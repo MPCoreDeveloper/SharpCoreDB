@@ -1628,6 +1628,19 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    storage write (0.7–1.3 µs), the WAL (0.02 µs) and row validation (0.19 µs) — and the only one that produced
    a win was the plan-cache warm-up (removed, 21 µs → 3.5 µs of real parsing). The remaining bucket is lock
    acquisition and per-statement metadata bookkeeping, which needs a stage before it can be measured.
+   **Item 1 — the `Dispatch` stage — was then added and measured, and it bounds the remainder.** `Dispatch`
+   wraps lock acquisition, the shared-parser fetch and the hand-off in `ExecuteSQL(sql)`; on the same shape it
+   reports **38.4 µs/statement, essentially the whole profiled pass (770 ms)**, because every other stage nests
+   inside it (the table work happens within `sqlParser.Execute`) — so it is an outer envelope, not a new cost.
+   Its value is the **gap**: the named stages inside it sum to ~8–11 µs, so **~28 µs/statement sits inside the
+   dispatch region and outside every stage**, and its allocation says the same thing more loudly —
+   **7,520 B/statement against ~2,000 B/statement across the named stages**, i.e. **~5.5 KB/statement
+   unaccounted**, with 27 gen0 collections in the pass. That points at two places: the parser's full `Execute`
+   (the `Parse` stamp covers the batch dispatcher's statement classification, not the whole parse) and
+   `Table.Insert`'s work after the engine call (the per-row PK check and index updates have no stamp on this
+   path). ⚠️ Coverage note, recorded rather than hidden: this stamp is wired on `ExecuteSQL(sql)` only — the
+   parameterized and async overloads share an identical block that could not be disambiguated safely, so they
+   stay unstamped rather than being edited blind on a hot path.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)

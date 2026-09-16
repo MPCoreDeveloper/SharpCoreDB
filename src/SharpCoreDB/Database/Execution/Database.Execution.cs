@@ -126,10 +126,15 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §2 instrumentation (2026-09-15): outer stamp for the last unattributed bucket on this shape — lock
+        // acquisition, the shared-parser fetch and the hand-off. `parse` nests inside, so the delta is the cost.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {

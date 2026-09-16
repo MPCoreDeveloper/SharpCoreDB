@@ -129,9 +129,19 @@ public static class WritePathProfiler
         /// below the table that had no stamp at all.
         /// </summary>
         StatementValidate = 17,
+
+        /// <summary>
+        /// The per-statement dispatch below classification: acquiring the write lock, fetching the shared parser
+        /// and handing the statement to it. Added (2026-09-15) as the outer stamp for the last bucket on the
+        /// standalone-statement shape — with `encode`, `parse`, `engine-write`, `row-build`, `validate`,
+        /// `stmt-validate` and `wal-append` all attributed, ~31 µs of a 39.5 µs statement was still unaccounted
+        /// for and the remaining candidates were lock acquisition plus the per-statement bookkeeping around the
+        /// parser. Nested stages (`parse`) are included in it, so the delta between this and them is the point.
+        /// </summary>
+        Dispatch = 18,
     }
 
-    private const int StageCount = 18;
+    private const int StageCount = 19;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -164,7 +174,7 @@ public static class WritePathProfiler
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
-        "hash-index", "stmt-validate",
+        "hash-index", "stmt-validate", "dispatch",
     ];
 
     private static int _enabled;
