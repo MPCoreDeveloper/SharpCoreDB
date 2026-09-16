@@ -33,20 +33,27 @@ public partial class Storage : IStorage
     private readonly bool enableBufferedAppends;
 
     /// <summary>
-    /// True when the configured durability asks for asynchronous writes (<see cref="DurabilityMode.Async"/>),
-    /// which the append path now honours instead of silently writing through per record. See
-    /// <see cref="BuffersAppends"/>.
+    /// True when appends made OUTSIDE a transaction are buffered instead of written through — the explicit
+    /// <see cref="DatabaseConfig.EnableBufferedAppends"/> opt-in, and only that. All buffered appends share one
+    /// buffer, the same threshold/interval bounds and the same flush boundaries.
+    /// <para>
+    /// <b>Deliberately NOT derived from <see cref="DatabaseConfig.WalDurabilityMode"/> (reversed 2026-09-16).</b>
+    /// For one day, A1 (2026-09-15) made <c>Async</c> disable write-through for table appends too, on the
+    /// reasoning that a caller who asked for asynchronous WAL writes should not still pay a synchronous write
+    /// per record. That coupling was measured and removed, because <c>Async</c> is set by six presets spanning
+    /// opposite regimes — <c>BulkImport</c> but also the mixed-OLTP, analytics, read-heavy, mobile and
+    /// write-once-logging configurations — so it cannot distinguish an append that will never be read from one
+    /// that will be. A one-variable A/B on the same build (tuned <c>--pk</c> arm, medians of 3, isolated) shows
+    /// what getting it wrong costs: with buffering engaged, <b>UPDATE 230,722 → 356,135 (+54 %)</b>,
+    /// <b>DELETE 168,804 → 216,909 (+28 %)</b>, <b>INSERT 81,344 → 99,575 (+22 %)</b>, READ flat, while
+    /// SQLite's own reference moved under 5 %. Buffering costs on every phase of a workload that reads between
+    /// appends — the deferred bytes must be made visible to the next read, so the buffer buys a deferred flush
+    /// and loses the batching it was meant to win. The bulk win is real and is kept where it belongs: callers
+    /// that append without reading in between opt in through
+    /// <see cref="DatabaseConfig.EnableBufferedAppends"/>, and the bulk-oriented presets do so.
+    /// </para>
     /// </summary>
-    private readonly bool asyncAppends;
-
-    /// <summary>
-    /// True when appends made OUTSIDE a transaction are buffered instead of written through: either the
-    /// explicit <see cref="DatabaseConfig.EnableBufferedAppends"/> opt-in, or the <c>Async</c> durability the
-    /// caller configured. Both share one buffer, the same threshold/interval bounds and the same flush
-    /// boundaries. <c>FullSync</c> — the <see cref="DatabaseConfig"/> default — is unchanged, so the default
-    /// durability posture is untouched and nothing is buffered for callers who did not ask for it.
-    /// </summary>
-    private bool BuffersAppends => enableBufferedAppends || asyncAppends;
+    private bool BuffersAppends => enableBufferedAppends;
     private readonly long appendBufferFlushThresholdBytes;
     private readonly int appendBufferFlushIntervalMs;
     
@@ -80,13 +87,11 @@ public partial class Storage : IStorage
         this.appendBufferFlushThresholdBytes = Math.Max(0, config?.AppendBufferFlushThresholdBytes ?? 1024 * 1024);
         this.appendBufferFlushIntervalMs = Math.Max(0, config?.AppendBufferFlushIntervalMs ?? 10);
 
-        // §5 item 2 (A1): honour the durability the configuration already promises. `Async` is what the
-        // HighPerformance, BulkImport, in-memory and read-heavy presets set — each documented as trading
-        // durability for speed — yet the table append ignored the mode and wrote through per record, so a
-        // caller who explicitly asked for Async still paid a synchronous write per row. That is the same
-        // class of defect as the encryption-posture mismatch §3-1c found: a configuration that promises
-        // something the code does not deliver. `FullSync` keeps write-through per record.
-        this.asyncAppends = config?.WalDurabilityMode == DurabilityMode.Async;
+        // §5 item 2 (A1), REVERSED the next day on measurement — see BuffersAppends for the numbers. A1 made
+        // `WalDurabilityMode = Async` disable write-through for table appends. On a workload that reads between
+        // appends that cost 22-54 % on every phase, and `Async` turned out to be set by six presets spanning
+        // opposite regimes, so it was never a usable signal for "this append will not be read back".
+        // `WalDurabilityMode` means the WAL again; table-append buffering is requested explicitly.
         
         // Initialize batch encryption configuration
         this.enableBatchEncryption = (config?.EnableBatchEncryption ?? false) && !this.noEncryption;

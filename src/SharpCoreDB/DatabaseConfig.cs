@@ -286,17 +286,18 @@ public class DatabaseConfig
     /// FullSync uses FileStream.Flush(true) for full durability.
     /// Async relies on OS buffering for better performance.
     /// <para>
-    /// <b>What <c>Async</c> does to the table append (2026-09-15).</b> The append path now honours this
-    /// setting instead of unconditionally writing through per record: with <c>Async</c>, an append made
-    /// outside a transaction is buffered exactly as <see cref="EnableBufferedAppends"/> buffers it — same
-    /// buffer, same <see cref="AppendBufferFlushThresholdBytes"/> /
-    /// <see cref="AppendBufferFlushIntervalMs"/> bounds, same flush boundaries (<c>Database.Flush()</c>,
-    /// commit, <c>BeginTransaction</c>, compaction, fixed-width migration, overflow-arena compaction,
-    /// <c>DROP TABLE</c>, dispose). Measured on 20,000 standalone single-row <c>INSERT</c> statements:
-    /// <b>1,127.61 → 119.79 µs/row (9.4×)</b>. <c>FullSync</c> — this property's default — is unchanged and
-    /// still writes each row through immediately, so nothing is buffered unless it is asked for, and
-    /// <see cref="EnableBufferedAppends"/> remains the explicit route for a caller who wants buffering while
-    /// keeping <c>FullSync</c>.
+    /// <b>What this property does NOT do to the table append (reversed 2026-09-16).</b> For one day
+    /// (2026-09-15, §5 item 2 / A1) <c>Async</c> also disabled write-through for table appends, buffering them
+    /// exactly as <see cref="EnableBufferedAppends"/> does. That coupling was measured and removed: this
+    /// property is a <i>durability</i> statement, and six presets set it for durability reasons across opposite
+    /// append regimes — <c>BulkImport</c> and the write-once logging sink (append-only, where buffering wins:
+    /// 9.4× on 20,000 standalone single-row <c>INSERT</c> statements, 1,127.61 → 119.79 µs/row), but also the
+    /// mixed-OLTP, analytics, read-heavy and mobile configurations (which read between appends, where buffering
+    /// costs). Measured on the tuned <c>--pk</c> arm, one variable, same build, medians of 3, isolated: with
+    /// buffering engaged, <b>UPDATE 230,722 → 356,135 (+54 %)</b>, <b>DELETE 168,804 → 216,909 (+28 %)</b>,
+    /// <b>INSERT 81,344 → 99,575 (+22 %)</b>, READ flat, with SQLite's reference within 5 %. The append path
+    /// therefore writes through per record at either setting, and table-append buffering is requested only by
+    /// <see cref="EnableBufferedAppends"/> — which the bulk-oriented presets now set explicitly.
     /// </para>
     /// <para>
     /// <b>Trade:</b> buffered rows are lost by a crash — process kill as well as power loss — until a
@@ -470,7 +471,12 @@ public class DatabaseConfig
         UseGroupCommitWal = true,
         EnableAdaptiveWalBatching = true,
         WalBatchMultiplier = 512,          // ✅ EXTREME: ProcessorCount * 512
-        WalDurabilityMode = DurabilityMode.Async, // Fast async writes
+        WalDurabilityMode = DurabilityMode.Async, // Fast async writes (WAL only — see that property's note)
+        // Append buffering is the *other* half of the bulk trade, and since 2026-09-16 it is requested
+        // explicitly instead of being inherited from `Async`: a bulk import appends without reading in between,
+        // which is exactly the shape buffering is for (~512 µs -> ~4.5 µs per 64-byte row), whereas a reader in
+        // the loop pays 22-54 % for it.
+        EnableBufferedAppends = true,
         WalMaxBatchSize = 0,               // Adaptive (scales to 10k)
         WalMaxBatchDelayMs = 1,            // Minimal delay
         GroupCommitSize = 5000,            // ✅ LARGE: 5000 rows per commit

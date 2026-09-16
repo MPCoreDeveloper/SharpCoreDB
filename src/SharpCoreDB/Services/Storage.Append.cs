@@ -502,8 +502,9 @@ public partial class Storage
         // ✅ Buffered append mode: the SAME buffer serves single-row appends outside a transaction — one
         // open/write/close per flush boundary instead of a write-through open/close per row (~512 µs →
         // ~4.5 µs per 64-byte row for the write itself). Engaged by DatabaseConfig.EnableBufferedAppends
-        // (explicit opt-in) or by DatabaseConfig.WalDurabilityMode = Async, which the performance presets
-        // set and now actually get; see BuffersAppends for the durability contract.
+        // (explicit opt-in) and by nothing else: `WalDurabilityMode = Async` no longer implies it, reversed
+        // 2026-09-16 after a one-variable A/B showed buffering costs 22-54 % on every phase of a workload that
+        // reads between appends. See BuffersAppends for the contract and the numbers.
         if (IsInTransaction || BuffersAppends)
         {
             long futurePosition;

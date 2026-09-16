@@ -1588,6 +1588,31 @@ whether `Async` is meant as a durability statement or a performance hint; the nu
 and the 12 `AsyncDurabilityAppendTests` stay valid under both, because they assert only that the append
 *honours* the configured mode — which is true, and remains the defect A1 correctly fixed.
 
+**Decision taken (2026-09-16): option (a), implemented and re-measured.** `BuffersAppends` is now
+`enableBufferedAppends` alone; `BulkImport` and the write-once logging sink opt in explicitly, so the append-only
+shapes keep the 9.4×; and every contract comment that described the coupling is rewritten — `WalDurabilityMode`'s
+own doc, `Storage.BuffersAppends`, the append path's comment, and the harness arm's. ⚠️ **A correction:** an
+earlier version of this section claimed the 12 `AsyncDurabilityAppendTests` would stay valid under either option.
+That was wrong — they asserted `Async must buffer an append made outside a transaction` and built their fixtures
+from an `Async` config, so they had to be repointed to the opt-in, where they now pass under `FullSync` and thereby
+prove the opt-in is the cause. Two tests pin the new contract instead:
+`Async_Alone_DoesNotBufferTableAppends` and `EnableBufferedAppends_Buffers_AtEitherDurabilityMode`.
+
+| `--pk` FW plaintext | A1 coupling (shipped) | after (a) | change |
+|---|---:|---:|---:|
+| INSERT | 81,344 | 97,316 | +20 % |
+| READ | 110,162 | 120,166 | +9 % |
+| UPDATE | 230,722 | **385,668** | **+67 %** |
+| DELETE | 168,804 | 213,727 | +27 % |
+
+UPDATE is **0.8× SQLite — ahead** on that run, where the coupling had left it 1.24× behind, and the other three
+phases improved too. **Bulk pays nothing:** the `--multirowinsert` arm (20,000 rows, 1,000 rows/statement, median
+of 5, isolated) measures **17.18 µs/row / 58,205 rows/s write-through** against **17.46 µs/row / 57,277 rows/s
+buffered** — 1.6 % apart, inside noise, because the multi-row path never consulted `BuffersAppends`. ⚠️ Per §2 the
+absolute multi-row figure is *not* a speedup claim against the 22.72 µs/row recorded in §6/§9: that figure was
+gathered under the contention this section describes, so 17.18 µs/row is simply the first clean measurement of the
+same shape.
+
 **`--dual-mode` (same protocol, medians of 3, rep-interleaved)** — the encryption comparison, now
 protocol-compliant rather than trend-only:
 

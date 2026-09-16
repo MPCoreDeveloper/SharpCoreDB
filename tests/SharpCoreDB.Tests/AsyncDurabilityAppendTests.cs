@@ -16,21 +16,30 @@ using System.Threading.Tasks;
 using Xunit;
 
 /// <summary>
-/// Plan §5 item 2 (A1): <c>DatabaseConfig.WalDurabilityMode</c> now governs the table append. Until this,
-/// both append entry points hard-coded <c>FileOptions.WriteThrough</c>, so a caller who explicitly chose
-/// <c>DurabilityMode.Async</c> — which the <c>HighPerformance</c>, <c>BulkImport</c>, in-memory and
-/// read-heavy presets all select, each documented as trading durability for speed — still paid a
-/// synchronous write per record, and <c>EnableBufferedAppends</c> was the only route to the buffer.
-/// These tests pin the contract that makes the change safe, and they pin both halves of it:
-/// <list type="bullet">
-/// <item><c>Async</c> buffers like the explicit opt-in: a row is readable the moment it is inserted, it is
-/// durable after <c>Flush()</c> or a commit, it survives a reopen, and the overflow arena — which is what a
-/// fixed-width table's TEXT columns use — resolves through the same buffer.</item>
-/// <item>The default <c>FullSync</c> is <b>unchanged</b>: every row is written through immediately, so no
-/// existing database silently gains a durability window it did not ask for.</item>
-/// </list>
+/// Plan §5 item 2 (A1) changed how the append path treats <c>DatabaseConfig.WalDurabilityMode</c>, and this file
+/// pins where that change stands <b>after it was partially reversed on measurement (2026-09-16)</b>.
 /// <para>
-/// The trade this buys, stated plainly: with <c>Async</c>, rows still in the buffer are lost by a process
+/// A1 (2026-09-15) made <c>Async</c> disable <c>FileOptions.WriteThrough</c> for table appends, so a caller who
+/// chose asynchronous WAL writes stopped paying a synchronous write per record. On a workload that reads between
+/// appends that cost 22–54 % on every phase — the deferred bytes have to be made visible to the next read — and
+/// <c>Async</c> is set by six presets spanning opposite append regimes, so it cannot distinguish an append that
+/// will never be read back from one that will. The coupling is therefore gone: table appends are written through
+/// per record at either durability setting, and buffering is requested only by
+/// <see cref="DatabaseConfig.EnableBufferedAppends"/> — which <c>BulkImport</c> and the write-once logging sink
+/// now set explicitly, which is where the 9.4× that A1 measured belongs.
+/// </para>
+/// <para>
+/// The tests below pin both halves of the resulting contract:
+/// <list type="bullet">
+/// <item><c>EnableBufferedAppends</c> buffers: a row is readable the moment it is inserted, it is durable after
+/// <c>Flush()</c> or a commit, it survives a reopen, and the overflow arena — which is what a fixed-width
+/// table's TEXT columns use — resolves through the same buffer.</item>
+/// <item><c>Async</c> does <b>not</b> buffer (see <c>Async_Alone_DoesNotBufferTableAppends</c>) and neither does
+/// the default <c>FullSync</c>: no database silently gains a durability window it did not ask for.</item>
+/// </list>
+/// </para>
+/// <para>
+/// The trade the opt-in buys, stated plainly: with buffering on, rows still in the buffer are lost by a process
 /// crash as well as by power loss — they have not left managed memory. The buffer is bounded by
 /// <c>AppendBufferFlushThresholdBytes</c> (1 MB) and <c>AppendBufferFlushIntervalMs</c> (10 ms), and is
 /// flushed by <c>Database.Flush()</c>, a commit, <c>BeginTransaction</c> and every structural operation
@@ -64,14 +73,18 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     // ── Helpers ─────────────────────────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Async durability with a threshold a handful of rows will not reach and a zero interval, so the only
-    /// thing that flushes is an explicit boundary — which is what these tests assert about.
+    /// The explicit buffering opt-in — <see cref="DatabaseConfig.EnableBufferedAppends"/> — with a threshold a
+    /// handful of rows will not reach and a zero interval, so the only thing that flushes is an explicit
+    /// boundary, which is what these tests assert about. The durability mode is deliberately left at the default
+    /// (<c>FullSync</c>): since 2026-09-16 buffering comes from the opt-in alone, so these tests keep passing even
+    /// if the removed coupling ever came back — which is exactly why
+    /// <c>Async_Alone_DoesNotBufferTableAppends</c> exists to catch it.
     /// </summary>
-    private static DatabaseConfig Async(bool atRest, bool fixedWidth = false) => new()
+    private static DatabaseConfig Buffered(bool atRest, bool fixedWidth = false) => new()
     {
         NoEncryptMode = !atRest,
         EnableAtRestRecordEncryption = atRest,
-        WalDurabilityMode = DurabilityMode.Async,
+        EnableBufferedAppends = true,
         AppendBufferFlushThresholdBytes = 1024 * 1024,
         AppendBufferFlushIntervalMs = 0,
         FixedWidthRecordLayout = fixedWidth,
@@ -128,7 +141,77 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
         }
     }
 
-    // ── Async buffers: read-your-writes, and nothing on disk until a boundary ───────────────────
+    // ── The reversed contract: Async is durability, EnableBufferedAppends is buffering ───────────
+
+    /// <summary>
+    /// The new contract, asserted where the old one was: <c>WalDurabilityMode = Async</c> must <b>not</b> buffer
+    /// table appends. It did for one day (A1, 2026-09-15), and on a workload that reads between appends that cost
+    /// 22–54 % on every phase — UPDATE +54 %, DELETE +28 %, INSERT +22 % on the tuned <c>--pk</c> arm, one
+    /// variable, same build. <c>Async</c> is a durability statement; buffering is the explicit opt-in asserted
+    /// below. If this test fails, the coupling is back and every read-interleaved workload is paying for it.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void Async_Alone_DoesNotBufferTableAppends(bool atRest)
+    {
+        var file = Path.Combine(NewDir(atRest ? "async_nobuffer_atrest" : "async_nobuffer_raw"), "x.dat");
+        var storage = NewStorage(new DatabaseConfig
+        {
+            NoEncryptMode = !atRest,
+            EnableAtRestRecordEncryption = atRest,
+            WalDurabilityMode = DurabilityMode.Async,
+        });
+
+        try
+        {
+            storage.AppendBytes(file, System.Text.Encoding.UTF8.GetBytes("row"));
+
+            Assert.False(storage.HasBufferedAppends(file),
+                "Async is a durability mode, not a buffering request: the row must be written through");
+            Assert.True(new FileInfo(file).Length > 0, "the row must be on disk immediately under Async");
+        }
+        finally
+        {
+            (storage as IDisposable)?.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// The other half, and the reason the split is safe: buffering is decided by
+    /// <see cref="DatabaseConfig.EnableBufferedAppends"/> alone, at either durability setting — the two settings
+    /// are now independent, so a bulk caller can buffer without weakening the WAL and a latency-sensitive caller
+    /// can keep <c>FullSync</c> without losing the append speed <c>Async</c> used to bring with it.
+    /// </summary>
+    [Theory]
+    [InlineData(DurabilityMode.Async)]
+    [InlineData(DurabilityMode.FullSync)]
+    public void EnableBufferedAppends_Buffers_AtEitherDurabilityMode(DurabilityMode mode)
+    {
+        var file = Path.Combine(NewDir($"optin_{mode}"), "x.dat");
+        var storage = NewStorage(new DatabaseConfig
+        {
+            NoEncryptMode = true,
+            WalDurabilityMode = mode,
+            EnableBufferedAppends = true,
+            AppendBufferFlushThresholdBytes = 1024 * 1024,
+            AppendBufferFlushIntervalMs = 0,
+        });
+
+        try
+        {
+            storage.AppendBytes(file, System.Text.Encoding.UTF8.GetBytes("row"));
+
+            Assert.True(storage.HasBufferedAppends(file),
+                "EnableBufferedAppends is the buffering request and must be honoured at either durability mode");
+        }
+        finally
+        {
+            (storage as IDisposable)?.Dispose();
+        }
+    }
+
+    // ── Buffered appends: read-your-writes, and nothing on disk until a boundary ─────────────────
 
     [Theory]
     [InlineData(false)]
@@ -136,7 +219,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public async Task Async_BuffersAppends_AndEveryRowIsReadableImmediately(bool atRest)
     {
         var dir = NewDir(atRest ? "readwrite_atrest" : "readwrite_raw");
-        await using var db = Open(dir, Async(atRest));
+        await using var db = Open(dir, Buffered(atRest));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
 
         InsertRows(db, 1, 25);
@@ -156,7 +239,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public async Task Async_Flush_MakesBufferedRowsDurable_AcrossReopen(bool atRest)
     {
         var dir = NewDir(atRest ? "flush_atrest" : "flush_raw");
-        await using (var db = Open(dir, Async(atRest)))
+        await using (var db = Open(dir, Buffered(atRest)))
         {
             db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
             InsertRows(db, 1, 50);
@@ -166,7 +249,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
             Assert.True(DatLength(dir) > 0, "Flush() must write the buffered rows through");
         }
 
-        await using var reopened = Open(dir, Async(atRest));
+        await using var reopened = Open(dir, Buffered(atRest));
         Assert.Equal(50L, CountOf(reopened));
         Assert.Single(reopened.ExecuteQuery("SELECT * FROM t WHERE id = 50"));
     }
@@ -177,7 +260,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public async Task Async_Commit_MakesBufferedRowsDurable_AcrossReopen(bool atRest)
     {
         var dir = NewDir(atRest ? "commit_atrest" : "commit_raw");
-        await using (var db = Open(dir, Async(atRest)))
+        await using (var db = Open(dir, Buffered(atRest)))
         {
             db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
 
@@ -189,7 +272,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
             Assert.Equal(40L, CountOf(db));
         }
 
-        await using var reopened = Open(dir, Async(atRest));
+        await using var reopened = Open(dir, Buffered(atRest));
         Assert.Equal(40L, CountOf(reopened));
         Assert.Single(reopened.ExecuteQuery("SELECT * FROM t WHERE id = 40"));
     }
@@ -206,7 +289,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public async Task Async_FixedWidthTextColumn_ArenaBlocksResolveAfterReopen(bool atRest)
     {
         var dir = NewDir(atRest ? "arena_atrest" : "arena_raw");
-        await using (var db = Open(dir, Async(atRest, fixedWidth: true)))
+        await using (var db = Open(dir, Buffered(atRest, fixedWidth: true)))
         {
             db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
             InsertRows(db, 1, 30);
@@ -216,7 +299,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
             db.Flush();
         }
 
-        await using var reopened = Open(dir, Async(atRest, fixedWidth: true));
+        await using var reopened = Open(dir, Buffered(atRest, fixedWidth: true));
         Assert.Equal(30L, CountOf(reopened));
         Assert.Equal("name1", reopened.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0].Values.Last());
         Assert.Equal("name30", reopened.ExecuteQuery("SELECT * FROM t WHERE id = 30")[0].Values.Last());
@@ -235,11 +318,11 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public void Async_BeginTransaction_FlushesBufferedAppends_SoRollbackKeepsThem(bool atRest)
     {
         var file = Path.Combine(NewDir(atRest ? "rollback_atrest" : "rollback_raw"), "x.dat");
-        var storage = NewStorage(Async(atRest));
+        var storage = NewStorage(Buffered(atRest));
         try
         {
             long before = storage.AppendBytes(file, System.Text.Encoding.UTF8.GetBytes("before"));
-            Assert.True(storage.HasBufferedAppends(file), "Async must buffer an append made outside a transaction");
+            Assert.True(storage.HasBufferedAppends(file), "buffered appends must engage for an append made outside a transaction");
 
             storage.BeginTransaction();
             long inside = storage.AppendBytes(file, System.Text.Encoding.UTF8.GetBytes("inside"));
@@ -263,7 +346,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
     public async Task Async_DropTable_ThenRecreate_KeepsOnlyNewRows()
     {
         var dir = NewDir("droptable");
-        await using var db = Open(dir, Async(atRest: false));
+        await using var db = Open(dir, Buffered(atRest: false));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT)");
         InsertRows(db, 1, 20);
         Assert.Equal(20L, CountOf(db));
@@ -276,7 +359,7 @@ public sealed class AsyncDurabilityAppendTests : IDisposable
         Assert.Equal(1L, CountOf(db));
         Assert.Equal("fresh", db.ExecuteQuery("SELECT * FROM t WHERE id = 1")[0].Values.Last());
 
-        await using var reopened = Open(dir, Async(atRest: false));
+        await using var reopened = Open(dir, Buffered(atRest: false));
         Assert.Equal(1L, CountOf(reopened));
     }
 
