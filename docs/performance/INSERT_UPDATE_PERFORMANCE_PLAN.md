@@ -2028,6 +2028,26 @@ Three conclusions, and the second is the important one:
    The lever is statement-level overhead, not the record, the layout or the index — and the fact that two arms with
    identical `in-place-patch` usage differ by 6.2× is the strongest available clue.
 
+   ⚠️ **The control run refutes that sentence, in the same session.** `--pk-profile` profiles the PK arm's UPDATE phase
+   exactly as the default job's is now instrumented, and it measures **16.62 µs/update** — the *same* as the PK-less
+   arm's 15.92 — while also showing **`parse` firing 10,000 times**. Two claims withdraw:
+
+   - **The PK route is not skipping the parser.** `parse` runs 10,000 times on both arms (11.1 % of the PK arm's
+     stamped time, 30.6 % of the PK-less arm's), so "a dedicated batched updater that does not parse each statement"
+     is wrong. It was inferred from a ratio rather than read out of the driver, which is the error this plan keeps
+     paying for.
+   - **The profiled PK arm is 6.5× slower than its own timed counterpart** (16.62 µs/update profiled against
+     391,668 ops/s = 2.55 µs/update timed), so the profiler is **not neutral at this granularity** — the same caveat
+     §6 recorded for PageBased. Its dominant stage is a **single** `row-locate` call at **99.6 ms** holding **7.1 MB**
+     (10 µs/update), a rate the timed run cannot be paying while still posting 2.55 µs/update.
+
+   So the **6.2× between the timed arms is real** — same session, same regime, both committed — but the stages do **not**
+   yet explain it, because on this phase the profiler distorts precisely the arm that was meant to be the control.
+   The resolving experiment is to stop comparing profiled numbers across arms: compare their **call counts and
+   allocation** (which the profiler reports reliably) and time both in the same run, then decide whether the batch
+   driver, the batch locate or the commit is the lever. Until then, priority 1 has a measurement problem, not a
+   candidate list — and it is the fourth time this session that a plausible reading has failed its own control.
+
 **Until that package exists, the honest reading of the comparison table is per-shape**, and the plan should say so
 rather than let the headline 0.24× stand unqualified: the same engine is **1.29× ahead** of SQLite on PK-bound UPDATE
 and **0.24×** on a PK-less, hash-predicate update. A PK-less schema is a legitimate workload; it is simply the one
