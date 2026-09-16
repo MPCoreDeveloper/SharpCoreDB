@@ -2126,11 +2126,20 @@ against 0.271–0.456 s), so the effect is outside this arm's noise. This is the
 has produced, it was already implemented, and it converts §4b's estimate ("~24 % of INSERT") into a measurement on the
 tracked shape.
 
-⚠️ **Which makes the §4b reopen defect the gate on priority 2 rather than a side quest.** `FixedWidthInlineValueBytes`
-changes the on-disk record layout, so its default stays 0 (byte-identical) and it cannot ship enabled while
-`FixedWidthInlineValueTests.Reopen_KeepsInlineAndOverflowValues` is skipped — a reopened database currently loses its
-inline values. **That test is priority 2's next step**: a measured **19.3 %** INSERT win is sitting behind one failing
-reopen path, and no further candidate-hunting on this row is worth as much as fixing it.
+✅ **The reopen defect is fixed the same day, and the acceptance criterion is met.** Root cause, found by following the
+evidence already recorded in the skipped test rather than by a debugger: the reopen path rebuilds each table by
+**JSON-deserializing the `Table` itself** (`Database.Core.cs:385`), so `_config` does not survive the round-trip, and
+the layout was computed from `_config?.FixedWidthInlineValueBytes ?? 0` (`Table.Serialization.cs:435`). A table
+created with capacity 16 therefore came back reading every inline slot at capacity 0, decoding `flag = 2` as an
+overflow-arena offset and returning `DBNull` — while new inserts after reopen round-tripped because they were written
+*and* read at capacity 0, and no factory probe fired because the table is built from metadata rather than by a factory.
+The fix makes the capacity part of the persisted layout, mirroring `IsFixedWidthRecords`: a settable
+`Table.FixedWidthInlineValueBytes` (seeded from config at construction, clearing the cached layout on set), the same
+field on `TableMetadataDto`, and its write at `Database.Core.cs:553`. **Backward compatible by construction** — older
+metadata lacks the field, and 0 is the historical layout. `FixedWidthInlineValueTests.Reopen_KeepsInlineAndOverflowValues`
+is **un-skipped and passes**, so the suite baseline moves from 17 skipped to 16, and §4b is no longer gated on a
+defect: enabling it is now a decision about the default (owner call, with the format/migration story of decision 3),
+not a bug to fix.
 
 ⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
 `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)

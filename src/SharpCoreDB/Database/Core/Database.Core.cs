@@ -547,6 +547,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             ColumnCollations = t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
             AutoIncrementCounters = t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
             IsFixedWidthRecords = t.IsFixedWidthRecords,  // B5: persist the record format (1.x → 2.0)
+            // §4b: persist the inline capacity too — it is part of the same layout, and a reopened table without it
+            // decoded every inlined value as an overflow offset (DBNull). Missing in older metadata = 0 = the
+            // historical layout, so this is backward compatible.
+            FixedWidthInlineValueBytes = t.FixedWidthInlineValueBytes,
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };

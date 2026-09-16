@@ -41,6 +41,14 @@ public sealed class TableMetadataDto
     /// </summary>
     public bool IsFixedWidthRecords { get; set; }
 
+    /// <summary>
+    /// Gets or sets the inline capacity that is part of the fixed-width record layout (§4b). Persisted with the layout
+    /// flag for the same reason: the reopen path rebuilds tables from this DTO, and a table that read its own inline
+    /// slots must come back with the same capacity or it misdecodes them as overflow offsets and returns DBNull for
+    /// every inlined value. Missing in metadata written before §4b = 0 = the historical layout.
+    /// </summary>
+    public int FixedWidthInlineValueBytes { get; set; }
+
     /// <summary>Gets or sets auto-increment flags per column.</summary>
     public List<bool>? IsAuto { get; set; }
 

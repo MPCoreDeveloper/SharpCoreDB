@@ -431,8 +431,11 @@ public partial class Table
     private FixedWidthRecordLayout GetFixedWidthLayout()
     {
         // §4b: the inline capacity is part of the layout, so it participates in the cache key implicitly — the
-        // configuration is fixed for the lifetime of the table, and the migration path clears this field.
-        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _config?.FixedWidthInlineValueBytes ?? 0);
+        // capacity is fixed for the lifetime of the table, and both the migration path and the property setter clear
+        // this field. ⚠️ Read the <b>persisted</b> property, never `_config` alone: a reopened table has no config
+        // (Database.Core.cs:385 deserializes the Table from metadata), and reading capacity 0 against records written
+        // with capacity 16 misdecoded every inline slot as an overflow offset — the §4b reopen defect.
+        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         return _fixedWidthLayout;
     }
 
