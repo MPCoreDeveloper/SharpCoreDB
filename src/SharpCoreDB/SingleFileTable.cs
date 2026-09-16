@@ -62,6 +62,21 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     // config flag only selects the format for NEW tables and triggers JSON → binary migration.
     private bool _fixedWidthRecords;
     private FixedWidthRecordLayout? _fixedWidthLayout;
+
+    /// <summary>
+    /// Inline payload capacity for variable-length slots (plan §4b). Like the fixed-width flag above this is part of
+    /// the *record layout*, and this class is the one a reopened table is built as
+    /// (<c>DatabaseExtensions.LoadTables</c>), so it must be forwarded there too — otherwise a table written with an
+    /// inline layout is read with 5-byte slots and an inline slot decodes as an arena offset.
+    /// </summary>
+    private int _fixedWidthInlineValueBytes;
+
+    /// <summary>Sets the inline payload capacity and invalidates the cached layout, which depends on it.</summary>
+    internal void SetFixedWidthInlineValueBytes(int inlineValueBytes)
+    {
+        _fixedWidthInlineValueBytes = Math.Max(0, inlineValueBytes);
+        _fixedWidthLayout = null;
+    }
     private SingleFileOverflowArena? _overflowArena;
 
     // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /
@@ -108,6 +123,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         _config = config;
         _fixedWidthRecords = config?.FixedWidthRecordLayout ?? false;
+        _fixedWidthInlineValueBytes = config?.FixedWidthInlineValueBytes ?? 0;
     }
 
     /// <summary>
@@ -743,7 +759,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
 
         // B6: binary fixed-width records + out-of-line overflow arena.
-        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         var arena = _overflowArena ??= new SingleFileOverflowArena();
 
         var records = new List<byte[]>(rowsToWrite.Count);
@@ -951,7 +967,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 _fixedWidthRecords = true;
                 var overflowBytes = _storageProvider.ReadBlockAsync(_overflowBlockName, CancellationToken.None).GetAwaiter().GetResult();
                 _overflowArena = SingleFileOverflowArena.Deserialize(overflowBytes);
-                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
                 var binaryRows = new List<Dictionary<string, object>>();
 
                 long position = 0;
@@ -1015,7 +1031,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         long position = 0;
         bool any = false;
 

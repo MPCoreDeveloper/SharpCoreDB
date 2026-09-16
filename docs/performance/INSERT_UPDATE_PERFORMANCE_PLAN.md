@@ -892,6 +892,22 @@ observation at once: the probe lived in `DirectoryTableFactory` so it printed no
 layout-affecting property is taken from the **restored** metadata rather than from the caller's `DatabaseConfig` —
 which is exactly why the reopened table has `FixedWidthRecordLayout = true` and `FixedWidthInlineValueBytes = 0`.
 So the config *does* reach every `DirectoryTableFactory` construction, and that is not the path a reopened table takes.
+**Attempted the fix, and it moved the question instead of closing it (same day).** `SingleFileTable` — the class a
+reopened table is built as — turned out to use the shared codec but to compute its layout at **three** sites as
+`FixedWidthRecordLayout.Compute(ColumnTypes)`, with no inline capacity, so that class could never honour one. It now
+does: a `_fixedWidthInlineValueBytes` field initialised from the config, a `SetFixedWidthInlineValueBytes` setter that
+invalidates the cached layout, all three sites passing the capacity, and `DatabaseExtensions.LoadTables` forwarding the
+caller's value beside the existing `SetFixedWidthRecords` call. **The reopen test still fails.** Two further probes
+narrowed it: with a marker in `DirectoryTableFactory.CreateTable` *and* in `DatabaseExtensions.LoadTables`, **neither
+printed during the reopen phase** of a filtered run (one class, so sequential and not interleaved) — yet the reopened
+table is a provably different instance from the first. So the construction site on reopen remains unidentified, and
+the remaining evidence is inconsistent with every construction site that exists in `src`.
+**That makes the next attempt a debugger question rather than a reading question.** Break on the `Table` and
+`SingleFileTable` constructors during an open and read the stack — the one tool this session did not have, and after
+five probes the honest conclusion is that more reading will only produce more plausible theories. The forwarding
+changes are kept because they are correct in principle and inert at the default (`InlineBytes = 0`), and the reopen
+test stays skipped with the complete evidence set in its reason.
+
 **The fix therefore has two honest shapes:** persist the layout property with the table metadata, or overlay the
 caller's configuration onto the restored one. Either is small, and the first is the one that also makes the layout
 self-describing — which is what this section wants for the version and upgrade story anyway.
