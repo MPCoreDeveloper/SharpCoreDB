@@ -1999,6 +1999,35 @@ Three conclusions, and the second is the important one:
    with a hash predicate, −1.3×. So the layout flip remains a *pair* with the predicate gate — it is just not a pair
    with the inline capacity, which is what this run was built to test.
 
+   ⚠️ **Measured the same day, and it corrects the sentence above: the legacy layout already patches in place.**
+   `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` profiles the document-CRUD job's UPDATE phase exactly as `--pk-profile` profiles
+   the PK arm, and the profiled pass (10,000 updates, **15.92 µs/update**) answers the open question directly:
+   **`in-place-patch` fires 10,000 times**, so no new capability is needed for that half — the legacy variable-length
+   layout already takes the in-place route on a hash predicate, and this plan has now assumed a missing mechanism
+   three times in one session where the mechanism existed.
+
+   | stage | total ms | calls | share | B/call |
+   |---|---:|---:|---:|---:|
+   | `commit` (batch-level: one call, the WAL flush) | 26.8 | 1 | 35.8 % | 724,792 |
+   | `parse` | 22.8 | 10,000 | 30.6 % | 531 |
+   | `index-maint` | 8.4 | 20,000 | 11.2 % | 43 |
+   | `in-place-patch` | 8.2 | 10,000 | 11.0 % | 175 |
+   | `engine-write` | 6.7 | 10,000 | 9.0 % | 150 |
+   | `row-locate` | 1.2 | 1 | 1.6 % | 32 |
+   | `classify` | 0.6 | 10,000 | 0.8 % | 0 |
+
+   So the 15.92 µs/update is **per-statement and batch-driver overhead, not the record write**: the patch is
+   **0.82 µs** and the engine write 0.67 µs — ~1.5 µs of real work — while `parse` alone costs **2.28 µs per
+   statement**, and the stamped stages cover only **7.47 µs of the 15.92**, leaving **53 % unattributed**, which is
+   the batch driver rather than any table operation. That also explains the **6.2×** against the PK arm
+   (2.55 µs/update): both use the same in-place patch, the same single `ExecuteBatchSQL` and the same one
+   `row-locate` call, so the difference is *how the batch is driven* — the PK route appears to have a dedicated
+   batched updater that does not parse each statement, while this route parses all 10,000.
+
+   **Priority 1 is therefore: instrument the batch driver on this route and diff it against the PK arm's driver.**
+   The lever is statement-level overhead, not the record, the layout or the index — and the fact that two arms with
+   identical `in-place-patch` usage differ by 6.2× is the strongest available clue.
+
 **Until that package exists, the honest reading of the comparison table is per-shape**, and the plan should say so
 rather than let the headline 0.24× stand unqualified: the same engine is **1.29× ahead** of SQLite on PK-bound UPDATE
 and **0.24×** on a PK-less, hash-predicate update. A PK-less schema is a legitimate workload; it is simply the one

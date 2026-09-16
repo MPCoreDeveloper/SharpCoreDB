@@ -376,6 +376,14 @@ class Program
     }
 
     /// <summary>
+    /// Profiles the document-CRUD job's UPDATE phase, from <c>SHARPCOREDB_MAIN_PROFILE_UPDATE=1</c> (plan §9
+    /// priority 1). Mirrors <c>--pk-profile</c> for the PK-less arm: the question is whether any in-place route is
+    /// taken at all on a hash-predicate update, and the <c>in-place-patch</c> stage call count answers it directly.
+    /// </summary>
+    static bool MainProfileUpdateOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_UPDATE") == "1";
+
+    /// <summary>
     /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
     /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
     /// write-through append per row — and now routes to the batched core when the table has no per-row-only
@@ -849,7 +857,16 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE
+            // UPDATE (plan §9 priority 1: the PK-less, hash-predicate route). SHARPCOREDB_MAIN_PROFILE_UPDATE=1
+            // turns the profiler on for THIS phase only, mirroring --pk-profile: Reset clears the INSERT/READ stamps
+            // so the report describes the update batch alone, and the question it answers is whether any in-place
+            // route is taken at all — read the in-place-patch stage call count.
+            if (MainProfileUpdateOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var updateStmts = new List<string>(UpdateCount);
             for (int i = 0; i < UpdateCount; i++)
@@ -863,6 +880,15 @@ class Program
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            if (MainProfileUpdateOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled UPDATE pass: {result.UpdateTime:F2}s "
+                    + $"({result.UpdateOpsPerSec:N0} ops/sec, {result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
 
             // DELETE
             sw.Restart();
@@ -1368,7 +1394,8 @@ class Program
             // DELETE by PK
             // --pk-profile-delete turns the profiler on for THIS arm only, exactly as --pk-profile does for
             // UPDATE, and Reset clears the INSERT/READ/UPDATE stamps so the report describes the DELETE batch
-            // and nothing else. Plan §9 priority 1 is this column (0.51× SQLite), and the call counts are the
+            // and nothing else. This column opened the plan at 0.51× SQLite and is now 2.19× ahead of it (§8b), and
+            // the call counts were the
             // question: the contiguous fixed-width delete fast path buffers its tombstones in ONE stamped
             // region, so a single `engine-write` call means the fast path ran for the whole batch while 10,000
             // means it fell through to the per-statement generic route.
