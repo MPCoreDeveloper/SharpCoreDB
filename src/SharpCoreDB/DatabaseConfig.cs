@@ -108,6 +108,32 @@ public class DatabaseConfig
     public bool EnableBufferedAppends { get; init; } = false;
 
     /// <summary>
+    /// Gets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width record
+    /// slot instead of writing them to the overflow arena. <b>Default 0 — the existing layout, byte for byte.</b>
+    /// <para>
+    /// Context (plan §4b): the fixed-width record already implements the stable-slot + overflow model — fixed-size
+    /// columns inline, String/Blob as a 5-byte <c>[null-flag(1)][overflow offset(4)]</c> slot — so *every*
+    /// variable-length value, however short, costs an arena write. Measured on the multi-row pass those arena
+    /// stages are <b>arena-write 2.26 µs + arena-append 1.79 µs = ~4.05 µs/row, ~24 %</b>, and on that schema every
+    /// TEXT value is short (<c>User1</c>, <c>user1@test.com</c>, <c>payload-1</c>).
+    /// </para>
+    /// <para>
+    /// Above zero, a variable slot becomes <c>[null-flag(1)][offset(4)][inline length(2)][inline payload(N)]</c> —
+    /// still a <b>constant size per schema</b>, so the position-stable record and every in-place update and delete
+    /// fast path keep working — and a payload that fits is written in the slot with <c>null-flag = 2</c>. NULL (0)
+    /// and overflow (1) keep their existing encodings and offsets, so the inline case is purely additive.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>This changes the on-disk record layout.</b> The layout is computed from the schema rather than stored,
+    /// so a file written with one value of this property must be opened with the same one — which is why the default
+    /// preserves the current layout exactly, and why enabling it belongs with the record-version and migration work
+    /// (plan §4b): rewrite the table, do not flip it under existing data. 16 is the value the benchmark schema
+    /// needs, because it inlines all three of its TEXT columns.
+    /// </para>
+    /// </summary>
+    public int FixedWidthInlineValueBytes { get; init; }
+
+    /// <summary>
     /// Gets the pending-append threshold, in bytes, at which buffered appends are flushed
     /// (only used when <see cref="EnableBufferedAppends"/> is enabled). Bounds both the memory the
     /// buffer can hold and the amount of work a crash can lose. Default 1 MB.

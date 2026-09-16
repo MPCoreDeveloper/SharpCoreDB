@@ -430,7 +430,9 @@ public partial class Table
 
     private FixedWidthRecordLayout GetFixedWidthLayout()
     {
-        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        // §4b: the inline capacity is part of the layout, so it participates in the cache key implicitly — the
+        // configuration is fixed for the lifetime of the table, and the migration path clears this field.
+        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _config?.FixedWidthInlineValueBytes ?? 0);
         return _fixedWidthLayout;
     }
 

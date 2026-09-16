@@ -850,10 +850,26 @@ keeping the record constant-size per schema**, which is exactly what the in-plac
 §4a and §6 depend on (a position-stable record with fixed offsets). That is a smaller and safer change than a
 variable-length record, and it captures the same prize — so the `OverflowArena` half of this section is done, and
 the whole of the work is the inline threshold plus its format handling.
-**What still blocks it:** the layout is *computed from the schema* and never stored, so changing it silently
-changes the meaning of every existing record. This is therefore the **first change in this program that genuinely
-breaks the on-disk format** — it needs the version bump, an upgrade path for existing files, and migration tests
-(§0.1-3, §0.5). It should be its own unit, not an edit appended to an INSERT optimisation session.
+**Implementation status (2026-09-16): built, default-off, and NOT yet shippable — the encoding works, two integration
+paths do not.** The inline capacity exists behind `DatabaseConfig.FixedWidthInlineValueBytes`, which **defaults to 0
+and therefore preserves the historical layout byte for byte** (the whole existing suite stays green with it: 1,911
+tests). Above zero a variable slot becomes `[null-flag(1)][offset(4)][length(2)][inline payload(N)]` — the 5-byte
+prefix is untouched, so only the inline case (`null-flag = 2`) is new — and a payload that fits is written in the
+record with no arena traffic at all. The reader is centralised in one `TryReadVariableSlot` so the six separate code
+sites that decode a variable slot cannot disagree, and the two compaction-critical methods
+(`CollectVariableOffsets`, `RepointVariableSlots`) now skip flag 2 — treating an inline payload as an arena offset
+would keep or re-point the wrong block.
+**What is proven by test** (`FixedWidthInlineValueTests`): short values stored inline and long values still
+overflowing, both round-tripping, a `WHERE name = <inlined value>` lookup matching, and **compaction keeping inline
+and overflow values intact** — that last one is the patch most likely to corrupt data, and it passes.
+**What is not:** two tests are committed **skipped, as the acceptance criteria**, because they fail today —
+**(1)** a reopened table decodes an inline slot as an arena offset, so an inlined value comes back empty (the reopen
+path does not yet carry the inline layout), and **(2)** the bulk mutation path fails on inlined rows (update or bulk
+delete — not yet isolated). Since the encoding itself round-trips, both are integration: the prime suspects are the
+directory-open path rebuilding the table from the stored schema with a configuration that does not include the new
+property, and the bulk paths' own slot reads.
+**Do not enable this for data that is re-read or mutated until those two tests pass.** That — not the encoding — is
+the remaining §4b work, together with the version bump and upgrade path this section already requires.
 
 ### 4c. Index maintenance on update
 

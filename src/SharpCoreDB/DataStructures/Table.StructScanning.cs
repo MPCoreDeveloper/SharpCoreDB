@@ -908,6 +908,17 @@ public partial class Table
             return false; // truncated record or NULL slot (NULL never equals a value)
         }
 
+        // §4b: flag 2 means the payload lives in the slot itself, so compare those bytes directly and never touch
+        // the arena. The length is validated against the record before slicing, because a corrupt length must not
+        // throw here — this runs per row on a scan.
+        if (recordData[slotOffset] == 2)
+        {
+            var inlineLength = BinaryPrimitives.ReadInt16LittleEndian(recordData.Slice(slotOffset + 5, 2));
+            return inlineLength == expectedUtf8.Length
+                && slotOffset + 7 + inlineLength <= recordData.Length
+                && recordData.Slice(slotOffset + 7, inlineLength).SequenceEqual(expectedUtf8);
+        }
+
         // NOTE: offset 0 is a VALID block offset (the first arena block's length prefix sits at 0),
         // so only the flag byte above distinguishes NULL — never filter on the offset value itself.
         var arenaOffset = BinaryPrimitives.ReadInt32LittleEndian(recordData.Slice(slotOffset + 1, 4));

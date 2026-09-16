@@ -49,8 +49,14 @@ public static class FixedWidthCodec
             }
             else
             {
+                var payload = Table.EncodeVariablePayload(types[i], value);
+                if (TryWriteInlineVariableSlot(slot, layout, payload))
+                {
+                    continue;   // stored in the record: no arena traffic at all for this value
+                }
+
                 (variableColumns ??= []).Add(i);
-                (variablePayloads ??= []).Add(Table.EncodeVariablePayload(types[i], value));
+                (variablePayloads ??= []).Add(payload);
             }
         }
 
@@ -86,8 +92,14 @@ public static class FixedWidthCodec
             }
             else
             {
+                var payload = Table.EncodeVariablePayload(types[i], value);
+                if (TryWriteInlineVariableSlot(slot, layout, payload))
+                {
+                    continue;   // stored in the record: no arena traffic at all for this value
+                }
+
                 (variableColumns ??= []).Add(i);
-                (variablePayloads ??= []).Add(Table.EncodeVariablePayload(types[i], value));
+                (variablePayloads ??= []).Add(payload);
             }
         }
 
@@ -100,6 +112,64 @@ public static class FixedWidthCodec
     {
         slot[0] = 0;
         BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+    }
+
+    /// <summary>
+    /// Writes a variable-length payload into the slot itself when the layout has inline capacity and the payload
+    /// fits (plan §4b), returning <see langword="false"/> when it must go to the overflow arena instead. The slot
+    /// layout is the historical <c>[null-flag(1)][offset(4)]</c> prefix with <c>[length(2)][payload(N)]</c> appended,
+    /// so a NUL or overflow slot is byte-identical to what previous versions wrote.
+    /// </summary>
+    private static bool TryWriteInlineVariableSlot(Span<byte> slot, FixedWidthRecordLayout layout, byte[] payload)
+    {
+        if (layout.InlineValueBytes <= 0 || payload.Length > layout.InlineValueBytes)
+        {
+            return false;
+        }
+
+        slot[0] = 2;                                                        // inline payload
+        BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);               // offset unused
+        BinaryPrimitives.WriteInt16LittleEndian(slot[5..], (short)payload.Length);
+        payload.CopyTo(slot[7..]);
+        return true;
+    }
+
+    /// <summary>
+    /// Reads a variable-length slot in one place, so no reader can support the overflow encoding and miss the
+    /// inline one. Returns <see langword="false"/> when the slot is NULL, in which case
+    /// <paramref name="value"/> is <see cref="DBNull"/>.
+    /// </summary>
+    internal static bool TryReadVariableSlot(
+        ReadOnlySpan<byte> slot,
+        FixedWidthRecordLayout layout,
+        DataType type,
+        IOverflowArena arena,
+        out object value)
+    {
+        if (slot[0] == 0)
+        {
+            value = DBNull.Value;
+            return false;
+        }
+
+        if (slot[0] == 2 && layout.InlineValueBytes > 0)
+        {
+            var length = BinaryPrimitives.ReadInt16LittleEndian(slot[5..]);
+            var payload = length > 0 ? slot.Slice(7, length).ToArray() : [];
+            value = Table.DecodeVariablePayload(type, payload);
+            return true;
+        }
+
+        var offset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+        var block = arena.Read(offset);
+        if (block is null)
+        {
+            value = DBNull.Value;
+            return false;
+        }
+
+        value = Table.DecodeVariablePayload(type, block);
+        return true;
     }
 
     /// <summary>
@@ -148,16 +218,10 @@ public static class FixedWidthCodec
             var slot = data.Slice(layout.Offsets[i], layout.SlotSizes[i]);
             if (layout.IsVariable[i])
             {
-                if (slot[0] == 0)
-                {
-                    row[columns[i]] = DBNull.Value;
-                }
-                else
-                {
-                    var offset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                    var payload = arena.Read(offset);
-                    row[columns[i]] = payload is null ? DBNull.Value : Table.DecodeVariablePayload(types[i], payload);
-                }
+                // One place for NULL, the overflow encoding (flag 1) and the inline encoding (flag 2, plan §4b), so
+                // a reader cannot implement one and miss the other.
+                _ = TryReadVariableSlot(slot, layout, types[i], arena, out var variableValue);
+                row[columns[i]] = variableValue;
             }
             else
             {
@@ -179,9 +243,11 @@ public static class FixedWidthCodec
             }
 
             var slot = layout.Offsets[i];
-            if (slot + 5 > record.Length || record[slot] == 0)
+            // Flags: 0 = NULL, 1 = overflow offset, 2 = inline payload (plan §4b). Only flag 1 carries an arena
+            // offset — collecting an inline payload as one would keep or free the wrong block.
+            if (slot + 5 > record.Length || record[slot] is 0 or 2)
             {
-                continue; // truncated or null slot
+                continue; // truncated, null, or inline — no arena block to collect
             }
 
             var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(record.AsSpan(slot + 1, 4));
@@ -207,7 +273,9 @@ public static class FixedWidthCodec
             }
 
             var slot = layout.Offsets[i];
-            if (slot + 5 > record.Length || record[slot] == 0)
+            // Flags: 0 = NULL, 1 = overflow offset, 2 = inline payload (plan §4b) — only flag 1 holds an offset, so
+            // an inline slot must never be re-pointed through the compaction mapping.
+            if (slot + 5 > record.Length || record[slot] is 0 or 2)
             {
                 continue;
             }

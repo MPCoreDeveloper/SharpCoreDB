@@ -4412,9 +4412,11 @@ public partial class Table
                             continue;
                         }
 
-                        var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                        var block = arena.Read(blockOffset);
-                        decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
+                        // §4b: the slot may carry the payload inline (flag 2) rather than an arena offset, so this
+                        // goes through the shared reader instead of reading an offset unconditionally.
+                        decoded[i] = FixedWidthCodec.TryReadVariableSlot(slot, layout, type, arena, out var variableValue)
+                            ? variableValue
+                            : null;
                     }
                     else
                     {

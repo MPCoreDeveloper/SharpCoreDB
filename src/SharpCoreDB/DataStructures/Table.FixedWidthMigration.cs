@@ -253,6 +253,11 @@ public partial class Table
                     continue; // NULL slot — valid in either format
                 }
 
+                if (data[slot] == 2)
+                {
+                    continue; // §4b inline payload — no arena block to validate
+                }
+
                 // The slot must be an arena offset, not a legacy string-length prefix.
                 var offset = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(data.AsSpan(slot + 1, 4));
                 if (arena.Read(offset) is null)
