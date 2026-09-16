@@ -166,4 +166,18 @@ public sealed class FixedWidthInlineValueTests : IDisposable
         Assert.Equal(LongValue, ValueOf(db, 1, "note"));
         Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 2"));
     }
+
+    /// <summary>
+    /// Pins the shipped default and the escape hatch. ⚠️ The default is <b>0</b> and the owner decision is to make it
+    /// 16: flipping it is blocked on the single-file path, which supplies the capacity from config instead of storing
+    /// it, so a mismatch makes <c>SingleFileTable.IsFixedWidthDataBlock</c> classify a binary block as legacy JSON and
+    /// <c>EnsureCacheLoaded</c> throws. When that path persists the capacity (like the multi-file path now does), this
+    /// test is the one that must be updated deliberately — that is what it is for.
+    /// </summary>
+    [Fact]
+    public void Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout()
+    {
+        Assert.Equal(0, new DatabaseConfig().FixedWidthInlineValueBytes);
+        Assert.Equal(16, new DatabaseConfig { FixedWidthInlineValueBytes = 16 }.FixedWidthInlineValueBytes);
+    }
 }

@@ -109,13 +109,27 @@ public class DatabaseConfig
 
     /// <summary>
     /// Gets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width record
-    /// slot instead of writing them to the overflow arena. <b>Default 0 — the existing layout, byte for byte.</b>
+    /// slot instead of writing them to the overflow arena. <b>Default 0 — the historical layout, byte for byte.</b>
+    /// <para>
+    /// ⚠️ <b>The owner decided on 2026-09-16 to make this 16 and is blocked on one path, not on the design.</b> The
+    /// multi-file path is ready: the capacity is persisted per table in metadata and a reopened table decodes with the
+    /// capacity it was written with, so flipping the default is upgrade-only and needs no rewrite of existing data
+    /// (see the "self-describing" paragraph below). The <b>single-file (<c>.scdb</c>) path is not ready</b>: its
+    /// capacity is still supplied from the opening <c>DatabaseConfig</c>
+    /// (<c>DatabaseExtensions</c> → <c>SingleFileTable.SetFixedWidthInlineValueBytes</c>) rather than stored, so a
+    /// capacity mismatch makes <c>SingleFileTable.IsFixedWidthDataBlock</c>'s record-length test fail, the block then
+    /// falls through to the legacy JSON branch and <c>EnsureCacheLoaded</c> throws
+    /// <c>JsonException: '0x14' is an invalid start of a value</c> on a binary record. Flipping this default without
+    /// fixing that breaks <c>ReopenRoundTripMatrixTests</c> (must-pass, plan constraint 2), so the flip waits on
+    /// persisting the capacity in the SCDB format. The measured case for doing so is below.
+    /// </para>
     /// <para>
     /// Context (plan §4b): the fixed-width record already implements the stable-slot + overflow model — fixed-size
-    /// columns inline, String/Blob as a 5-byte <c>[null-flag(1)][overflow offset(4)]</c> slot — so *every*
-    /// variable-length value, however short, costs an arena write. Measured on the multi-row pass those arena
-    /// stages are <b>arena-write 2.26 µs + arena-append 1.79 µs = ~4.05 µs/row, ~24 %</b>, and on that schema every
-    /// TEXT value is short (<c>User1</c>, <c>user1@test.com</c>, <c>payload-1</c>).
+    /// columns inline, String/Blob as a 5-byte <c>[null-flag(1)][overflow offset(4)]</c> slot — so at capacity 0
+    /// *every* variable-length value, however short, costs an arena write. Measured on the batched multi-row INSERT
+    /// shape at 1,000 rows/statement (median of 5), raising this to 16 took <b>62,545 → 74,634 rows/s (+19.3 %)</b>,
+    /// <b>15.99 → 13.40 µs/row (−16.2 %)</b> and <b>4,943 → 4,348 B allocated/row (−12 %)</b>, by halving the
+    /// overflow arena (1,006,670 → 488,890 B).
     /// </para>
     /// <para>
     /// Above zero, a variable slot becomes <c>[null-flag(1)][offset(4)][inline length(2)][inline payload(N)]</c> —
@@ -124,11 +138,17 @@ public class DatabaseConfig
     /// and overflow (1) keep their existing encodings and offsets, so the inline case is purely additive.
     /// </para>
     /// <para>
-    /// ⚠️ <b>This changes the on-disk record layout.</b> The layout is computed from the schema rather than stored,
-    /// so a file written with one value of this property must be opened with the same one — which is why the default
-    /// preserves the current layout exactly, and why enabling it belongs with the record-version and migration work
-    /// (plan §4b): rewrite the table, do not flip it under existing data. 16 is the value the benchmark schema
-    /// needs, because it inlines all three of its TEXT columns.
+    /// ⚠️ <b>This is part of the on-disk record layout and it costs space.</b> Every variable-length column reserves
+    /// <c>2 + N</c> extra bytes per record, so the benchmark schema's table file grew 2.4× (760,000 → 1,840,000 B) for
+    /// the +19.3 % above, and a value *longer* than N pays the reserve as well as its arena write.
+    /// </para>
+    /// <para>
+    /// <b>The layout is self-describing on the multi-file path, which is what makes a non-zero default safe there.</b>
+    /// The value is persisted per table in metadata (<c>Table.FixedWidthInlineValueBytes</c>, written by
+    /// <c>Database.Core.cs</c>) and a reopened table decodes with the capacity it was *written* with rather than with
+    /// this config — so a database created under the old default keeps its capacity-0 layout and needs no rewrite,
+    /// while new tables take whatever this is. An older build reading a new file would misread its slots; that is a
+    /// downgrade, which this format deliberately does not support (upgrade-only, owner decision).
     /// </para>
     /// </summary>
     public int FixedWidthInlineValueBytes { get; init; }

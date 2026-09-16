@@ -2141,6 +2141,21 @@ is **un-skipped and passes**, so the suite baseline moves from 17 skipped to 16,
 defect: enabling it is now a decision about the default (owner call, with the format/migration story of decision 3),
 not a bug to fix.
 
+⚠️ **The owner decided the default should be 16, and the flip is currently blocked on one path — the attempt is
+recorded rather than left implicit.** Flipping `FixedWidthInlineValueBytes` to 16 on 2026-09-16 broke a must-pass
+suite (plan constraint 2) and was reverted: on the **single-file (`singlefile-fixedwidth`) variant** of
+`ReopenRoundTripMatrixTests`, `SingleFileTable.EnsureCacheLoaded` threw
+`JsonException: '0x14' is an invalid start of a value` while deserializing a **binary** record as legacy JSON. The
+cause is the same class of defect just fixed for the multi-file path, one layer out: the SCDB format does not store
+the capacity, so it is supplied from the opening `DatabaseConfig`
+(`DatabaseExtensions` → `SingleFileTable.SetFixedWidthInlineValueBytes`); when that disagrees with the capacity the
+block was written with, `IsFixedWidthDataBlock`'s record-length test fails, the block falls through to the legacy JSON
+branch, and deserialisation throws. **So §4b's next step is to persist the capacity in the SCDB format** — the mirror
+of what `Table`/`TableMetadataDto` just gained — and
+`FixedWidthInlineValueTests.Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout` is the test that must be
+updated deliberately when it lands. The trade to weigh at that point is unchanged: **+19.3 %** rows/s against a **2.4×**
+larger table file on the benchmark schema.
+
 ⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
 `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)
 **once for the whole call**, and `BulkIndexRowsInBTree` (:822) is already bulk — the "per row" figures came from the
