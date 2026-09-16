@@ -655,13 +655,22 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// <returns>True if schema-changing command.</returns>
     private static bool IsSchemaChangingCommand(string sql)
     {
+        // §2 instrumentation (2026-09-16): stamped to settle whether this per-statement post-dispatch test is part of
+        // the single-row-statement profile's unattributed 26.2 µs. It should be negligible — this is already the
+        // span-based replacement for a per-statement ToUpperInvariant — and the measurement decides, not the reading.
+        long classifyStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+
         // Span-based ordinal check — the previous TrimStart().ToUpperInvariant() allocated a full
         // uppercased copy of the statement on every ExecuteSQL call (measured as part of the
         // per-statement SQL overhead; the statement text itself is already case-preserved).
         var span = sql.AsSpan().TrimStart();
-        return span.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase)
+        var result = span.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase)
             || span.StartsWith("ALTER ", StringComparison.OrdinalIgnoreCase)
             || span.StartsWith("DROP ", StringComparison.OrdinalIgnoreCase);
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
+        return result;
     }
 
     /// <summary>

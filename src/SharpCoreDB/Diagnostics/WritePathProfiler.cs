@@ -152,9 +152,19 @@ public static class WritePathProfiler
         /// <see cref="Encode"/>.
         /// </summary>
         TableBatch = 19,
+
+        /// <summary>
+        /// Deciding what kind of statement this is — the parser's statement classification and the dispatcher's
+        /// post-call schema-change test. Added (2026-09-16) after the single-row-statement profile showed
+        /// <c>dispatch</c> at 36.5 µs/statement with 26.2 µs of that unaccounted for: the dispatcher's
+        /// <c>IsSchemaChangingCommand(sql)</c> and metadata flags run *after* the dispatch stamp closes, and the
+        /// parser's own classification (prefix tests plus its regex fallbacks) runs inside <c>Execute</c> without a
+        /// stamp. Both answer the same question, so they share one stage.
+        /// </summary>
+        Classify = 20,
     }
 
-    private const int StageCount = 20;
+    private const int StageCount = 21;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -187,7 +197,7 @@ public static class WritePathProfiler
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
-        "hash-index", "stmt-validate", "dispatch", "table-batch",
+        "hash-index", "stmt-validate", "dispatch", "table-batch", "classify",
     ];
 
     private static int _enabled;

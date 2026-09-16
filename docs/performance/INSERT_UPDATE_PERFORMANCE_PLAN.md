@@ -2109,6 +2109,33 @@ shown we deliver.
 Everything else in this plan is an implementation detail I will decide and verify under the §2 protocol
 (overflow-arena growth policy, when a value inlines vs overflows, which index maintenance to skip).
 
+## 11. Instrumentation findings — the single-row-statement floor (2026-09-16)
+
+After the DELETE, scanner, §4b and PageBased-UPDATE work landed, the profile of the 1 row/statement shape
+(20,000 statements) left exactly one hole: `dispatch` measured 36.5 µs/statement (66.3% of a 55.1
+µs/statement pass) and, after subtracting its stamped children (10.3 µs/statement), **26.2 µs/statement was
+unaccounted for**, with 7.3 KB of allocation per call. Two candidate owners were named: the dispatcher's
+post-call block (`IsSchemaChangingCommand` plus the metadata flags, which run *after* the `dispatch` stamp
+closes) and the parser's own plumbing inside `sqlParser.Execute`.
+
+A `classify` stage was added and stamped on `IsSchemaChangingCommand` to decide between them:
+
+| stage | total ms | calls | share | alloc MB | B/call |
+|---|---|---|---|---|---|
+| classify | 0.6 | 20,002 | 0.0% | 0.0 | 0 |
+
+**The post-call block is excluded** — 0.03 µs/statement and zero allocation, because the method is already
+the span-based replacement for a per-statement `ToUpperInvariant`. The entire 26.2 µs therefore sits inside
+`sqlParser.Execute`'s own body, where the concrete suspects are the three uppercased copies per statement
+that this codebase has already removed elsewhere for exactly this reason:
+
+- `SqlParser.DML.cs:131-132` — `parts[0].ToUpperInvariant()` and `parts[1].ToUpperInvariant()`;
+- the `upper` full-statement copy feeding the AST-routing `upper.Contains(...)` tests
+  (`SqlParser.DML.cs:106-110`).
+
+The next step is to stamp that region the same way *before* changing it — and to check for a partner gate in
+the sense of §2's pairing lesson, since a "no change" on one half is not a verdict on the pair.
+
 
 
 
