@@ -2090,25 +2090,54 @@ where this engine currently pays a re-serialize per update, and priority 1 is th
 Then: **priority 2, INSERT** (0.54× fair-PK batch, 0.67× default SQL path, 0.92× StructRow, 0.85× Direct — decision 4
 wants this above parity, not near it) and **priority 3, PageBased UPDATE** (0.17×, decision 1 and §6).
 
-⚠️ **Priority 2's own named lever is eliminated before it was built, for a structural reason.** §9's item 2 has long
-carried "defer the per-row index maintenance to one bulk build" (hash-index 1.7 µs + index-maint 2.2 µs per row, 23 %
-of the budget), and the `BulkImport` preset's comment names the same thing. Two measurements and one reading remove it:
+⚠️ **Priority 2's own named lever was mis-characterised in the previous revision of this block, and the correction
+revives it.** The claim "the hash half is measured as noise" rested on a **switch that does nothing on these arms**:
+`SHARPCOREDB_HASH_INDEXES=0` left the `hash-index` stage firing 20 times and allocating an *identical* 18.2 MB,
+because the multi-row arm calls `CreateDocsIndexSql` and registers an index explicitly, which the config flag cannot
+undo. Both timed runs were therefore the same configuration. The stage table from those same runs is reliable on the
+column that matters — **allocation** — because its `dispatch` figure (4,489 B/row) independently matches the harness's
+own profiler-free counter (**4,937 B/row**), and it gives the batched shape's real budget:
 
-- **The hash half is already measured as noise.** Timed, profiler-free, median of 5, multi-row batch shape:
-  **63,377 rows/s with hash indexes against 59,082 without** — inside the arm's ±10 % band and in the *wrong*
-  direction for a cost. Per-row hash maintenance is ≲ noise here.
-- **The index work is already per call, not per row.** `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls
-  `UpdatePrimaryKeyIndex(validatedRows, positions)` and `UpdateHashIndexes(validatedRows, positions)` **once for the
-  whole call**, and `BulkIndexRowsInBTree` is already bulk. The "per row" figures were taken on the
-  **1-row-per-statement** shape, where each row *is* its own call — so on every tracked arm (batched `InsertBatch`,
-  and the multi-row statement, which also batches per statement) there is nothing left to defer.
+| region | calls | B/row | staged µs/row |
+|---|---:|---:|---:|
+| `arena-write` (contains `arena-append`, 737 B) | 20,000 | **1,096** | 2.65 |
+| `validate` + `encode` (validation and serialisation) | 20 | 1,452 | 7.9 together |
+| `hash-index` (inside `index-maint`, 1,033 B) | 20 | **951** | 0.94 |
+| `row-build` | 20,000 | 400 | 1.6 |
+| `parse` | 20 | 443 | 0.46 |
+| `engine-write` | 20 | 193 | 1.1 |
 
-**What the reading did surface, and it is a live per-row candidate on the tracked shape:** `RowsToDictionaries(validatedRows)`
-inside the same critical section allocates a `Dictionary<string, object>` **per row** purely to feed
-`BulkIndexRowsInBTree`, and it only runs when a B-tree exists — which the PK-bearing benchmark schema has. The
-`index-maint` stage's measured allocation (~1,032 B/call × 2 ≈ 2 KB/row) is consistent with it, against the harness's
-own **profiler-free** counter reading **4,937 B/row** on that shape. That is where priority 2 should point: allocation
-on the batch insert path, measured with the harness's `[diag]` counter rather than with stage times. The at-rest
+Note the call counts: `index-maint`, `hash-index`, `validate`, `encode` and `parse` all fire **once per statement**,
+which confirms the per-call claim above — while `arena-write`, `arena-append` and `row-build` fire **once per row**
+(20,000) and are therefore the genuinely per-row costs. That reframes priority 2: the per-row budget is the arena
+(~1.1 KB and 2.65 µs per row), and **§4b's inline capacity is the existing lever for it** — it is already implemented,
+defaults to 0, and `SHARPCOREDB_INLINE_BYTES` measures it on this exact shape.
+
+**Measured on that shape, timed and profiler-free, median of 5, same session and regime:**
+
+| `SHARPCOREDB_INLINE_BYTES` | rows/s | µs/row | allocated/row | arena file | data file |
+|---|---:|---:|---:|---:|---:|
+| 0 (the default) | 62,545 | 15.99 | 4,943 B | 1,006,670 B | 760,000 B |
+| 16 | **74,634** | **13.40** | **4,348 B** | **488,890 B** | 1,840,000 B |
+
+**+19.3 % rows/s, −16.2 % µs/row, −12 % allocation**, with the overflow arena halved and the data file 2.4× larger
+because every TEXT slot now reserves `1+4+2+16` bytes. The two runs' min–max bands barely overlap (0.213–0.361 s
+against 0.271–0.456 s), so the effect is outside this arm's noise. This is the first clean timed INSERT win the plan
+has produced, it was already implemented, and it converts §4b's estimate ("~24 % of INSERT") into a measurement on the
+tracked shape.
+
+⚠️ **Which makes the §4b reopen defect the gate on priority 2 rather than a side quest.** `FixedWidthInlineValueBytes`
+changes the on-disk record layout, so its default stays 0 (byte-identical) and it cannot ship enabled while
+`FixedWidthInlineValueTests.Reopen_KeepsInlineAndOverflowValues` is skipped — a reopened database currently loses its
+inline values. **That test is priority 2's next step**: a measured **19.3 %** INSERT win is sitting behind one failing
+reopen path, and no further candidate-hunting on this row is worth as much as fixing it.
+
+⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
+`InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)
+**once for the whole call**, and `BulkIndexRowsInBTree` (:822) is already bulk — the "per row" figures came from the
+**1-row-per-statement** shape, where each row *is* its own call. So on the tracked arms there is nothing to defer; the
+hash index's 951 B/row is a *per-call* allocation over 1,000 rows, not a per-statement one, and removing it means
+changing what the index stores rather than when it is built. The at-rest
 mutation tax (~2× on UPDATE/DELETE, §3-1f/§4c) applies to both tables and is accounted there rather than as an INSERT
 cost. Anything below this block that opens with DELETE as priority 1 is pre-deferred-index history, kept for the record.
 
