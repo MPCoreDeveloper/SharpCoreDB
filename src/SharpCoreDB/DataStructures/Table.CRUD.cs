@@ -147,8 +147,15 @@ public partial class Table
                 // Primary key check (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
+                    // §2 instrumentation (2026-09-15): the per-row uniqueness probe on the single-row INSERT
+                    // path — a B-tree search per row that had no stamp, and one of the two suspects for the
+                    // ~28 µs/statement the Dispatch envelope could not account for.
+                    long probeStart = Diagnostics.WritePathProfiler.Stamp();
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    if (IsPrimaryKeyTaken(pkVal))
+                    bool pkTaken = IsPrimaryKeyTaken(pkVal);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, probeStart);
+
+                    if (pkTaken)
                         throw new InvalidOperationException("Primary key violation");
                 }
 
@@ -226,6 +233,11 @@ public partial class Table
                     _database?.SetLastInsertRowId(position);
                 }
 
+                // §2 instrumentation (2026-09-15): the second suspect for the ~28 µs/statement the Dispatch
+                // envelope could not account for — the per-row index maintenance this path performs after the
+                // engine call (PK B-tree insert, hash-index adds, B-tree row indexing), which had no stamp.
+                long indexMaintStart = Diagnostics.WritePathProfiler.Stamp();
+
                 // Update indexes (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
@@ -250,6 +262,7 @@ public partial class Table
 
                 // 🔥 NEW: Auto-index in B-tree if indexes exist
                 IndexRowInBTree(row, position);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexMaintStart);
                 
                 // ✅ NEW: Update cached row count
                 Interlocked.Increment(ref _cachedRowCount);
@@ -2575,13 +2588,23 @@ public partial class Table
                             }
                             else
                             {
+                                // §6 instrumentation (2026-09-15): this is the PageBased update's actual write —
+                                // the `else` of `TryUpdateInPlace`, i.e. append a new version and re-point the
+                                // indexes. It was entirely unstamped, which is why that arm attributed only
+                                // ~31 %: the Columnar branch above is skipped for PageBased, and the
+                                // `fastPatch` branch's engine-write stamp (:2402) never runs on this engine
+                                // either.
+                                long writeStart = Diagnostics.WritePathProfiler.Stamp();
                                 long newPosition = engine.Insert(Name, rowData);
+                                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
 
                                 if (this.PrimaryKeyIndex >= 0)
                                 {
+                                    long repointStart = Diagnostics.WritePathProfiler.Stamp();
                                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                                     this.Index.Delete(pkVal);
                                     this.Index.Insert(pkVal, newPosition);
+                                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                                 }
 
                                 foreach (var hashIndex in this.hashIndexes)
