@@ -1598,13 +1598,21 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `GetNormalizedSql` collapses whitespace but keeps literal *values*, statements differing only in their
    literals — exactly what 20,000 distinct INSERTs are — miss the cache every time: a normalized copy, a cache
    key, a `Split` of the whole statement, a `CachedQueryPlan` and a cache insert, per statement, for a plan
-   nothing reads. **That is the next target, and it is a design question rather than a micro-fix:** either
-   consume the returned plan, warm only statements that will repeat, or key DML by statement *shape* — the last
-   of which is sound only if the plan stops embedding literal tokens, since `CachedQueryPlan` is built from the
-   split tokens that include them. Attributed now: **~32 µs of a warm ~60 µs/statement (50 %, up from 25 %)**
-   — `parse` 23.3, `arena-write` 6.1, `row-build` 1.0, `engine-write` 0.7, `stmt-validate` 0.04, `wal-append`
-   0.02 — leaving ~28 µs in the `_walLock` region, `IsSchemaChangingCommand`, `Table.Insert`'s validation block
-   and the `_metadataDirty` bookkeeping.
+   nothing reads. **FIXED (2026-09-15) — and the removal is the whole fix.** Both `ExecuteSQL` overloads no
+   longer call `GetOrAddPlan` for DML: nothing reads a DML plan entry (`CachedPlan` is consumed only by the two
+   SELECT paths, and `TryGetCachedPlan` has no callers), so the chain was cost without effect, and the
+   literal-sensitive key meant it could never have hit for distinct-literal statements anyway. The statement
+   classification that existed only to feed it went with it. Measured (`--multirowinsert`, 1 row/statement,
+   median of 5): **59.64 → 51.29 µs/statement**, allocation **9.75 → 8.32 B/row**, and `parse` from 465.8 ms
+   across two stamps to **71.0 ms across one** — a ~21 µs warm-up replaced by 3.55 µs of real parsing. The
+   SELECT path's cache is untouched. Making DML plans *useful* would be a feature: the DML path takes raw SQL,
+   so it would have to accept a plan argument first. Attribution **after** the fix: `parse` **3.55 µs** (was
+   23.3), `arena-write` ~6–7 µs, `engine-write` ~0.7–2 µs, `row-build` ~0.4–1.4 µs, `stmt-validate` 0.04,
+   `wal-append` 0.03. So of a warm **51.29 µs** statement roughly 11–14 µs is attributed, and the remainder is
+   the `_walLock` region, `IsSchemaChangingCommand`, `Table.Insert`'s validation block and the `_metadataDirty`
+   bookkeeping. ⚠️ Per-stage figures on this shape swing by more than 2× between runs of the same build (the
+   profiled pass measured `arena-write` at 130.6 ms and 366.8 ms on two of them), so only medians-of-5 are
+   quoted as results and the stage numbers are read as ratios inside one report.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)
