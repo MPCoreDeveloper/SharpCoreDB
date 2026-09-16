@@ -1525,12 +1525,52 @@ or within ~2×, down from the ~7–10× and ~6–14× that opened this plan. The
 INSERT (per-record framing + the SQL ladder) and in the at-rest tax, both of which §3-1f/§4c and the
 `DeferredDeleteIndexes` work have already reduced but not eliminated.
 
-**Note added later the same day (§5 item 2):** these figures predate the change that made the append path
-honour `WalDurabilityMode`. The harness arm configuration sets `WalDurabilityMode = Async`, which the append
-path now obeys instead of writing through per record, so the INSERT columns above are **stale for the arms
-that declare `Async`** — measured on the same shape, honouring the mode moved standalone single-row INSERT
-from 1,127.61 to 119.79 µs/row. Re-running `--pk` / `--pk-default` / `--dual-mode` under the §2 protocol is
-the way to bring this table current, and until that run exists no INSERT figure here should be quoted.
+**Re-run under the §2 protocol (2026-09-16) — the caveat above is closed.** The three arms were re-run on the
+current build, which includes the change that made the append path honour `WalDurabilityMode`: one process at a
+time, launched detached with its output to a file, nothing else on the CPU, medians of 3 reps.
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| `--pk` SharpCoreDB FW, plaintext | 81,344 | 110,162 | 230,722 | 168,804 |
+| `--pk` SharpCoreDB FW, at-rest | 66,237 | 61,191 | 263,388 | 167,647 |
+| `--pk` SharpCoreDB legacy, plaintext | 73,297 | 69,744 | 155,104 | 134,926 |
+| `--pk` SQLite | 160,508 | 93,187 | 286,597 | 350,365 |
+| `--pk-default` SharpCoreDB (pure default) | 50,777 | 44,269 | 125,771 | 100,998 |
+| `--pk-default` SQLite | 147,356 | 76,137 | 210,634 | 264,855 |
+
+Gaps vs the matching SQLite arm: **FW plaintext** UPDATE 1.24×, READ **0.85× (ahead)**, DELETE 2.08×,
+INSERT 1.97×; **FW at-rest** UPDATE 1.09×, READ 1.52×, DELETE 2.09×, INSERT 2.42×; **legacy** UPDATE 1.85×,
+READ 1.34×, DELETE 2.60×, INSERT 2.19×; **pure default** UPDATE 1.68×, READ 1.72×, DELETE 2.62×, INSERT 2.90×.
+
+⚠️ **These columns are not comparable with the 2026-09-15 table arm by arm, and the reason is the reference:**
+SQLite itself came back **15 % lower on INSERT and 6 % higher on UPDATE** between the two runs, so the machine
+or OS state differs and absolute ops/sec did not transfer *even on the same box*. The comparison that survives
+is the **ratio** — which is what the §2 protocol says to use, and why every row above is stated as a gap.
+
+**And the ratio flags something real: tuned FW UPDATE went from 0.6× (ahead of SQLite) to 1.24× (behind).**
+SQLite's UPDATE *rose* 6 % across the two runs while the FW arm *fell* 45 % (420,187 → 230,722), so this is not
+the reference drifting upward — it is a relative regression on the UPDATE arm, and it is now the first thing to
+bisect. The cheapest test needs one run and no code: the harness already has the A/B built in — re-run `--pk`
+with `SHARPCOREDB_BUFFERED_APPENDS=0`, which reverts the append path to writing through, and see whether the FW
+UPDATE column returns to ~420K. If it does, append buffering is the cause and the fix is to narrow
+`BuffersAppends` so it governs appends without also governing the version append an update falls back to.
+
+**`--dual-mode` (same protocol, medians of 3, rep-interleaved)** — the encryption comparison, now
+protocol-compliant rather than trend-only:
+
+| operation | raw (plaintext opt-out) | default (encrypted) | raw/default |
+|---|---:|---:|---:|
+| INSERT | 90,664 | 81,247 | 1.12× |
+| READ | 78,401 | 70,867 | 1.11× |
+| UPDATE | 102,727 | 45,056 | **2.28×** |
+| DELETE | 216,402 | 68,142 | **3.18×** |
+
+The split is the useful part: the encrypted default costs ~11–12 % on the append-and-scan operations and
+**2.3–3.2× on the mutating ones**. That is the physically expected shape — appends write ciphertext
+sequentially, whereas an update or delete reads a page, decrypts, modifies it and re-encrypts — and it means the
+encryption tax is a **mutation tax**, so it belongs in the §4/§6 accounting rather than in the INSERT budget. It
+also explains most of the `--pk-default` gap: that arm is Columnar *and* encrypted, and its UPDATE/DELETE
+columns are the ones carrying this cost.
 
 ---
 
@@ -1613,6 +1653,19 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    bookkeeping. ⚠️ Per-stage figures on this shape swing by more than 2× between runs of the same build (the
    profiled pass measured `arena-write` at 130.6 ms and 366.8 ms on two of them), so only medians-of-5 are
    quoted as results and the stage numbers are read as ratios inside one report.
+   **Where that variance came from, corrected (2026-09-15):** it was *mostly* self-inflicted. The disagreeing
+   runs were made while the nine test suites and other benchmark invocations were in flight — and several
+   commands were auto-backgrounded by the tooling while still writing output, so a "quiet" measurement was never
+   actually quiet. **But not entirely.** The first isolated `--pk` re-run (2026-09-16: one process, launched
+   detached with output to a file, nothing else on the CPU) still shows a **1.3–1.65× rep-to-rep spread on the
+   INSERT arms** — legacy 57.1 / 73.3 / 94.3 K ops/s, SQLite 137 / 180 / 161 K — while the small tight arms
+   (at-rest INSERT, UPDATE) stay within ~10 %. So the protocol is: **one benchmark at a time, launched detached
+   with its output to a file, with no suite run and no second benchmark beside it**, and **quote medians and
+   ratios, never a single absolute**, because the INSERT arms carry a real rep-to-rep spread even on a quiet
+   machine. That protocol is now cheap to honour: a full `--pk` arm is ~28 s end to end. **Rep ladders, not just
+   medians, are worth reading:** the 2026-09-16 ladders rise monotonically on two of the three INSERT arms
+   (legacy 57.1 → 73.3 → 94.3 K, pure default 35.1 → 50.8 → 55.8 K), which is a warm-up effect rather than
+   random noise — so a median of 3 is conservative, and a single unrepeated run is measuring the JIT.
    **Item 2 — the remaining candidates — closed the same way.** Stamping the single-row `Table.Insert`'s
    validation block as `Validate` and its `SerializeRowExact` as `Encode` (neither had a stamp) settles two of
    the four named candidates: **row validation is free — 0.19 µs/statement, 0 bytes allocated** — while the
