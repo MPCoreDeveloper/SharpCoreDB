@@ -42,6 +42,7 @@ decision. The branch stays at `2.1.0-RC.3`; no release mechanics run until the o
 | 4 | INSERT target | **Beat SQLite, not merely match it** |
 | 5 | Scope | **Everything** — core SQL, Direct and StructRow paths *and* the bulk APIs (`InsertBatch`/`UpdateBatch`) and the ADO.NET / YesSql / Sync providers |
 | 6 | Encryption posture (§3-1b) | **Security stays the default and must be real.** "Encrypted by default" is the product promise; `NoEncryptMode=true` remains the explicit *raw-speed* opt-out for benchmarks and speed-critical deployments. **Every published number carries both an encrypted and an unencrypted column**, so the trade is a visible, documented option rather than a hidden tax. |
+| 7 | Per-row write durability under the default (FullSync) | **Stays write-through per value — recorded, not changed.** The default is a 34× cliff behind buffered appends on per-row statements (961–1,037 µs/row against ~30 µs/row, measured 2026-09-16), but a buffered *default* would trade the crash-durability promise (constraint 2: buffered rows are lost on process crash as well as power loss). The gain is already available exactly where a bulk caller wants it — `BulkImport` sets `EnableBufferedAppends = true` explicitly (with `Async` WAL, group commit and the query cache off), as does the write-once logging sink — so this is a deliberate posture, not an oversight. Any change to it is an owner call with both durability columns published. |
 
 Consequences: §6 is promoted from an owner call to a real work package; §5's INSERT target moves above
 parity; §4b's format change is in scope **with** a migration path; §8's targets apply to every API
@@ -191,6 +192,16 @@ instrumentation accounts for ≥90% of wall time in a write loop.
    **encrypted (default) and unencrypted (`NoEncryptMode=true`)** side by side, per operation, on the
    same run. Neither mode may be quoted alone: the difference is a product decision the user makes, so
    hiding either half of it would be the same mistake as quoting build times without recall.
+
+6. **The regime is declared and cleared per measurement, never inherited.** The harness takes its switches from
+   environment variables and the shell that runs it persists across commands, so a switch set for one measurement
+   silently governs every later run in that shell. This plan learned it the expensive way on 2026-09-16: a whole
+   session's figures — a profile run, an A/B, and the `--pk` arms — were buffered-appends with a FullSync WAL
+   because `SHARPCOREDB_BUFFERED_APPENDS=1` and `SHARPCOREDB_WAL_DURABILITY=fullsync` were still set from earlier
+   turns, which made the "default posture" numbers **34× off**. Two rules follow: **clear the switches before each
+   measurement** rather than assuming they were left unset, and **quote the harness's `[diag]` line** so the regime
+   travels with the number. Ratios survive a regime mistake when both halves of the comparison share it; absolutes
+   do not — which is the second reason this protocol quotes ratios.
 
 ---
 
@@ -1354,6 +1365,13 @@ UPDATE gap **8.7× fixed-width / 9.6× at-rest / 10.2× legacy**, against Append
 PageBased is meanwhile **ahead of SQLite on READ** (1.5–1.7×) and **ahead of AppendOnly on INSERT** (+22 %), so
 §6's scope does not change: it is an UPDATE-only package.
 
+**Re-confirmed 2026-09-16 16:00 in the §8b regime, and now the largest SQL-path deficit in the plan.** PageBased
+fixed-width plaintext UPDATE **52,904** against SQLite's 302,923 (**0.17× / 5.7× gap**) and AppendOnly's 391,668 —
+while PageBased leads on READ (239,370, 2.27× SQLite) and INSERT (114,605, 1.11× AppendOnly). So the package is
+unchanged and the priority rises to **priority 2** in §9: the gate work moved this column from 31,132 to ~55,578 and
+no further, and the ~47 µs/update attribution in the block below still points at the re-serialize and its arena
+write rather than at the page write.
+
 > ⚠️ **Split the same day, and it re-points the work.** The two stamps went in on the generic per-page-op route — the
 serialize (`Encode`) and the page write (`EngineWrite`) — and attribution rose from 44.6 % to **62.4 %** (350.7 ms of
 stages against a 561.9 ms pass, 56.19 µs/update):
@@ -1846,6 +1864,44 @@ encryption tax is a **mutation tax**, so it belongs in the §4/§6 accounting ra
 also explains most of the `--pk-default` gap: that arm is Columnar *and* encrypted, and its UPDATE/DELETE
 columns are the ones carrying this cost.
 
+### 8b. Standing targets, re-measured 2026-09-16 16:00 *(explicit regime, `--pk`, fair PK shape)*
+
+The regime is set **deliberately** here rather than inherited: `SHARPCOREDB_BUFFERED_APPENDS=1` and
+`SHARPCOREDB_WAL_DURABILITY=fullsync`, matching the tables above, so these columns are comparable with them and the
+deltas measure code rather than a regime change. Fixed-width plaintext, `WHERE id = @pk` for both engines, one
+process at a time, medians of 3. Competitor columns are the control, and they moved ≤2–4 %.
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| AppendOnly, FW plaintext | 102,833 | 110,366 | **391,668** | **878,487** |
+| PageBased, FW plaintext | 114,605 | 239,370 | 52,904 | 302,154 |
+| SQLite | 190,333 | 105,491 | 302,923 | 400,589 |
+
+Gaps against the matching SQLite arm — **the write-path programme has effectively won three of its four columns**:
+
+| column | ratio | reading |
+|---|---:|---|
+| READ | **1.05× ahead** | won; holds only in the fixed-width layout |
+| UPDATE | **1.29× ahead** | won; it was 0.6× before the append-buffering decoupling |
+| DELETE | **2.19× ahead** | won; it was 0.51× and priority 1 when this plan opened |
+| INSERT (SQL batch) | 0.54× | **the remaining AppendOnly deficit** — and the only one |
+| PageBased UPDATE | 0.17× (5.7× gap) | unchanged by the gate work; §6's UPDATE-only package |
+
+Two caveats travel with this table. **DELETE's move is the deferred-index work**, not a new mechanism, so the
+2.19× is a routing win to defend rather than a number to build on. And **PageBased is ahead on READ (2.27×
+SQLite) and INSERT (1.11×)**, so its 0.17× UPDATE is a single-column problem, not a general engine verdict.
+
+⚠️ **Cross-run absolutes still do not transfer**: this session measured the *same build's* AppendOnly UPDATE at
+385,668 (three-way run) and 391,668 (here) while SQLite moved 325,813 → 302,923, and the inter-rep spread on the
+INSERT arms is 1.3–1.65×. Read the ratios; the columns are context.
+
+⚠️ **And this table must not be read alone: the default job disagrees with it by ~5×.** Same build, same session, same
+regime — the document-CRUD job (the table the comparison doc headlines) measures the SharpCoreDB SQL path at
+**UPDATE 65,570 against SQLite's 272,190 (0.24×)** and **DELETE 117,243 against 375,350 (0.31×)**, where this
+fair-PK table is **1.29× ahead** and **2.19× ahead**. Both are "by PK" runs, so the 5.4× spread is route- or
+layout-dependent, not a missing mechanism. **Reconciling the two tables is priority 1 in §9 and is a diagnosis
+before it is a fix** — the fair-PK columns are won *on this shape* and must not be reported as "UPDATE/DELETE won".
+
 ---
 
 ## 9. Execution order and dependency graph
@@ -1869,7 +1925,46 @@ because until it is done, "encryption costs 1.3–1.6×" is a number without a m
 measuring the price of protection we have not established we actually get. None of these three changes
 the on-disk format, and together they produce the attribution the structural work needs.
 
-**Priority order, re-derived from the 2026-09-16 three-way run** (supersedes the queue below wherever they
+**Priority order, re-derived after the 2026-09-16 16:00 benchmark in an explicitly set regime** — this block
+supersedes every priority list below it. Both §8b tables come from the same session and regime, and **they disagree,
+which is the finding**: the fair-PK shape and the default job measure different routes.
+
+Fair PK shape (`WHERE id = @pk`, tuned, fixed-width plaintext, AppendOnly, medians of 3):
+
+| column | SharpCoreDB | SQLite | ratio | status |
+|---|---:|---:|---:|---|
+| READ | 110,366 | 105,491 | **1.05× ahead** | **won** — defend it; holds only in the fixed-width layout |
+| UPDATE | 391,668 | 302,923 | **1.29× ahead** | **won on this shape** |
+| DELETE | 878,487 | 400,589 | **2.19× ahead** | **won on this shape** — deferred index maintenance; this column opened the plan at 0.51× and "priority 1" |
+| INSERT, SQL batch route | 102,833 | 190,333 | 0.54× | **priority 2** — the remaining AppendOnly INSERT deficit |
+| PageBased UPDATE | 52,904 | 302,923 | **0.17×** (5.7× gap) | **priority 3** — §6's package, still UPDATE-only |
+
+Default job — the document-CRUD table the comparison doc headlines, SharpCoreDB SQL path:
+
+| column | SharpCoreDB | SQLite | ratio | status |
+|---|---:|---:|---:|---|
+| INSERT | 99,355 | 148,845 | 0.67× | see priority 2 |
+| READ | 75,818 | 99,521 | 0.76× | ⚠️ behind here while 1.05× *ahead* on the fair-PK shape |
+| UPDATE | 65,570 | 272,190 | **0.24×** | **priority 1** |
+| DELETE | 117,243 | 375,350 | **0.31×** | **priority 1** |
+
+**Priority 1 is to reconcile those two tables, and it is a diagnosis before it is a fix.** The same engine on the same
+build is **1.29× ahead** on PK-bound UPDATE and **0.24×** on the default job's UPDATE — a 5.4× spread — so the deficit
+is route- or layout-dependent, not a missing mechanism: this plan's own history says the in-place UPDATE machinery and
+the deferred-index DELETE path both exist and are gated. Candidates to eliminate, cheapest first: **(a) the layout** —
+the in-place UPDATE/DELETE fast paths require fixed-width records, so a default-job table that resolves to the legacy
+variable-length layout takes the re-serialize route, which §6 already measured as the expensive one; **(b) the
+predicate and entry point** — literal versus bound parameter, single statement versus batch; **(c) index state**.
+Per §2 the next step is **instrumentation on the default job's UPDATE, not a change** — this plan has already paid
+once for acting on a plausible route theory (the PageBased gates, §6) and twice this session for trusting a reading
+over a measurement. Passing the fair-PK columns and then declaring UPDATE/DELETE "won" would make it three.
+
+Then: **priority 2, INSERT** (0.54× fair-PK batch, 0.67× default SQL path, 0.92× StructRow, 0.85× Direct — decision 4
+wants this above parity, not near it) and **priority 3, PageBased UPDATE** (0.17×, decision 1 and §6). The at-rest
+mutation tax (~2× on UPDATE/DELETE, §3-1f/§4c) applies to both tables and is accounted there rather than as an INSERT
+cost. Anything below this block that opens with DELETE as priority 1 is pre-deferred-index history, kept for the record.
+
+**Priority order, re-derived from the 2026-09-16 three-way run** *(superseded by the block above)* (supersedes the queue below wherever they
 disagree). Every figure is fair-shape — `WHERE id = @pk` for both engines, tuned, plaintext, median of 3, isolated
 — and every claim names its shape, because this session measured the *same build's* UPDATE column at **67,811** and
 **385,668** (5.7×) purely from the predicate and the API route:
@@ -2263,6 +2358,14 @@ removing 80% of its garbage buys nothing here — 195 fewer gen0 collections on 
 The win is real for production: **5× less allocation and 5× fewer collections on the default posture**. The
 multi-row half is unaffected by construction — a 3,000-payload batch still clamps to 65,536 and keeps the
 coalescing that makes it cheap — and it measured 45,279 rows/s / 22.09 µs/row unbuffered with 4,943 B/row.
+
+**Closing pointer (2026-09-16).** This section is now a closed account of the per-statement floor, and the two fixes
+it produced are **invisible on every tracked arm by construction** — the capacity gate needs statement text that
+differs per row (the arms bind by parameter or batch), and the append buffer needs the unbuffered path (the arms are
+buffered). That is worth stating plainly so the floor is not re-opened: the profile now shows tokenisation at
+**1.15 µs/statement** and the cache's own miss work at **2.26 µs and 359 B**, against a `Count` gate that was
+**21.9 µs**. The forward queue is §9's re-derived order — **INSERT throughput first, then PageBased UPDATE parity** —
+because three of the four fair-PK columns are already ahead of SQLite (§8b).
 
 
 

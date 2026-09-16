@@ -134,6 +134,12 @@ the deltas below measure code changes rather than a regime change. The competito
    Direct (1.09×) and StructRow (1.12×) paths, level on INSERT (0.90–0.96× on AppendOnly, and 1.49× *ahead* on
    PageBased StructRow), and behind on single-row UPDATE (0.25–0.39×) and DELETE (0.35–0.48×) — the two columns
    the plan has targeted since §8.
+   ⚠️ **The fair-PK harness disagrees with this row by ~5×, and that is the most useful thing in this document.**
+   Same build, same session, same regime, `--pk` fixed-width plaintext: **UPDATE 1.29× *ahead* of SQLite (391,668)
+   and DELETE 2.19× ahead (878,487)** against this table's 0.24× and 0.31× (65,570 / 117,243). Both are by-PK runs,
+   so the deficit here is route- or layout-dependent rather than mechanical — a default-job table that resolves to the
+   legacy variable-length layout cannot use the in-place fast paths that the fixed-width arm uses. Reconciling the two
+   is **priority 1** of the plan (§9) and is instrumentation work first, not a change.
 3. **LiteDB's weakness is point access, not bulk write.** Its INSERT (66–80K) is within 1.2–1.9× of every other
    engine here; its READ/UPDATE/DELETE (10–16K) are 6–26× behind. A comparison that quotes INSERT alone would
    flatter it.
