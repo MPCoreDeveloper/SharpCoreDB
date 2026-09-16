@@ -349,6 +349,17 @@ class Program
     }
 
     /// <summary>
+    /// Forces the fixed-width record layout for the document-CRUD job, from <c>SHARPCOREDB_MAIN_FIXEDWIDTH=1</c>.
+    /// Diagnostic only (plan §9 priority 1): the default job's schema declares no PRIMARY KEY, and
+    /// <c>SqlParser.DDL.cs</c> grants the fixed-width layout only to tables with an explicitly declared PK, so that
+    /// arm runs legacy variable-length records and cannot take the in-place UPDATE patch. Running the identical job
+    /// with the layout forced separates the two candidate gates — the layout and the PK-equality predicate — instead
+    /// of leaving them entangled in one 5.4× spread.
+    /// </summary>
+    static bool MainFixedWidthOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_FIXEDWIDTH") == "1";
+
+    /// <summary>
     /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
     /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
     /// write-through append per row — and now routes to the batched core when the table has no per-row-only
@@ -751,7 +762,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = BuildConfig(engineType, noEncrypt: noEncrypt, atRestRecords: atRestRecords);
+            var config = BuildConfig(engineType, fixedWidth: MainFixedWidthOverride(), noEncrypt: noEncrypt, atRestRecords: atRestRecords);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -769,6 +780,16 @@ class Program
 
             // Index lookup path used by READ/UPDATE/DELETE in this benchmark
             db.ExecuteSQL(CreateDocsIndexSql);
+
+            // §9 priority-1 diagnostics: report the layout this table actually resolved to. The schema declares no
+            // PK, so AutoFixedWidthRecords cannot apply and the arm runs legacy variable-length records unless
+            // SHARPCOREDB_MAIN_FIXEDWIDTH=1 forced FixedWidthRecordLayout — which is the variable under test.
+            if (db.TryGetTable("docs", out var layoutProbe) && layoutProbe is SharpCoreDB.DataStructures.Table probeTable)
+            {
+                Console.WriteLine(
+                    $"    [diag] docs layout: IsFixedWidthRecords={probeTable.IsFixedWidthRecords} " +
+                    $"(config FixedWidthRecordLayout={config.FixedWidthRecordLayout}, AutoFixedWidthRecords={config.AutoFixedWidthRecords})");
+            }
 
             // INSERT (batched via InsertBatch API for optimal performance)
             var sw = Stopwatch.StartNew();

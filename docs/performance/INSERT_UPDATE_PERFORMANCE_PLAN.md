@@ -1948,16 +1948,39 @@ Default job — the document-CRUD table the comparison doc headlines, SharpCoreD
 | UPDATE | 65,570 | 272,190 | **0.24×** | **priority 1** |
 | DELETE | 117,243 | 375,350 | **0.31×** | **priority 1** |
 
-**Priority 1 is to reconcile those two tables, and it is a diagnosis before it is a fix.** The same engine on the same
-build is **1.29× ahead** on PK-bound UPDATE and **0.24×** on the default job's UPDATE — a 5.4× spread — so the deficit
-is route- or layout-dependent, not a missing mechanism: this plan's own history says the in-place UPDATE machinery and
-the deferred-index DELETE path both exist and are gated. Candidates to eliminate, cheapest first: **(a) the layout** —
-the in-place UPDATE/DELETE fast paths require fixed-width records, so a default-job table that resolves to the legacy
-variable-length layout takes the re-serialize route, which §6 already measured as the expensive one; **(b) the
-predicate and entry point** — literal versus bound parameter, single statement versus batch; **(c) index state**.
-Per §2 the next step is **instrumentation on the default job's UPDATE, not a change** — this plan has already paid
-once for acting on a plausible route theory (the PageBased gates, §6) and twice this session for trusting a reading
-over a measurement. Passing the fair-PK columns and then declaring UPDATE/DELETE "won" would make it three.
+**Priority 1 — the reconciliation is done, and it inverted the hypothesis.** Adding a diagnostic that reports the
+layout the table actually resolves to (`Table.IsFixedWidthRecords`) and a switch that forces it
+(`SHARPCOREDB_MAIN_FIXEDWIDTH=1`, harness-only) produced a clean 2×2 in one session and one regime:
+
+| predicate | legacy variable-length | fixed-width |
+|---|---:|---:|
+| PK equality, `WHERE id = @pk` (fair-PK arm) | 94,715 | **391,668** — 4.1× *better* |
+| non-PK hash, `WHERE name = 'User{i}'` (default job) | **67,177** | 50,998 — 1.3× *worse* |
+
+Read with `SqlParser.DDL.cs:392-407`, which grants the fixed-width layout only to tables with an **explicitly
+declared PRIMARY KEY**, and the default job's schema declares none — so it runs legacy variable-length records. The
+probe confirms it: `IsFixedWidthRecords=False` by default, `True` only when forced.
+
+Three conclusions, and the second is the important one:
+
+1. **The entry-point candidate is eliminated.** Both arms issue their updates through `ExecuteBatchSQL`; the
+   difference is the predicate, not the route.
+2. **The predicate is the binding gate, and the layout alone is worse than useless.** With a non-PK predicate the
+   update re-serializes the whole record either way, and the fixed-width layout then *adds* cost: forcing it moved the
+   default job's UPDATE **67,177 → 50,998** and its INSERT **87,586 → 66,583** (−24 % each), because with
+   `FixedWidthInlineValueBytes = 0` every TEXT value takes an overflow-arena write. ⚠️ **So nobody may "fix" this by
+   flipping the layout default** — on this shape that is a measured regression.
+3. **The fix is a package.** In-place patching must be extended to **non-PK-located** updates (locate through the
+   hash index, then patch the changed fixed-width slot, which is length-preserving for the same reason §6's gate was
+   safe), and it must land **together with §4b's inline capacity**, because that is what removes the arena tax the
+   fixed-width layout introduces here. This is the third appearance of the pairing lesson: with a PK predicate the
+   layout is worth 4.1×, with a hash predicate it is worth −1.3×, and neither number is achievable without the other
+   half of its pair.
+
+**Until that package exists, the honest reading of the comparison table is per-shape**, and the plan should say so
+rather than let the headline 0.24× stand unqualified: the same engine is **1.29× ahead** of SQLite on PK-bound UPDATE
+and **0.24×** on a PK-less, hash-predicate update. A PK-less schema is a legitimate workload; it is simply the one
+where this engine currently pays a re-serialize per update, and priority 1 is the package above rather than a claim.
 
 Then: **priority 2, INSERT** (0.54× fair-PK batch, 0.67× default SQL path, 0.92× StructRow, 0.85× Direct — decision 4
 wants this above parity, not near it) and **priority 3, PageBased UPDATE** (0.17×, decision 1 and §6). The at-rest
