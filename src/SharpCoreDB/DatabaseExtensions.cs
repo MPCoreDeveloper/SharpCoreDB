@@ -861,11 +861,13 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
                 // table opened with FixedWidthRecordLayout is auto-migrated on first load. (The
                 // on-disk binary format is still authoritative for reading regardless of config.)
                 table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
-                // §4b: the inline capacity is part of the record layout as well, and it cannot come from
-                // `metadata.Value` (the config the table is constructed with) — so without this a reopened table
-                // reads an inline slot as an arena offset and the value comes back NULL. Forwarded for the same
-                // reason as the flag above.
-                table.SetFixedWidthInlineValueBytes(_options.DatabaseConfig?.FixedWidthInlineValueBytes ?? 0);
+                // §4b: the inline capacity is part of the record layout, and the STORED value is authoritative — it is
+                // persisted in the table metadata entry (carved out of the entry's reserved area, so a file written
+                // before the field existed reads 0 there, which is the layout its records actually have). Taking it
+                // from `_options.DatabaseConfig` instead is what broke singlefile-fixedwidth reopen: a
+                // config-vs-records disagreement makes IsFixedWidthDataBlock's record-length test fail, the block is
+                // then treated as legacy JSON and EnsureCacheLoaded throws on a binary record.
+                table.SetFixedWidthInlineValueBytes(metadata.Value.FixedWidthInlineValueBytes);
                 _tables[tableName] = table;
             }
         }

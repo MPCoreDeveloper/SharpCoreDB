@@ -109,19 +109,16 @@ public class DatabaseConfig
 
     /// <summary>
     /// Gets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width record
-    /// slot instead of writing them to the overflow arena. <b>Default 0 — the historical layout, byte for byte.</b>
+    /// slot instead of writing them to the overflow arena. <b>Default 16.</b>
     /// <para>
-    /// ⚠️ <b>The owner decided on 2026-09-16 to make this 16 and is blocked on one path, not on the design.</b> The
-    /// multi-file path is ready: the capacity is persisted per table in metadata and a reopened table decodes with the
-    /// capacity it was written with, so flipping the default is upgrade-only and needs no rewrite of existing data
-    /// (see the "self-describing" paragraph below). The <b>single-file (<c>.scdb</c>) path is not ready</b>: its
-    /// capacity is still supplied from the opening <c>DatabaseConfig</c>
-    /// (<c>DatabaseExtensions</c> → <c>SingleFileTable.SetFixedWidthInlineValueBytes</c>) rather than stored, so a
-    /// capacity mismatch makes <c>SingleFileTable.IsFixedWidthDataBlock</c>'s record-length test fail, the block then
-    /// falls through to the legacy JSON branch and <c>EnsureCacheLoaded</c> throws
-    /// <c>JsonException: '0x14' is an invalid start of a value</c> on a binary record. Flipping this default without
-    /// fixing that breaks <c>ReopenRoundTripMatrixTests</c> (must-pass, plan constraint 2), so the flip waits on
-    /// persisting the capacity in the SCDB format. The measured case for doing so is below.
+    /// ⚠️ <b>This is 16 by owner decision (2026-09-16).</b> It was briefly blocked: making it 16 broke
+    /// <c>ReopenRoundTripMatrixTests</c> on the <b>single-file</b> variant, because that format supplied the capacity
+    /// from the opening config rather than storing it, so a mismatch made <c>SingleFileTable.IsFixedWidthDataBlock</c>
+    /// classify a binary block as legacy JSON and <c>EnsureCacheLoaded</c> threw
+    /// <c>JsonException: '0x14' is an invalid start of a value</c>. That is fixed: the capacity is now persisted in the
+    /// SCDB table metadata entry (<c>TableMetadataEntry.FixedWidthInlineValueBytes</c>, carved out of its reserved
+    /// bytes so the entry size and every offset are unchanged) and a reopened table takes it from there, never from
+    /// this config. The measured case for the default is below.
     /// </para>
     /// <para>
     /// Context (plan §4b): the fixed-width record already implements the stable-slot + overflow model — fixed-size
@@ -151,7 +148,7 @@ public class DatabaseConfig
     /// downgrade, which this format deliberately does not support (upgrade-only, owner decision).
     /// </para>
     /// </summary>
-    public int FixedWidthInlineValueBytes { get; init; }
+    public int FixedWidthInlineValueBytes { get; init; } = 16;
 
     /// <summary>
     /// Gets the pending-append threshold, in bytes, at which buffered appends are flushed

@@ -112,6 +112,10 @@ internal sealed class TableDirectoryManager : IDisposable
         var metadata = new TableMetadataEntry
         {
             TableId = GetTableId(table.Name),
+            // §4b: persist the table's inline capacity, which is part of its record layout. Read from the table itself
+            // (ITable.FixedWidthInlineValueBytes) so the create path cannot drift from the layout the rows are written
+            // with; it lands in the entry's reserved area, so older files read 0 = the historical layout.
+            FixedWidthInlineValueBytes = table.FixedWidthInlineValueBytes,
             DataBlockOffset = dataBlockOffset,
             PrimaryKeyIndexOffset = 0, // Will be set when PK index is created
             RecordCount = 0,

@@ -168,16 +168,16 @@ public sealed class FixedWidthInlineValueTests : IDisposable
     }
 
     /// <summary>
-    /// Pins the shipped default and the escape hatch. ⚠️ The default is <b>0</b> and the owner decision is to make it
-    /// 16: flipping it is blocked on the single-file path, which supplies the capacity from config instead of storing
-    /// it, so a mismatch makes <c>SingleFileTable.IsFixedWidthDataBlock</c> classify a binary block as legacy JSON and
-    /// <c>EnsureCacheLoaded</c> throws. When that path persists the capacity (like the multi-file path now does), this
-    /// test is the one that must be updated deliberately — that is what it is for.
+    /// Pins the shipped default and the escape hatch. Both layouts are first-class now: the capacity is persisted per
+    /// table on <b>both</b> paths — the multi-file metadata DTO and the single-file <c>TableMetadataEntry</c> (carved
+    /// out of its reserved bytes, so older files read 0 = the historical layout) — so a reopened database always
+    /// decodes with the capacity its records were written with, never with whatever this config now says. 16 is the
+    /// owner's default; 0 restores the historical layout byte for byte.
     /// </summary>
     [Fact]
     public void Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout()
     {
-        Assert.Equal(0, new DatabaseConfig().FixedWidthInlineValueBytes);
-        Assert.Equal(16, new DatabaseConfig { FixedWidthInlineValueBytes = 16 }.FixedWidthInlineValueBytes);
+        Assert.Equal(16, new DatabaseConfig().FixedWidthInlineValueBytes);
+        Assert.Equal(0, new DatabaseConfig { FixedWidthInlineValueBytes = 0 }.FixedWidthInlineValueBytes);
     }
 }

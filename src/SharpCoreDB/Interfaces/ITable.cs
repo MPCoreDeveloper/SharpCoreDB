@@ -59,6 +59,13 @@ public interface ITable
     bool IsFixedWidthRecords => false;
 
     /// <summary>
+    /// Gets the inline capacity of the fixed-width record layout (§4b) this table was written with. Persisted with the
+    /// table's metadata so a reopened database decodes with the capacity its records were written with rather than with
+    /// the opening config; 0 is the historical layout (every variable-length value goes to the overflow arena).
+    /// </summary>
+    int FixedWidthInlineValueBytes => 0;
+
+    /// <summary>
     /// Gets whether columns are auto-generated.
     /// </summary>
     List<bool> IsAuto { get; }

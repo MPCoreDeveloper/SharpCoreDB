@@ -2141,20 +2141,39 @@ is **un-skipped and passes**, so the suite baseline moves from 17 skipped to 16,
 defect: enabling it is now a decision about the default (owner call, with the format/migration story of decision 3),
 not a bug to fix.
 
-⚠️ **The owner decided the default should be 16, and the flip is currently blocked on one path — the attempt is
-recorded rather than left implicit.** Flipping `FixedWidthInlineValueBytes` to 16 on 2026-09-16 broke a must-pass
-suite (plan constraint 2) and was reverted: on the **single-file (`singlefile-fixedwidth`) variant** of
-`ReopenRoundTripMatrixTests`, `SingleFileTable.EnsureCacheLoaded` threw
-`JsonException: '0x14' is an invalid start of a value` while deserializing a **binary** record as legacy JSON. The
-cause is the same class of defect just fixed for the multi-file path, one layer out: the SCDB format does not store
-the capacity, so it is supplied from the opening `DatabaseConfig`
-(`DatabaseExtensions` → `SingleFileTable.SetFixedWidthInlineValueBytes`); when that disagrees with the capacity the
-block was written with, `IsFixedWidthDataBlock`'s record-length test fails, the block falls through to the legacy JSON
-branch, and deserialisation throws. **So §4b's next step is to persist the capacity in the SCDB format** — the mirror
-of what `Table`/`TableMetadataDto` just gained — and
-`FixedWidthInlineValueTests.Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout` is the test that must be
-updated deliberately when it lands. The trade to weigh at that point is unchanged: **+19.3 %** rows/s against a **2.4×**
-larger table file on the benchmark schema.
+✅ **Shipped: the default is 16, on both storage paths, and the suite is green.** The owner's decision is implemented.
+The single-file blocker above is fixed by persisting the capacity in the SCDB format too — it was carved out of
+`TableMetadataEntry`'s *reserved* area (`ScdbStructures.cs`: a 4-byte `FixedWidthInlineValueBytes` plus
+`Reserved[22]`, replacing `Reserved[26]`), so the entry size and **every field offset are unchanged**, an older file
+reads 0 there (which is the layout its records actually have), and the change needs **no version bump** — upgrade-only,
+as decided. `ITable.FixedWidthInlineValueBytes` exposes it, `TableDirectoryManager.CreateTable` persists it on the
+create path, and `DatabaseExtensions` takes the **stored** value on reopen instead of the opening config.
+
+Two measurement lessons came with it, both worth keeping. The first attempt at measuring the "new default" was
+**invalid**: the harness helper returned 0 when its switch was unset, so it overrode the product default and reproduced
+the capacity-0 numbers exactly (760,000 B data file, 4,943 B/row) — a run that *looked* like a default measurement and
+was a switch measurement. It now falls back to the product default. And five existing tests failed on the flip, all
+**test-side accidents rather than regressions**: four fixtures that deliberately exercise the historical capacity-0
+layout (arena free-list, no-growth, reopen, legacy migration) now pin `FixedWidthInlineValueBytes = 0` explicitly, and
+one `MockBehavior.Strict` `ITable` fake needed the new member configured. Both are recorded in the tests themselves.
+
+Measured with the product default, same regime and shape (1,000 rows/statement, median of 5):
+
+| | capacity 0 (old default) | capacity 16 (new default) |
+|---|---:|---:|
+| rows/s | 62,545 | **74,634** |
+| µs/row | 15.99 | **13.40** |
+| allocated/row | 4,943 B | **4,348 B** |
+| arena file | 1,006,670 B | **488,890 B** |
+| data file | 760,000 B | 1,840,000 B |
+
+The trade is the last row: every variable-length column reserves `2 + N` bytes, so the table file grew 2.4× on this
+schema. `0` remains available per database for the historical layout.
+
+A second median-of-5 run with the default measured **70,145 rows/s / 14.26 µs/row** against the same 62,545 baseline, so
+the honest range across the two runs is **+12 % to +19 %** on this shape. The allocation and file figures are
+deterministic and identical in both (4,348 B/row, 488,890 B arena, 1,840,000 B data file), which is the stronger part
+of the evidence.
 
 ⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
 `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)

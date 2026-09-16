@@ -77,6 +77,13 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         _fixedWidthInlineValueBytes = Math.Max(0, inlineValueBytes);
         _fixedWidthLayout = null;
     }
+
+    /// <summary>
+    /// Exposes the capacity to <see cref="ITable"/> so the table directory can persist it into the metadata entry when
+    /// the table is created (see <c>TableDirectoryManager.CreateTable</c>). Read-only deliberately: the value is part of
+    /// the record layout, so it is set once, by the constructors or by the reopen path.
+    /// </summary>
+    int ITable.FixedWidthInlineValueBytes => _fixedWidthInlineValueBytes;
     private SingleFileOverflowArena? _overflowArena;
 
     // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /

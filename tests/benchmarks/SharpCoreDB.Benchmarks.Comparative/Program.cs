@@ -369,10 +369,13 @@ class Program
     /// </summary>
     static int InlineBytesOverride()
     {
+        // Unset means the PRODUCT default, not 0: the product default became 16 when §4b shipped (2026-09-16), and an
+        // unconditional 0 here silently pinned every arm to the historical layout — which made a "default" measurement
+        // reproduce the old numbers exactly and hide the change. An explicit value, including 0, wins.
         var value = Environment.GetEnvironmentVariable("SHARPCOREDB_INLINE_BYTES");
-        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
-            ? parsed
-            : 0;
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : new DatabaseConfig().FixedWidthInlineValueBytes;
     }
 
     /// <summary>
@@ -696,8 +699,8 @@ class Program
             // records; the fixed-width arm forces FixedWidthRecordLayout.
             AutoFixedWidthRecords = !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
-            // §4b inline capacity — diagnostic (SHARPCOREDB_INLINE_BYTES). Off (0) by default so every published
-            // number below keeps the historical layout.
+            // §4b inline capacity — SHARPCOREDB_INLINE_BYTES. Unset keeps the PRODUCT default (16 since §4b shipped),
+            // so the arms track it; set it (e.g. 0) to measure the historical layout.
             FixedWidthInlineValueBytes = InlineBytesOverride(),
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,

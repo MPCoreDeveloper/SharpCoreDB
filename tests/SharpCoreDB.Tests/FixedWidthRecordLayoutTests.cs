@@ -37,8 +37,11 @@ public sealed class FixedWidthRecordLayoutTests : IDisposable
         try { if (Directory.Exists(_dirPath)) Directory.Delete(_dirPath, true); } catch { }
     }
 
+    // §4b: this fixture exercises the HISTORICAL capacity-0 layout on purpose — its arena free-list, no-growth and
+    // reopen assertions are all about values going to the overflow arena, which a non-zero inline capacity stops doing
+    // for short values. The product default became 16 on 2026-09-16, so 0 is pinned explicitly here.
     private IDatabase CreateFixedWidthDb() => _factory.Create(
-        _dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { FixedWidthRecordLayout = true });
+        _dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { FixedWidthRecordLayout = true, FixedWidthInlineValueBytes = 0 });
 
     private string DatPath(string table) => Path.Combine(_dirPath, $"{table}.dat");
 
