@@ -1325,7 +1325,31 @@ UPDATE gap **8.7× fixed-width / 9.6× at-rest / 10.2× legacy**, against Append
 PageBased is meanwhile **ahead of SQLite on READ** (1.5–1.7×) and **ahead of AppendOnly on INSERT** (+22 %), so
 §6's scope does not change: it is an UPDATE-only package.
 
-> ⚠️ **These numbers are only valid on a PK predicate, and §6's constraint now reads both ways.** The same engine
+> ⚠️ **Re-profiled on the current build (2026-09-16) — §6 reproduces, so its diagnosis is not stale.** `--pk-profile
+--engine=pagebased` on the fixed-width plaintext arm gives **UPDATE 21,285 ops/s (46.98 µs/update)** against §6's
+45.84 µs, with the same per-update arena traffic: **2,829 B/update**. The stage table:
+
+| stage | calls | share | µs/update |
+|---|---:|---:|---:|
+| `arena-write` | 10,000 | **54.5 %** | 11.4 |
+| `parse` | 10,000 | 15.6 % | 3.3 |
+| `row-locate` | 10,001 | 14.9 % | 3.1 |
+| `arena-append` (inside `arena-write`) | 10,000 | 14.2 % | 3.0 |
+| `commit` | 1 | 0.9 % | 0.2 |
+| **`in-place-patch`, `engine-write`, `index-maint`, `encode`** | **0** | — | — |
+
+Two facts stand out. First, the in-place machinery **still never fires** on this engine — zero calls for
+`in-place-patch`, `engine-write`, `index-maint` and `encode` — so the gated-fast-path diagnosis above is exactly
+right: an update here is a full re-serialize plus an arena append, and the gates are at `:2095`, `:2257` (`fastPatch`
+requires `Columnar`), `:2291`, and the delete-side `:3329`/`:3485`/`:3637`, all because a PageBased record can
+**relocate** and a cached position then goes stale. Second, **~55 % of the 470 ms pass is unattributed** (209.7 ms of
+stages measured against 470 ms), and the largest known-but-unstamped region is the *serialization itself* — the
+fixed-width encoding of the whole row that precedes the arena call, which the generic per-op route does not stamp.
+So the next step is the one that unlocked DELETE: **stamp the serialize and the engine write on the generic
+per-page-op route** and split that 55 % before changing anything. Only then is choosing among the three gated fast
+paths an arithmetic decision rather than a preference.
+
+The same engine
 > measured through the *no-PK* default job — whose SharpCoreDB tables declare no primary key, so their reads and DML
 > filter on a non-key column — shows PageBased READ collapsing to 31–59K (0.33–0.61× SQLite) and PageBased UPDATE at
 > *parity* with AppendOnly. I briefly read that as refuting this section; it does not, because it is a different
