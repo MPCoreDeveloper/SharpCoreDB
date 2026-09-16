@@ -837,11 +837,23 @@ made row-copying expensive in the first place. B costs only the pointer and reus
 repository already has — `DataStructures/OverflowArena.cs` plus the fixed-width overflow-arena path,
 including the two reopened-arena bug fixes recorded in the `CHANGELOG`.
 
-**Format handling (§0.1-3):** this is an on-disk change and it ships with a versioned upgrade. The
-table-file magic already reserves version bytes (`EncryptedTableMagic = 53 43 44 42 01 01 00 00`) and
-`Core/File/PageHeader` validates `Version` against `CurrentVersion`, so the hook exists: bump the
-version, write new files in the new layout, and provide the upgrade/migration path for existing files
-(old files must keep opening, per §0.5).
+**Scoped against the source (2026-09-16) — and the size of this section changed once it was read.** The
+stable-slot + overflow model this section decided is **already what ships**: `FixedWidthRecordLayout.Compute`
+gives fixed-size columns an inline `[null-flag(1)][payload]` slot and gives String/Blob a **5-byte**
+`[null-flag(1)][overflowOffset(4)]` slot — i.e. *every* variable-length value, however short, goes to the arena.
+Measured on the multi-row pass that costs `arena-write` 2.26 + `arena-append` 1.79 = **~4.05 µs/row, ~24 %** of the
+pass, and on the benchmark schema every TEXT value is short (`User1`, `user1@test.com`, `payload-1`), so none of
+them needs the arena at all.
+**So the missing piece is not the two-region model — it is an inline capacity per variable column**, i.e.
+`[null-flag(1)][inline N bytes][overflow marker]`. The important consequence is that this can be done **while
+keeping the record constant-size per schema**, which is exactly what the in-place update and delete fast paths in
+§4a and §6 depend on (a position-stable record with fixed offsets). That is a smaller and safer change than a
+variable-length record, and it captures the same prize — so the `OverflowArena` half of this section is done, and
+the whole of the work is the inline threshold plus its format handling.
+**What still blocks it:** the layout is *computed from the schema* and never stored, so changing it silently
+changes the meaning of every existing record. This is therefore the **first change in this program that genuinely
+breaks the on-disk format** — it needs the version bump, an upgrade path for existing files, and migration tests
+(§0.1-3, §0.5). It should be its own unit, not an edit appended to an INSERT optimisation session.
 
 ### 4c. Index maintenance on update
 
