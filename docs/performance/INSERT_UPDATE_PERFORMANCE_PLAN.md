@@ -862,12 +862,23 @@ would keep or re-point the wrong block.
 **What is proven by test** (`FixedWidthInlineValueTests`): short values stored inline and long values still
 overflowing, both round-tripping, a `WHERE name = <inlined value>` lookup matching, and **compaction keeping inline
 and overflow values intact** — that last one is the patch most likely to corrupt data, and it passes.
-**What is not:** two tests are committed **skipped, as the acceptance criteria**, because they fail today —
-**(1)** a reopened table decodes an inline slot as an arena offset, so an inlined value comes back empty (the reopen
-path does not yet carry the inline layout), and **(2)** the bulk mutation path fails on inlined rows (update or bulk
-delete — not yet isolated). Since the encoding itself round-trips, both are integration: the prime suspects are the
-directory-open path rebuilding the table from the stored schema with a configuration that does not include the new
-property, and the bulk paths' own slot reads.
+**Fixed (2026-09-16): the UPDATE path — and it was a corruption, not a lost value.** `WriteVariableSlotInPlace`
+(`Table.Serialization.cs`) classified the *old* slot as `slot[0] == 0 ? -1 : <read offset>`, i.e. it treated **any**
+non-zero flag as an arena offset — so updating a column whose value was stored inline read a *block number assembled
+from payload bytes* and then **freed it**. That is why the mutation test failed while the round-trip passed. It now
+treats only flag 1 as an offset, writes the new value into the slot when it fits (skipping the arena entirely), and
+the inline writer zeroes its unused tail so a shorter value cannot leave the previous value's bytes behind. With the
+inline capacity off nothing writes flag 2, so this is a no-op for the default layout — and the mutation test passes.
+**What is still open: one test, and it is narrowed to config propagation.** The record *is* written correctly — the
+raw data file reads `… 02 00 00 00 00 05 00 73 68 6F 72 74`, i.e. flag 2, unused offset, length 5, `"short"` — and
+the reopened table reports `IsFixedWidthRecords: true`, but the value comes back **`DBNull`**. That is precisely what
+`TryReadVariableSlot` returns when it *skips* the inline branch (`layout.InlineValueBytes == 0`), reads the unused
+offset `0` and finds no arena block. So the reopened table holds a configuration with `FixedWidthRecordLayout = true`
+and `FixedWidthInlineValueBytes = 0` — two properties of the *same* config disagreeing, which means the open path
+does not hand the caller's configuration to the table that serves queries. Ruled out by reading: `new DatabaseConfig`
+appears nowhere in the open path except `PlatformHelper`, and the only `Table` construction site is
+`DirectoryTableFactory.CreateTable`, which takes the config from *its* caller — so the remaining question is which
+caller runs during open, and that is the next place to look. The test carries this as its skip reason.
 **Do not enable this for data that is re-read or mutated until those two tests pass.** That — not the encoding — is
 the remaining §4b work, together with the version bump and upgrade path this section already requires.
 

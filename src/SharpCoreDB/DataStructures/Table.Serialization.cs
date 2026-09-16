@@ -573,7 +573,10 @@ public partial class Table
         // B6: offset 0 is a VALID arena block (the first block's length prefix sits at 0), so
         // -1 is the sentinel for "no block" (NULL slot) — a real offset 0 must be freed too,
         // otherwise the first variable block leaks and the free-list cannot reuse it.
-        int oldOffset = slot[0] == 0 ? -1 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+        // §4b: only flag 1 carries an arena offset. Flag 2 is a payload stored inline (so there is nothing to
+        // free), and flag 0 is NULL. Reading an offset for any non-zero flag — which this did — frees a block
+        // number assembled from payload bytes whenever the slot was inline: corruption, not just a lost value.
+        int oldOffset = slot[0] == 1 ? System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]) : -1;
         if (value == null || value == DBNull.Value)
         {
             if (oldOffset >= 0)
@@ -583,19 +586,32 @@ public partial class Table
 
             slot[0] = 0;
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+            return;
         }
-        else
+
+        var newPayload = EncodeVariablePayload(columnType, value);
+
+        // §4b: prefer the slot itself when the layout has inline capacity and the new value fits, so updating a
+        // short value never touches the arena — and, when the old value was inline, never frees anything either.
+        var writeLayout = GetFixedWidthLayout();
+        if (FixedWidthCodec.TryWriteInlineVariableSlot(slot, writeLayout, newPayload))
         {
-            var payload = EncodeVariablePayload(columnType, value);
-            var offset = arena.Write(payload);
             if (oldOffset >= 0)
             {
                 arena.Free(oldOffset);
             }
 
-            slot[0] = 1;
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+            return;
         }
+
+        var offset = arena.Write(newPayload);
+        if (oldOffset >= 0)
+        {
+            arena.Free(oldOffset);
+        }
+
+        slot[0] = 1;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
     }
 
     #endregion

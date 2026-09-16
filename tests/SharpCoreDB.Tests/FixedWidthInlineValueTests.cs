@@ -99,7 +99,7 @@ public sealed class FixedWidthInlineValueTests : IDisposable
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE name = 'User2'"));
     }
 
-    [Fact(Skip = "§4b open item: a reopened table decodes an inline slot as an arena offset, so an inlined value comes back empty — the reopen path does not yet carry the inline layout. This test is the acceptance criterion: it must pass before FixedWidthInlineValueBytes is enabled for anything that reopens (see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §4b).")]
+    [Fact(Skip = "§4b open item, narrowed (2026-09-16): the record IS written inline (the raw file shows flag 2, length 5, 'short') and the reopened table reports IsFixedWidthRecords=True, but the value comes back DBNull — which is what the reader returns when it SKIPS the inline branch (layout.InlineValueBytes == 0), reads the unused offset 0 and gets no arena block. So the reopened table's configuration lacks FixedWidthInlineValueBytes while still carrying FixedWidthRecordLayout=true: config propagation in the open path, not the encoding. Acceptance criterion before enabling this feature.")]
     public async Task Reopen_KeepsInlineAndOverflowValues()
     {
         await using (var db = Open("reopen"))
@@ -117,7 +117,7 @@ public sealed class FixedWidthInlineValueTests : IDisposable
 
     // ── The mutation paths that decode a variable slot ──────────────────────────────────────────
 
-    [Fact(Skip = "§4b open item: the bulk mutation path fails on inlined rows (update or bulk delete — not yet isolated). The round-trip and compaction tests pass, so the encoding is right and this is integration. Acceptance criterion before enabling FixedWidthInlineValueBytes (see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §4b).")]
+    [Fact]
     public async Task Update_ThenBatchDelete_ThenReinsert_WorksOnInlinedRows()
     {
         await using var db = Open("mutations");

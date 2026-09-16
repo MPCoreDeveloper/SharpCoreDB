@@ -120,7 +120,7 @@ public static class FixedWidthCodec
     /// layout is the historical <c>[null-flag(1)][offset(4)]</c> prefix with <c>[length(2)][payload(N)]</c> appended,
     /// so a NUL or overflow slot is byte-identical to what previous versions wrote.
     /// </summary>
-    private static bool TryWriteInlineVariableSlot(Span<byte> slot, FixedWidthRecordLayout layout, byte[] payload)
+    internal static bool TryWriteInlineVariableSlot(Span<byte> slot, FixedWidthRecordLayout layout, byte[] payload)
     {
         if (layout.InlineValueBytes <= 0 || payload.Length > layout.InlineValueBytes)
         {
@@ -131,6 +131,10 @@ public static class FixedWidthCodec
         BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);               // offset unused
         BinaryPrimitives.WriteInt16LittleEndian(slot[5..], (short)payload.Length);
         payload.CopyTo(slot[7..]);
+
+        // Zero the unused tail: otherwise a shorter value leaves the previous value's bytes behind the length,
+        // which the decoder never reads but a byte-level reader would.
+        slot.Slice(7 + payload.Length, layout.InlineValueBytes - payload.Length).Clear();
         return true;
     }
 
