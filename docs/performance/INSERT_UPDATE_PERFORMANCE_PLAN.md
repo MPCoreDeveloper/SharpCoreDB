@@ -1258,6 +1258,27 @@ UPDATE** (10.3× vs SQLite, where append-only is 0.6×, i.e. ahead). The earlier
 right shape; this is the current numbers for it, and it re-scopes the work: parity here is an
 **UPDATE-only** package, not a general "PageBased is slow".
 
+**Confirmed on the current build, with a shape warning attached (2026-09-16).** Re-run on the fair PK shape
+(`--pk --engine=pagebased`, median of 3, isolated) the trap is unchanged and if anything larger:
+
+| arm (fixed-width, `--pk`, `WHERE id = @pk` for both engines) | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| PageBased plaintext | 118,219 | 155,407 | **33,933** | 127,218 |
+| AppendOnly plaintext | 97,316 | 120,166 | **385,668** | 213,727 |
+| SQLite | 193,973 | 106,205 | 294,853 | 418,102 |
+
+UPDATE gap **8.7× fixed-width / 9.6× at-rest / 10.2× legacy**, against AppendOnly's 1.18× *ahead* on the same shape.
+PageBased is meanwhile **ahead of SQLite on READ** (1.5–1.7×) and **ahead of AppendOnly on INSERT** (+22 %), so
+§6's scope does not change: it is an UPDATE-only package.
+
+> ⚠️ **These numbers are only valid on a PK predicate, and §6's constraint now reads both ways.** The same engine
+> measured through the *no-PK* default job — whose SharpCoreDB tables declare no primary key, so their reads and DML
+> filter on a non-key column — shows PageBased READ collapsing to 31–59K (0.33–0.61× SQLite) and PageBased UPDATE at
+> *parity* with AppendOnly. I briefly read that as refuting this section; it does not, because it is a different
+> predicate, and this section's own rule ("parity must be proven with the §2 protocol on the same harness that
+> produced the 26K/245K pair, not on a friendlier one") applies equally to a *less* friendly one. A PageBased
+> read or update claim is meaningless without naming the predicate it was measured on.
+
 **First attribution attempt — failed, and recorded so it is not repeated.** `PageManager.UpdateRecord` calls
 `RecomputeFreeSpace` twice on its growth path, and that calls `GetUsedDataEnd` — a LINQ scan with
 `RecordFlags.HasFlag` (which boxes) over every slot — so a plausible cause sat right there. Rewriting it as a
@@ -1658,7 +1679,40 @@ because until it is done, "encryption costs 1.3–1.6×" is a number without a m
 measuring the price of protection we have not established we actually get. None of these three changes
 the on-disk format, and together they produce the attribution the structural work needs.
 
-**Where we actually are (2026-09-15, end of the insert/attribution session).** Phase 0 is done — the §2
+**Priority order, re-derived from the 2026-09-16 three-way run** (supersedes the queue below wherever they
+disagree). Every figure is fair-shape — `WHERE id = @pk` for both engines, tuned, plaintext, median of 3, isolated
+— and every claim names its shape, because this session measured the *same build's* UPDATE column at **67,811** and
+**385,668** (5.7×) purely from the predicate and the API route:
+
+| column | SharpCoreDB | SQLite | ratio | status |
+|---|---:|---:|---:|---|
+| READ | 120,166 | 101,695 | **1.18× ahead** | **won** — defend it, and note it holds only in the fixed-width layout |
+| UPDATE | 385,668 | 325,813 | **1.18× ahead** | **won** (0.6× before the append-buffering decoupling) |
+| DELETE | 213,727 | 418,093 | 0.51× | **priority 1** — routing work, no new machinery |
+| INSERT, SQL batch route | 97,316 | 196,404 | 0.50× | **priority 2** — route + layout work |
+| INSERT, StructRow route | 141,706 | 147,874† | 0.96× | near parity already |
+| PageBased UPDATE | 33,933 | 294,853 | **0.12×** | **priority 3** — §6's package, the largest absolute deficit |
+
+† from the no-PK job, which is fair on the INSERT column but nowhere else.
+
+1. **DELETE (append-only) — start here.** 4.68 µs/op against SQLite's 2.39. The components are known and small: a
+   PK probe costs 0.26 µs, deferred index maintenance is already the product default, and `DeleteByPrimaryKey`
+   (`Table.CRUD.cs:4886`) already runs key-only with no storage read when no hash index needs the row. So the
+   deficit is the *route the SQL batch takes* through `DeleteMultipleKeys` (`:3588`) — `TryBulkDeleteContiguousFixedWidth`,
+   `TryResolvePkBatchSequentially` and the `wholeFile` shortcut all exist and are gated — not missing machinery.
+   Target: ≤2.4 µs/op.
+2. **INSERT.** The per-row budget (§5) is validate 3.7 + encode 3.5 + arena-write 2.3 + index-maint 2.2 +
+   arena-append 1.9 + row-build 1.8 + hash-index 1.7 + commit 0.7 = 17.2 µs, which the 17.18 µs/row median
+   independently confirms. Two groups are directly addressable: the deferrable index work (index-maint + hash-index
+   = 3.9 µs, 23 %) and the overflow-arena round-trip for short TEXT (4.2 µs, 24 % — what §4b's two-region record
+   exists to remove).
+3. **PageBased UPDATE (§6).** Largest deficit anywhere (8.7–10.2×), unchanged package: the PK-equality fast paths
+   are switched off for PageBased at `:2134`, `:2260`, `:2266`, `:3153`, `:3309`, `:3461`, and a relocated record can
+   be written twice.
+4. **Protect READ and UPDATE.** Both are won *only* in the fixed-width layout — the legacy layout is 0.50× on UPDATE
+   with the same code — so §4b protects the two columns already won rather than merely speeding up INSERT.
+
+ Phase 0 is done — the §2
 protocol plus the `--gate` regression job (§2 item 4). The §3-1c audit is done and the at-rest default now
 protects table data. Phases 1–2 have landed: UPDATE is ahead of SQLite on the fixed-width path, DELETE
 moved to deferred index maintenance, and the SQL multi-row INSERT uses the batched core (§5 item 1), standing
