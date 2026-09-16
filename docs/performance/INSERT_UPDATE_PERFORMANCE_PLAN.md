@@ -213,6 +213,15 @@ instrumentation accounts for ≥90% of wall time in a write loop.
    travels with the number. Ratios survive a regime mistake when both halves of the comparison share it; absolutes
    do not — which is the second reason this protocol quotes ratios.
 
+7. **Every figure names its shape.** This plan has twice drawn a conclusion from a number measured on a *different*
+   shape than the one it was applied to: §9's "per-row index maintenance" item carried a figure taken on
+   **1-row-per-statement** into a plan for the **batched** arms (where the same work happens once per call, so there
+   was nothing to defer), and §5's per-row budget mixes statement costs with row costs. Rows per statement changes
+   which costs are per-row and which are per-statement, so a figure is only evidence about the shape it was taken on.
+   State the rows/statement, the arm and the capacity with every number — the harness's own `[diag]` line does for
+   allocation and file sizes. Baseline artifacts under `results/` are kept in git deliberately, as provenance for the
+   published tables; a figure that cannot be traced to one of them is not evidence.
+
 ---
 
 ## 3. Phase 1 — the encryption layer: a free fix, a decided posture, and an audit

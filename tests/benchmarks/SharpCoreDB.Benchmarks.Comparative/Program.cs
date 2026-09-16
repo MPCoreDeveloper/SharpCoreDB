@@ -48,6 +48,20 @@ class Program
 
     static async Task Main(string[] args)
     {
+        // §2 rule 6: the regime travels with every number. These switches are environment variables and the shell that
+        // runs this harness persists, so a leaked switch has already cost one session of figures (plan §11) — and an
+        // unstated regime is how a "default" measurement turns out not to be one. Print whatever is set, every run.
+        var regimeSwitches = Environment.GetEnvironmentVariables()
+            .Keys.Cast<object>()
+            .Select(k => k.ToString()!)
+            .Where(k => k.StartsWith("SHARPCOREDB_", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .Select(k => $"{k}={Environment.GetEnvironmentVariable(k)}")
+            .ToList();
+        Console.WriteLine(regimeSwitches.Count == 0
+            ? "REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply."
+            : $"REGIME (overridden): {string.Join("  ", regimeSwitches)}");
+
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
         if (args.Any(a => a.Equals("--readtest", StringComparison.OrdinalIgnoreCase)))
         {
