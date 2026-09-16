@@ -86,6 +86,46 @@ Read this with plan §6 open: PageBased is the in-place-update engine, so it pos
 only 2–3.8× LiteDB. That is the PageBased read/update trap the write-path profiler is chasing, seen from the read
 side.
 
+## Refresh, 2026-09-16 16:00 — same regime, but set explicitly (ops/sec)
+
+The figures above were taken in whatever environment the shell happened to hold. The diagnostic switches are
+environment variables and that shell persists, so the 2026-09-16 session's runs were all buffered-appends +
+FullSync WAL without that being stated anywhere (plan §11 carries the full correction). This refresh sets those
+same two switches **deliberately** — `SHARPCOREDB_BUFFERED_APPENDS=1`, `SHARPCOREDB_WAL_DURABILITY=fullsync` — so
+the deltas below measure code changes rather than a regime change. The competitor columns are the control:
+
+| database | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB — SQL path | 99,355 | 75,818 | 65,570 | 117,243 |
+| SharpCoreDB — Direct API | 126,663 | 133,349 | 123,049 | 192,012 |
+| SharpCoreDB — StructRow | 137,642 | 123,484 | n/a | n/a |
+| SQLite (control) | 148,845 | 99,521 | 272,190 | 375,350 |
+| LiteDB (control) | 75,491 | 14,048 | 10,977 | 15,055 |
+
+- **Nothing moved outside the documented spread.** SQLite's own reference moved ≤2% and LiteDB ≤4%, so the machine
+  is comparable; every SharpCoreDB column landed between −10% and +20%, inside the inter-rep spread this document
+  already records (up to ~1.5×). Today's two fixes are invisible here for structural reasons rather than by luck:
+  the query-cache capacity gate only affects workloads whose statement text differs *per row*, which the batched
+  100K INSERT and the PK-bound UPDATE/DELETE never do, and the append-buffer fix only affects the **unbuffered**
+  path, which this regime does not use.
+- **Multi-row INSERT micro-benchmark, same regime:** **62,827 rows/s / 15.92 µs/row**, against 58,205 rows/s /
+  17.18 µs/row recorded and 56,672 / 17.65 measured earlier in the day — inside ±8% rep noise, and the fastest of
+  the three. Allocation 4,937 B/row, 14–16 gen0 collections per pass. The batched shape is unaffected by the
+  buffer fix by construction: one 65,536-byte buffer per *statement*, not per row.
+- **The `--pk` engine arms disagree by far more than any noise**, which is the useful finding. Same session, same
+  regime, one variable:
+
+| fair-PK arm, fixed-width plaintext | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| AppendOnly | 102,833 | 110,366 | **391,668** | **878,487** |
+| PageBased | 114,605 | 239,370 | 52,904 | 302,154 |
+| SQLite | 190,333 | 105,491 | 302,923 | 400,589 |
+
+  AppendOnly posts **7.4× PageBased's UPDATE** and **2.9× its DELETE** (and beats SQLite on both: UPDATE ×1.29,
+  DELETE ×2.19), while PageBased is ahead on READ (2.2× AppendOnly, 2.27× SQLite) and INSERT (1.11×). That is the
+  PageBased write trap this document's PageBased section describes, now confirmed within one regime and one
+  session instead of across runs — and it is where the remaining SQL-path UPDATE work should be aimed.
+
 ## Findings
 
 1. **Against LiteDB, SharpCoreDB wins every operation in both engines** — 1.2–1.8× on INSERT, 5.3–7.3× on READ,
