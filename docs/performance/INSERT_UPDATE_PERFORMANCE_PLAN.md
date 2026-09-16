@@ -882,6 +882,19 @@ much smaller and better-defined question than the one this section started with,
 encoding. The plan's persistence map still stands (`<name>.dat` + `.meta`; no stored schema for directory tables), so
 the remaining work is to find the restore path that serves queries after open and see what it does with a record
 whose slots were written in the inline encoding.
+
+**The fourth probe found it, and it corrects the "config propagation is refuted" conclusion above — that was only half
+right.** The reopen *does* build a **different** `Table` instance (verified by reference comparison), so something
+constructs it — but not either `ITableFactory`. The restore is `DatabaseExtensions.cs:859` (and `:1108`):
+`new SingleFileTable(tableName, _storageProvider, metadata.Value)` — i.e. **rebuilt from persisted metadata** — and
+`SingleFileTableFactory` is not constructed anywhere in `src` (it appears only in a doc comment). That explains every
+observation at once: the probe lived in `DirectoryTableFactory` so it printed nothing; the instance differs; and the
+layout-affecting property is taken from the **restored** metadata rather than from the caller's `DatabaseConfig` —
+which is exactly why the reopened table has `FixedWidthRecordLayout = true` and `FixedWidthInlineValueBytes = 0`.
+So the config *does* reach every `DirectoryTableFactory` construction, and that is not the path a reopened table takes.
+**The fix therefore has two honest shapes:** persist the layout property with the table metadata, or overlay the
+caller's configuration onto the restored one. Either is small, and the first is the one that also makes the layout
+self-describing — which is what this section wants for the version and upgrade story anyway.
 **The persistence map, so this is not re-derived:** in *directory* mode a table is `<name>.dat` plus a `.meta`
 sidecar (`FileStreamManager.cs:178`, `DirectoryStorageProvider.cs:425`); `TableSchemaDefinition` is constructed at DDL
 time and applied, never stored; `TableMetadataDto` is written (`Database.Core.cs:533`) but has **no reader anywhere in

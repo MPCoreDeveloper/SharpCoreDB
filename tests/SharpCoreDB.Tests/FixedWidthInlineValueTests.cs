@@ -99,7 +99,7 @@ public sealed class FixedWidthInlineValueTests : IDisposable
         Assert.Single(db.ExecuteQuery("SELECT * FROM t WHERE name = 'User2'"));
     }
 
-    [Fact(Skip = "§4b open item, re-narrowed (2026-09-16) after three probes refuted the earlier theories: the row IS written inline, the reopened table reports IsFixedWidthRecords=True, every table construction receives the right configuration (fixedWidth=True, inlineBytes=16), the reopen does NOT construct its table through DirectoryTableFactory at all, and a row inserted AFTER reopen reads back correctly. So the restored layout is inline-aware and the reader works — only the record written BEFORE the reopen is misread, coming back DBNull. That is about locating/reading a pre-existing record after open, not about the layout or the encoding. Acceptance criterion before enabling this feature.")]
+    [Fact(Skip = "§4b open item (2026-09-16), narrowed by four probes: the row IS written inline, the reopened table reports IsFixedWidthRecords=True, every DirectoryTableFactory construction receives the right configuration (fixedWidth=True, inlineBytes=16), a row inserted AFTER reopen reads back correctly, and the reopened table is a DIFFERENT instance from the first — yet DirectoryTableFactory produced no construction for it, and SingleFileTableFactory is not constructed anywhere in src. So a Table instance exists on reopen that neither factory built, and only the record written BEFORE the reopen is misread (DBNull). Acceptance criterion before enabling FixedWidthInlineValueBytes. See plan §4b.")]
     public async Task Reopen_KeepsInlineAndOverflowValues()
     {
         await using (var db = Open("reopen"))
