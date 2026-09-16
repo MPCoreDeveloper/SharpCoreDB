@@ -480,7 +480,15 @@ public partial class SqlParser
 
         if (batchedRows is not null)
         {
+            // §2 instrumentation (2026-09-16): the table-side envelope for one statement. Its children — encode,
+            // index-maint, engine-write, commit, row-locate, hash-index and the arena stages — are stamped deeper,
+            // so the delta between this and the sum of them is the table's own glue: lock acquisition, the batch
+            // PK probe, the positions array, the cached-row-count update. That residual and the statement-glue
+            // residual (dispatch minus its children) are the last unattributed third of a multi-row pass
+            // (plan §9 priority 2), and they need different fixes, so they are separated here rather than argued.
+            long tableBatchStart = Diagnostics.WritePathProfiler.Stamp();
             tableAsTable!.InsertBatch(batchedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.TableBatch, tableBatchStart);
             insertedCount = batchedRows.Count;
             lastInsertedRow = batchedRows[^1];
 

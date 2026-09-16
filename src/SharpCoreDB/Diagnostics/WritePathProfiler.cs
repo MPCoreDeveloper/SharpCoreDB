@@ -139,9 +139,22 @@ public static class WritePathProfiler
         /// parser. Nested stages (`parse`) are included in it, so the delta between this and them is the point.
         /// </summary>
         Dispatch = 18,
+
+        /// <summary>
+        /// The <c>Table.InsertBatch</c> call on the SQL multi-row <c>INSERT … VALUES</c> path — and therefore the
+        /// bracket around everything the table does for one statement. Added (2026-09-16) to split the last hole
+        /// on that shape: with <see cref="Dispatch"/> (the statement envelope) and this (the table envelope) both
+        /// stamped, each delta names its own residual — <c>dispatch</c> − (<c>table-batch</c> + <c>parse</c> +
+        /// <c>row-build</c> + <c>stmt-validate</c>) is the statement glue, and <c>table-batch</c> − (<c>encode</c> +
+        /// <c>index-maint</c> + <c>engine-write</c> + <c>commit</c> + <c>row-locate</c>) is the table-side glue
+        /// (lock acquisition, the batch PK probe, the positions array, the cached-row-count update). Its children
+        /// nest inside it, exactly as <see cref="Validate"/> nests <see cref="ValidateOnly"/> and
+        /// <see cref="Encode"/>.
+        /// </summary>
+        TableBatch = 19,
     }
 
-    private const int StageCount = 19;
+    private const int StageCount = 20;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -174,7 +187,7 @@ public static class WritePathProfiler
         "validate", "encode", "index-maint", "row-locate", "in-place-patch",
         "engine-write", "wal-append", "wal-flush", "commit", "parse", "index-decode",
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
-        "hash-index", "stmt-validate", "dispatch",
+        "hash-index", "stmt-validate", "dispatch", "table-batch",
     ];
 
     private static int _enabled;

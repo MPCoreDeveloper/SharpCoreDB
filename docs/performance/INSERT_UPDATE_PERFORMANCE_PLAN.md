@@ -1753,12 +1753,27 @@ disagree). Every figure is fair-shape — `WHERE id = @pk` for both engines, tun
    0.7, row validation 0.2 — roughly **11.5 µs of the 17.18 µs median, leaving ~5.7 µs/row (33 %) unattributed
    inside `dispatch`.** That is the same envelope gap the single-row shape shows (~30 µs/statement, §9 item 2),
    now visible on both shapes and for the same reason.
-   **So the first INSERT job is to split `dispatch` on the batch shape, not to attack serialization:** encode is
-   ~20 %, while the unattributed third is larger. Note also that batch row validation is *not* an anomaly — 0.2
-   µs/row matches the single-row path's 0.19 µs; the earlier text here compared the bracket with the leaf.
-   **After that:** `encode` (20 %, where the arena round-trip lives — §4b's target) and `index-maint` (13 %, with
-   the caveat that `BTree.InsertBulk` is a plain `Insert` loop despite its doc comment, and a full
-   `RebuildAllIndexesFromFile` is not an option — §7a pitfall 2 measured 1380 ms for 20K records).
+   ⚠️ **Corrected a third time — by the measurement this item asked for (2026-09-16).** A `table-batch` stage was
+   added around `SqlParser.DML.cs`'s `Table.InsertBatch(batchedRows)` call (the un-stamped table-side envelope) and
+   the multi-row arm re-run. **The 33 % hole this item claimed does not exist; it was produced by mixing the
+   profiled pass's leaf sums with the timed median's total** — apples to oranges. Within one report the tree closes:
+   `dispatch` 13.45 µs/row = `table-batch` 7.59 + `parse` 3.33 + `row-build` 1.51 + glue 1.03 (**98 %**), and
+   `table-batch` 7.59 = validate/encode 3.50 + `index-maint` 2.38 + `commit` 1.08 + `engine-write` 0.38 +
+   `row-locate` 0.16 + glue 0.09 (**99 %**). So there are two glues and both are small — 1.03 µs/row on the
+   statement side and 0.09 µs/row on the table side — and neither is worth a task of its own. What does differ is
+   the profiled pass (13.4 µs/row) against the same run's timed median (20.04 µs/row): one warm pass is not a
+   median, which is the §2 rule applied to my own number instead of to someone else's.
+   **The measured INSERT lever list, ranked, after the split** (profiled pass, per row):
+   1. **`parse` 3.33 µs (25 %) + `row-build` 1.51 (11 %) = 36 %, and they are one pipeline.**
+      `ParseMultiRowInsertValues` materializes a `List<string>` of literals per row — 18.4 MB per 20,000 rows,
+      962 KB per statement — and `BuildRowFromValues` then converts each literal to a typed value. Fusing them,
+      i.e. scanning the VALUES text straight into the typed row, removes the per-literal strings and the per-row
+      list. This is the largest single lever on the INSERT path.
+   2. **`encode` 3.28 (25 %)** — the serializer, whose arena round-trip (`arena-write` 2.26 + `arena-append` 1.79)
+      is exactly what §4b's two-region record exists to remove.
+   3. **`hash-index` 1.93 (14 %)** — per-row hash adds. The PK B-tree's own share of `index-maint` is only
+      0.45 µs/row, so the bulk-insert index story is *hash* adds, not the B-tree.
+   4. `commit` 1.08 (8 %), `engine-write` 0.38, row validation 0.22, `row-locate` 0.16.
 3. **PageBased UPDATE (§6).** Largest deficit anywhere (8.7–10.2×), unchanged package: the PK-equality fast paths
    are switched off for PageBased at `:2134`, `:2260`, `:2266`, `:3153`, `:3309`, `:3461`, and a relocated record can
    be written twice.
