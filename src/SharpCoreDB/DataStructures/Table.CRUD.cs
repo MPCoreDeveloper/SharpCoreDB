@@ -2285,9 +2285,14 @@ public partial class Table
                 List<(long Position, Dictionary<string, object>? Row, byte[]? Raw)>? rows = null;
 
                 // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
-                // on a columnar table with a PK resolves through the PK B-tree directly (single
-                // search + one read) instead of SelectInternal full-row materialization. When the
-                // key is not found the generic machinery below still runs.
+                // on a table with a PK resolves through the PK B-tree directly (single search + one read)
+                // instead of SelectInternal full-row materialization. When the key is not found the generic
+                // machinery below still runs.
+                // ⚠️ Tried removing this PageBased exclusion on 2026-09-16 — the reasoning was that the decision here
+                // is only how the row is *located* and the PageBased write arm already re-points on relocation. It
+                // measured as no change (--pk --engine=pagebased: 30,037 ops/s against 33,933, gap 10.1x against
+                // 8.7-10.2x, i.e. inside the noise), so the gate was restored rather than kept on reasoning alone.
+                // See plan §6 for the recorded negative result.
                 if (StorageMode != StorageMode.PageBased &&
                     this.PrimaryKeyIndex >= 0 &&
                     !string.IsNullOrEmpty(where) &&

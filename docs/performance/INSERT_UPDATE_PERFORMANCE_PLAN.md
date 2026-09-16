@@ -1347,6 +1347,23 @@ from 55 %. So the lever is the same one §4b targets — how many bytes an updat
 secondarily the two fast paths that would avoid the re-serialize altogether (`:2257` `fastPatch`, `:2291` the
 PK-equality path), **not** the page write that this section originally suspected.
 
+**Tried and reverted the same day: relaxing the PK-equality gate.** The reasoning was sound — the gate at `:2291`
+decides only how the row is *located*, and the PageBased write arm already re-points indexes when a record relocates,
+so relocation was never that decision's business. Measured on `--pk --engine=pagebased`, fixed-width plaintext:
+**UPDATE 30,037 ops/s against 33,933 before the change (gap 10.1× against 8.7–10.2× SQLite)** — no improvement inside
+this machine's noise. With no demonstrated gain, and a newly-unleashed path on an engine that had been gated away from
+it, the **gate was restored**. Recorded as a negative result so it is not re-tried on reasoning alone.
+
+**And those numbers name the real lever: `fastPatch`** — the raw-byte patch that skips the re-serialize entirely and
+is worth the 34.1 % `encode` bucket. It cannot simply be unlocked either, because it writes through
+`engine.TryUpdateInPlaceSameLength`, a **default interface method that only `AppendOnlyEngine` implements**
+(`IStorageEngine.cs:65`, `AppendOnlyEngine.cs:137`) — so on PageBased the patch is attempted and then discarded. The
+next step for this package is therefore an **in-place, same-length record overwrite on the PageBased engine**, which is
+safe *by construction* for fixed-width records precisely because that API is length-preserving, so relocation cannot
+occur — the same argument that made the locate gate look removable. Until it exists, **§4b's inline capacity is the
+only identified lever that cuts this column's cost** (the 2,829 B/update through the arena) on top of INSERT's 24 %,
+which makes §4b the higher-value blocker in the program.
+
 The same engine
 > measured through the *no-PK* default job — whose SharpCoreDB tables declare no primary key, so their reads and DML
 > filter on a non-key column — shows PageBased READ collapsing to 31–59K (0.33–0.61× SQLite) and PageBased UPDATE at
