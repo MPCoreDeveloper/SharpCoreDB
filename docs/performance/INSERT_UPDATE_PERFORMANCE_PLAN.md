@@ -879,6 +879,18 @@ does not hand the caller's configuration to the table that serves queries. Ruled
 appears nowhere in the open path except `PlatformHelper`, and the only `Table` construction site is
 `DirectoryTableFactory.CreateTable`, which takes the config from *its* caller — so the remaining question is which
 caller runs during open, and that is the next place to look. The test carries this as its skip reason.
+**The persistence map, so this is not re-derived:** in *directory* mode a table is `<name>.dat` plus a `.meta`
+sidecar (`FileStreamManager.cs:178`, `DirectoryStorageProvider.cs:425`); `TableSchemaDefinition` is constructed at DDL
+time and applied, never stored; `TableMetadataDto` is written (`Database.Core.cs:533`) but has **no reader anywhere in
+`src`**; and `TableDirectoryManager` — the per-table column-entry store — belongs to `SingleFileStorageProvider`, i.e.
+the single-file format only. So for directory tables there is no schema file the layout could ride in, which leaves
+two honest options: **(a)** propagate the caller's configuration to the table the open path creates — small, but the
+construction is indirect (`SqlParser.DDL.cs:365` uses the *parser's* `this.config`, and the parser is built with the
+database's config at `Database.Execution.cs:32/440`, so the question is which parser/table instance actually serves
+queries after open), or **(b)** record the layout in the `.meta` sidecar so it is **self-describing per table** —
+the format-proper answer, and the one that also settles the version and migration requirement this section opens
+with. (b) is what I would do next, which is why this belongs in a session that can treat it as the format change it
+is rather than as plumbing.
 **Do not enable this for data that is re-read or mutated until those two tests pass.** That — not the encoding — is
 the remaining §4b work, together with the version bump and upgrade path this section already requires.
 
