@@ -1325,29 +1325,27 @@ UPDATE gap **8.7× fixed-width / 9.6× at-rest / 10.2× legacy**, against Append
 PageBased is meanwhile **ahead of SQLite on READ** (1.5–1.7×) and **ahead of AppendOnly on INSERT** (+22 %), so
 §6's scope does not change: it is an UPDATE-only package.
 
-> ⚠️ **Re-profiled on the current build (2026-09-16) — §6 reproduces, so its diagnosis is not stale.** `--pk-profile
---engine=pagebased` on the fixed-width plaintext arm gives **UPDATE 21,285 ops/s (46.98 µs/update)** against §6's
-45.84 µs, with the same per-update arena traffic: **2,829 B/update**. The stage table:
+> ⚠️ **Split the same day, and it re-points the work.** The two stamps went in on the generic per-page-op route — the
+serialize (`Encode`) and the page write (`EngineWrite`) — and attribution rose from 44.6 % to **62.4 %** (350.7 ms of
+stages against a 561.9 ms pass, 56.19 µs/update):
 
 | stage | calls | share | µs/update |
 |---|---:|---:|---:|
-| `arena-write` | 10,000 | **54.5 %** | 11.4 |
-| `parse` | 10,000 | 15.6 % | 3.3 |
-| `row-locate` | 10,001 | 14.9 % | 3.1 |
-| `arena-append` (inside `arena-write`) | 10,000 | 14.2 % | 3.0 |
-| `commit` | 1 | 0.9 % | 0.2 |
-| **`in-place-patch`, `engine-write`, `index-maint`, `encode`** | **0** | — | — |
+| `encode` (the full re-serialize) | 10,000 | **34.1 %** | 11.9 |
+| `arena-write` (inside `encode`) | 10,000 | 29.5 % | 10.4 |
+| `row-locate` | 10,001 | 13.6 % | 4.8 |
+| `parse` | 10,000 | 12.4 % | 4.4 |
+| `arena-append` (inside `arena-write`) | 10,000 | 8.2 % | 2.9 |
+| `engine-write` (the page write itself) | 10,000 | **1.6 %** | 0.6 |
+| `commit` | 1 | 0.6 % | 0.2 |
 
-Two facts stand out. First, the in-place machinery **still never fires** on this engine — zero calls for
-`in-place-patch`, `engine-write`, `index-maint` and `encode` — so the gated-fast-path diagnosis above is exactly
-right: an update here is a full re-serialize plus an arena append, and the gates are at `:2095`, `:2257` (`fastPatch`
-requires `Columnar`), `:2291`, and the delete-side `:3329`/`:3485`/`:3637`, all because a PageBased record can
-**relocate** and a cached position then goes stale. Second, **~55 % of the 470 ms pass is unattributed** (209.7 ms of
-stages measured against 470 ms), and the largest known-but-unstamped region is the *serialization itself* — the
-fixed-width encoding of the whole row that precedes the arena call, which the generic per-op route does not stamp.
-So the next step is the one that unlocked DELETE: **stamp the serialize and the engine write on the generic
-per-page-op route** and split that 55 % before changing anything. Only then is choosing among the three gated fast
-paths an arithmetic decision rather than a preference.
+Three conclusions, and the last is the surprise. **(1) The page write is 1.6 %** — so the "a relocated record can be
+written twice" fact above is real but *cheap*, and the page manager is not where the ~47 µs goes; that hypothesis is
+now refuted with a number rather than dropped. **(2) The serialize is the cost** — 34.1 %, and it *contains* the arena
+write, whose **2,829 B/update** is what actually costs (10.4 µs of the 11.9). **(3) ~38 % remains unattributed**, down
+from 55 %. So the lever is the same one §4b targets — how many bytes an update pushes through the arena — and only
+secondarily the two fast paths that would avoid the re-serialize altogether (`:2257` `fastPatch`, `:2291` the
+PK-equality path), **not** the page write that this section originally suspected.
 
 The same engine
 > measured through the *no-PK* default job — whose SharpCoreDB tables declare no primary key, so their reads and DML

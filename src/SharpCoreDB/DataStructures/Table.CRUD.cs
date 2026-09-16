@@ -2626,7 +2626,14 @@ public partial class Table
                         }
                         else // PageBased
                         {
+                            // §2 instrumentation (2026-09-16): the two regions §6 named as unstamped on this route —
+                            // the serialize and the page write. PageBased UPDATE attributes only ~45 % of its pass
+                            // (209.7 ms of stages against a 470 ms pass, 46.98 µs/update) and the in-place machinery
+                            // never fires here (zero calls for in-place-patch, engine-write, index-maint, encode), so
+                            // what remains has to be split before it can be attacked.
+                            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
                             rowData = SerializeRowExact(row);
+                            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
                             long position = rowPosition;
                             string? pkVal = this.PrimaryKeyIndex >= 0 ? oldPkValue?.ToString() : null;
@@ -2640,7 +2647,11 @@ public partial class Table
 
                             if (position >= 0)
                             {
+                                // §2 instrumentation: the page write itself, which the fastPatch branch's
+                                // engine-write stamp never covered because that branch is Columnar-only.
+                                long pageWriteStart = Diagnostics.WritePathProfiler.Stamp();
                                 long newPosition = engine.Update(Name, position, rowData);
+                                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, pageWriteStart);
 
                                 if (newPosition != position)
                                 {
