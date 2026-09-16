@@ -2254,7 +2254,13 @@ public partial class Table
                 // (only the changed fields at their actual slot offsets) — no full-row
                 // deserialization. This is the hot path for
                 // `UPDATE t SET score = ... WHERE indexed_col = ...`.
-                bool fastPatch = StorageMode == StorageMode.Columnar &&
+                // §6 (2026-09-16): `_fixedWidthRecords` now joins this gate, and the engine needs no new primitive to
+                // support it — the default IStorageEngine.TryUpdateInPlaceSameLength routes to TryUpdateInPlace,
+                // which PageBasedEngine implements. The patch is length-preserving for a fixed-width record (fields
+                // are written at their fixed slot offsets), so the write cannot relocate and the storage reference
+                // stays valid, which is the property this gate was protecting. The Columnar half is unchanged: a
+                // legacy variable-width patch may change the length, and that engine handles the case as it always has.
+                bool fastPatch = (StorageMode == StorageMode.Columnar || _fixedWidthRecords) &&
                     !string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var fastWhereCol, out _) &&
                     !updates.ContainsKey(fastWhereCol) &&
@@ -2288,13 +2294,14 @@ public partial class Table
                 // on a table with a PK resolves through the PK B-tree directly (single search + one read)
                 // instead of SelectInternal full-row materialization. When the key is not found the generic
                 // machinery below still runs.
-                // ⚠️ Tried removing this PageBased exclusion on 2026-09-16 — the reasoning was that the decision here
-                // is only how the row is *located* and the PageBased write arm already re-points on relocation. It
-                // measured as no change (--pk --engine=pagebased: 30,037 ops/s against 33,933, gap 10.1x against
-                // 8.7-10.2x, i.e. inside the noise), so the gate was restored rather than kept on reasoning alone.
-                // See plan §6 for the recorded negative result.
-                if (StorageMode != StorageMode.PageBased &&
-                    this.PrimaryKeyIndex >= 0 &&
+                // ⚠️ Kept relaxed (2026-09-16) — and it is only useful PAIRED with the `fastPatch` gate above, which
+                // is why relaxing it alone measured as no change: with fastPatch false this route deserializes the
+                // row anyway, so both together are what skip the re-serialize. The decision here is only how the row
+                // is *located*, and the PageBased write arm already re-points indexes when a record relocates
+                // (RepointIndexesAfterRelocation), so relocation was never this decision's business. Alone it changed
+                // nothing measurable (30,037 vs 33,933 ops/s); paired with the fast patch it is the route that keeps
+                // the record as raw bytes instead of materializing it.
+                if (this.PrimaryKeyIndex >= 0 &&
                     !string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var pkWhereCol, out var pkWhereVal) &&
                     string.Equals(pkWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))

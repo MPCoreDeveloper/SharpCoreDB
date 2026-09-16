@@ -1383,15 +1383,27 @@ so relocation was never that decision's business. Measured on `--pk --engine=pag
 this machine's noise. With no demonstrated gain, and a newly-unleashed path on an engine that had been gated away from
 it, the **gate was restored**. Recorded as a negative result so it is not re-tried on reasoning alone.
 
-**And those numbers name the real lever: `fastPatch`** — the raw-byte patch that skips the re-serialize entirely and
-is worth the 34.1 % `encode` bucket. It cannot simply be unlocked either, because it writes through
-`engine.TryUpdateInPlaceSameLength`, a **default interface method that only `AppendOnlyEngine` implements**
-(`IStorageEngine.cs:65`, `AppendOnlyEngine.cs:137`) — so on PageBased the patch is attempted and then discarded. The
-next step for this package is therefore an **in-place, same-length record overwrite on the PageBased engine**, which is
-safe *by construction* for fixed-width records precisely because that API is length-preserving, so relocation cannot
-occur — the same argument that made the locate gate look removable. Until it exists, **§4b's inline capacity is the
-only identified lever that cuts this column's cost** (the 2,829 B/update through the arena) on top of INSERT's 24 %,
-which makes §4b the higher-value blocker in the program.
+**FIXED (2026-09-16): the two gates had to move together, and that is the whole lesson.** Individually each measured as
+no change — `fastPatch` alone 31,132 ops/s, the locate gate alone 30,037 — because each was useless without the other:
+with `fastPatch` false the locate route deserializes the row anyway, and with the locate route still gated the
+`fastPatch` flag never had a raw-bytes row to patch. Relaxed **together**, on the fixed-width plaintext arm:
+**UPDATE 31,132 → 55,578 ops/s, gap to SQLite 9.7× → 5.3×** (at-rest 26,762 → 57,134, gap 11.3× → 5.1×), while the
+**legacy variable-width arm is unchanged** (31,824 → 32,354) exactly as predicted — a variable-width patch may change
+the record's length, so it is correctly still excluded.
+**The safety argument for both is one property, checked against the source rather than assumed:** a fixed-width patch
+writes fields at their fixed slot offsets, so the record **cannot change length and cannot relocate**, which is exactly
+what the gates were protecting. And the engine primitive already existed — the default
+`IStorageEngine.TryUpdateInPlaceSameLength` routes to `TryUpdateInPlace` (`IStorageEngine.cs:65`), which
+`PageBasedEngine` implements (`PageBasedEngine.cs:179`) — so no engine work was needed. My earlier conclusion that a
+*m*issing engine primitive was the blocker was **wrong**, and checking it before writing an engine method is what
+avoided implementing something redundant; the correction is recorded here.
+**What remains is now a fresh profile, not a guess:** the patch removes the re-serialize, so the next question is how
+the remaining 5.3× splits between `parse`, the patch itself, the index re-pointing and `commit` — and secondarily
+whether the delete-side twins of these two gates (`:3329`, `:3485`, `:3637`) deserve the same treatment.
+
+**And §4b's remaining value is INSERT-only now, not shared.** The PageBased column no longer depends on it — the win
+here came from skipping the re-serialize, not from shrinking arena bytes — so §4b carries the INSERT ~24 % and its own
+reopen blocker, and the two columns have separate work again.
 
 The same engine
 > measured through the *no-PK* default job — whose SharpCoreDB tables declare no primary key, so their reads and DML

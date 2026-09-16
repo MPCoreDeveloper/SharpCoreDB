@@ -1,0 +1,42 @@
+{
+  "SharpCoreDB (SQL, PK, legacy, plaintext)": {
+    "InsertTime": 0.5779047,
+    "InsertOpsPerSec": 173038,
+    "ReadTime": 0.0633736,
+    "ReadOpsPerSec": 157794,
+    "UpdateTime": 0.314223,
+    "UpdateOpsPerSec": 31824,
+    "DeleteTime": 0.0510456,
+    "DeleteOpsPerSec": 195903
+  },
+  "SharpCoreDB (SQL, PK, fixed-width, plaintext)": {
+    "InsertTime": 0.7681595,
+    "InsertOpsPerSec": 130181,
+    "ReadTime": 0.0419893,
+    "ReadOpsPerSec": 238155,
+    "UpdateTime": 0.3212096,
+    "UpdateOpsPerSec": 31132,
+    "DeleteTime": 0.0915999,
+    "DeleteOpsPerSec": 109170
+  },
+  "SharpCoreDB (SQL, PK, fixed-width, at-rest default)": {
+    "InsertTime": 1.058752,
+    "InsertOpsPerSec": 94450,
+    "ReadTime": 0.07519,
+    "ReadOpsPerSec": 132996,
+    "UpdateTime": 0.3736634,
+    "UpdateOpsPerSec": 26762,
+    "DeleteTime": 0.0540747,
+    "DeleteOpsPerSec": 184929
+  },
+  "SQLite": {
+    "InsertTime": 0.5969941,
+    "InsertOpsPerSec": 167505,
+    "ReadTime": 0.0989229,
+    "ReadOpsPerSec": 101088,
+    "UpdateTime": 0.0330187,
+    "UpdateOpsPerSec": 302858,
+    "DeleteTime": 0.025028,
+    "DeleteOpsPerSec": 399552
+  }
+}
