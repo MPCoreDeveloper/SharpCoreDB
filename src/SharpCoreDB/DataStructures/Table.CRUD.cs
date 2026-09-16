@@ -2355,6 +2355,13 @@ public partial class Table
                 if (rows is null)
                 {
                     rows = [];
+
+                    // §6 instrumentation (2026-09-15): the "full-row materialization plus a per-row re-search"
+                    // §6 named by reading, and one of the two regions this engine's UPDATE arm left
+                    // unattributed. PageBased reaches here for every statement because its contiguous,
+                    // PK-lookup and raw-byte fast paths are all gated away from it (StorageMode gates at
+                    // :2226 and :2260).
+                    long locateStart = Diagnostics.WritePathProfiler.Stamp();
                     foreach (var row in SelectInternal(where, orderBy: null, asc: true, noEncrypt: false))
                     {
                         long position = -1;
@@ -2371,6 +2378,8 @@ public partial class Table
 
                         rows.Add((position, row, null));
                     }
+
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
                 }
 
                 foreach (var (rowPosition, resolvedRow, rawData) in rows)
