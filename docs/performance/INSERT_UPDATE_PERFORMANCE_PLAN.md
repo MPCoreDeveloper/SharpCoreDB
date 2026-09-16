@@ -2172,7 +2172,44 @@ exactly 1,174 B/call. The pinning of that allocation figure *is* the finding: on
 so the delegate was already elided, presumably because `GetOrAdd` is `[MethodImpl(AggressiveInlining)]` and the lambda
 therefore never escapes. The sentence earlier in this section claiming a per-call display-class allocation was wrong.
 
-**What the cache costs on an all-miss workload, measured with a switch rather than argued.** `BuildConfig` now reads
+**Methodology correction: this section's absolutes were not taken under the configuration they appear to
+describe.** The shell that runs the harness persists between commands, and the diagnostic switches are
+environment variables, so `SHARPCOREDB_BUFFERED_APPENDS=1` and `SHARPCOREDB_WAL_DURABILITY=fullsync` were
+still set from earlier turns for **every** measurement above — the profile runs, the cache A/B, and the
+`--pk` and default-job arms. Two consequences, and they point in opposite directions:
+
+- **The ratios survive.** The 2.27× cache result, the 25.3 → 4.85 µs attribution and the `Count`-gate
+  mechanism were all measured inside one regime with both halves of each pair sharing it, and the
+  comparison arms still match the previously recorded table (FW UPDATE 55,578 → 56,885) because that table
+  was taken in the same regime. The profiler attribution is regime-independent in any case: an O(entries)
+  `Count` per miss is an O(entries) `Count` per miss under any durability setting.
+- **The absolutes do not.** "39,269 rows/s / 25.47 µs/row" describes **buffered appends with a FullSync
+  WAL**, not the harness's tuned default (`Async`, unbuffered since the 2026-09-16 reversal) and not the
+  product default. The same shape measured in the same session, minutes apart, in the two regimes:
+
+| 1 row/statement, 20,000 rows | write-through appends (default posture) | buffered appends |
+|---|---|---|
+| rows/s (median) | **961** | **32,725** |
+| µs/row | **1,037.51** | 30.56 |
+| wall, median of 5 | **20.75 s** | 0.611 s |
+| harness-reported allocation | **76,467 B/row** | 7,925 B/row |
+| gen0 collections per pass | **244** | 25 |
+| `arena-append` | 10,228 ms, 65,856 B/call | 43.8 ms, 850 B/call |
+| `engine-write` | 10,243 ms, 4,371 B/call | 10.3 ms, 206 B/call |
+
+That is a 34× cliff between two supported postures, and it corroborates something this codebase already
+knew: `Storage.AppendBytes` documents its write-through branch as **0.4597 ms per value**, measured by
+this same profiler, and `OverflowArena.WriteMany` exists solely to amortise it — two appends per row at
+that price is the ~1 ms/row above. **The per-call open is not a bug to fix mechanically:** the comment at
+the append site records that a cached write handle makes ordinary readers (`FileShare.Read`) fail with a
+sharing violation, which the suite caught in ten tests, so avoiding it means changing durability or
+reader-sharing policy — i.e. `EnableBufferedAppends` (opt-in, 34× here) or group commit, both of which
+already exist and are deliberately off in the tuned harness config for a like-for-like comparison.
+
+**The lesson, recorded because it cost real measurement time:** an arm is only "the default" when the
+environment is cleared explicitly, and a persistent shell silently leaks a diagnostic switch into every
+later run. Every harness run should state its regime — the `[diag]` line does — and the switches must be
+cleared per measurement, not trusted to have been left unset. `BuildConfig` now reads
 `SHARPCOREDB_QUERY_CACHE=off` (the property is init-only, so it has to be set in the object initializer — assigning it
 after construction does not compile, CS8852). With one statement per row:
 

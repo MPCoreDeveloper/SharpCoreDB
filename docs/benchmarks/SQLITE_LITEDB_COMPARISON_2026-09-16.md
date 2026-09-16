@@ -115,4 +115,15 @@ side.
   `--multirowinsert` — 1,000 rows/statement: 17.65 µs/row / 56,672 rows/s; and one statement per row
   (`SHARPCOREDB_MULTIROW_ROWS=1`), which is the shape that exposed the query-cache capacity-gate defect:
   **25.47 µs/row / 39,269 rows/s, up from 57.70 µs/row / 17,332 rows/s** (2.27×, plan §11).
+- **Regime caveat on those two `--multirowinsert` figures, and on the four columns above.** The shell that runs
+  the harness persists between commands and the diagnostic switches are environment variables, so the figures in
+  this document taken during the 2026-09-16 session were measured with `SHARPCOREDB_BUFFERED_APPENDS=1` and
+  `SHARPCOREDB_WAL_DURABILITY=fullsync` still set from earlier turns — **buffered appends with a FullSync WAL**,
+  not the harness's tuned `Async` default and not the product default. The **ratios** are unaffected: both halves
+  of every comparison shared the regime, and the arms here still match the previously recorded table within noise,
+  which was taken in that same regime. The **absolutes** describe buffered appends. For scale, the same shape
+  measured minutes apart: **write-through appends 961 rows/s / 1,037.51 µs/row / 76,467 B allocated per row / 244
+  gen0 per pass, against buffered 32,725 rows/s / 30.56 µs/row / 7,925 B per row / 25 gen0** — a 34× cliff, and
+  the reason `Storage.AppendBytes` documents its write-through branch at 0.4597 ms per value. Plan §11 carries the
+  full correction table and the note that the per-call open is a reader-sharing decision, not a mechanical fix.
 - PageBased is one run, not a median; treat those four columns as indicative.
