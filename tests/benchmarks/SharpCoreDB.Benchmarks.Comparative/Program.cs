@@ -384,6 +384,18 @@ class Program
         Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_UPDATE") == "1";
 
     /// <summary>
+    /// Hash-index switch, from <c>SHARPCOREDB_HASH_INDEXES=0</c>. Diagnostic for plan §9 priority 1's profiler-free
+    /// bisect: the default job's UPDATE pays two <c>index-maint</c> calls per row (the PK B-tree plus the hash index
+    /// on the updated column), and this switch removes the hash half. ⚠️ It also changes how the row is *located*, so
+    /// a delta here is the pair, not the index alone — the same pairing caveat the rest of §9 records.
+    /// </summary>
+    static bool HashIndexesOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_HASH_INDEXES");
+        return !(value is not null && value.Equals("0", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
     /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
     /// write-through append per row — and now routes to the batched core when the table has no per-row-only
@@ -705,7 +717,7 @@ class Program
             PageCacheCapacity = 10_000,
             UseMemoryMapping = true,
             UseBufferedIO = true,
-            EnableHashIndexes = true,
+            EnableHashIndexes = HashIndexesOverride(),
             // DELETE index maintenance (plan §7). Deferred maintenance is the PRODUCT DEFAULT since
             // v2.1, so this arm follows the default unless the env var explicitly opts out — set
             // SHARPCOREDB_DEFER_DELETE_INDEXES=0 to measure the eager behaviour.

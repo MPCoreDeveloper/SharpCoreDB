@@ -2048,6 +2048,40 @@ Three conclusions, and the second is the important one:
    driver, the batch locate or the commit is the lever. Until then, priority 1 has a measurement problem, not a
    candidate list — and it is the fourth time this session that a plausible reading has failed its own control.
 
+   **The profiler-free bisect ran, and it eliminated four more candidates.** Timed, document-CRUD job, UPDATE cell,
+   three configurations in one session (`SHARPCOREDB_WAL_DURABILITY`, and the new `SHARPCOREDB_HASH_INDEXES=0`):
+
+   | mode | INSERT | READ | UPDATE | DELETE |
+   |---|---:|---:|---:|---:|
+   | fullsync + hash indexes | 77,071 | 64,600 | **60,712** | 129,658 |
+   | async + hash indexes | 104,635 | 80,745 | **59,292** | 131,680 |
+   | async, no hash indexes | 106,063 | 84,165 | **58,885** | 133,902 |
+
+   **UPDATE is flat to ±1.5 % across all three** while INSERT moves +36 % and READ +25 % on `Async` — so the switch is
+   live, and the flat UPDATE is a result rather than a dead lever. Eliminated on this shape, by measurement: WAL
+   durability, index maintenance, the record layout (§§ above), the inline capacity (§§ above), the record write
+   (`in-place-patch` 0.82 µs + `engine-write` 0.67 µs) and the locate (0.12 µs). What is left is the batch driver's
+   per-operation work.
+
+   **And the one routing candidate is now quantitatively refuted too.** `TryParseUpdateForBatch`
+   (`Database.Batch.cs:864`) takes an allocation-free canonical scan (`TryScanCanonicalDml`, `:526`) for
+   `UPDATE <t> SET <col> = <lit> WHERE <col> = <lit>` and otherwise falls back to `BatchUpdateRegex.Match(sql)` — a
+   regex per statement — with anything that fails both going to `nonInserts` for per-statement execution (`:1167`).
+   The arms' predicates differ in exactly that way (`id = 12` numeric versus `name = 'User12'` quoted), so a regex
+   fallback was the best candidate. It is not the answer: the arms' `parse` differs by only **1.55 µs versus 2.28 µs
+   per statement — 0.73 µs, ~5 %** of the 15 µs. A regex cannot be a 6.2×.
+
+   **The rule this leaves behind, and it is the durable output of priority 1:** the profiler's *times* do not transfer
+   across arms on these batch paths — it is `Interlocked`-summed per stage with `[ThreadStatic]` allocation
+   checkpoints read from `GC.GetAllocatedBytesForCurrentThread`, and its own source records the resulting bias under
+   `Parallel.For` serialisation (`WritePathProfiler.cs:212-215, 311-324` and the comment at `:316`). Its **call
+   counts** do transfer, and they already answered the two questions that mattered: `in-place-patch` fires 10,000
+   times on the PK-less route (the legacy layout patches in place) and `parse` fires 10,000 times on **both** arms
+   (no parser-skipping batch route). **Priority 1 is therefore a count-based attribution of `UpdateMultiple`'s
+   per-operation work — not another time-based compare — and the harness switches it now has are
+   `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`, `SHARPCOREDB_HASH_INDEXES` and
+   `SHARPCOREDB_MAIN_PROFILE_UPDATE`.**
+
 **Until that package exists, the honest reading of the comparison table is per-shape**, and the plan should say so
 rather than let the headline 0.24× stand unqualified: the same engine is **1.29× ahead** of SQLite on PK-bound UPDATE
 and **0.24×** on a PK-less, hash-predicate update. A PK-less schema is a legitimate workload; it is simply the one
