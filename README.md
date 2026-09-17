@@ -27,8 +27,8 @@ Use it when you need:
 - A production-focused stack validated by a **1,916-test core suite** (0 failed; **2,897 tests across
   16 suites** in total) and **backward compatibility**
 
-> **🚧 Current pre-release: v2.1.0-RC.3 (2026-09-17) — the .NET 11 / C# 15 preview line.** Available on
-> the `release/v2.1.0.0-RC.3` branch, `net11.0` only. Highlights: the fixed-width inline capacity
+> **🚧 Current pre-release: v2.1.0-RC.3 (2026-09-17) — the .NET 11 / C# 15 preview line.** **Published on
+> NuGet.org** (all 27 packages, pre-release) from the `release/v2.1.0.0-RC.3` branch, `net11.0` only. Highlights: the fixed-width inline capacity
 > ships at 16 by default on both storage paths (+12–19 % on the batched multi-row INSERT shape, per
 > the tracked measurement), the overflow arena appends a row's payloads in one call instead of one
 > file open per value, and in-place UPDATE/DELETE with deferred index maintenance put the
