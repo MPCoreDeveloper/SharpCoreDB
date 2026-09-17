@@ -3,7 +3,7 @@
 This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
 
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -16,13 +16,12 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Graph v2.0.0.2
-
+# SharpCoreDB.Graph v2.1.0-RC.3
 **Lightweight Graph Traversal Engine**
 
 A* pathfinding and graph algorithms **30-50% faster than alternatives** with pure managed C# 14 code.
 
-## ✨ What's New in v1.9.5 (archived; current release 2.0.0.2)
+## ✨ What's New in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ Inherits metadata improvements from SharpCoreDB v1.9.5
 - ✅ Phase 6 complete: A* pathfinding with 30-50% improvement
@@ -54,7 +53,7 @@ A* pathfinding and graph algorithms **30-50% faster than alternatives** with pur
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph --version 2.0.0.0
+dotnet add package SharpCoreDB.Graph --version 2.1.0-RC.3
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

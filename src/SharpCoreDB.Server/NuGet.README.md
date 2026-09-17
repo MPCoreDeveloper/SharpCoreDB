@@ -1,9 +1,14 @@
-# SharpCoreDB.Server v2.0.0.2
-
+# SharpCoreDB.Server v2.1.0-RC.3
 Network database server package for `SharpCoreDB`.
 
+> **The server host is a standalone executable, not a NuGet package.** `src/SharpCoreDB.Server` is
+> `IsPackable=false` and is distributed as the `sharpcoredb-server` binary and the
+> `ghcr.io/mpcoredeveloper/sharpcoredb-server` container image. The packable server-side libraries are
+> **`SharpCoreDB.Server.Core`** (hosting, gRPC/REST wiring) and **`SharpCoreDB.Server.Protocol`**
+> (wire contracts) — install those, then run the server from the repository or the container image.
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+
+## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -30,7 +35,7 @@ Network database server package for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 2.0.0.0
+dotnet add package SharpCoreDB.Server.Core --version 2.1.0-RC.3
 ```
 
 ## Documentation

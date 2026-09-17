@@ -12,7 +12,7 @@ on:
         required: false
         default: ''
       packVersion:
-        description: 'Explicit full package version (e.g. 2.1.0-RC.2). Leave empty to use the version each project declares.'
+        description: 'Explicit full package version (e.g. 2.1.0-RC.3). Leave empty to use the version each project declares.'
         required: false
         default: ''
 
@@ -133,8 +133,8 @@ jobs:
           "SharpCoreDB.Projections.*.nupkg"
 
         push_layer "Layer 3 (top-level)" \
-          "SharpCoreDB.Server.[0-9]*.nupkg" \
           "SharpCoreDB.Graph.Advanced.*.nupkg" \
+          "SharpCoreDB.Aspire.Hosting.*.nupkg" \
           "SharpCoreDB.Provider.Sync.*.nupkg" \
           "SharpCoreDB.Provider.YesSql.*.nupkg" \
           "SharpCoreDB.Functional.Dapper.*.nupkg" \

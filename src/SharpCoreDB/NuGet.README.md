@@ -1,14 +1,43 @@
-# SharpCoreDB v2.0.0.2 — Performance-First Database Engine
+# SharpCoreDB v2.1.0-RC.3 — Performance-First Database Engine
 
-**High-Performance Embedded AND Networked Database for .NET 10**
+**High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
+
+> **This is the v2.1 release candidate line** — `2.1.0-RC.3` targets **net11.0 only** with
+> **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages remain the v2.0 stable
+> line on `master`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
 [![NuGet](https://img.shields.io/nuget/v/SharpCoreDB.svg)](https://www.nuget.org/packages/SharpCoreDB)
 [![NuGet downloads](https://img.shields.io/nuget/dt/SharpCoreDB.svg)](https://www.nuget.org/packages/SharpCoreDB)
-[![.NET 10](https://img.shields.io/badge/.NET-10-blue.svg)](https://dotnet.microsoft.com/download)
+[![.NET 11](https://img.shields.io/badge/.NET-11-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.1.0-RC.3
+
+- **The fixed-width inline capacity now ships at 16 by default on both storage paths.** A
+  fixed-width record used to keep *every* variable-length value in the overflow arena; short values
+  now live in the record slot. Measured on the tracked batched shape (20,000 rows, 1,000
+  rows/statement, median of 5): **62,545 → 70,145–74,634 rows/s (+12 to +19 %)** and the arena file
+  halved (1,006,670 → 488,890 B) for a 2.4× larger table file. `0` remains available per database
+  for the historical layout.
+- **The overflow arena no longer opens its file once per value.** `IOverflowArena.WriteMany`
+  receives a row's payloads at once and appends them with a single `AppendBytesMultiple` call;
+  the profiler's `arena-append` call count fell from 3 per row to **exactly 1**. Measured
+  **1,428 → 523.51 µs/row** on the fixed-width multi-row INSERT path (**2.73×**).
+- **The fair-PK write path is now ahead of SQLite on UPDATE and DELETE.** In-place record
+  updates plus deferred index maintenance put the fixed-width layout at **~0.8× SQLite UPDATE**
+  and **~0.5× SQLite DELETE** (median-of-3, product-default regime). The legacy
+  variable-length layout and the PageBased engine remain behind on UPDATE and are tracked openly
+  in `docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md`.
+- **`INSERT` remains the open column.** The batched multi-row shape converts to a measured win,
+  the single-row statement path does not (the residual is the SQL/engine path plus per-value
+  write-through durability, not the I/O). Recorded rather than glossed.
+- **Validation for this release:** **2,897 tests across 16 suites, 0 failed, 0 errors, 16 skipped**
+  (core 1,916), plus the comparative / fair-PK / pure-default / PageBased / multi-row harness
+  arms and the write-path regression gate (PASSED).
+- Full report: `docs/2.1.0-RC.3_WHAT_CHANGED.md` and `docs/CHANGELOG.md`.
 
 ## What's New in 2.0.0.2
 
@@ -199,16 +228,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0.2
+dotnet add package SharpCoreDB --version 2.1.0-RC.3
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0-RC.3
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -236,10 +265,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.0.0.2 (September 2026)  
-**Target:** .NET 10 / C# 14  
-**Tests:** 1,700+ (100% passing)  
-**Status:** ✅ Stable — performance-first v2.0.0 release  
+**Latest Version:** 2.1.0-RC.3 (September 2026)  
+**Target:** .NET 11 / C# 15 (preview)  
+**Tests:** 2,897 across 16 suites (0 failed, 16 skipped)  
+**Status:** ✅ Release candidate — v2.1 (net11.0-only) performance line  
 **Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 

@@ -6,7 +6,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -121,13 +121,12 @@ await distributedDb.ExecuteAsync(
 
 MIT License - see [LICENSE](https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/LICENSE) for details.
 
-# SharpCoreDB.Distributed v2.0.0.2
-
+# SharpCoreDB.Distributed v2.1.0-RC.3
 **Enterprise Distributed Database Features**
 
 Multi-master replication, distributed transactions, and automatic sharding - Phase 10 complete with sub-100ms replication latency.
 
-## ✨ What's New in v1.9.5 (archived; current release 2.0.0.2)
+## ✨ What's New in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ Phase 10.2: Multi-master replication with vector clocks
 - ✅ Phase 10.3: Distributed transactions with 2PC protocol
@@ -168,7 +167,7 @@ Multi-master replication, distributed transactions, and automatic sharding - Pha
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Distributed --version 2.0.0.0
+dotnet add package SharpCoreDB.Distributed --version 2.1.0-RC.3
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

@@ -7,7 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Added (Munarium-inspired features — v2.1.0-RC.3, net11.0 / C# 15 preview)
+## [2.1.0-RC.3] - 2026-09-17
+
+> Full release notes: [`docs/2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
+> Scope: the net11.0 / C# 15 preview release candidate line (`release/v2.1.0.0-RC.3`), validated by
+> **2,897 tests across 16 suites (0 failed, 0 errors, 16 skipped)** plus the full benchmark arm set.
+
+### Added (Munarium-inspired features — net11.0 / C# 15 preview)
 
 - **Content-verified immutable artifacts**: `ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex` with `Verify()` and `BuildResult` (Success/VerificationFailed/LimitExceeded). `Verify()` is content-addressed, so tampering with any manifest field is reported as `VerificationFailed`. Inspired by munarium-datastore `model.rs`, `canonical.rs` and `verify.rs`.
 - **Hybrid fusion**: `HybridFusionAlpha` in `VectorSearchOptions` for balanced lexical + vector scoring (0.0–1.0). Recorded in the artifact manifest; wiring the weighted scorer into GraphRAG ranking is still open (Phase 3, partial).
@@ -85,9 +91,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - All features are **opt-in**, pure managed C# 15 / .NET 11, and work alongside existing HNSW, SIMD, and EventSourcing (conditional appends). Phase status is tracked in `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md`.
 
 See `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md` for details and usage.
-
-## [Unreleased] (previous)
-
 
 ## [2.0.0.2] - 2026-09-04
 

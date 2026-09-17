@@ -26,7 +26,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v2.0.0.2 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.1.0-RC.3 (2026-09-17): net11.0-only (C# 15 preview) release line - 2,897 tests green across 16 suites; the fixed-width inline capacity ships at 16 by default on both storage paths (batched multi-row INSERT measured +12 to +19 percent); the overflow arena writes a row's payloads in one append instead of one file open per value; and in-place UPDATE/DELETE with deferred index maintenance put the fixed-width fair-PK layout ahead of SQLite on UPDATE (0.8x) and DELETE (0.5x). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/release/v2.1.0.0-RC.3/docs/CHANGELOG.md</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

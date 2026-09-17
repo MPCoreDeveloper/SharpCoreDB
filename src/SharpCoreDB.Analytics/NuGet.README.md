@@ -3,7 +3,7 @@
 This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
 
 
-## Patch updates in v1.9.5 (archived; current release 2.0.0.2)
+## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -16,13 +16,12 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Analytics v2.0.0.2
-
+# SharpCoreDB.Analytics v2.1.0-RC.3
 **Advanced Analytics Engine for SharpCoreDB**
 
 Unlock enterprise-grade analytics with 100+ aggregate functions, window functions, and statistical analysis tools - **150-680x faster than SQLite**.
 
-## ✨ What's New in v1.9.5 (archived; current release 2.0.0.2)
+## ✨ What's New in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ Inherits metadata improvements from SharpCoreDB v1.9.5
 - ✅ Phase 9 complete: 100+ aggregate and window functions
@@ -54,7 +53,7 @@ Unlock enterprise-grade analytics with 100+ aggregate functions, window function
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 2.0.0.0
+dotnet add package SharpCoreDB.Analytics --version 2.1.0-RC.3
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

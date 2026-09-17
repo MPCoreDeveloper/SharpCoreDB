@@ -26,8 +26,20 @@ Network database server package for `SharpCoreDB`.
 
 ## Installation
 
+The server host is a standalone executable and is **not** published as a NuGet package
+(`IsPackable=false`). Run it from the repository or use the container image:
+
 ```bash
-dotnet add package SharpCoreDB.Server --version 2.0.0.0
+dotnet run --project src/SharpCoreDB.Server -c Release
+# or
+docker run -p 5001:5001 -p 8443:8443 ghcr.io/mpcoredeveloper/sharpcoredb-server:latest
+```
+
+The packable server-side libraries are:
+
+```bash
+dotnet add package SharpCoreDB.Server.Core --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Server.Protocol --version 2.1.0-RC.3
 ```
 
 ## Documentation

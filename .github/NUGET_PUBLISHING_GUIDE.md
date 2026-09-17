@@ -61,20 +61,55 @@ order (with `--skip-duplicate`):
 |---|---|
 | `reason` | Free-text note shown in the run summary |
 | `versionSuffix` | Optional NuGet pre-release suffix. **Empty** → stable version from the `.csproj` files (e.g. `2.0.0.0`). **`preview.1`**, **`rc.1`**, **`beta.1`** → `2.0.0.0-preview.1` etc. |
+| `packVersion` | Explicit full package version (e.g. `2.1.0-RC.3`) passed as `/p:Version=…` to the whole pack. Leave empty to use the version each project declares. |
 
-### Scenario B2: Publishing the 2.0.0.0 release (click-by-click)
+This workflow packs **`SharpCoreDB.CI.slnf`**, i.e. every packable package in the family, and pushes
+them in dependency layers (core → dependents → mid-level → top-level → remaining).
+
+> `src/SharpCoreDB.Server` is **not** in that set: it is `IsPackable=false` (a standalone executable
+> shipped as the `sharpcoredb-server` binary and the `ghcr.io/mpcoredeveloper/sharpcoredb-server`
+> container image). Its packable libraries are `SharpCoreDB.Server.Core` and
+> `SharpCoreDB.Server.Protocol`, both of which *are* published.
+
+### Scenario B2: Publishing the 2.1.0-RC.3 release (click-by-click)
 
 1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
 2. In the left sidebar, select **"Manual NuGet Publish"**
 3. Click the blue **"Run workflow"** button (top right)
 4. In the dialog:
-   - **Branch**: `master` (the v2.0.0.0 trunk — SharpCoreDB v2 is now the leading line)
-   - **versionSuffix**: leave **empty** for the stable `2.0.0.0` release
-   - **reason**: e.g. `2.0.0.0 – performance-first V2 release`
+   - **Branch**: `release/v2.1.0.0-RC.3` (the net11.0 / C# 15 preview RC line)
+   - **packVersion**: `2.1.0-RC.3`
+   - **versionSuffix**: leave **empty** (an explicit `packVersion` is supplied)
+   - **reason**: e.g. `2.1.0-RC.3 – validated RC of the net11.0 line (2,897 tests green)`
 5. Click **"Run workflow"**
 6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
    dependency layers (core → dependents → mid-level → top-level).
-7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — the `2.0.0.0` version should appear.
+7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — `2.1.0-RC.3` should appear (`2.1.0-rc.3`
+   normalized). Other packages in the family should show the same version.
+
+> The v2.1 RC line is **pre-release**: NuGet will not select `2.1.0-RC.3` unless a consumer asks for it
+> explicitly or ticks *Include prerelease*.
+
+### Scenario B3: Publishing only the core package (quick path)
+
+The branch workflow `.github/workflows/ci-net11.yml` triggers on `release/v2.1.0.0-*` and has a
+`workflow_dispatch` **publish** job that packs and pushes **only** `src/SharpCoreDB/SharpCoreDB.csproj`
+at its declared version. Use it when only the core package changed; use Scenario B2 for a full release.
+
+### Scenario B4: Publishing the 2.0.0.2 release (click-by-click)
+
+1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
+2. In the left sidebar, select **"Manual NuGet Publish"**
+3. Click the blue **"Run workflow"** button (top right)
+4. In the dialog:
+   - **Branch**: `master` (the v2.0 stable trunk)
+   - **versionSuffix**: leave **empty** for the stable `2.0.0.2` release
+   - **packVersion**: leave **empty** (each project declares its own version)
+   - **reason**: e.g. `2.0.0.2 – performance-first v2 release`
+5. Click **"Run workflow"**
+6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
+   dependency layers (core → dependents → mid-level → top-level).
+7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — the `2.0.0.2` version should appear.
 
 > **Requires** the `NUGET_API_KEY` repository secret (`Settings → Secrets and variables → Actions`). If it was
 > used for the 1.9.7 publish it is already configured.
@@ -92,17 +127,29 @@ on:
 
 ## Version Management
 
-SharpCoreDB uses **4-part versions** (`n.n.n.n`, e.g. `2.0.0.0`). The versions come from the `<Version>` tags
-in `.csproj` files, but the **single source of truth for the SharpCoreDB package family is
-`<SharpCoreDBVersion>` in `Directory.Packages.props`** (used by all central package references).
+SharpCoreDB uses **4-part versions** (`n.n.n.n`, e.g. `2.0.0.0`) for its stable lines, and a
+**3-part version plus a prerelease label** for the pre-release lines (`2.1.0-RC.3`). The versions come
+from the `<Version>` tags in `.csproj` files, but the **single source of truth for the SharpCoreDB
+package family is `<SharpCoreDBVersion>` in `Directory.Packages.props`** (used by all central package
+references).
+
+**Current line state (2026-09-17):**
+
+| Line | Branch | Version | Latest published |
+|---|---|---|---|
+| v2.1 RC (net11.0 / C# 15 preview) | `release/v2.1.0.0-RC.3` | `2.1.0-RC.3` | `2.1.0-rc.1` (RC.3 not yet pushed) |
+| v2.0 stable (net10.0 / C# 14) | `master` | `2.0.0.3` | `2.0.0.3` |
+
+Every one of the **46 `.csproj` files on the v2.1 RC branch** carries the same `<Version>` — the
+release checklist is `git grep "<Version>" -- '*.csproj'` and it must return exactly one distinct value.
 
 Each packable project file carries the same version:
 
 ```xml
 <PropertyGroup>
-  <Version>2.0.0.0</Version>
-  <AssemblyVersion>2.0.0.0</AssemblyVersion>
-  <FileVersion>2.0.0.0</FileVersion>
+  <Version>2.1.0-RC.3</Version>
+  <AssemblyVersion>2.1.0.0</AssemblyVersion>
+  <FileVersion>2.1.0.0</FileVersion>
 </PropertyGroup>
 ```
 
@@ -238,4 +285,4 @@ For questions:
 ---
 
 **Created**: 2025-01-28  
-**Last Updated**: 2025-01-28
+**Last Updated**: 2026-09-17 (v2.1.0-RC.3 release preparation)

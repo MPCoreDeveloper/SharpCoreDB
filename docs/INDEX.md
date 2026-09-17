@@ -23,6 +23,9 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 0b. Release notes
 
+- `2.1.0-RC.3_WHAT_CHANGED.md` — **what's new in 2.1.0-RC.3** (net11.0 / C# 15 preview RC: the
+  inline-capacity default, the overflow-arena write path, the fair-PK UPDATE/DELETE position, plus
+  the full validation table and the honest remaining gaps)
 - `2.0.0.2_WHAT_CHANGED.md` — **what's new in 2.0.0.2** (2.x-vs-1.9.x major steps + the hardening
   and data-integrity batch)
 - `2.0.0.0_WHAT_CHANGED.md` — **what's new in v2.0 vs v1.9** (features + benchmarks vs SQLite/LiteDB)
@@ -158,6 +161,9 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 10. Benchmarks & Performance
 
+- `2.1.0-RC.3_WHAT_CHANGED.md` — ⭐ **release notes (2.1.0-RC.3)**: the validation table (2,897 tests /
+  16 suites), the comparative / fair-PK / pure-default / PageBased / multi-row arms measured
+  2026-09-17, and the remaining gaps
 - `2.0.0.2_WHAT_CHANGED.md` — ⭐ **release notes (2.0.0.2)**: the 2.x-vs-1.9.x major steps + the
   2.0.0.2 hardening/perf batch
 - `CHANGELOG.md` — full per-version change log (`[2.0.0.2]`, new `[Unreleased]` on top)

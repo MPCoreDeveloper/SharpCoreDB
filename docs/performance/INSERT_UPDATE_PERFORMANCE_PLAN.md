@@ -16,8 +16,10 @@ area the owner wants addressed **before** any new C# 15 / net11 release decision
 **In scope:** INSERT, UPDATE (and DELETE where the same machinery is involved) on the default
 configuration, across the SQL, Direct and StructRow API ladders.
 
-**Explicitly out of scope for this plan:** publishing packages, bumping the version, and any GA
-decision. The branch stays at `2.1.0-RC.3`; no release mechanics run until the owner says so.
+**Explicitly out of scope for the plan's work items:** the GA decision, and any change to the plan's
+non-negotiable constraints (§0.1). The branch is the **`2.1.0-RC.3`** line; the owner authorised the
+RC.3 release on **2026-09-17**, so the release mechanics — version and package metadata, documentation,
+packaging — now run, and **§8d** records the verification run they are based on.
 
 **Non-negotiable constraints** (they decide what a "fix" may look like):
 
@@ -1958,6 +1960,63 @@ found* by `SELECT * FROM t WHERE id = 1`. Note that `ValueOf`-style assertions r
 "misdecoded value", so the first thing a retry must do is separate those two — assert the row count and the PK index
 *before* asserting the value, because the migration's index rebuild (or the order of the swap against it) is the prime
 suspect. The reverted tree is green and the attempt is in the revert commit.
+
+---
+
+### 8d. Release verification for 2.1.0-RC.3 *(2026-09-17, product-default regime)*
+
+The owner authorised the RC.3 release, so the release-mechanics ban in §0 is lifted and this is the run
+the release notes and the package metadata are based on. **Regime: no `SHARPCOREDB_*` switch set** —
+every harness run prints its own `REGIME:` banner, so the claim is checkable in the logs. Machine was
+loaded (the usual session spread), so **ratios are the comparable part**; SQLite's own reference moved
+between the 2026-09-16 and the 2026-09-17 runs (fair-PK INSERT 202,292 → 156,946).
+
+**Test suites — all 16, unfiltered, Release, `net11.0`, run through the MTP hosts:**
+
+| Suite | Tests | Suite | Tests |
+|---|---:|---|---:|
+| SharpCoreDB.Tests (core) | 1,916 (16 skipped) | SharpCoreDB.Search.Tests | 58 |
+| SharpCoreDB.VectorSearch.Tests | 248 | SharpCoreDB.Identity.Tests | 53 |
+| SharpCoreDB.Provider.Sync.Tests | 135 | SharpCoreDB.Functional.Tests | 38 |
+| SharpCoreDB.EntityFrameworkCore.Tests | 116 | SharpCoreDB.Functional.Linq2DB.Tests | 24 |
+| SharpCoreDB.Analytics.Tests | 81 | SharpCoreDB.Projections.Tests | 15 |
+| SharpCoreDB.EventSourcing.Tests | 72 | SharpCoreDB.HybridSearch.Tests | 6 |
+| SharpCoreDB.Graph.Advanced.Tests | 65 | SharpCoreDB.Functional.Dapper.Tests | 3 |
+| SharpCoreDB.CQRS.Tests | 64 | SharpCoreDB.Functional.EntityFrameworkCore.Tests | 3 |
+| | | **Total** | **2,897 / 0 failed / 16 skipped** |
+
+**Write-path gate:** `--gate` **PASSED** — nothing slower than baseline × 1.50. The three `watch`
+entries (raw INSERT 1.32×, default INSERT 1.41×, default UPDATE 1.28×) sit inside the run's own rep
+spread, which reached **2.08×** on this loaded machine, so they are not attributable.
+
+**Arms (median of 3 where the arm reports one):**
+
+| Arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| `--pk` legacy, plaintext | 111,923 | 74,495 | 138,399 | 263,270 |
+| `--pk` fixed-width, plaintext | 108,661 | 105,652 | **324,560** | **736,046** |
+| `--pk` fixed-width, at-rest | 109,717 | 91,981 | 251,267 | 373,616 |
+| `--pk` SQLite | 156,946 | 93,551 | 258,213 | 342,452 |
+| `--pk-default` (pure default) | 96,266 | 55,533 | 79,337 | 208,722 |
+| `--pk-default` SQLite | 180,409 | 94,087 | 284,996 | 366,093 |
+| `--pk --engine=pagebased` fixed-width | 175,562 | 210,210 | 58,464 | 304,980 |
+| `--pk --engine=pagebased` SQLite | 179,928 | 104,533 | 289,159 | 378,621 |
+| comparative, SQL | 85,560 | 67,482 | 63,853 | 107,871 |
+| comparative, Direct | 124,976 | 139,840 | 98,421 | 235,605 |
+| comparative, StructRow | 133,023 | 108,602 | — | — |
+| comparative, SQLite | 134,662 | 87,955 | 263,040 | 342,813 |
+
+Gaps that moved **in our favour** since §8c: fixed-width UPDATE **0.8×** and DELETE **0.5×** of SQLite
+(ahead), PageBased fixed-width UPDATE improved 5.7× → **4.9×**. Gaps that did **not** move: fair-PK
+INSERT **1.4×** behind (unchanged), pure-default UPDATE **3.6×** behind (the `NoEncryptMode` mechanism
+of §3-1c, still the largest default-config lever).
+
+`--multirowinsert` (20,000 rows, 1,000 rows/statement, median of 5): **52,742 rows/s / 18.96 µs/row**,
+with the deterministic figures matching the committed default — **4,341–4,343 B/row allocated,
+1,840,000 B data file, 488,890 B arena**. The throughput band is the loaded-machine part; the
+allocation and file figures are the evidence that the shipped default is the one under test.
+
+**Packaging:** `dotnet pack` on the CI solution filter produced every package at `2.1.0-RC.3`.
 
 ---
 

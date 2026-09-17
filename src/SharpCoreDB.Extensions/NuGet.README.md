@@ -3,7 +3,7 @@
 This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
 
 
-## What's New in v1.9.5 (archived; current release 2.0.0.2)
+## What's New in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - **FluentMigrator alignment**: `AddSharpCoreDBFluentMigrator()` now defaults both generator and processor to SQLite-compatible mode.
 - Inherits all v1.9.5 engine improvements (Auto-ROWID, GRAPH_RAG, SIMD optimization, Logging.Abstractions 10.0.7).
@@ -17,13 +17,12 @@ For full documentation, see: https://github.com/MPCoreDeveloper/SharpCoreDB/blob
 
 See the main repository for usage examples.
 
-# SharpCoreDB.Extensions v2.0.0.2
-
+# SharpCoreDB.Extensions v2.1.0-RC.3
 **Dapper Integration and ASP.NET Core Extensions**
 
 Dapper ORM integration and ASP.NET Core health check extensions for SharpCoreDB.
 
-## ✨ What's New in v1.9.5 (archived; current release 2.0.0.2)
+## ✨ What's New in v1.9.5 (archived; current release v2.1.0-RC.3)
 
 - ✅ **FluentMigrator alignment**: `AddSharpCoreDBFluentMigrator()` defaults generator and processor to SQLite-compatible mode
 - ✅ Inherits v1.9.5 engine improvements (Auto-ROWID, GRAPH_RAG SQL, SIMD optimization)
@@ -82,7 +81,7 @@ var userId = connection.QuerySingle<int>(
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 2.0.0.0
+dotnet add package SharpCoreDB.Extensions --version 2.1.0-RC.3
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

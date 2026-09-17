@@ -73,9 +73,11 @@ jobs:
         GITHUB_ACTIONS: "true"
 
   # Manual publish to NuGet.org (only via workflow_dispatch, using the repo's
-  # NUGET_API_KEY secret). Packs the net11.0 (C# 15 preview) core at the version pinned in the csproj.
+  # NUGET_API_KEY secret). This packs the net11.0 (C# 15 preview) CORE package at the version pinned
+  # in the csproj. For the full package set (all ~26 SharpCoreDB packages, in dependency order) use
+  # the "Manual NuGet Publish" workflow (publish-manual.yml), which packs SharpCoreDB.CI.slnf.
   publish:
-    name: Pack + Publish to NuGet.org
+    name: Pack + Publish core to NuGet.org
     runs-on: ubuntu-latest
     if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 30
