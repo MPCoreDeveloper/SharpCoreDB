@@ -2,7 +2,10 @@ name: Docker
 
 on:
   push:
-    tags: [ 'v*' ]
+    # v2.1 RC tags are excluded: Dockerfile is net10.0-only (sdk:10.0 / aspnet:10.0) and does not copy
+    # global.json, so it cannot build that branch's net11.0 projects. No image is produced for those tags
+    # until a net11-aware Dockerfile exists — recorded as an open item in the 2.1.0-RC.3 release notes.
+    tags: [ 'v*', '!v2.1*' ]
   workflow_dispatch:
 
 env:

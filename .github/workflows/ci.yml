@@ -3,7 +3,11 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [ master, develop ]
-    tags: [ 'v*' ]
+    # The v2.1 release line is net11.0-only with C# 15 preview and pins the .NET 11 SDK in global.json, so
+    # this net10.0 pipeline cannot build its commits — and its pack/publish jobs are master-only anyway.
+    # Those tags are covered by ci-net11.yml; without this exclusion a release tag on that branch shows a
+    # red "CI/CD Pipeline" run that says nothing about the release itself.
+    tags: [ 'v*', '!v2.1*' ]
   pull_request:
     branches: [ master, develop ]
 
