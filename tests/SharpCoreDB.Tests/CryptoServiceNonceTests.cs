@@ -119,7 +119,9 @@ public sealed class CryptoServiceNonceTests
 
     /// <summary>
     /// Concurrent writers are the normal case for a DI singleton: the cipher cache must never hand a thread a
-    /// half-built cipher, and nonces must stay unique without a lock.
+    /// half-built (or another thread's) cipher, and nonces must stay unique without a lock. This test caught a
+    /// real defect on Linux — <see cref="System.Security.Cryptography.AesGcm"/> instance one-shots are not
+    /// thread-safe off Windows (dotnet/runtime#53320), so the service now caches one cipher per (key, thread).
     /// </summary>
     [Fact]
     public void Encrypt_IsThreadSafe_AndNoncesStayUniqueUnderConcurrency()

@@ -45,14 +45,27 @@ public sealed class CryptoService : ICryptoService, IDisposable
     private byte[] _noncePrefix = CreateNoncePrefix();
 
     /// <summary>
-    /// PERF: one <see cref="AesGcm"/> per key instead of one per call. Constructing the cipher imports the
-    /// key — measured **0.69 µs per call, 59% of an Encrypt call** on this machine — and the storage layer
-    /// makes one Encrypt/Decrypt call per record *and* per overflow-arena block, so a row with three TEXT
-    /// columns paid that import three to four times (the whole measured at-rest INSERT tax on the acceptance
-    /// shape). Keyed by the full key bytes with structural comparison: a fingerprint could serve a
-    /// wrong-but-similar key a cipher, which is silent corruption, and is not worth the saved nanoseconds.
+    /// PERF: one <see cref="AesGcm"/> per key *and per thread* instead of one per call. Constructing the
+    /// cipher imports the key — measured **0.69 µs per call, 59% of an Encrypt call** on this machine — and
+    /// the storage layer makes one Encrypt/Decrypt call per record *and* per overflow-arena block, so a row
+    /// with three TEXT columns paid that import three to four times (the whole measured at-rest INSERT tax on
+    /// the acceptance shape).
+    ///
+    /// SECURITY: the cache is keyed by thread as well as by key because <see cref="AesGcm"/> instance
+    /// one-shots are **not thread-safe off Windows**. dotnet/runtime#53320 (Microsoft's crypto lead):
+    /// "AesGcm.Encrypt is thread-safe on Windows but not on other operating systems", and the failure mode is
+    /// "corruption of the managed buffer, corruption of the underlying native handle, or even nonce reuse
+    /// (which would destroy GHASH)". One cipher per key shared across threads therefore passed on a Windows
+    /// developer box and failed on Linux: <c>CryptoServiceNonceTests.Encrypt_IsThreadSafe_AndNoncesStayUniqueUnderConcurrency</c>
+    /// fails on ubuntu-latest with <c>CryptographicException : Error occurred during a cryptographic
+    /// operation</c> out of <c>AesGcm.EncryptCore</c>. One instance per (key, thread) keeps the key-import win
+    /// with no lock, no contention and no cross-thread use of one native handle.
+    ///
+    /// The outer dictionary's key is the caller-independent key COPY (see <see cref="GetCipher"/>): the
+    /// structural comparer must never be able to match an entry built from a mutated array.
     /// </summary>
-    private readonly ConcurrentDictionary<byte[], AesGcm> _ciphers = new(KeyComparer.Instance);
+    private readonly ConcurrentDictionary<byte[], ConcurrentDictionary<int, AesGcm>> _ciphers =
+        new(KeyComparer.Instance);
 
     /// <summary>
     /// Gets a value indicating whether AES hardware acceleration (AES-NI) is available.
@@ -136,9 +149,21 @@ public sealed class CryptoService : ICryptoService, IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
     public byte[] Encrypt(byte[] key, byte[] data)
     {
-        // SECURITY: Check for GCM nonce exhaustion
-        long currentCount = Interlocked.Increment(ref _encryptionCount);
-        
+        // SECURITY: the nonce is [prefix(8)][counter(4)], and ResetEncryptionCounter swaps the prefix *and*
+        // resets the counter. The two must therefore be read as one unit: a call that took counter 5 before a
+        // reset must not pair it with the post-reset prefix, because a later call can legitimately reach
+        // counter 5 again under that same prefix — a repeated GCM nonce, which destroys GHASH. The re-read
+        // below is a seqlock: it retries only when a reset landed inside this call, so the hot path pays one
+        // extra cached load and can never emit a mixed pair.
+        byte[] prefix;
+        long currentCount;
+        do
+        {
+            prefix = Volatile.Read(ref _noncePrefix);
+            currentCount = Interlocked.Increment(ref _encryptionCount);
+        }
+        while (!ReferenceEquals(prefix, Volatile.Read(ref _noncePrefix)));
+
         if (currentCount >= CryptoConstants.MAX_GCM_OPERATIONS)
         {
             throw new InvalidOperationException(
@@ -162,7 +187,7 @@ public sealed class CryptoService : ICryptoService, IDisposable
         Span<byte> cipher = result.AsSpan(CryptoConstants.GCM_NONCE_SIZE, data.Length);
         Span<byte> tag = result.AsSpan(CryptoConstants.GCM_NONCE_SIZE + data.Length, CryptoConstants.GCM_TAG_SIZE);
 
-        BuildNonce(nonce, currentCount);
+        BuildNonce(nonce, prefix, currentCount);
         GetCipher(key).Encrypt(nonce, data, cipher, tag);
 
         return result;
@@ -227,12 +252,17 @@ public sealed class CryptoService : ICryptoService, IDisposable
         Interlocked.Exchange(ref _encryptionCount, 0);
     }
 
-    /// <summary>Releases the cached ciphers (each holds a native key handle).</summary>
+    /// <summary>Releases the cached ciphers (each holds a native key handle) for every key and thread.</summary>
     public void Dispose()
     {
-        foreach (var cipher in _ciphers.Values)
+        foreach (var byThread in _ciphers.Values)
         {
-            cipher.Dispose();
+            foreach (var cipher in byThread.Values)
+            {
+                cipher.Dispose();
+            }
+
+            byThread.Clear();
         }
 
         _ciphers.Clear();
@@ -250,31 +280,39 @@ public sealed class CryptoService : ICryptoService, IDisposable
     /// Writes <c>[prefix(8)][counter(4)]</c> into <paramref name="nonce"/>. Only the low 32 bits of the counter
     /// are used, which is sound because the exhaustion guard above throws before the counter reaches 2^32 — so
     /// the invocation field never repeats within this instance, and with a fixed prefix the nonce never does.
+    /// The prefix is passed in rather than re-read here so that the pair the caller validated (see the seqlock
+    /// in <see cref="Encrypt"/>) is exactly the pair that is written.
     /// </summary>
-    private void BuildNonce(Span<byte> nonce, long counter)
+    private static void BuildNonce(Span<byte> nonce, byte[] prefix, long counter)
     {
-        Volatile.Read(ref _noncePrefix).CopyTo(nonce);
+        prefix.CopyTo(nonce);
         BinaryPrimitives.WriteUInt32LittleEndian(nonce[GcmNoncePrefixSize..], (uint)counter);
     }
 
     /// <summary>
-    /// Returns the cached cipher for <paramref name="key"/>, creating it once. The dictionary key is a COPY of
-    /// the caller's key: if a caller mutated its array in place, an entry built from the old bytes must never
-    /// match the new bytes — that would encrypt with the wrong key.
+    /// Returns this thread's cached cipher for <paramref name="key"/>, creating it once. The outer dictionary
+    /// key is a COPY of the caller's key: if a caller mutated its array in place, an entry built from the old
+    /// bytes must never match the new bytes — that would encrypt with the wrong key.
     /// </summary>
     private AesGcm GetCipher(byte[] key)
     {
-        if (_ciphers.TryGetValue(key, out var cached))
+        if (!_ciphers.TryGetValue(key, out var byThread))
+        {
+            var keyCopy = (byte[])key.Clone();
+            byThread = _ciphers.GetOrAdd(keyCopy, static _ => new ConcurrentDictionary<int, AesGcm>());
+        }
+
+        int threadId = Environment.CurrentManagedThreadId;
+        if (byThread.TryGetValue(threadId, out var cached))
         {
             return cached;
         }
 
-        var keyCopy = (byte[])key.Clone();
-        var created = new AesGcm(keyCopy, CryptoConstants.GCM_TAG_SIZE);
-        var stored = _ciphers.GetOrAdd(keyCopy, created);
+        var created = new AesGcm(key, CryptoConstants.GCM_TAG_SIZE);
+        var stored = byThread.GetOrAdd(threadId, created);
         if (!ReferenceEquals(stored, created))
         {
-            created.Dispose(); // another thread inserted first
+            created.Dispose(); // the entry already existed (managed thread ids are reused after a thread dies)
         }
 
         return stored;

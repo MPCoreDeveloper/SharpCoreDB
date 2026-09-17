@@ -83,8 +83,13 @@ public sealed class AesGcmEncryptionNonceTests
     }
 
     /// <summary>
-    /// The shared cipher is an assumption this project had not measured before: if GCM carried per-instance
-    /// state, one instance across threads would corrupt pages. This asserts it does not.
+    /// This test is what caught a real defect: <see cref="System.Security.Cryptography.AesGcm"/> instance
+    /// one-shots are **not thread-safe off Windows** (dotnet/runtime#53320 — "thread-safe on Windows but not on
+    /// other operating systems", with buffer/handle corruption and nonce reuse among the failure modes), so one
+    /// cached cipher shared by every thread passed on a Windows developer box and failed on ubuntu-latest with
+    /// <c>CryptographicException : Error occurred during a cryptographic operation</c> out of
+    /// <c>AesGcm.EncryptCore</c>. The instance now keeps one cipher per thread; this asserts that concurrent use
+    /// of ONE <see cref="AesGcmEncryption"/> instance stays correct and unique.
     /// </summary>
     [Fact]
     public void OneInstance_IsSafeUnderConcurrentUse()

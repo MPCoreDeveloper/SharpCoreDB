@@ -30,6 +30,9 @@ The **v2.0 stable packages (`2.0.0.2`)** remain the net10.0 / C# 14 line on `mas
 - ⚠️ **INSERT still ~1.4× behind SQLite** on the fair-PK shape (1.9× on the pure default config)
 - ⚠️ **PageBased UPDATE still 4.9× behind** (instrumented, not yet fixed)
 - ✅ **Backward compatible**: existing databases open unchanged; the layout change is upgrade-only
+- ✅ **Linux/macOS data-integrity defect fixed** — the AES-GCM cipher caches were shared across threads,
+  which is only safe on Windows (dotnet/runtime#53320); they are thread-affine now, so concurrent
+  encryption cannot corrupt a cipher's native state or repeat a nonce off Windows
 
 | Measured 2026-09-17 (median of 3, product-default regime) | SharpCoreDB fixed-width | SQLite | ratio |
 |--------------------------|-------:|-------:|-------:|
