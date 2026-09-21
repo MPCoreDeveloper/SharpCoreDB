@@ -367,4 +367,71 @@ runs the suite. Disclosed limitation: the table above is therefore **not reprodu
 until session 2 re-adds them — the exact three call sites are `PageBasedEngine.Read`, `PageBasedEngine.Update`, and
 a wrapper over `DeserializeRowFromSpan` (`Table.PageBasedScan.cs:115`).
 
+### 2026-09-21 — 5.2 PageBased UPDATE (session 2 of 2) — root cause of the 100,000 decodes identified
+- Session: 2 of 2
+- Command(s): static analysis of the index-load path (no benchmark run — see the note on budget)
+- Verdict: **REJECTED (scoped out)** — root cause found and documented; no code change landed this session
+- Commit: this worklog entry only
+- NEXT: implement fix (1) below — it is localized and mirrors logic that already exists for the Columnar path
+
+**Root cause — conclusive, with the code.** `Table.Indexing.cs:184-193`, inside `EnsureIndexLoaded`:
+
+```csharp
+if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
+{
+    var eng = GetOrCreateStorageEngine();
+    foreach (var (pos, recordData) in eng.GetAllRecords(Name))   // every record in the table
+    {
+        var row = DeserializeRowFromSpan(recordData);            // the 100,000 decodes
+        if (row != null && row.ContainsKey(columnName))
+            index.Add(row, pos);
+    }
+}
+```
+
+A **full-table scan plus a full-row decode** to (re)build one hash index. It is reached from
+`Table.BatchUpdateMode.cs:223` (`RebuildIndexInternal` → `EnsureIndexLoaded`), i.e. the first indexed
+operation after the index was invalidated. The measurement is exactly the table's row count (100,000) and
+630 B/call, so the identification is quantitative, not a guess.
+
+**The structural asymmetry that makes it expensive.** The batch-INSERT path maintains a *loaded* index
+incrementally (`InsertBatchCriticalSection` → `UpdateHashIndexes`) and loads registered-but-unloaded indexes
+only on the **Columnar** path (`Table.CRUD.cs:801-807` is guarded by `if (StorageMode == Columnar)`). On
+**PageBased** the INSERT instead marks each registered-but-unloaded index **stale**
+(`Table.CRUD.cs:258`, `:2203`, `:3046`). So the index is never built while the table is small; the build is
+deferred to the first UPDATE that touches it — by which time the table has 100,000 rows and the build costs a
+full scan and 100,000 full-row decodes. Charging it to UPDATE is what produced the 4.4× column.
+
+**Impact.** `row-decode` was 168.0 ms of a 370 ms UPDATE pass = **45.4% of the wall time** (measured; see
+session 1's table). Removing the full-row decode alone would take the PageBased UPDATE ratio from **0.23×**
+(60,475 ÷ 267,253) to roughly **0.4×**, and that is before any of the remaining page-engine work — so this is
+the largest single item found on this column so far.
+
+**Two candidate fixes, ranked (both to be implemented with the harness stamps re-added so the result is
+attributable):**
+
+1. **Load registered-but-unloaded indexes on the PageBased INSERT path too** — mirror the existing Columnar
+   branch in `InsertBatchCriticalSection` (`Table.CRUD.cs:801-807`) so the index is built while the table is
+   still small and then maintained incrementally by `UpdateHashIndexes`. This does not shift cost, it removes
+   it: the O(n) rebuild is replaced by incremental maintenance. Low risk, localized, and semantically
+   identical. ⚠️ Watch the lock protocol — `EnsureIndexLoaded` upgrades to a write lock and
+   `Table.CRUD.cs:4589` records that a plain read lock there deadlocks, so confirm the INSERT path is not
+   already holding the table's write lock when calling it.
+2. **Decode only the indexed column during a rebuild** — replace the full-row `DeserializeRowFromSpan` in the
+   PageBased rebuild branch with a single-slot read (`FixedWidthCodec.TryReadVariableSlot` /
+   `Table.ReadTypedValueFromSpan` at `layout.Offsets[colIdx]`) and add by key via the existing
+   `HashIndex.Add(object key, long position)` overload. This keeps the rebuild O(rows) but removes the full
+   row materialisation and most of the 630 B/row. Higher risk: the null/`DBNull` handling must match
+   `index.Add(row, pos)` exactly or indexed lookups change behaviour.
+
+**Open question this session could not close (recorded, not assumed).** Whether the **AppendOnly** UPDATE arm
+pays the same deferred rebuild. Its session-1 profile had no `row-decode` stage, so the question was
+unaskable then; when fix (1) is implemented, add the rebuild site to the profile and check both engines.
+
+**Why no code change landed (honest budget note).** The remaining session budget was not sufficient to make
+either fix *and* validate it to the standard the brief requires (build + core suite + gate + a measured
+before/after ratio). Both fixes touch index semantics, where an unvalidated change risks silently wrong
+lookups — the exact class of defect this plan has paid for before. The root cause is documented with its
+line numbers and its measured share, so the next session can implement fix (1) directly.
+
 <!-- APPEND-ENTRIES-BELOW -->
