@@ -559,4 +559,54 @@ and the fair-PK UPDATE may not be taking the `UpdateBatchViaPrimaryKeyLookup` ro
 that route assumption was never verified with a call count, which is the same error this plan has now paid for
 five times).
 
+### 2026-09-21 — 5.2 follow-up 4 — correction: the "profiler leak" claim is UNVERIFIED; no speculative fix made
+- Session: 1 (extension 4)
+- Command(s): static analysis of every `Enable`/`Disable`/`Reset` call site in `tests/`
+- Verdict: **NO CHANGE** — the previous entry's leak hypothesis does not survive a call-site audit
+- NEXT: settle the 744 s anomaly by measurement (below), then restore the stamps
+
+**The correction (this is the deliverable, so the next session does not "fix" a non-bug).** The follow-up-2
+entry blamed the 744.6 s core-suite run on `Enable()` being process-wide and never reset. Auditing every call
+site in `tests/` refutes that as written:
+
+- `tests/SharpCoreDB.Tests/Diagnostics/WritePathProfilerTests.cs` **pairs** them — `Disable()` at lines 33, 51,
+  104, 135 and 159 against `Enable()` at 67, 119 and 150, and line 57 even asserts `Assert.False(...Enabled)`.
+- the benchmark harness pairs them too: five `Enable()` calls (`Program.cs:535, 905, 1368, 1426, 1474`) against
+  five `Disable()` calls (`:537, 924, 1400, 1456, 1493`).
+
+So there is no leaking call site in the suite, and the 744 s **has no verified cause**. It is still real — it
+was measured A/B in the same session — but the mechanism is unexplained. Candidate explanations that a
+measurement can separate, in order of cost:
+
+1. **`_explicitlyDisabled` state**: `Enable()` clears it and `Disable()` sets it, so a test that runs while a
+   *parallel* test collection has the profiler on makes the *other* collection's `Stamp()` calls take the full
+   path (the profiler is a static, process-wide singleton; xunit.v3 runs collections in parallel). This is the
+   most likely mechanism and it is testable by running the two affected test classes in a single-threaded
+   collection.
+2. **`SHARPCOREDB_WRITE_PROFILE`** being set in the shell that launched the suite. Note the test run was
+   launched by `Start-Process` **without** the env-clearing step that the benchmark runs used — so a variable
+   left in the user's environment would auto-enable the profiler for the whole suite via
+   `TryAutoEnableFromEnvironment`. This is one command to check (`$env:SHARPCOREDB_WRITE_PROFILE`) and it was
+   never checked.
+3. The count of hot-path calls is simply large enough that the enabled path is expensive: `DeserializeRowFromSpan`
+   is on every scan path, so a suite that scans heavily could pay it tens of millions of times.
+
+**No code change was made, deliberately.** Restoring the page/row stamps before this is settled would re-arm a
+slowdown whose cause is unknown — the exact "act on a plausible story" error this plan has now paid for five
+times. The cheapest next action is (2): print `$env:SHARPCOREDB_WRITE_PROFILE` and re-run the suite — if it is
+set, clear it and the anomaly is explained without touching the profiler at all.
+
+**Candidate (2) refuted by measurement (same session).** `SHARPCOREDB_WRITE_PROFILE` is **not** set in the
+process, User or Machine scope — checked directly:
+`[Environment]::GetEnvironmentVariable('SHARPCOREDB_WRITE_PROFILE', 'User'/'Machine')` both return empty, as
+does `$env:SHARPCOREDB_WRITE_PROFILE`, and no `SHARPCOREDB_*` variable exists in either persistent scope at all.
+So `TryAutoEnableFromEnvironment` never armed the profiler and the 744 s is **not** an environment-variable
+effect. That narrows it to the two remaining candidates above — parallel test collections sharing the static
+profiler (1), or sheer call volume on the hot path (3) — and (1) is the one to test next, because it needs no
+new code: the profiler's `Enabled`/`_explicitlyDisabled` state is process-global while xunit.v3 runs collections
+in parallel, so any collection running concurrently with `WritePathProfilerTests` pays the full `Stamp()` path
+(`GC.GetAllocatedBytesForCurrentThread()` + `Stopwatch.GetTimestamp()` + a thread-static push) on every stamped
+call. The test for it is to put `WritePathProfilerTests` and the heaviest scanning test class in the same
+single-threaded collection and re-time the suite.
+
 <!-- APPEND-ENTRIES-BELOW -->
