@@ -609,4 +609,136 @@ in parallel, so any collection running concurrently with `WritePathProfilerTests
 call. The test for it is to put `WritePathProfilerTests` and the heaviest scanning test class in the same
 single-threaded collection and re-time the suite.
 
+### 2026-09-21 — 5.2 follow-up 5 — the 744 s is REFUTED as an instrumentation effect; the O(rows) rebuild is named — it is NOT a relocation site, and it costs 3.6–4.4× of the arm
+- Session: 1 (extension 5)
+- Command(s): core suite ×4 (`-parallelMode` default / `none`) · `--pk-profile --engine=pagebased` ×3 (fix (2) only · fix (1)+fix (2) · temporary probe) · `--pk-profile-insert --engine=pagebased` · `--gate` ×2
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.`
+- Verdict: **KEPT** — the three stamps from session 1 are restored and measured free (170.0 s vs a 190.5 s same-session baseline, both 1916 / 0 failed / 16 skipped); the 744 s did **not** reproduce in the configuration that produced it; the rebuild is pinned to one call site and is worth 3.6–4.4× on this arm
+- Commit: `perf(diagnostics)`: restore page-read/page-update/row-decode stamps (the 744 s is refuted)
+- NEXT: fix `Table.CRUD.cs:2239` — the unconditional `EnsureAllRegisteredIndexesLoaded()` at the batch-UPDATE entry is the entire O(rows) rebuild (probe: removing it takes `row-decode` 100,000 → **0** and the arm 42.60 → **9.73 µs/update**); decide between the two candidates in §6 and measure with `--pk --engine=pagebased`
+
+**1. The 744 s — candidate 1 measured, and REFUTED.** Session 1 blamed a 5× suite slowdown (744.6 s vs 156.3 s) on
+temporary stamps on `PageBasedEngine.Read` and `DeserializeRowFromSpan`; follow-up 4 showed the leak hypothesis does
+not survive a call-site audit and left two candidates. Candidate 1 (test collections sharing the static profiler) is
+testable with no new code, because the xunit.v3 host has `-parallelMode none`. All runs below are this session, same
+machine, same build inputs; A and B are the *same* source except for the three stamps.
+
+| run | `-parallelMode` | stamps | wall | reported | tests |
+|---|---|---|---:|---:|---|
+| A | `collections` (default) | — (HEAD) | **191.8 s** | 190.468 s | 1916 / 0 failed / 16 skipped |
+| B | `collections` (default) | **yes** | **171.3 s** | 169.963 s | 1916 / 0 failed / 16 skipped |
+| C | `none` (single-threaded) | yes | 316 s | 315.014 s | 1916 / **1 failed** / 16 skipped |
+| D | `collections` (default) | yes (**final tree**) | **158.0 s** | 157.971 s | 1916 / 0 failed / 16 skipped |
+
+**The configuration that produced 744.6 s — parallel collections plus those two hot stamps — now runs in 170.0 s
+(run B) and 158.0 s (run D, the final tree) against a 190.5 s same-day no-stamp baseline (run A).** No mechanism is
+needed: the anomaly does not reproduce, so neither the shared-profiler candidate (1) nor the call-volume candidate (3)
+has to explain it. The 744.6 s was a single
+unpaired sample: the "156.3 s" it was compared against was a different run at a different moment, while the one pair
+that *was* measured back to back in the same window (page-update stamp present 156.286 s / absent 156.853 s) showed no
+effect at all — and that session's own gate spread was growing (2.18× → 2.38× → 2.79×), which is the signature of
+load, not of code. This session's machine is loaded the way the plan has learned to distrust: 6 cores / 12 logical,
+VS Code + extensions resident, and the same suite has run at ~100 s, 156.3 s, 164.1 s and 190.5 s across sessions.
+**Caveat, stated rather than smoothed:** one sample per arm; the honest claim is "the ×5 slowdown does not reproduce in
+the configuration that produced it", not "the profiler is free under all load".
+
+**2. The single failure in run C is pre-existing, and that is measured, not argued.** `FsmBenchmarks.Benchmark_PageAllocation_UnderOneMicrosecond`
+is a wall-clock micro-benchmark (`Assert.True(microseconds < 1000)`) over `ExtentAllocator` — no `Table`, no storage
+engine, and no path any of these stamps sit on. It fails in serial mode (1146.1 µs in run C, 1206.4 µs run standalone)
+**and it fails identically on the unmodified tree**: the two stamp files stashed, rebuilt, same command → 1495.6 µs.
+It is an environment-sensitive timing assert, not a regression. Both parallel runs (A, B, D) are green.
+
+**3. The three stamps are restored** (the limitation session 1 disclosed as "the table above is therefore not
+reproducible from the committed tree"). The stages themselves — `Stage.PageRead` 24, `PageUpdate` 25, `RowDecode` 27 —
+and their `StageNames` entries already existed; only the call sites were missing:
+
+- `PageBasedEngine.Update` → `page-update` (wraps the whole method, so `TryUpdateInPlace` is covered by its route
+  through `Update`);
+- `PageBasedEngine.Read` → `page-read` (both returns);
+- `Table.PageBasedScan.cs:120` — a new `DeserializeRowFromSpan` wrapper emits `row-decode`, with the original body
+  renamed `DeserializeRowFromSpanCore` (line 133) so that **every** caller is counted, including the PageBased rebuild
+  branch in `Table.Indexing.cs:190` and the scan at `Table.PageBasedScan.cs:68`.
+
+
+**4. The call counts with both index fixes active — the decisive reading, and it refutes the relocation hypothesis.**
+The worklog asked for `--pk-profile --engine=pagebased` in *both* fix states. Fix (2) (`changedColumn`) is committed;
+fix (1) (load registered-but-unloaded indexes on the batch-INSERT path too, placed before `engine.InsertBatch` exactly
+as follow-up 1 recorded it) was re-applied for the run and reverted again afterwards. Same three-minute window, same machine:
+
+| state | `row-decode` calls | share | B/call | `page-read` | `page-update` | `row-locate` | profiled UPDATE |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| fix (2) only (= committed) | **100,000** | 65.8 % | 630 | 10,000 | 10,000 | **1** | 0.35 s — 28,351 ops/s — 35.27 µs/update |
+| fix (1) + fix (2) | **100,000** | 79.7 % | 630 | 10,000 | 10,000 | **1** | 0.43 s — 23,474 ops/s — 42.60 µs/update |
+
+**Both fixes leave the rebuild exactly where it was: 100,000 calls, one per table row.** And `row-locate` = **1** is the
+fact that decides the question the plan posed: that stamp is the one around `TryBulkUpdateContiguousFixedWidth`
+(`Table.CRUD.cs:2272`), so all 10,000 statements of the batch were handled by the contiguous PK pass inside **one**
+`UpdateMultiple` call — which returns at `:2255` and therefore means **`RepointIndexesAfterRelocation` never ran for
+this arm at all**. Not the site fix (2) patched (`Table.BatchUpdate.cs:389`, inside `UpdateBatchViaPrimaryKeyLookup` —
+a route this arm does not take), and not any of the four other sites in `Table.BatchUpdate.cs` (`:128`, `:540`, `:808`,
+`:960`), nor `Table.BatchUpdateParallel.cs:190`, nor the two in `Table.CRUD.cs` (`:2032`, `:2687`). That whole
+"which relocation site" line of reasoning is closed: the decode pass is paid **before the first update touches
+anything**.
+
+**5. The probe that names the caller.** One temporary change — `EnsureAllRegisteredIndexesLoaded()` at
+`Table.CRUD.cs:2239`, the pre-load at the top of `UpdateMultiple`, commented out for one run and reverted immediately
+after — gives the answer:
+
+| state | `row-decode` | profiled UPDATE | measured stages |
+|---|---:|---:|---:|
+| fix (2) only | 100,000 calls | 35.27 µs/update | 217.6 ms |
+| fix (1) + fix (2) | 100,000 calls | 42.60 µs/update | 265.0 ms |
+| **pre-load removed (probe)** | **stage absent — 0 calls** | **9.73 µs/update (102,758 ops/s)** | **74.2 ms** |
+
+`Table.CRUD.cs:2239` → `EnsureAllRegisteredIndexesLoaded()` (`Table.Indexing.cs:311`) → `EnsureIndexLoaded` →
+`Table.Indexing.cs:184-193` (whole-table `GetAllRecords` plus a full-row decode per record) is responsible for **all
+100,000 decodes, 60.2 MB of decode garbage, and 3.6–4.4× of this arm's wall time**. That is the largest single item
+found on the PageBased UPDATE column so far, and it is a *pre-load*, not an invalidation: the guard exists because an
+unloaded index would otherwise be rebuilt from a file that still contains stale records — an append-only/Columnar
+concern. On this arm nothing appends (`row-locate` = 1, no relocation, no `in-place-patch` miss) and the probe's 10,000
+updates still complete in a tenth of the time.
+
+**6. Why neither fix could ever have worked, and what to do instead.** Fix (2) filters *which* index a relocation
+invalidates, and no relocation happens on this route (§4). Fix (1) loads the index during INSERT — but the rebuild is
+still there in both states, so the index is not loaded-and-fresh when `UpdateMultiple` starts. Every static suspect for
+"who drops it between the INSERT arm and the UPDATE arm" was checked and eliminated: `Table.Flush()` (`Table.cs:798`)
+does an engine flush plus `CompactPendingDeletes()` (Columnar-gated, no-op here); `RebuildIndex`
+(`Table.BatchUpdateMode.cs:204`) is Columnar-gated and has no callers; `RebuildAllIndexesFromFile`
+(`Table.Compaction.cs:289`) decodes through `DeserializeRow`, not `DeserializeRowFromSpan`, and fires only from the two
+compaction entries; `ClearAllIndexes` is reached only from DDL; `CreateHashIndex` removes a loaded index only when
+upgrading to `isUnique`. That question stays **open** — recorded, not guessed — but it no longer blocks the fix, because
+the probe shows the pre-load is the cost regardless of *why* the index is unloaded. It also explains why fix (1) never
+moved the ratio when it was first measured (60,475 → 62,264 ops/s): the same 100,000 decodes were still being paid.
+
+Two candidates, ranked, for the next session — both measurable with `--pk --engine=pagebased` against the 4.5× gap:
+
+1. **Stop the pre-load from rebuilding on PageBased.** `EnsureAllRegisteredIndexesLoaded()` protects an invariant that
+   belongs to the append-only write path ("an unloaded index would later be rebuilt from the file INCLUDING the stale
+   record"). This arm appends nothing (`row-locate` = 1, no relocation), yet it pays a full-table decode for the guard.
+   The probe is the measurement: 42.60 → 9.73 µs/update with the call removed. The fix is to make the guard
+   *conditional* rather than removed — e.g. only pre-load when the operation can leave a stale record — and to run the
+   existing stale-record/deferred-index suites plus `VacuumStressTests` and `StorageEnginePerfTests` as the correctness
+   gate, because a wrong version of this silently returns deleted rows (the regression the guard exists for).
+2. **Make any rebuild that is still legitimate cheap.** The single-column decode variant from the 5.2 session-2 entry
+   (`FixedWidthCodec.TryReadVariableSlot` + `HashIndex.Add(key, pos)`) removes the 630 B/row full-row materialisation
+   even when a rebuild is correct — worth doing, but ranked second: candidate 1 removes the rebuild, this one only
+   makes it cheaper.
+
+Also still open from this session, for whoever picks up the profiler line: the `row-decode`/`page-read`/`page-update`
+stamps are now **committed**, so the stage table in §4/§5 is reproducible from the tree (session 1's disclosed
+limitation is closed).
+
+**7. Honest limits.** (a) The gate was run twice and both runs were **INCONCLUSIVE (exit 2)** — worst rep spread 2.84×
+then 3.07× against the 2.5× limit, the harness's own verdict being "this run measures the machine's load and not the
+code". Exit 2 concludes nothing in either direction; the suite results in §1 are the `KEPT` basis, and the gate is
+recorded as a documented failed-to-quiet re-run rather than as a pass. (b) The µs/update figures come from the profiled
+pass, and the plan's rule stands: only *call counts and allocation* transfer across arms. The 100,000 → 0 call count and
+60.2 MB → 0 allocation are hard; the 4.4× wall-time ratio is consistent with them and far outside the profiler's
+demonstrated distortion band. (c) The probe removed a correctness guard; it was reverted before anything was rebuilt
+for validation and was never committed — it is recorded as a diagnostic, not as a proposed change, and the reproduction
+is three lines in §5.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
+

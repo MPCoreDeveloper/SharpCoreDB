@@ -108,11 +108,29 @@ public partial class Table
     }
     
     /// <summary>
+    /// Counts one row decode and delegates to <see cref="DeserializeRowFromSpanCore"/>.
+    /// <para>
+    /// §9 priority 3 instrumentation (2026-09-21, re-added): this is the stamp that identified the O(rows)
+    /// hash-index rebuild — <c>Table.Indexing.cs</c>'s PageBased branch walks every record in the table and
+    /// routes each one through here, so <c>row-decode</c> reported exactly the table's row count (100,000)
+    /// for a 10,000-row UPDATE batch. The wrapper exists so the stamp covers the scan path *and* the rebuild
+    /// without touching any of their call sites.
+    /// </para>
+    /// </summary>
+    private Dictionary<string, object>? DeserializeRowFromSpan(byte[] data)
+    {
+        long decodeStart = Diagnostics.WritePathProfiler.Stamp();
+        var row = DeserializeRowFromSpanCore(data);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowDecode, decodeStart);
+        return row;
+    }
+
+    /// <summary>
     /// Deserializes a byte array into a row dictionary.
     /// Helper method for PageBased storage scanning.
     /// ✅ PERF: Uses _dictPool to reduce allocations during full table scans.
     /// </summary>
-    private Dictionary<string, object>? DeserializeRowFromSpan(byte[] data)
+    private Dictionary<string, object>? DeserializeRowFromSpanCore(byte[] data)
     {
         // Fixed-width record layout (out-of-line overflow): variable slots reference the arena.
         if (_fixedWidthRecords)
