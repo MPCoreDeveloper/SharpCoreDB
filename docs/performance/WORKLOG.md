@@ -738,7 +738,83 @@ demonstrated distortion band. (c) The probe removed a correctness guard; it was 
 for validation and was never committed — it is recorded as a diagnostic, not as a proposed change, and the reproduction
 is three lines in §5.
 
+### 2026-09-21 — 5.2 follow-up 6 — PageBased no longer pre-loads indexes before a write: FW UPDATE 4.6× behind → 0.8–1.0× (parity), reproduced in both directions in one session
+- Session: 1 (extension 6)
+- Command(s): `… --pk --engine=pagebased` ×4 (before · after · after · before) · `… --pk-profile --engine=pagebased` · core suite ×2 · `-class PageBasedIndexRebuildTests` ×2 (fix applied and reverted) · `--gate`
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.`
+- Verdict: **KEPT** — the pre-load is skipped on PageBased (follow-up 5's candidate 1); the fair-PK PageBased UPDATE gap closes from 4.6× behind to parity, with the profiler's `row-decode` call count going 100,000 → **0**, and the suite is green at 1919 / 0 failed / 16 skipped
+- Commit: `perf(index)`: PageBased does not pre-load hash indexes before a write (plan §9 priority 3)
+- NEXT: the PageBased UPDATE pass is no longer dominated by the index rebuild — re-read `--pk-profile` (§3) and attack `engine-write` + `page-update` (23 % + 21 % of the stages now); the untested shapes in §5 are the follow-up
+
+**1. The change — one guard, and the invariant that justifies it.** Follow-up 5 pinned the whole O(rows) rebuild to
+`Table.CRUD.cs:2239` (`UpdateMultiple`) → `EnsureAllRegisteredIndexesLoaded()` → `EnsureIndexLoaded`. The fix is to stop
+that pre-load from rebuilding on PageBased, and it is placed in the guard itself (`Table.Indexing.cs:326`) so that all
+five call sites (two UPDATE entry points, three DELETE entry points) inherit it rather than five call sites being
+patched independently — the invariant is mode-dependent, not call-site-dependent.
+
+*Why PageBased is exempt, from the code:* the pre-load exists because a rebuild re-reads a **version-bearing** data
+file — an append/Columnar UPDATE leaves the superseded record in the file, where a later rebuild still enumerates it.
+That is the "stale row returned for the same PK" regression `54b0a5b8` fixed (its message says so, and its regression
+test is `FixedWidthPatchTests`). PageBased has no such version to leak: `PageManager.UpdateRecord`
+(`PageManager.cs:516-578`) either rewrites the slot in place or moves the slot pointer inside the page — the old bytes
+are never enumerated — and when the page is full it marks the old slot `RecordFlags.Deleted` (line 568) and inserts the
+record elsewhere; `PageManager.GetAllRecordsInPage` (line 723) yields only slots that are **not** flagged deleted, and
+`PageManager.TryReadRecord` (line 668) returns false for them. A PageBased rebuild therefore reads exactly the live
+rows, so deferring it is correct rather than merely cheaper. The append/Columnar paths keep the pre-load unchanged.
+
+**2. The measurement — four runs, same session, ratios only.** `--pk --engine=pagebased` twice with the fix and twice
+without, so the effect is bracketed in *both* directions on the same machine in one window:
+
+| run | state | FW plaintext UPDATE | FW at-rest UPDATE | SQLite UPDATE | FW gap |
+|---|---|---:|---:|---:|---:|
+| R0 | before (HEAD) | 47,592 | 51,159 | 282,045 | **5.9×** |
+| R1 | **after** | 240,032 | 410,598 | 238,874 | **1.0×** |
+| R2 | **after** (2nd sample) | 333,407 | 400,761 | 267,871 | **0.8×** |
+| R3 | before (fix reverted) | 60,857 | 58,410 | 278,453 | **4.6×** |
+
+The same-session control is tight: SQLite's UPDATE median never left 238.9k–282.0k (1.18× spread) while the FW arm moved
+47.6k/60.9k → 240k/333k. R3 reverted to **60,857**, i.e. this shape's historical baseline almost exactly (60,475 /
+62,264 / 64,289 / 64,649 → 4.4–4.6× across the earlier sessions), so the win is the code, not a quiet machine. The
+other two PageBased arms moved with it (legacy 32,709 → 119,951 / 130,900; FW at-rest 51,159 → ~400k), which is the
+expected signature of an engine-wide guard rather than a per-arm tweak.
+
+**3. The call count, which is load-independent.** `--pk-profile --engine=pagebased` after the fix: the `row-decode`
+stage is **absent — 0 calls**, against 100,000 in both fix states measured in follow-up 5. The stage totals corroborate
+it: 265.0 ms with the rebuild and 217.6 ms without it in follow-up 5, and **88.3 ms** now — 217.6 − 143.2 (the measured
+`row-decode` time) ≈ 74, the remaining stages in the same band. Profiled UPDATE: 42.60 / 35.27 µs/update before →
+**12.17 µs/update** now. `page-read` (10,000), `page-update` (10,000), `in-place-patch` (10,000) and `row-locate` (1) are
+unchanged, so the write path itself did not change shape — only the decode pass disappeared.
+
+**4. Guard tests added.** `tests/SharpCoreDB.Tests/PageBasedIndexRebuildTests.cs` (3 tests) pins the PageBased half of
+the invariant, which nothing covered: the existing PageBased tests always call `EnsureIndexLoaded` explicitly first
+(`DeleteIndexCleanupTests:93,118`), so the *unloaded* case — exactly the state this no-op leaves behind — was untested.
+Each test writes with the index unloaded and then asserts the indexed lookups: an UPDATE of the indexed column
+(`UpdateAffectedCount`), a batch UPDATE through `UpdateMultiple` (the gated route), and a DELETE, each checking that the
+new value is found and the superseded/deleted one is not. **They pass on the reverted tree as well** (measured, same
+session) — they are pins, not a bug finder: the honest claim is that the change is *covered*, not that it fixed a live
+defect. `--pk --engine=pagebased` is not a correctness test (it checks no values), so these are what stands behind it.
+
+**5. Honest limits.** (a) Rep spreads inside R1/R2 reach 3.1×, so the *ratio* carries roughly ±50 % error — quoted as
+"4.6× behind → parity", not as a precise multiplier; the direction is bracketed by R3 and the call count is exact.
+(b) This is a **cost removal only where the index is not read afterwards**: if the same workload later reads by the
+indexed column, the rebuild still happens once, lazily, at that read. That is at worst a shift and often a saving (the
+lazy path rebuilds one index; the pre-load rebuilt every registered one). (c) Shapes not re-measured with the fix:
+`--pk-default`, `--dual-mode`, the at-rest non-PK arms, and the DELETE arms whose entry points also inherit the skip
+(`CollectDeleteRecords:3352`, `DeleteMultiple:3501`, `DeleteMultipleKeys:3632`). The DELETE column did move with it in
+R1/R2, but that was not an isolated measurement. (d) Still open from follow-up 5, and now the next thing on this
+column: `Table.CRUD.cs:2687` calls `RepointIndexesAfterRelocation` without a `changedColumn`, so a **relocating**
+PageBased per-row update still invalidates every loaded index — the contiguous fast path this arm takes never reaches
+it, so it remains unmeasured; the code path is still there. (e) `--gate` ran green on the re-run but **failed once**:
+the first attempt reported `default DELETE 98.725 → 58.681 = 1,68×`, with five of the other seven metrics parked at
+~1.25× — the whole-run offset signature of a loaded machine, not of one arm (today's earlier gate attempts were
+INCONCLUSIVE at 2.84× and 3.07× rep spread). The immediate re-run passed all eight metrics (worst 1.06×, `default
+DELETE` 1.03×). The static argument settles it independently: the gate prints `engine=AppendOnly`, and this change is
+PageBased-only, so the gate's arms never execute the new branch — and the PageBased DELETE measurement moved the other
+way (183,864 → 269,757 / 297,160 ops/s in R1/R2).
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
 
 
 

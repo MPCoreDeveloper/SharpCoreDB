@@ -307,10 +307,28 @@ public partial class Table
     /// is rebuilt from the data file on next use — which, after an append update or logical
     /// delete, still contains the stale record — so any write that creates stale versions must
     /// ensure its registered indexes are loaded first. Cheap after the first load (cached).
+    /// <para>
+    /// <b>PageBased is deliberately exempt.</b> The reason this pre-load exists is a rebuild reading a
+    /// <i>version-bearing</i> file: on the append/Columnar engines a superseded record stays in the data file
+    /// and is still enumerated, which is the "stale row returned for the same PK" regression that
+    /// <c>54b0a5b8</c> fixed by loading every index before the write. PageBased has no such version to leak —
+    /// <c>PageManager.UpdateRecord</c> either rewrites the slot in place or moves the slot pointer inside
+    /// the page (the old bytes are never enumerated), and when the page is full it marks the old slot
+    /// <c>RecordFlags.Deleted</c> and inserts the record elsewhere; <c>PageManager.GetAllRecordsInPage</c>
+    /// yields only slots that are not flagged deleted, and <c>PageManager.TryReadRecord</c> returns false
+    /// for them. A PageBased rebuild therefore reads exactly the live rows, so deferring it is not a correctness
+    /// risk — while paying it up front costs one full-table decode pass per batch UPDATE entry: measured
+    /// (<c>--pk-profile --engine=pagebased</c>, fix-state independent) <c>row-decode</c> 100,000 calls for a
+    /// 10,000-row UPDATE batch over 100,000 rows, 60.2 MB of decode garbage, and 42.60 → 9.73 µs/update with the
+    /// pre-load skipped.
+    /// </para>
     /// </summary>
     private void EnsureAllRegisteredIndexesLoaded()
     {
         if (this.registeredIndexes.Count == 0)
+            return;
+
+        if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
             return;
 
         // Safe to iterate directly: the caller holds the write lock and EnsureIndexLoaded only
