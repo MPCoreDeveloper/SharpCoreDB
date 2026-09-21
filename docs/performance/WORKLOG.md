@@ -1130,7 +1130,88 @@ flags' archives relative to the working directory (the repo-root `results/`, whi
 follow-up 6 recorded for its `--pk` runs). The `--multirowinsert` arm prints its figures and `[diag]` line to the
 console and writes no archive, which is why §3 quotes the console output rather than a file.
 
+### 2026-09-21 — 5.3 default-job UPDATE — the encrypted-snapshot lever LANDED: +20 % on the target cell (supersedes the BLOCKED verdict)
+- Session: 3 (the `BLOCKED` entry above handed this forward as a capability; it is now implemented and measured)
+- Command(s): `--dual-mode` ×6 unprofiled (4 with the change stashed, 2 with it) · `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` (mechanism check) · the comparative run · core suite ×2 · `--gate`
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.`
+- Verdict: **KEPT** — correct (suite **1919 / 0 failed / 16 skipped**, twice) and a **measured +20 %** on the default (encrypted) job's UPDATE, with that cell's encryption tax falling from **1.37–2.13×** to **1.09–1.14×**
+- Commit: `perf(update)`: serve the encrypted UPDATE locate from one whole-file snapshot (plan §5.3 / §5.5)
+- NEXT: the same lever's second half — the 12.6 MB snapshot allocation and the per-record decrypt are now the locate's cost; and `Table.CRUD.cs:2687`'s missing `changedColumn` is still unmeasured
+
+**1. The change, and why it is narrow.** `TryLoadWholeFileForRowAccess` refuses encrypted files, so the PK-less
+UPDATE route read one record at a time. The fix adds a **sibling** loader for the UPDATE fast-patch locate
+(`TryLoadWholeFileForUpdatePatch`, `Table.CRUD.cs:4214-4241`) that also serves encrypted files, and extends
+`TrySlicePayloadFromFile` to decrypt the one record it slices (`:4195-4212`) — the same treatment the contiguous
+fixed-width path already gives encrypted spans through `IStorage.DecryptRecordPayload`. Four properties keep it
+contained: (a) the **DELETE path keeps the plaintext-only helper**, because it deserializes plaintext keys straight out
+of its snapshot and ciphertext would mis-read them; (b) **fixed-width records stay excluded** (their contiguous path
+owns that case) and the 32 MB size limit still bounds the snapshot; (c) when a slice cannot be produced the code
+**falls back to the per-record read** rather than skipping the row — skipping would silently drop the update; (d) the
+**plaintext arm's code path is byte-identical** (its loader returns the same bytes, its slice takes the same branch), so
+it is a within-run control for the measurement below rather than a second variable.
+
+**2. The A/B — four pre-change samples against two post-change samples, same session, same flags.** The first two
+pre-change samples were taken before the change (one of them a `--gate` run, which prints the same job's medians) and
+the other three were taken *inside the same window as the post-change runs*, with the change stashed, rebuilt and
+re-run — so grouping is the build, not the clock:
+
+| sample | build | raw (plaintext) UPDATE | **default (encrypted) UPDATE** | tax |
+|---|---|---:|---:|---:|
+| `--gate` (pre) | no change | 103,117 | 75,501 | 1.37× |
+| dual-mode (pre) | no change | 159,282 | 74,645 | 2.13× |
+| dual-mode (pre) | no change | 129,334 | 74,072 | 1.75× |
+| dual-mode (pre) | no change | 110,944 | 70,956 | 1.56× |
+| dual-mode (**post**) | **change** | 98,956 | **86,697** | **1.14×** |
+| dual-mode (**post**) | **change** | 100,203 | **91,870** | **1.09×** |
+
+**The target cell is the stable one and the control is the noisy one** — exactly the opposite of the usual pattern here.
+Four pre-change samples sit in **70,956–75,501** (spread 1.06×) and both post-change samples sit above the whole
+pre-range at **86,697 / 91,870** (spread 1.06×): **median 74,359 → 89,284 = +20.1 %**, with non-overlapping groups, and
+the load-independent tax metric agrees (**1.37–2.13× → 1.09–1.14×** — the encrypted arm moved from ~1.6× behind its
+plaintext twin to ~1.1×). The plaintext arm's own numbers swing 99k–159k in the same six runs, which is why the target
+cell's four-sample stability is what carries the claim.
+
+**3. The mechanism, checked rather than assumed.** `--pk-profile`-style profiling of the same shape
+(`SHARPCOREDB_MAIN_PROFILE_UPDATE=1`) shows the encrypted arm now takes the snapshot and stops paying per-record reads:
+`row-snapshot` **0 B / 0.0 ms → 1 call / 12.6 MB / 5.0 ms**, and `row-locate-index` **119.5 ms (52.4 % of staged) → 13.4 ms
+(14.2 %)** with the staged total falling 227.9 → 94.6 ms. The remaining locate cost is now the slice copy plus one AEAD
+open per record — which is the next thing to attack, and it is what bounds this fix (see §5).
+
+**4. A second, larger observation on a different shape — recorded, not claimed.** The plain comparative run (the
+SQL/Direct/StructRow ladders, same session, SQLite in the same process) was taken before and after:
+
+| ladder | UPDATE before | UPDATE after | vs SQLite before → after |
+|---|---:|---:|---|
+| SharpCoreDB (SQL) | 45,944 | 50,646 | 0.18× → 0.18× |
+| SharpCoreDB (Direct) | 59,009 | **112,791** | **0.23× → 0.40×** |
+| SQLite (same runs) | 253,699 | 284,594 | — |
+
+The **Direct ladder's UPDATE nearly doubled (+91 %)**, far outside that arm's own drift on the same two runs
+(INSERT +21 %, READ +23 %, DELETE −2 %), and it is the cell the 5.2/5.3 work pointed at: an encrypted, hash-predicate
+update through the direct API. The SQL ladder's UPDATE gained only +10 %, *less* than its own arm's INSERT (+16 %) and
+READ (+26 %) drift, so **its ratio is unchanged at 0.18× and no improvement is claimed there** — the SQL driver's
+per-statement work is the difference between the two ladders and this change does not touch it. Two samples on a
+loaded machine cannot carry more than "consistent with §2, on a second harness"; §2's four-vs-two design is what the
+verdict rests on.
+
+**5. Validation, limits and provenance.** (a) Build **0 errors**, no new warnings; core suite **1919 / 0 failed /
+16 skipped** on the final source (157.3 s), and it had already been green (189.9 s) on the same source before the
+stash round trip. (b) ⚠️ **`--gate` was run once and returned INCONCLUSIVE (exit 2)**: `default UPDATE`'s own rep spread
+inside that single run was **3.18×**, larger than the effect being measured — the fourth inconclusive gate of this
+session (the other three: 2.84×, 3.07×, 3.34×, with one FAILED and one PASSED in between). The gate therefore cannot
+arbitrate this change, and the evidence is the designed A/B above; recording it as a failed-to-quiet re-run rather than
+as a pass is the honest form. (c) **The claim is bounded by what was replaced**: the encryption tax on this cell was
+1.37–2.13× and is now 1.09–1.14×, so the remaining ~1.1× is the per-record AEAD open (which stays) plus the 12.6 MB
+snapshot allocation and read; a fix of *those* is where the next measurement goes, not another snapshot. (d) The
+plaintext arm was left byte-identical on purpose, which is why it can be a control in §2 — a deliberate choice, not an
+oversight, and it is why the raw arm's numbers are quoted but not used as a denominator.
+(e) Artifacts: `results/dual-mode-20260921_{212914,212936,213002,213047,213108,213119}.json` (the six A/B runs, the
+last three of which are the stashed-build samples) and `results/comparative_20260921_193451.json` for §4 — the
+comparative archive lands in the repo-root `results/` (git-ignored), as recorded in §5.4.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
 
 
 

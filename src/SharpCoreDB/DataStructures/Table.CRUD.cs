@@ -2238,15 +2238,18 @@ public partial class Table
             // from the file INCLUDING the stale record).
             EnsureAllRegisteredIndexesLoaded();
 
-            // Whole-file snapshot for the per-row fastPatch reads below (same guard as the DELETE
-            // path): reading the small plaintext file once replaces one pread pair per updated row.
-            // A position that already has a buffered in-place overwrite in this transaction is
-            // NEVER served from the snapshot (its disk bytes would be stale) — it falls back to the
-            // per-record read, which honors the write-behind buffer.
+            // Whole-file snapshot for the per-row fastPatch reads below. The DELETE path's helper refuses
+            // encrypted files (it deserializes plaintext keys out of its snapshot); the UPDATE locate only
+            // ever slices ONE record and hands it to the field patcher, so it can serve the same ciphertext
+            // snapshot and decrypt that record on demand — which is what the default (encrypted)
+            // configuration used to pay as a per-record read for every updated row.
+            // A position that already has a buffered in-place overwrite in this transaction is NEVER served
+            // from the snapshot (its disk bytes would be stale) — it falls back to the per-record read, which
+            // honors the write-behind buffer.
             // §5.5 instrumentation (2026-09-21): this one call allocates the whole data file and was
             // invisible, so it read as per-operation cost spread over the batch below it.
             long snapshotStart = Diagnostics.WritePathProfiler.Stamp();
-            byte[]? wholeFile = TryLoadWholeFileForRowAccess();
+            var (wholeFile, wholeFileEncrypted) = TryLoadWholeFileForUpdatePatch();
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowSnapshot, snapshotStart);
 
             // B8: single-pass contiguous UPDATE — when every operation is a `pk = <literal>` match on a
@@ -2329,7 +2332,14 @@ public partial class Table
                         if (fastPatch && wholeFile != null &&
                             (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, fastSearch.Value)))
                         {
-                            fastData = TrySlicePayloadFromFile(wholeFile, fastSearch.Value);
+                            fastData = TrySlicePayloadFromFile(wholeFile, fastSearch.Value, wholeFileEncrypted);
+                            if (fastData is null && wholeFileEncrypted)
+                            {
+                                // A storage implementation without DecryptRecordPayload, or a frame that will
+                                // not open. The per-record read is the path the plaintext arm already uses;
+                                // skipping the row instead would silently drop the update.
+                                fastData = engine.Read(Name, fastSearch.Value);
+                            }
                         }
                         else
                         {
@@ -2374,7 +2384,11 @@ public partial class Table
                                     if (fastPatch && wholeFile != null &&
                                         (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, pos)))
                                     {
-                                        data = TrySlicePayloadFromFile(wholeFile, pos);
+                                        data = TrySlicePayloadFromFile(wholeFile, pos, wholeFileEncrypted);
+                                        if (data is null && wholeFileEncrypted)
+                                        {
+                                            data = engine.Read(Name, pos);
+                                        }
                                     }
                                     else
                                     {
@@ -4164,11 +4178,21 @@ public partial class Table
     }
 
     /// <summary>
-    /// Copies the raw (plaintext) payload of the record at <paramref name="position"/> out of a
-    /// whole-file snapshot. Returns null when the position/length is not fully contained in the
-    /// snapshot (caller falls back to the per-record read).
+    /// Copies the payload of the record at <paramref name="position"/> out of a whole-file snapshot,
+    /// decrypting it when the snapshot holds ciphertext. Returns null when the position/length is not fully
+    /// contained in the snapshot, or when an encrypted payload cannot be decrypted — the caller falls back to
+    /// the per-record read in both cases.
+    /// <para>
+    /// The encrypted half is what the PK-less UPDATE route needed: an encrypted file used to get no snapshot
+    /// at all (<see cref="TryLoadWholeFileForRowAccess"/> refuses it), so every update paid a per-record read
+    /// while the plaintext arm read the file once. The 4-byte prefix is the stored (ciphertext) length even in
+    /// an encrypted file, so the sliced bytes are a complete AEAD frame and
+    /// <see cref="IStorage.DecryptRecordPayload"/> returns the plaintext the field patcher needs — the same
+    /// treatment the contiguous fixed-width path already gives encrypted spans
+    /// (<c>TryReadContiguousFixedWidthRecords</c>).
+    /// </para>
     /// </summary>
-    private static byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position)
+    private byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position, bool encrypted)
     {
         if (position < 0 || position + 4 > wholeFile.Length)
         {
@@ -4183,7 +4207,38 @@ public partial class Table
 
         var payload = new byte[recordLength];
         wholeFile.AsSpan((int)position + 4, recordLength).CopyTo(payload);
-        return payload;
+
+        return encrypted ? this.storage?.DecryptRecordPayload(payload) : payload;
+    }
+
+    /// <summary>
+    /// Whole-file snapshot for the UPDATE fast-patch locate, ENCRYPTED files included.
+    /// <para>
+    /// <see cref="TryLoadWholeFileForRowAccess"/> deliberately refuses encrypted files because its other
+    /// caller (the DELETE key resolution) deserializes plaintext keys straight out of its snapshot and
+    /// ciphertext would mis-read every key. The UPDATE locate only ever slices one record and hands it to the
+    /// field patcher, so it can serve the same ciphertext snapshot and decrypt that record on demand. This is
+    /// what makes the snapshot usable on the default (encrypted) configuration, which is the one that pays the
+    /// per-record read today. Fixed-width records stay excluded — their contiguous path owns that case — and
+    /// the size limit keeps the snapshot bounded, falling back to the per-record read beyond it.
+    /// </para>
+    /// </summary>
+    private (byte[]? Snapshot, bool Encrypted) TryLoadWholeFileForUpdatePatch()
+    {
+        if (_fixedWidthRecords || this.storage is null)
+        {
+            return (null, false);
+        }
+
+        var fi = new System.IO.FileInfo(DataFile);
+        if (!fi.Exists || fi.Length <= 0 || fi.Length > WholeFileDeleteResolutionLimitBytes)
+        {
+            return (null, false);
+        }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
+        var bytes = this.storage.ReadBytesRange(DataFile, 0, (int)fi.Length);
+        return bytes is null ? (null, false) : (bytes, encrypted);
     }
 
     /// <summary>
