@@ -235,9 +235,20 @@ public static class WritePathProfiler
         /// attempt, which never applies to a table without a primary key.
         /// </summary>
         RowLocateIndex = 29,
+
+        /// <summary>
+        /// The <c>storage.FlushTransactionBuffer()</c> half of the batch-commit pair
+        /// (<c>Database.Batch.cs:1185-1189</c>), split out of <see cref="Commit"/> (2026-09-21) because
+        /// <c>commit</c> is the largest single stage on the encrypted default-job UPDATE arm — one call whose cost
+        /// ranges from 5.7 ms to 32.4 ms across reps against 4.8-12.8 ms for the same stamp on the plaintext arm,
+        /// so the two calls it covers have to be separated before either can be attacked. <see cref="Commit"/>
+        /// now measures <c>CommitSync()</c> alone (the buffered in-place overwrite flush lives inside it,
+        /// <c>Storage.Append.cs:1310-1338</c>).
+        /// </summary>
+        CommitBuffer = 30,
     }
 
-    private const int StageCount = 30;
+    private const int StageCount = 31;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -275,6 +286,7 @@ public static class WritePathProfiler
         "page-read", "page-update",
         "stmt-build", "row-decode",
         "row-snapshot", "row-locate-index",
+        "commit-buffer",
     ];
 
     private static int _enabled;

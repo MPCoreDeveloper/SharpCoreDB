@@ -1209,7 +1209,62 @@ oversight, and it is why the raw arm's numbers are quoted but not used as a deno
 last three of which are the stashed-build samples) and `results/comparative_20260921_193451.json` for §4 — the
 comparative archive lands in the repo-root `results/` (git-ignored), as recorded in §5.4.
 
+### 2026-09-21 — 5.3 follow-up — `commit` is `CommitSync()` alone: 30.6 ms of 124.1 ms staged on the encrypted arm, and it is the next target
+- Session: 1 (extension — the only product change is the diagnostic split of the commit stamp itself)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` · core suite
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only, named because it is the vehicle
+- Verdict: **KEPT (instrumentation)** — the split answers the question it was added for, in one run: **`FlushTransactionBuffer()` is 0.0 ms** and **every millisecond of the commit is `CommitSync()`**
+- Commit: `perf(diagnostics)`: split the batch-commit stamp into CommitSync and the buffer flush
+- NEXT: profile *inside* `Storage.CommitSync()` (`Storage.Core.cs:152`) — WAL, the buffered-overwrite flush (`Storage.Append.cs:1310-1338`) and the metadata save are the three candidates, and the batched-vs-fallback branch of `TryFlushBufferedOverwritesBatched` is one return value to count
+
+**1. Why this was the next thing to look at.** After the encrypted-snapshot fix (§5.3), the stage table on the target
+cell changed shape: the locate fell from 119.5 ms / 52.4 % to 13.4 ms / 14.2 %, and the largest single stage became
+**`commit` — one call, 29.8 ms, 31.5 %**. The same stamp reads 4.8–12.8 ms on the *plaintext* arm of the same runs, so
+the commit is where this cell's remaining encryption gap sits (5.7–32.4 ms across the encrypted arm's reps against
+4.8–12.8 ms plaintext: a heavier tail, not a clean multiple, which is exactly why it had to be split before being
+attacked).
+
+**2. The split, and its one result.** `Database.Batch.cs:1185-1195` stamped two calls as one. `commit` now measures
+`storage.CommitSync()` alone and a new stage `commit-buffer` (`WritePathProfiler.cs`, `StageCount` 30 → 31) measures
+`storage.FlushTransactionBuffer()`. The `Add` order is load-bearing and is commented at the site: `Add` closes the
+checkpoint its `Stamp` opened, so each pair has to close before the next opens.
+
+| stage | ms | share | calls | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| **`commit` (= `CommitSync`)** | **30.6** | **24.6 %** | **1** | 0.5 | 556,568 |
+| `parse` | 21.3 | 17.2 % | 10,000 | 5.1 | 531 |
+| `row-locate-index` | 20.7 | 16.7 % | 10,000 | 4.1 | 431 |
+| `engine-write` | 17.2 | 13.9 % | 10,000 | 2.9 | 302 |
+| `in-place-patch` | 16.5 | 13.3 % | 10,000 | 1.7 | 175 |
+| `index-maint` | 9.5 | 7.7 % | 20,000 | 0.8 | 43 |
+| `row-snapshot` | 6.6 | 5.3 % | 1 | 12.6 | 13,166,800 |
+| `row-locate` | 1.1 | 0.9 % | 1 | 0.0 | 32 |
+| `classify` | 0.5 | 0.4 % | 10,000 | 0.0 | 0 |
+| **`commit-buffer`** | **0.0** | **0.0 %** | **1** | 0.0 | 0 |
+
+**3. The named target, and what is inside it.** `Storage.Core.cs:152` `CommitSync()` is called once per batch and,
+on a 10,000-row UPDATE batch, has three plausible components: the **WAL** (append/fsync), the **buffered in-place
+overwrite flush** (`Storage.Append.cs:1310-1338` → `TryFlushBufferedOverwritesBatched` at `:1354`, which writes one
+page per touched page and falls back to two `WriteRecordInPlace` syscalls per row), and the **metadata save**
+(`Database.Batch.cs:1179` `SaveMetadata()` sits immediately before the commit and is *outside* every stamp in this
+table). The batched overwrite path's own gate (`overwrites.Count < 64 || path.EndsWith(".ovf")`, `:1356`) does **not**
+exclude a 10,000-row batch on the data file, so the branch should engage on **both** arms — which means the 2–6× gap is
+*not* explained by branch selection alone, and the next measurement has to distinguish the three components rather
+than assume one. One return value in `TryFlushBufferedOverwritesBatched` is worth counting for that reason.
+
+**4. Limits, and why nothing was changed beyond the split.** (a) `commit`'s meaning changed in this build: it no longer
+includes the buffer flush. That is recorded rather than silent, and the flush is 0.0 ms on this route so earlier
+readings are unaffected in substance — but a stage's meaning changing inside an append-only worklog needs to be said
+out loud. (b) The commit path is the durability contract (the buffered in-place overwrites are write-behind, so
+anything that writes them differently is a data-integrity change, not a tuning one) and this machine's band is ±20–30 %
+with the gate INCONCLUSIVE four times today — so a 5–15 % change there could not be *verified* right now, and this
+plan's rule is that an unverified change is not a landed one. Hence: the target is named with its numbers, the
+measurement design is one level deeper, and the change waits for a session that can resolve it. (c) Validation: build
+**0 errors**; core suite **1919 / 0 failed / 16 skipped** (157.5 s); the profiler's own tests still pass with 31 stages.
+(d) Artifact: `results/dual-mode-20260921_2*` — this run's archive is the one whose first table carries `commit-buffer`.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 

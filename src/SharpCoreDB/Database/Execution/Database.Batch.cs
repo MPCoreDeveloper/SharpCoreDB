@@ -1182,10 +1182,17 @@ public partial class Database
                 // Only commit if we started the transaction
                 if (!isInTransactionBefore)
                 {
+                    // Split (2026-09-21): `commit` now measures CommitSync alone, and the
+                    // buffer flush gets its own stage — the pair is the largest single cost on the encrypted
+                    // default-job UPDATE arm and the two halves have to be told apart before either is attacked.
+                    // The Add order matters: Add closes the checkpoint its Stamp opened, so each pair stays closed.
                     long commitStart = Diagnostics.WritePathProfiler.Stamp();
                     storage.CommitSync();
-                    storage.FlushTransactionBuffer();
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+
+                    long commitBufferStart = Diagnostics.WritePathProfiler.Stamp();
+                    storage.FlushTransactionBuffer();
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitBuffer, commitBufferStart);
                 }
                 
                 // ✅ FIX: Force tables to refresh row count from disk to ensure visibility
