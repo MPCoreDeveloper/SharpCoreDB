@@ -235,4 +235,77 @@ behaviour-preserving on the fall-through.
 instrumentation + attribution, which is the prerequisite the plan itself demands ("instrument first, then
 attack the largest named stage"). The optimisation above is scoped and ready for the next session.
 
+### 2026-09-21 — 5.1 INSERT (session 3, granted timebox extension) — `encode` inline-string fast path landed
+- Session: 3 (extension; 5.1's 2-session timebox was spent on session 1 (dead end) + session 2 (the prerequisite instrumentation))
+- Command(s): `… --pk-profile-insert` · `… --pk`
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Verdict: **KEPT** — real, measurable win on the load-independent allocation metric AND on the unprofiled ratio;
+  core suite 1916/0 failed/16 skipped, gate PASSED (second run — see the gate note)
+- Commit: `perf(fixedwidth)`: the `encode` inline-string fast path
+- NEXT: 5.1 timebox is now fully spent → move to **5.2 (PageBased UPDATE)** per the brief. Remaining INSERT levers
+  are recorded below for a future INSERT pass.
+
+**The change.** `FixedWidthCodec.SerializeRow` (both overloads) now tries
+`TryWriteInlineStringSlot` **before** allocating the payload: when `value is string` on a non-Blob variable column
+and `UTF8.GetByteCount(s) <= layout.InlineValueBytes`, the UTF-8 bytes are written **straight into the record slot**.
+The result is byte-identical to the old path (`EncodeVariablePayload` for a string is
+`UTF8.GetBytes(value.ToString())`, and `ToString()` on a string is the string itself), but the payload array is
+never created. On the fair-PK schema two of the three TEXT columns fit the inline capacity (`name` 9 B, `data`
+13 B; `email` 18 B overflows), so the old code allocated **two payload arrays per row only to copy them into the
+slot and discard them**. Falls through unchanged when the payload does not fit.
+
+**Measured — `--pk-profile-insert`, 100,000 rows / 10 batches (allocation is deterministic; it was bit-identical
+across earlier runs, so this column is load-independent evidence):**
+
+| metric | before | after | delta |
+|---|---:|---:|---|
+| `encode` B/call | 7,854,331 | **7,058,962** | **−795,369 B/call (−79.5 B/row)** |
+| `validate` (envelope) B/call | 7,854,371 | 7,059,002 | −795,369 |
+| `encode` stage time | 512.1 ms (22.7%) | **404.8 ms (21.4%)** | **−107.3 ms (−21%)** |
+| total measured across stages | 2256.2 ms | **1889.7 ms** | −366.5 ms (−16.2%) |
+| profiled pass | 14.71 µs/row / 67,962 ops/s | **12.15 µs/row / 82,337 ops/s** | **+21.2%** |
+| `arena-write` / `arena-append` bytes | 36.2 MB / 20.6 MB | **36.2 MB / 20.6 MB** | **unchanged** |
+| `hash-index` B/call | 8,824,845 | 8,824,644 | unchanged |
+
+**Byte-identical on disk** is the correctness argument the arena columns give: the same arena byte totals with the
+same call counts means the encoder produced the same records, only without the throw-away arrays. The suite agrees
+(1916/0 failed, including the fixed-width reopen/round-trip and bulk tests), and READ/UPDATE/DELETE still measure
+normally on the same run (66,986 / 80,220 / 155,572 ops/s).
+
+**Measured — `--pk` (unprofiled, median-of-3, same session):**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW plaintext | **124,971** (was 118,994) | 119,210 | 355,550 | 683,008 |
+| SQLite | 177,728 | 94,514 | 268,272 | 345,941 |
+| **ratio** | **0.70×** (was 0.67×) | **1.26× ahead** | **1.33× ahead** | **1.97× ahead** |
+
+So the unprofiled fair-PK INSERT moved **+5.0%** and the ratio **0.67× → 0.70×**. The profiled arm shows +21.2%
+because the profiler's own overhead sat disproportionately on the `encode` stage; **+5.0% is the number that
+describes the product**, and only the ratio is comparable across sessions (SQLite moved 178,047 → 177,728).
+
+**Gate note (honest).** The first `--gate` returned **exit 2 = INCONCLUSIVE** (rep spread 2.79× > 2.5×) — the
+machine has grown steadily noisier this session (2.18× → 2.38× → 2.79×). The documented re-run **PASSED** (exit 0,
+spread 2.22×), with raw READ 0.81×, raw UPDATE 0.71× and raw DELETE 0.58× of baseline — i.e. *faster* than the
+committed baseline, not slower.
+
+**New finding — the harness is not route-symmetric on this arm, and that caps the prize.** Both fair-PK INSERT arms
+build their row representation **inside** the timed region:
+SharpCoreDB builds **1 `Dictionary<string, object>` (6 entries) + 3 interpolated strings per row** then calls
+`db.InsertBatch` once per 10,000 rows (`Program.cs:1350-1372`); SQLite builds **1 `SqliteCommand` + 5
+`SqliteParameter` objects + 3 interpolated strings per row** and executes per row (`Program.cs:1217-1235`). So part
+of the measured 8.4 µs/row is harness object construction in both arms — engine work can only move the ratio within
+the part that is actually engine work. This belongs beside the plan §1.4 "measurement defects that block
+attribution" and should be quantified before the endgame is planned on this column.
+
+**Remaining INSERT levers, recorded (not attempted — timebox):**
+1. **The 2 per-row `List<>` scratch objects** in `SerializeRow` (`variableColumns`, `variablePayloads`), created
+   whenever any value overflows — `email` (18 B) always overflows the 16-byte inline capacity, so both are
+   allocated for every row. Fixing it needs a `WriteMany` overload (`byte[][]`+count or a span) because
+   `IOverflowArena.WriteMany` takes `IReadOnlyList<byte[]>`; that is an interface change, so it needs its own session.
+2. **The unattributed 39.9%** of the profiled total (753.6 ms after the fix) — code with no stamp. On this arm that
+   is the `Table.InsertBatch` driver itself (`NormalizeInsertRow`, the column-index map, `ValidateExistingPrimaryKeys`)
+   plus whatever the harness constructs inside the window. This is the largest single bucket and the next thing to
+   instrument, per the plan's own "instrument first" rule.
+
 <!-- APPEND-ENTRIES-BELOW -->
