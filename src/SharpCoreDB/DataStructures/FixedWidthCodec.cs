@@ -47,6 +47,11 @@ public static class FixedWidthCodec
             {
                 WriteNullVariableSlot(slot);
             }
+            else if (value is string text && types[i] != DataType.Blob
+                     && TryWriteInlineStringSlot(slot, layout, text))
+            {
+                continue;   // encoded into the slot directly: no throw-away payload array
+            }
             else
             {
                 var payload = Table.EncodeVariablePayload(types[i], value);
@@ -89,6 +94,11 @@ public static class FixedWidthCodec
             else if (value == null || value == DBNull.Value)
             {
                 WriteNullVariableSlot(slot);
+            }
+            else if (value is string text && types[i] != DataType.Blob
+                     && TryWriteInlineStringSlot(slot, layout, text))
+            {
+                continue;   // encoded into the slot directly: no throw-away payload array
             }
             else
             {
@@ -135,6 +145,43 @@ public static class FixedWidthCodec
         // Zero the unused tail: otherwise a shorter value leaves the previous value's bytes behind the length,
         // which the decoder never reads but a byte-level reader would.
         slot.Slice(7 + payload.Length, layout.InlineValueBytes - payload.Length).Clear();
+        return true;
+    }
+
+    /// <summary>
+    /// Encodes a string straight into an inline variable slot, returning <see langword="false"/> when the layout
+    /// has no inline capacity or the UTF-8 form does not fit — in which case the caller falls through to the
+    /// unchanged arena path.
+    /// <para>
+    /// Byte-identical to <see cref="TryWriteInlineVariableSlot"/> over
+    /// <c>Table.EncodeVariablePayload(String/other-non-Blob, string)</c> (which is
+    /// <c>UTF8.GetBytes(value.ToString())</c>, and <c>ToString()</c> on a string is the string itself), but it
+    /// never materialises the payload array. PERF (plan §9 priority 2): on the fair-PK INSERT arm two of the three
+    /// TEXT columns fit the inline capacity, so that array was allocated once per row per column only to be copied
+    /// into the slot and thrown away.
+    /// </para>
+    /// </summary>
+    internal static bool TryWriteInlineStringSlot(Span<byte> slot, FixedWidthRecordLayout layout, string value)
+    {
+        if (layout.InlineValueBytes <= 0)
+        {
+            return false;
+        }
+
+        var byteCount = System.Text.Encoding.UTF8.GetByteCount(value);
+        if (byteCount > layout.InlineValueBytes)
+        {
+            return false;
+        }
+
+        slot[0] = 2;                                                        // inline payload
+        BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);               // offset unused
+        BinaryPrimitives.WriteInt16LittleEndian(slot[5..], (short)byteCount);
+        System.Text.Encoding.UTF8.GetBytes(value, slot[7..]);
+
+        // Zero the unused tail, exactly as the payload-array overload does — a shorter value must not leave the
+        // previous value's bytes behind the length for a byte-level reader.
+        slot.Slice(7 + byteCount, layout.InlineValueBytes - byteCount).Clear();
         return true;
     }
 
