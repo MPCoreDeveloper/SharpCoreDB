@@ -1208,7 +1208,15 @@ public partial class Storage
         lock (appendLock)
         {
             FlushBufferedAppends();
+
+            // Split (2026-09-21): the commit is the largest single stage on the encrypted default-job UPDATE
+            // arm, and this is the write-behind half of it — the one place a 10,000-row batch's overwrites
+            // reach the disk. Stamped separately so the batched page path can be told from the per-record
+            // fallback without guessing.
+            long overwritesStart = Diagnostics.WritePathProfiler.Stamp();
             FlushBufferedOverwrites();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwrites, overwritesStart);
+
             ApplyBufferedTombstones();
         }
     }
@@ -1453,6 +1461,14 @@ public partial class Storage
     /// buffer, every page-local overwrite payload is copied in, and the page is written back.
     /// Returns false on a partial read so the caller can fall back to the idempotent per-record loop.
     /// </summary>
+    /// <remarks>
+    /// ⚠️ Coalescing consecutive pages into one range was implemented here (2026-09-21) and **refuted by
+    /// measurement**: with all ~320 touched pages of a 10,000-row UPDATE batch merged into two ~1 MB ranges the
+    /// stage read 29.8 ms against 31.2 ms for the per-page form (inside this machine's noise) while its
+    /// allocation rose from 0.5 MB to 1.5 MB from the larger rented buffers. So the flush is *not* paying for
+    /// its syscall count — the per-page loop below is kept deliberately, and the read/write split inside it is
+    /// the next thing to measure rather than the I/O shape.
+    /// </remarks>
     private bool FlushOverwritePages(string path, long fileLength, int pageBytes, Dictionary<long, List<(int RelOffset, byte[] Payload)>> pages, List<long> pageStarts)
     {
         SafeFileHandle readHandle = GetOrOpenReadHandle(path);

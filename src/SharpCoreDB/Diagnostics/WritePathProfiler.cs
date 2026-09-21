@@ -246,9 +246,18 @@ public static class WritePathProfiler
         /// <c>Storage.Append.cs:1310-1338</c>).
         /// </summary>
         CommitBuffer = 30,
+
+        /// <summary>
+        /// The buffered in-place overwrite flush inside <c>FlushBufferedAppendsAndOverwrites</c>
+        /// (<c>Storage.Append.cs:1211</c> → <c>FlushBufferedOverwrites</c>), split out (2026-09-21) because the
+        /// commit is the largest single stage on the encrypted default-job UPDATE arm and this is where a
+        /// 10,000-row UPDATE batch's write-behind records are actually written: either the batched page path
+        /// (<c>TryFlushBufferedOverwritesBatched</c>) or two <c>WriteRecordInPlace</c> syscalls per row.
+        /// </summary>
+        CommitOverwrites = 31,
     }
 
-    private const int StageCount = 31;
+    private const int StageCount = 32;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -287,6 +296,7 @@ public static class WritePathProfiler
         "stmt-build", "row-decode",
         "row-snapshot", "row-locate-index",
         "commit-buffer",
+        "commit-overwrites",
     ];
 
     private static int _enabled;

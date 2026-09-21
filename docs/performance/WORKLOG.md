@@ -1263,7 +1263,67 @@ measurement design is one level deeper, and the change waits for a session that 
 **0 errors**; core suite **1919 / 0 failed / 16 skipped** (157.5 s); the profiler's own tests still pass with 31 stages.
 (d) Artifact: `results/dual-mode-20260921_2*` — this run's archive is the one whose first table carries `commit-buffer`.
 
+### 2026-09-21 — 5.3 follow-up 2 — the commit is 100 % the buffered-overwrite flush, and coalescing its pages is REFUTED
+- Session: 1 (extension)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` ×2 (per-page baseline and the coalesced build) · core suite
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only, named because it is the vehicle
+- Verdict: **the stamp is KEPT, the candidate is REVERTED** — `commit-overwrites` names the commit's cost exactly, and the I/O-shape fix built on top of it was refuted by its own measurement and is out of the tree
+- Commit: `perf(diagnostics)`: stamp the buffered-overwrite flush inside the commit (plan §5.3 follow-up)
+- NEXT: one stage around the flush's **write** half (`RandomAccess.Write`) so read and write can be told apart — the refutation below says the cost is per byte or per write, not per syscall
+
+**1. The split inside `CommitSync`, and it is complete.** `CommitSync` (`Storage.Core.cs:152`) is
+`FlushBufferedAppendsAndOverwrites()` + `transactionBuffer.Flush()`, and the first of those
+(`Storage.Append.cs:1206-1214`) is appends + **overwrites** + tombstones. Stamping the overwrite flush on its own
+settles the whole question in one run, on the encrypted default-job UPDATE arm:
+
+| stage | ms | share | calls | alloc MB |
+|---|---:|---:|---:|---:|
+| `commit` (= `CommitSync`) | 31.2 | 21.6 % | 1 | 0.5 |
+| **`commit-overwrites`** (= `FlushBufferedOverwrites`) | **31.2** | **21.6 %** | **1** | **1.5** |
+| `commit-buffer` (= `FlushTransactionBuffer`) | 0.0 | 0.0 % | 1 | 0.0 |
+
+**All of the commit is the write-behind overwrite flush** — appends, tombstones and the transaction-buffer flush are
+all free on this route — so the 10,000 buffered in-place overwrites of an UPDATE batch cost ~3.1 µs per row to reach
+the disk, and that is where this cell's remaining gap lives.
+
+**2. The candidate that was built on top of it — and refuted.** The flush's per-page path
+(`Storage.Append.cs:1472-1510`) costs two syscalls plus a full-page read **and** write per touched page, so a
+10,000-row batch whose keys sit in adjacent pages pays ~320 × (read 4 KB + write 4 KB) to persist ~1.5 MB of payload.
+Coalescing consecutive page starts into one range (one read, one patch pass, one write, capped at 1 MB so the rented
+buffer stays bounded, keeping the idempotent per-record fallback for a partial read) was therefore implemented — and
+measured, in the same window, on the same shape:
+
+| build | `commit-overwrites` | its allocation |
+|---|---:|---:|
+| per-page (baseline) | 31.2 ms | 0.5 MB |
+| **coalesced ranges** | **29.8 ms** | **1.5 MB** |
+| per-page (after the revert) | 29.8 ms | 0.5 MB |
+
+**The I/O-shape hypothesis is refuted**: merging ~320 touched pages into two ~1 MB ranges did not move the stage
+(31.2 → 29.8 ms, inside this machine's band) while it *raised* the allocation threefold from the larger rented
+buffers. The flush is therefore **not** paying for its syscall count, which is the one thing coalescing could have
+fixed; where the ~320 pages *are* adjacent, only the I/O shape changed and nothing else did. The coalescing is out of
+the tree, and the refutation is recorded in the method's own XML remark (with the numbers) so the next reader does not
+re-run the same experiment.
+
+**3. What the refutation leaves.** A per-page cost that is neither the syscall count nor the number of ranges can only
+be **(a) the bytes moved** (a full page read + a full page written per touched page, ~2.6 MB in this batch) or **(b) the
+write primitive itself** — `GetOrOpenWriteHandle`'s file options (write-through / buffering), a flush per write, or the
+`pageCache.EvictPage` call that follows every page write. The next measurement is one stage around the `RandomAccess.Write`
+inside that loop: if the write half is ~all of the 29.8 ms, the lever is the handle's write options or the number of
+flushes, not the paging; if the read half is, the lever is that the read re-fetches a page the process may already have.
+That is a one-stage probe on a stage whose four samples so far read 29.8 / 30.6 / 31.2 / 32.4 ms — a tighter metric than
+any whole-arm timing on this machine, which is why this axis is worth finishing.
+
+**4. Validation and limits.** Build **0 errors**; core suite **1919 / 0 failed / 16 skipped** (174.1 s). Limits: the
+refutation is a single pair of profiled runs (one baseline, one candidate) on a stage with a 1.09× spread across four
+samples, so "inside the band" is a claim about ~±10 %, not about a 1.4× effect — a coalescing win would have had to be
+≥ 10 % to show, and it was not; the allocation column, which is not windowed like the time column, moved the **wrong**
+way and independently supports the revert. The commit path itself was not otherwise touched: the buffered overwrites are
+the write-behind durability contract, and the only product change here is instrumentation.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
