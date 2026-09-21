@@ -434,4 +434,60 @@ before/after ratio). Both fixes touch index semantics, where an unvalidated chan
 lookups — the exact class of defect this plan has paid for before. The root cause is documented with its
 line numbers and its measured share, so the next session can implement fix (1) directly.
 
+### 2026-09-21 — 5.2 follow-up (granted extension) — fix (1) refuted by measurement; root cause now conclusive
+- Session: 1 (extension)
+- Command(s): `… --pk --engine=pagebased` · static analysis of the invalidation path
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Verdict: **REVERTED** — fix (1) produced no win (4.4× → 4.5×, inside noise); tree returned to the committed state
+- Commit: this worklog entry only
+- NEXT: implement the **precise-invalidation** fix below (it is the real lever, not a cost shift)
+
+**Fix (1) as implemented and measured.** `InsertBatchCriticalSection` loaded registered-but-unloaded hash
+indexes on the PageBased path too (mirroring the Columnar branch's `EnsureIndexLoaded` call), placed **before**
+`engine.InsertBatch` so the ordering stays duplicate-free. Build green; the tracking shape moved
+**60,475 → 62,264** ops/sec while SQLite moved 267,253 → 277,330, so the gap went **4.4× → 4.5×** — no win.
+Reverted.
+
+**The refined, now conclusive root cause.** `Table.CRUD.cs:2200-2205`, in `RepointIndexesAfterRelocation`:
+
+```csharp
+// values a precise repoint is not possible, so invalidate for a lazy rebuild.
+foreach (var col in this.loadedIndexes)
+{
+    this.staleIndexes.Add(col);
+    this._indexReadyCache.TryRemove(col, out _);
+}
+```
+
+**The UPDATE path itself invalidates every loaded index** (its own comment says so), and the next indexed
+operation then rebuilds it via `Table.BatchUpdateMode.cs:223` → `EnsureIndexLoaded`, whose PageBased branch
+scans the whole table and full-decodes every row (`Table.Indexing.cs:184-193`). That is why pre-loading during
+INSERT could not help: whatever INSERT does, the first relocating UPDATE throws the index away again.
+
+**Why this is a genuine bug and not just a benchmark artifact.** The invalidation is **unconditional** — it
+throws away *every* loaded index no matter which columns the UPDATE actually changed. The fair-PK harness
+updates `score`; the index is on `name`. An index on a column the statement did not touch cannot have become
+stale, so the O(rows) rebuild that follows is pure waste. (It is not merely a PageBased issue either: the same
+unconditional sweep runs on any relocating update, and `Table.BatchUpdateMode.cs:217-218` limits the hash-index
+branch to Columnar, so PageBased pays a full rebuild for an index its own rebuild path then declines to
+refresh — worth confirming next session.)
+
+**The fix to implement next (ranked):**
+
+1. **Invalidate only the indexes the update can actually have changed** — pass the update's column set into
+   `RepointIndexesAfterRelocation` (its batch caller already has `updateColumnName`/the update dictionary) and
+   invalidate only indexes whose column is in that set. An update to `score` then leaves the `name` index
+   loaded and fresh, and the 100,000-decode rebuild disappears entirely rather than moving. This is the real
+   lever: measured share of the waste is 45 % of the PageBased UPDATE wall time (168.0 ms of 370 ms).
+2. **Make any rebuild that does happen cheap** — the single-column decode variant from the previous entry
+   (`FixedWidthCodec.TryReadVariableSlot` + `HashIndex.Add(key, pos)`), which removes the full-row
+   materialisation (630 B/row) even when a rebuild is legitimate.
+3. **Fix the profiler-enabled leak** before re-adding the page/row stamps, so the stamps that made this
+   diagnosis possible can stay in the tree (see the session-1 note: 744.6 s vs 156.3 s on the core suite).
+
+**Validation note (no re-run needed).** After the revert, `git status` shows `src/` byte-identical to commit
+`1b2688e2`, and the build is green — so the last verified results for exactly this source stand unchanged:
+core suite **1916 / 0 failed / 0 errors / 16 skipped**, `--gate` **PASSED** (exit 0). No new code has landed
+since those runs.
+
 <!-- APPEND-ENTRIES-BELOW -->
