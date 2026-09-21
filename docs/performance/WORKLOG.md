@@ -490,4 +490,46 @@ refresh — worth confirming next session.)
 core suite **1916 / 0 failed / 0 errors / 16 skipped**, `--gate` **PASSED** (exit 0). No new code has landed
 since those runs.
 
+### 2026-09-21 — 5.2 follow-up 2 — precise invalidation landed; the two triggers are complementary
+- Session: 1 (extension 2)
+- Command(s): `… --pk --engine=pagebased` · core suite
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Verdict: **KEPT on correctness grounds; performance effect NOT attributable** (see the honest read)
+- Commit: `perf(index)`: invalidate only the updated column's index on relocation
+- NEXT: re-apply fix (1) **on top of this** and measure both together — that is the decisive experiment
+
+**The change.** `RepointIndexesAfterRelocation` gained an optional `changedColumn` (default `null` = the previous
+unconditional behaviour, so the other ten call sites are untouched). When supplied, only an index whose column
+matches is invalidated: an index over a column the statement did not touch cannot have gone stale, so it must not
+be thrown away. The PageBased batch path (`Table.BatchUpdate.cs:389`, inside
+`UpdateBatchViaPrimaryKeyLookup`) passes its `updateColumnName`.
+
+**Measured — `--pk --engine=pagebased`, median-of-3:**
+
+| arm | UPDATE (ops/sec) | SQLite | gap |
+|---|---:|---:|---:|
+| baseline (session 1) | 60,475 | 267,253 | 4.4× |
+| fix (1) alone (reverted) | 62,264 | 277,330 | 4.5× |
+| **fix (2) (this commit)** | **64,289** | 288,552 | **4.5×** |
+
+**Honest read: +6.3 % absolute, but not attributable.** The machine's own band on this shape is ±10–20 % (this
+session's gate rep spread reached 2.79×), and SQLite's reference moved +8 % between the same two runs, so the
+ratio is unchanged at 4.5×. This is **not** a measured performance win and must not be quoted as one. It is kept
+because the change is *correct* on its own terms — invalidating an index over an untouched column is a bug —
+and because it is the necessary half of the next experiment (below). Validation: core suite
+**1916 / 0 failed / 0 errors / 16 skipped** (164.1 s; that level is machine load, established by the earlier
+A/B where the same suite ran at ~100 s and where with/without a stamp measured 156.286 s vs 156.853 s).
+
+**The key insight this session produced — the two triggers are complementary.** The index is invalidated in
+**two** independent places, and each fix covers only one:
+- **at INSERT time** — `Table.CRUD.cs:258` marks every registered-but-unloaded index stale, so the index is
+  never built while the table is small (fix (1) addressed this, and failed alone);
+- **at UPDATE time** — `RepointIndexesAfterRelocation` threw away every loaded index (fix (2) addresses this,
+  and fails alone, since INSERT has already marked it stale).
+
+Neither fix can work on its own for exactly the reason the other exists. **The decisive experiment — fix (1)
+re-applied on top of fix (2), measured once — has not been run.** That is the first thing the next session does,
+and it is cheap: the fix (1) diff is two lines plus the load loop, and the measurement is one
+`--pk --engine=pagebased` run against the 60,475 / 64,289 figures above.
+
 <!-- APPEND-ENTRIES-BELOW -->
