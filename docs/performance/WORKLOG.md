@@ -532,4 +532,31 @@ re-applied on top of fix (2), measured once — has not been run.** That is the 
 and it is cheap: the fix (1) diff is two lines plus the load loop, and the measurement is one
 `--pk --engine=pagebased` run against the 60,475 / 64,289 figures above.
 
+### 2026-09-21 — 5.2 follow-up 3 — the decisive test REFUTED the trigger hypothesis
+- Session: 1 (extension 3)
+- Command(s): `… --pk --engine=pagebased` with fix (1) **and** fix (2) together
+- Verdict: **REVERTED** (fix (1)); fix (2) stays as committed
+- NEXT: stop guessing — re-add the `row-decode` stamp (after the profiler-leak fix) and read the **call count** with both fixes in place
+
+| state | PageBased FW UPDATE | SQLite | gap |
+|---|---:|---:|---:|
+| session-1 baseline | 60,475 | 267,253 | 4.4× |
+| fix (2) alone | 64,289 | 288,552 | 4.5× |
+| **fix (1) + fix (2)** | **64,649** | 294,373 | **4.6×** |
+
+**64,649 and 64,289 are identical within the machine band**, so removing *both* index-invalidation triggers
+did **not** remove the O(rows) rebuild. The hypothesis "index staleness is what triggers the full-table
+rebuild" is **refuted** — and with it the whole fix (1)/(2) line of reasoning as a performance lever, even
+though fix (2) remains correct on its own terms and stays committed.
+
+**What this leaves.** Either the 100,000 decodes come from a **third** path, or the rebuild is not the dominant
+cost in the *unprofiled* run (the 45 % share was measured under the profiler, which this plan has twice shown
+distorts the stage it is applied to). The next session must not guess again: re-add the `row-decode` stamp,
+run `--pk-profile --engine=pagebased` on both fix states, and read the **call count** — if it still reports
+100,000 with both fixes in place, the rebuild comes from elsewhere in the batch-update path
+(`Table.BatchUpdate.cs` has four more `RepointIndexesAfterRelocation` call sites and five `InPlacePatch` sites,
+and the fair-PK UPDATE may not be taking the `UpdateBatchViaPrimaryKeyLookup` route that fix (2) patched at all —
+that route assumption was never verified with a call count, which is the same error this plan has now paid for
+five times).
+
 <!-- APPEND-ENTRIES-BELOW -->
