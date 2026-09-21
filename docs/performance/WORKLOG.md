@@ -105,4 +105,75 @@ WAL/metadata) — **not** the row type, the layout, or the arena (all measured d
 - NEXT: <the next concrete action>
 ```
 
+### 2026-09-21 — Session 0 ritual (agent) — environment verified on `perf/autonomous-20260921`
+- Session: 0 (ritual, not counted against a timebox)
+- Command(s): `git checkout -b perf/autonomous-20260921` · `dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0` · `tests\SharpCoreDB.Tests\bin\Release\net11.0\SharpCoreDB.Tests.exe` · `SharpCoreDB.Benchmarks.Comparative.exe --gate`
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Result:
+  - build: **0 errors** (294 pre-existing warnings), 19.7 s, `net11.0`
+  - core suite: **1916 total / 0 failed / 0 errors / 16 skipped**, 100.0 s — matches the RC.3 baseline exactly
+  - gate: **PASSED** (exit 0) — nothing slower than baseline × 1.50. Rep spread worst 2.18× (machine
+    loaded), so this is a pass on a noisy machine; raw UPDATE 0.69× and raw DELETE 0.79× are *faster*
+    than baseline, not slower.
+  - gate medians (raw): INSERT 135,942 · READ 90,805 · UPDATE 155,021 · DELETE 259,827
+  - gate medians (default): INSERT 126,910 · READ 87,959 · UPDATE 74,011 · DELETE 92,799
+- Verdict: **KEPT** — environment sane and baseline-healthy; safe to work.
+- Commit: `c1aac3fb` (brief + worklog added)
+- NEXT: **5.1** — establish the fair-PK INSERT baseline (`--pk`, `--multirowinsert`) and build the
+  per-stage INSERT budget.
+
+### 2026-09-21 — 5.1 INSERT (session 1 of 2) — fair-PK baseline + first lever refuted
+- Session: 1 of 2
+- Command(s): `SharpCoreDB.Benchmarks.Comparative.exe --pk` · `… --multirowinsert`
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.` (both runs)
+- Verdict: **REVERTED** (hypothesis refuted, no measured win — nothing kept)
+- Commit: none for `src/`; this worklog entry is committed
+- NEXT: 5.1 session 2 — instrument the **fair-PK INSERT phase** (no existing flag profiles it; see below)
+
+**Fair-PK baseline, median-of-3, this session (ops/sec):**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW plaintext | 118,994 | 108,851 | 364,629 | 713,353 |
+| SharpCoreDB FW at-rest | 107,954 | 91,414 | 266,878 | 389,273 |
+| SharpCoreDB legacy plaintext | 104,388 | 74,108 | 148,398 | 286,328 |
+| SQLite | 178,047 | 98,653 | 286,788 | 372,717 |
+| **FW plaintext ratio** | **0.67×** | **1.10×** | **1.27×** | **1.91×** |
+
+At-rest tax: INSERT 1.10× · READ 1.19× · UPDATE 1.37× · DELETE 1.83×. **Only INSERT is behind** — the
+brief §1 table reproduces exactly, so the mission's remaining target is confirmed.
+
+**`--multirowinsert` baseline** (20,000 rows, 1,000 rows/statement, median of 5):
+**64,959 rows/s · 15.39 µs/row · 4,342 B/row · gen0 12–14 · data 1,840,000 B · arena 488,890 B** —
+identical to the plan §8d figures, so the shipped default is the one under test.
+
+**New finding — corrected read of the stage table (the plan's "validate + encode = 1,742 B/row"
+double-counts).** `validate` (871,034 B/call) is the **parent** of `validate-only` (0 B/call) + `encode`
+(870,994 B/call); the two agree to within 40 B, so this is nesting, not two costs. **Leaf allocation per
+row** (4,342 B total): hash-index **952** (22%) · encode **871** (20%) · arena-write **467** (11%) ·
+parse **443** (10%) · row-build **400** (9%) · engine-write 178 · commit 132 · validate-only **0**.
+
+**The arena lever is spent.** `arena-write` is now **467 B/row** against the **1,096 B/row** plan §11
+recorded *before* the §4b inline capacity shipped as default 16. Validation is now pure CPU with **zero**
+allocation. The remaining INSERT budget is the index path and the row codec, not the arena.
+
+**Refuted hypothesis (this session's negative result).** `HashIndex.BuildUnsafeKey`'s string path allocated
+**two** arrays per key — an intermediate UTF-8 buffer materialised only to learn its length, then the
+tagged result. Rewriting it to `GetByteCount` + encode-into-result (and the same for the `default:` case)
+produced a **bit-identical** measurement: `hash-index` allocation **951,792 B/call before and after**,
+total **4,342 B/row unchanged**, rows/s 64,959 → 58,490 inside a min–max band of 0.262–0.475 s (noise).
+**Conclusion: `BuildUnsafeKey` is not on either arm's path** — both run the *dictionary* path
+(`_useUnsafeEqualityIndex == false`), so `AddBatchKeysLockedCore` uses the string key directly and never
+serializes it. Key-serialization micro-optimisations are off-target here.
+
+**Second hypothesis closed without spending a run.** `CollationExtensions.NormalizeIndexKey`
+(`CollationExtensions.cs:29-40`) already returns the input **unchanged** for `CollationType.Binary`, so
+there is no per-row string allocation to remove on the normalisation path.
+
+**Why the next step is instrumentation, not another code guess.** The fair-PK INSERT arm calls
+`db.InsertBatch` (`Program.cs:1368`), **not** SQL statements, and the harness's `--pk-profile` profiles the
+**UPDATE** arm only (`Program.cs:1390-1397`: "the printed report describes the UPDATE batch and nothing
+else"). So neither the plan §9 "SQL-layer" reading nor the multi-row profile describes the shape that is
+actually behind. Instrument first, then attack the largest **named** stage.
+
 <!-- APPEND-ENTRIES-BELOW -->
