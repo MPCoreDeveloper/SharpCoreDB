@@ -1003,7 +1003,138 @@ documented failed-to-quiet re-run rather than as a pass.
 
 Artifact: `results/dual-mode-20260921_204131.json` (the run the table above is taken from).
 
+### 2026-09-21 — 5.3 default-job UPDATE/DELETE — BLOCKED (session 2 of 2: the mechanism is named, the remaining lever is a capability)
+- Session: 2 of 2 (hard stop)
+- Command(s): no new runs — this entry decides on §5.3 session 1's counts and the §5.5 stamps they prompted
+- Verdict: **BLOCKED** — the item's durable output exists, no switchable lever survived, and the one remaining lever is a capability change the item's own text anticipated; the hard stop is respected rather than pushed
+- Commit: none (record only)
+- NEXT: 5.4 — providers re-validation, which the brief requires after every core change and which 5.2's PageBased fix now is
+
+**Why BLOCKED and not REJECTED, and not a half-finished fix.** 5.3's DoD offers two exits: a landed fix, or a
+documented `REJECTED` that "names what `UpdateMultiple`'s per-operation work actually is, plus the evidence for why no
+clean lever remains". **The naming is done** — §5.3's table, extended by §5.5's two new stages, says the per-operation
+work is: `row-locate-index` 10,000 calls (52–73 % of the staged pass on the encrypted arm, 14–18 % on the plaintext
+one), then `engine-write` 10,000, `parse` 10,000, `index-maint` 20,000, `in-place-patch` 10,000, `classify` 10,000,
+`commit` 1, `row-locate` 1 and `row-snapshot` 1 — so the work is **the locate and the record read**, not the record
+layout, the inline capacity, the index configuration, the parser or the re-serialisation. **What is not done is the
+second half of that exit** — "no clean lever remains" — because one lever does remain and it is large. Declaring
+`REJECTED` would overclaim, and starting the fix would be a capability change taken in an exhausted session; `BLOCKED`
+is the third, honest option the brief's timebox rule provides.
+
+**The lever, and its bounded size.** On the encryped default arm the locate is 52–73 % of the staged pass because
+`TryLoadWholeFileForRowAccess` returns `null` for encrypted records (`Table.CRUD.cs:4132-4134`), so every update takes
+`engine.Read` per row instead of the one-shot snapshot the plaintext arm uses. The whole encryption tax on this arm is
+measurable and modest: **raw UPDATE 106,339 vs default 63,636 ops/s = 1.67×** — so a perfect fix of the locate wins
+**at most ~1.67× on this cell**, and candidate 1 does not remove the whole of it either (the per-record *decryption*
+stays; only the random read goes). That is the number to decide against, and it is why this is a `BLOCKED` with a
+ceiling rather than an open-ended invitation.
+
+**What a fix would have to do (handed forward with the ⚠️).** Candidates 1–3 of §5.5 §4, with the warning that the
+snapshot's guard **cannot simply be relaxed**: `TryOverwriteFieldsInPlaceActual` needs *plaintext* field offsets, so
+feeding it raw ciphertext would corrupt records — the decryption has to happen per record *inside* the new path, exactly
+as `TryBulkUpdateContiguousFixedWidth` already does it for encrypted fixed-width records
+(`Table.CRUD.cs:2752-2755`). The 4-byte length prefix is plaintext even in encrypted files
+(`Storage.Append.cs:1554-1556`), so a whole-file walk is possible; the design is not blocked on missing information,
+only on being a new capability rather than a tuning change.
+
+**Refuted by this item, for the record:** the record layout, the inline capacity and the hash-index configuration are
+all refuted **by counts** (not by times) in §5.3 §3, and the parser-skipping batch route, the WAL durability, the index
+maintenance, the record write and the locate-as-contiguous-attempt were refuted earlier by the plan's §9 priority-1
+work. Two of the plan's readings failed their own controls before that. Nothing in this item's search space is left
+unmeasured — the remaining work is the capability above.
+
+### 2026-09-21 — 5.4 Providers re-validation — the three arms, the three ladders and the provider suites on the build that landed 5.2's fix
+- Session: 1 of 1
+- Command(s): `--pk` · `--pk-default` · `--multirowinsert` · the plain comparative run (the SQL/Direct/StructRow ladders) · five provider test suites built and run as executables
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.` on every run (the `--multirowinsert` run prints its own `[diag]` line, quoted below)
+- Verdict: **KEPT (validation only)** — nothing changed in the product, all suites green, and the item's purpose is met: the numbers after the first core change since the brief was written are recorded per ladder with same-session SQLite references
+- Commit: this worklog entry only
+- NEXT: 5.5's candidate 1 is the only open lever on the plan's scoreboard (5.3 is `BLOCKED` on it); 5.1's remaining INSERT delta is the other
+
+**1. `--pk` (AppendOnly, the fair-PK scoreboard row) — one run, SQLite in the same process.**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB legacy plaintext | 102,011 | 68,231 | 151,756 | 279,692 |
+| **SharpCoreDB FW plaintext** | 111,139 | 117,201 | **306,894** | **600,600** |
+| SharpCoreDB FW at-rest | 110,448 | 86,509 | 262,618 | 358,731 |
+| SQLite (same run) | 155,219 | 96,568 | 274,134 | 350,018 |
+| **FW ratio vs SQLite** | **0.71×** | **1.21×** | **1.12×** | **1.72×** |
+
+Against the brief §4 row (READ 1.05× ahead, UPDATE 1.29× ahead, DELETE 2.19× ahead, INSERT 0.54× behind): READ and
+UPDATE hold their ground, DELETE has moved back from 2.19× to 1.72× ahead, and **INSERT has improved from 0.54× to
+0.71×** — still the one fair-PK column behind, which is 5.1's item, not a regression from 5.2.
+
+**2. `--pk-default` (pure default configuration, encrypted).**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB (default config) | 104,700 | 61,654 | 121,791 | 257,877 |
+| SQLite (same run) | 179,513 | 94,222 | 291,676 | 378,624 |
+| **ratio vs SQLite** | **0.58×** | **0.65×** | **0.42×** | **0.68×** |
+
+Against the brief's "pure default (encrypted)" row (INSERT 1.6× behind, READ 1.2× behind, UPDATE 3.6× behind, DELETE
+2.1× behind): **UPDATE 3.6× → 2.4× behind and DELETE 2.1× → 1.5× behind**, READ 1.2× → 1.5×, INSERT 1.6× → 1.7× —
+i.e. the two columns the plan cares about most here improved while READ moved the other way inside the machine's band.
+
+**3. `--multirowinsert`** — 20,000 rows, 1,000 rows/statement, 20 statements, median of 5: **57,377 rows/s**, median
+**17.43 µs/row** (min 0.243 s, median 0.349 s, max 0.383 s), allocation **4,265–4,272 B/row** with 11–15 gen0
+collections, `[diag] data file 1,840,000 B · overflow arena 488,890 B`. The profiled pass's stage table is `dispatch`
+28.1 %, `table-batch` 20.6 %, `validate` 10.1 %, `encode` 9.7 %, `arena-write` 6.3 %, `index-maint` 5.3 %,
+`hash-index` 4.7 %, `parse` 4.0 %, `arena-append` 3.3 %, `commit` 2.1 %, `row-build` 2.0 %, `row-locate` 1.7 %,
+`engine-write` 1.0 %. Against the recorded budget for this shape (wall median 17.53 µs/row, 4,937 B/row) this is **flat
+on time and −14 % on allocation**, which is what the committed §4b work should look like. ⚠️ **This harness has no
+SQLite twin**, so the DoD's ratio clause cannot be met for this arm and is not claimed.
+
+**4. The three ladders (plain comparative run, same session, same process as SQLite).**
+
+| ladder | INSERT | READ | UPDATE | DELETE | ratio vs SQLite (I/R/U/D) |
+|---|---:|---:|---:|---:|---|
+| SharpCoreDB (SQL) | 72,121 | 49,739 | 45,944 | 60,898 | 0.54× / 0.51× / **0.18×** / 0.16× |
+| SharpCoreDB (Direct) | 89,975 | 95,355 | 59,009 | 184,995 | 0.67× / 0.98× / **0.23×** / 0.47× |
+| SharpCoreDB (StructRow) | 126,570 | 101,107 | — | — | 0.94× / **1.04×** / — / — |
+| SQLite | 134,625 | 96,985 | 253,699 | 391,633 | — |
+| LiteDB (reference) | 60,129 | 14,245 | 9,828 | 13,563 | 0.45× / 0.15× / 0.04× / 0.03× |
+
+**Named explicitly, as the DoD asks.** (a) **No provider re-introduces row-by-row overhead on this shape**: the SQL
+ladder costs 28 % more than the Direct ladder on UPDATE (45,944 vs 59,009) and 48 % less on READ, so the provider/driver
+layer is a *multiplier*, not the source of the UPDATE gap — which is **5.4× behind on SQL and 4.3× behind on Direct**,
+nearly the same number on both ladders, so the gap sits in the shared locate/read/patch path. That is an independent
+cross-check on 5.3's `BLOCKED` verdict, reached from a second harness. (b) **StructRow does not
+measure UPDATE/DELETE at all** (0 in both columns) while its READ is the only SharpCoreDB cell at/ahead of SQLite — so
+"StructRow wins" is a claim about INSERT and READ only, and this run is the evidence that the other two columns are
+absent rather than fast. (c) BLite's row is empty because the harness itself refuses it (`NotSupportedException` in that
+library's BsonDocumentBuilder API), not because of a result here.
+
+**5. The provider test projects, on the current build.** `dotnet test` **cannot run them in this repository**: they are
+Microsoft.Testing.Platform projects and .NET 10's SDK refuses the VSTest target outright — the first attempt failed on
+all five with `Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later`.
+Built and run as executables, the way the brief runs the core suite:
+
+| project | tests | failed | wall (build + run) |
+|---|---:|---:|---:|
+| `SharpCoreDB.EntityFrameworkCore.Tests` | 116 | **0** | 7.8 s |
+| `SharpCoreDB.Provider.Sync.Tests` | 135 | **0** | 5.5 s |
+| `SharpCoreDB.Functional.Linq2DB.Tests` | 24 | **0** | 10.7 s |
+| `SharpCoreDB.Functional.Dapper.Tests` | 3 | **0** | 8.2 s |
+| `SharpCoreDB.Functional.EntityFrameworkCore.Tests` | 3 | **0** | 8.8 s |
+| **total** | **281** | **0** | — |
+
+Not present in this repository: a **YesSql** provider project, and no separate ADO.NET/`Data.Provider` test project —
+that surface is covered inside `SharpCoreDB.Tests`, which is green on this same build (**1919 / 0 failed / 16 skipped**).
+These are correctness suites: they do not produce per-row overhead figures, and §4's ladders are what does that.
+
+**Provenance.** The three JSONs the tables above come from are `results/pk_comparative_20260921_185343.json`,
+`results/pk_default_20260921_185358.json` and `results/comparative_20260921_185439.json` — the harness writes those
+flags' archives relative to the working directory (the repo-root `results/`, which is git-ignored; the same note
+follow-up 6 recorded for its `--pk` runs). The `--multirowinsert` arm prints its figures and `[diag]` line to the
+console and writes no archive, which is why §3 quotes the console output rather than a file.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
+
+
 
 
 
