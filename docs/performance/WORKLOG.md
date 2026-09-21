@@ -308,4 +308,63 @@ attribution" and should be quantified before the endgame is planned on this colu
    plus whatever the harness constructs inside the window. This is the largest single bucket and the next thing to
    instrument, per the plan's own "instrument first" rule.
 
+### 2026-09-21 — 5.2 PageBased UPDATE (session 1 of 2) — the gap is a full-table deserialization, not the page engine
+- Session: 1 of 2
+- Command(s): `… --pk --engine=pagebased` · `… --pk-profile --engine=pagebased` · core suite · `--gate`
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Verdict: **KEPT** — 4 new stages + `wal-flush` finally wired (zero hot-path cost); core suite 1916/0 failed/16 skipped, gate PASSED
+- Commit: `perf(diagnostics)`: page/statement stages + `WalFlush` wiring
+- NEXT: **5.2 session 2** — fix the profiler-enabled leak (below), then re-add the row/page stamps and eliminate the 100,000-decode full-table pass
+
+**Baseline — `--pk --engine=pagebased`, median-of-3:**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW plaintext | 187,905 | **390,358** | **60,475** | 324,771 |
+| SQLite | 181,152 | 99,133 | 267,253 | 347,005 |
+| **ratio** | **1.0× (parity)** | **3.9× ahead** | **4.4× behind** | 1.1× |
+
+PageBased is at parity or far ahead on every column **except UPDATE**, which is the whole of this work item.
+
+**The finding (the reason this session existed).** The pre-existing profile attributed only **11.5%** of the
+UPDATE wall time (38.1 ms of 330 ms; `row-locate` fired **once** for 10,000 updates). Adding four stages —
+`page-read`, `page-update`, `stmt-build`, `row-decode` — and finally wiring `wal-flush` (which had **no writer
+at all**, a gap plan §9 item 5 records) lifted attribution to **62.6%** and produced a decisive answer:
+
+| stage | total ms | calls | share | B/call |
+|---|---:|---:|---:|---:|
+| **row-decode** | **168.0** | **100,000** | **72.6%** | **630** |
+| parse | 21.5 | 10,000 | 9.3% | 500 |
+| engine-write | 14.1 | 10,000 | 6.1% | 56 |
+| page-update (inside engine-write) | 12.2 | 10,000 | 5.3% | 56 |
+| stmt-build | 5.6 | 1 | 2.4% | — |
+| in-place-patch | 2.9 | 10,000 | 1.3% | 112 |
+| page-read | 2.9 | 10,000 | 1.3% | 216 |
+| wal-flush | 2.7 | 1 | 1.2% | — |
+
+**`row-decode` fires 100,000 times for 10,000 updates — exactly the table's row count.** A **full-table
+deserialization** runs inside the UPDATE phase: 10 decodes per update, 6.3 KB of garbage per update. The page
+engine itself is **4.1%** (`page-update` 1.22 µs + `page-read` 0.29 µs per update), so the 4.4× gap is **not**
+the page write, the relocation, or the index re-point — the three candidates plan §9 item 3 listed. It is an
+O(rows) pass charged to the DML phase (`EnsureIndexLoaded`/index rebuild is the prime suspect: the INSERT batch
+marks registered indexes stale and the first update to touch them triggers a rebuild).
+
+**A profiler defect this session exposed, and it matters more than the above.** `Stamp()` is cheap when the
+profiler is **off** (~2 volatile reads), but `Enable()` is process-wide and nothing turns it back off — so once
+any test enables it, **every** stamped call pays `GC.GetAllocatedBytesForCurrentThread()` + `Stopwatch.GetTimestamp()`
+for the rest of the process. Evidence: with temporary stamps on the two hottest shared paths
+(`PageBasedEngine.Read`, `DeserializeRowFromSpan`) the core suite took **744.6 s** against a ~100 s baseline;
+with both reverted, **156.3 s**. And the remaining 156 s is **machine load, not instrumentation** — an A/B in
+the same session with the `page-update` stamp present (156.286 s) and absent (156.853 s) is identical, and this
+session's gate rep spread grew 2.18× → 2.38× → 2.79×. So: stamping a broadly-shared engine method is safe only
+after the leak is fixed; the harness-only and DML-only stamps are free.
+
+**What was committed and what was reverted (deliberate).** Committed: the 4 new stages plus `WalFlush` wired to
+`db.Flush()` in the harness, and `stmt-build` around the statement-formatting loop — all zero-cost to the suite.
+Reverted after measuring: the temporary `page-read`, `page-update` and `row-decode` stamps. They produced the
+numbers above and are re-addable in one commit, but committing them would leave the leak armed for anyone who
+runs the suite. Disclosed limitation: the table above is therefore **not reproducible from the committed tree**
+until session 2 re-adds them — the exact three call sites are `PageBasedEngine.Read`, `PageBasedEngine.Update`, and
+a wrapper over `DeserializeRowFromSpan` (`Table.PageBasedScan.cs:115`).
+
 <!-- APPEND-ENTRIES-BELOW -->
