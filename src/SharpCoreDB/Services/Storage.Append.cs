@@ -1374,19 +1374,34 @@ public partial class Storage
         }
 
         var entries = new (long Offset, byte[] Payload)[overwrites.Count];
+
+        // Preparation half (collect + sort + bucket). Stamped separately (2026-09-21) because the I/O half was
+        // refuted as the cost: coalescing the page writes changed 640 syscalls into 4 and moved nothing, so the
+        // per-entry work below — over 10,000 entries — is the remaining suspect. The Add sits before the early
+        // return so a no-valid-entries batch cannot leave the allocation checkpoint open.
+        long prepStart = Diagnostics.WritePathProfiler.Stamp();
         int n = CollectValidOverwriteEntries(overwrites, fileLength, entries);
 
-        if (n == 0)
-        {
-            return false;
-        }
-
-        Array.Sort(entries, 0, n, Comparer<(long Offset, byte[] Payload)>.Create(static (a, b) => a.Offset.CompareTo(b.Offset)));
+        // No sort of `entries` here (removed 2026-09-21). It used Array.Sort with a Comparer<T> delegate over
+        // ~10,000 entries — ~133,000 delegate invocations, measured at 14.4 ms of this flush's 33.8 ms — and it
+        // bought no ordering that anything downstream needs:
+        //   * BucketOverwritesByPage groups by page start and never reads the array in offset order;
+        //   * FlushOverwritePages sorts the ~320 page starts itself before touching the file;
+        //   * within one page every overwrite is a DIFFERENT record (the positions come from the index, so the
+        //     spans cannot overlap), which makes the patch order inside the page buffer irrelevant;
+        //   * `direct` (records crossing a page boundary) is written one independent record at a time.
+        // The only ordering that ever mattered is the page order, and that is established below.
 
         var pages = new Dictionary<long, List<(int RelOffset, byte[] Payload)>>();
         var pageStarts = new List<long>();
         var direct = new List<(long Offset, byte[] Payload)>();
         BucketOverwritesByPage(entries, n, pageBytes, pages, pageStarts, direct);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwritesPrep, prepStart);
+
+        if (n == 0)
+        {
+            return false;
+        }
 
         Span<byte> lengthPrefix = stackalloc byte[4];
         foreach (var (offset, payload) in direct)

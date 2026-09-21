@@ -255,9 +255,18 @@ public static class WritePathProfiler
         /// (<c>TryFlushBufferedOverwritesBatched</c>) or two <c>WriteRecordInPlace</c> syscalls per row.
         /// </summary>
         CommitOverwrites = 31,
+
+        /// <summary>
+        /// The *preparation* half of the buffered-overwrite flush: collecting the valid entries, sorting them by
+        /// offset and bucketing them per storage page (`Storage.Append.cs`'s <c>TryFlushBufferedOverwritesBatched</c>).
+        /// Split out (2026-09-21) because coalescing the I/O loop's page writes changed nothing (31.2 → 29.8 ms
+        /// while 640 syscalls became 4), which leaves whatever both shapes do identically — this block is the only
+        /// per-entry work outside the I/O loop, over 10,000 entries.
+        /// </summary>
+        CommitOverwritesPrep = 32,
     }
 
-    private const int StageCount = 32;
+    private const int StageCount = 33;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -297,6 +306,7 @@ public static class WritePathProfiler
         "row-snapshot", "row-locate-index",
         "commit-buffer",
         "commit-overwrites",
+        "commit-ovw-prep",
     ];
 
     private static int _enabled;

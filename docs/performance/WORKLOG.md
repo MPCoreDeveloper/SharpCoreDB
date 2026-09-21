@@ -1322,7 +1322,57 @@ samples, so "inside the band" is a claim about ~±10 %, not about a 1.4× effect
 way and independently supports the revert. The commit path itself was not otherwise touched: the buffered overwrites are
 the write-behind durability contract, and the only product change here is instrumentation.
 
+### 2026-09-21 — 5.3 follow-up 3 — the buffered-overwrite flush sorted its entries for no reason: removing that sort is −31 % on the stage
+- Session: 1 (extension)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` ×2 (preparation split, then after the removal) · `--dual-mode` ×2 unprofiled · core suite
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only for the stage runs
+- Verdict: **KEPT** — `commit-overwrites` **33.8 → 23.4 ms** and its preparation half **14.4 → 6.3 ms** on a stage whose samples span 29.8–33.8 ms, with no semantic change: the ordering the sort provided was not needed by anything downstream
+- Commit: `perf(storage)`: stop sorting the buffered-overwrite flush's entries (plan §5.3 follow-up)
+- NEXT: the flush still costs 23.4 ms — 6.3 ms of preparation (collect + bucket over 10,000 entries) and ~17 ms of I/O, whose read/write split is still the one unmeasured axis; then the locate's tail
+
+**1. How the split found it.** Follow-up 2 refuted the I/O *shape* as the cost (coalescing 640 syscalls into 4 changed
+nothing), which narrowed the flush to whatever both shapes do identically. Stamping the preparation half
+(`commit-ovw-prep`, `Storage.Append.cs:1382-1391`: collect the valid entries, sort them, bucket them per page) named it:
+
+| stage | before | share of the flush |
+|---|---:|---:|
+| `commit-overwrites` (whole flush) | 33.8 ms | 100 % |
+| **`commit-ovw-prep`** (collect + **sort** + bucket) | **14.4 ms** | **43 %** |
+
+**2. The sort was removable, and the reason is checkable in the code.** It was
+`Array.Sort(entries, 0, n, Comparer<(long, byte[])> .Create(...))` over ~10,000 entries — a delegate-based
+comparison, so ~133,000 delegate invocations. Nothing downstream needed the offset order it produced:
+`BucketOverwritesByPage` groups by page start and never reads the array in offset order; `FlushOverwritePages` sorts
+the ~320 page starts itself before touching the file; within one page every overwrite is a *different* record (the
+positions come from the index, so the spans cannot overlap), which makes the patch order inside the page buffer
+irrelevant; and `direct` (records crossing a page boundary) is written as independent single records. The only ordering
+that ever mattered — the page order — is established where it is used. The removal is therefore a deletion plus a
+comment, not a reordering.
+
+**3. The measurement, and its honest limit.**
+
+| stage | with the sort | without it |
+|---|---:|---:|
+| `commit-ovw-prep` | 14.4 ms | **6.3 ms** |
+| `commit-overwrites` | 33.8 ms | **23.4 ms** |
+| `commit` | 33.8 ms | **23.4 ms** |
+
+−10.4 ms on a stage whose **six samples across this session read 29.8 / 30.6 / 31.2 / 32.4 / 33.8** — i.e. the effect
+is ~7× the stage's own spread, which is why this is a claim and not a candidate. ⚠️ **On the arm**, the same change is
+~6 % of a ~165 ms pass and is *not* resolvable here: the two unprofiled samples after it read 99,836 and 158,823
+default-arm UPDATE ops/s (against 86,697 / 91,870 before) — a 1.6× spread between two consecutive runs, so the arm
+timing neither confirms nor contradicts it. The stage metric is the evidence; that is stated rather than glossed.
+
+**4. Validation and limits.** Build **0 errors**; core suite **1919 / 0 failed / 16 skipped** (159.8 s);
+`WritePathProfilerTests` 4/4 with 33 stages. The change is inside the commit path (the durability contract) but it
+touches only *ordering*: the same records are written to the same offsets, in the same page order, by the same
+primitive — which is why it can be landed on a stage metric. The remaining 23.4 ms is named for the next session: 6.3 ms
+of collection/bucketing (two passes over the 10,000-entry dictionary plus one ~320-element dictionary of lists) and
+~17 ms of page I/O whose read/write split is still unmeasured. Artifacts:
+`results/dual-mode-20260921_{2141*,2142*,2143*}.json` (the two stage runs) and the unprofiled pair alongside them.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
