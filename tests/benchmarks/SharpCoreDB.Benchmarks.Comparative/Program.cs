@@ -110,6 +110,15 @@ class Program
             return;
         }
 
+        // Optional: --pk-profile-insert → the same treatment for the INSERT arm (plan §9 priority 2). INSERT is
+        // the only fair-PK column still behind SQLite, and neither --pk-profile (UPDATE) nor --multirowinsert
+        // (a different, SQL-statement-driven shape) attributes it.
+        if (args.Any(a => a.Equals("--pk-profile-insert", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkInsertProfile(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk → fair PK-based comparison: SharpCoreDB on a table with an
         // `id INTEGER PRIMARY KEY` (mirroring the SQLite harness schema) with UPDATE/DELETE by PK,
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
@@ -1306,7 +1315,8 @@ class Program
         bool noEncrypt = true,
         bool? atRestRecords = null,
         bool profileUpdateArm = false,
-        bool profileDeleteArm = false)
+        bool profileDeleteArm = false,
+        bool profileInsertArm = false)
     {
         var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
@@ -1347,6 +1357,17 @@ class Program
             db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (batched via InsertBatch with explicit ids, mirroring SQLite's rowid 1..N)
+            // §9 priority 2 instrumentation: this phase had NO stage attribution at all. --pk-profile
+            // profiles the UPDATE arm, and --multirowinsert profiles a different shape (1,000 rows/statement
+            // driven by SQL statements), while this arm is db.InsertBatch over 10,000-row batches. Turn the
+            // profiler on for exactly the region that is timed (the loop plus Flush) so the report and the
+            // ops/sec describe the same work.
+            if (profileInsertArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             var sw = Stopwatch.StartNew();
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
@@ -1373,6 +1394,15 @@ class Program
             result.InsertTime = sw.Elapsed.TotalSeconds;
             result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            if (profileInsertArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled INSERT pass: {result.InsertTime:F2}s "
+                    + $"({result.InsertOpsPerSec:N0} ops/sec, {result.InsertTime * 1_000_000 / InsertCount:F2} µs/row)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
 
             // READ by PK
             sw.Restart();
@@ -1548,6 +1578,28 @@ class Program
         Console.WriteLine();
         Console.WriteLine($"  DELETE: {result.DeleteOpsPerSec:N0} ops/sec ({result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
         Console.WriteLine("  One engine-write call = the contiguous fast path ran once for the batch; 10,000 = per-statement fallback.");
+    }
+
+    /// <summary>
+    /// Plan §9 priority 2: prints the write-path profiler's stage report for the exact INSERT arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same
+    /// <c>db.InsertBatch</c> calls over <c>BatchSize</c>-row batches (then a Flush). INSERT is the only fair-PK
+    /// column still behind SQLite and it had no attribution at all: <c>--pk-profile</c> covers UPDATE,
+    /// <c>--pk-profile-delete</c> covers DELETE, and <c>--multirowinsert</c> measures a different shape driven
+    /// by SQL statements rather than the Direct API.
+    /// </summary>
+    static void RunPkInsertProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ INSERT-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {InsertCount:N0} rows via db.InsertBatch in {InsertCount / BatchSize:N0} batches of {BatchSize:N0}, then Flush");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileInsertArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  INSERT: {result.InsertOpsPerSec:N0} ops/sec ({result.InsertTime * 1_000_000 / InsertCount:F2} µs/row)");
+        Console.WriteLine("  Per-statement stages fire once per InsertBatch call; per-row stages fire once per row.");
     }
 
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
