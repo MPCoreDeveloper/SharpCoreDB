@@ -2243,7 +2243,11 @@ public partial class Table
             // A position that already has a buffered in-place overwrite in this transaction is
             // NEVER served from the snapshot (its disk bytes would be stale) — it falls back to the
             // per-record read, which honors the write-behind buffer.
+            // §5.5 instrumentation (2026-09-21): this one call allocates the whole data file and was
+            // invisible, so it read as per-operation cost spread over the batch below it.
+            long snapshotStart = Diagnostics.WritePathProfiler.Stamp();
             byte[]? wholeFile = TryLoadWholeFileForRowAccess();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowSnapshot, snapshotStart);
 
             // B8: single-pass contiguous UPDATE — when every operation is a `pk = <literal>` match on a
             // plaintext fixed-width table with physically adjacent PK-ordered records, the old records
@@ -2341,10 +2345,16 @@ public partial class Table
                     }
                 }
 
+                long locateIndexStart = 0L;
                 if (rows is null && !string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
                     this.registeredIndexes.ContainsKey(whereCol))
                 {
+                    // §5.5 instrumentation (2026-09-21): the per-operation locate on this route — the
+                    // registered-index lookup plus the record read/slice — had no stamp at all, which is why
+                    // §5.3 could attribute only 39-61 % of the arm. It is stamped as its own stage so the
+                    // batch-level `row-locate` reading (one call, the contiguous attempt) stays comparable.
+                    locateIndexStart = Diagnostics.WritePathProfiler.Stamp();
                     EnsureIndexLoaded(whereCol);
                     if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex))
                     {
@@ -2388,6 +2398,9 @@ public partial class Table
                         }
                     }
                 }
+
+                    Diagnostics.WritePathProfiler.Add(
+                        Diagnostics.WritePathProfiler.Stage.RowLocateIndex, locateIndexStart);
 
                 if (rows is null)
                 {

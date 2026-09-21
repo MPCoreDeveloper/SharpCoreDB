@@ -914,7 +914,98 @@ table is traceable: the three runs are `results/dual-mode-20260921_202354.json` 
 four files are `pk_comparative_20260921_180319.json` (before/R0), `…_180429.json` (after/R1), `…_181028.json`
 (after/R2) and `…_181156.json` (reverted/R3).
 
+### 2026-09-21 — 5.5 Instrumentation coverage gaps — the two named regions stamped, and they name the lever 5.3 needed
+- Session: 1 (0.5-session item, used on demand exactly as the brief allows)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` (after the stamps) · build · core suite · `-class WritePathProfilerTests` · `--gate`
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only, named here because it is the vehicle; the harness's `REGIME:` banner and the `[diag]` layout line are quoted in §2
+- Verdict: **KEPT** — both stamps answer the question they were added for (§5.3's "what is `UpdateMultiple`'s per-operation work"), the profiler compiles and runs, no unrelated stage or path changed, core suite 1919 / 0 failed / 16 skipped, and the two new stages cost nothing when the profiler is off
+- Commit: `perf(diagnostics)`: stamp the UPDATE route's per-row locate and whole-file snapshot (plan §5.5)
+- NEXT: 5.3 session 2 — the named lever is the *locate*, and its mechanism is `TryLoadWholeFileForRowAccess`'s encryption guard (`Table.CRUD.cs:4132-4134`); two candidates in §4
+
+**1. What was added, and nothing else.** Two stages — `Stage.RowSnapshot = 28` / `"row-snapshot"` and
+`Stage.RowLocateIndex = 29` / `"row-locate-index"` (`WritePathProfiler.cs`, `StageCount` 28 → 30) — with exactly two
+stamp sites, both in `UpdateMultiple`:
+
+- `row-snapshot` around `TryLoadWholeFileForRowAccess()` (`Table.CRUD.cs:2248-2250`) — one call per batch UPDATE on
+  this route, and it allocates the entire data file, so a per-operation cost was carrying batch-level invisibility;
+- `row-locate-index` around the per-operation hash-locate block (`Table.CRUD.cs:2348-2402`) — the registered-index
+  lookup plus the record read/slice. It is a **new** stage rather than an extra `row-locate` stamp on purpose: the
+  existing `row-locate` reading is the *batch-level* contiguous attempt (one call), and folding 10,000 per-row calls
+  into it would have destroyed the count that §5.2 follow-ups used as evidence.
+
+The region that looked like the second gap — "the batch driver's per-statement work" — turned out to be **already
+stamped**: `Database.Batch.cs:1028-1073` wraps the whole per-statement classification/parse loop
+(`IsInsertStatement`, `TryParseUpdateForBatch`, the `updates` dictionary build) in one `parse` stamp per statement, and
+`classify` comes from `SqlParser.DML.cs:116,141`. Reading that before stamping is why this entry adds two stages and
+not three.
+
+**2. What the new stages say.** Same shape as §5.3 (default arm of `--dual-mode`, `engine=AppendOnly`, PK-less
+`docs`, 10,000 × `UPDATE docs SET score = … WHERE name = 'User<i>'`, `[diag] IsFixedWidthRecords=False`), calls and
+allocation only:
+
+| stage | default (encrypted) arm | raw (plaintext) arm |
+|---|---|---|
+| **`row-locate-index`** | **10,000 calls · 52.4 % of staged (rep 1) / 72.7 % (rep 3) · 487 / 431 B/call** | 10,000 calls · 14.2 % / 17.6 % · 279 B/call |
+| **`row-snapshot`** | **1 call · 0.1 % · 0 B** | **1 call · 6.3 % / 12.7 % · 9.9 MB (10,366,792 B in ONE call)** |
+| `commit` | 1 call · 14.2 % · 0.5 MB | 1 call · 16.6 % · 0.7 MB |
+| `engine-write` | 10,000 · 9.4 % · 302 B/call | 10,000 · 9.9 % · 94 B/call |
+| `parse` | 10,000 · 9.3 % · 531 B/call | 10,000 · 19.8 % · 531 B/call |
+| `index-maint` | 20,000 · 8.2 % · 43 B/call | 20,000 · 16.9 % · 43 B/call |
+| `in-place-patch` | 10,000 · 5.5 % · 175 B/call | 10,000 · 5.3 % · 175 B/call |
+| `row-locate` (batch attempt) | 1 · 0.5 % | 1 · 0.0 % |
+
+Attribution of the profiled UPDATE pass rises from **39–42 %** (§5.3) to **73–77 %** on the encrypted arm and
+**29–58 %** on the plaintext arm.
+
+**3. The finding, and it is a mechanism rather than a share.** `TryLoadWholeFileForRowAccess`
+(`Table.CRUD.cs:4132-4149`) returns `null` when the records are **encrypted**
+(`this.storage.AreRecordsEncrypted(DataFile)`), so on the *default* (encrypted) arm there is no snapshot at all
+(0 B, one no-op call) and every update takes the `engine.Read(Name, pos)` fallback — which is exactly the
+`row-locate-index` column: **487 B/call and 52–73 % of the staged time on the arm that is 1.67× behind its own
+plaintext twin** (dual-mode summary: raw UPDATE 106,339 vs default 63,636 ops/s). On the plaintext arm the snapshot
+*is* taken, and it is a visible one-call cost of **9.9 MB** (6.3–12.7 %). So the same 10,000 locates are served two
+different ways, and the slower way is the one the product's default configuration uses.
+
+**4. What this gives 5.3 session 2 — three candidates, ranked, all from the counts.** §5.3's durable output now
+exists: `UpdateMultiple`'s per-operation work on this route is **the locate**, then the record write, then the parse,
+then index maintenance — not the record layout, the inline capacity, the hash-index config or the re-serialisation the
+plan's first reading suspected.
+
+1. **Serve the encrypted arm's per-row locate from ONE range read with in-memory decryption**, mirroring what
+   `TryBulkUpdateContiguousFixedWidth` already does for encrypted fixed-width records ("an encrypted ... record keeps a
+   constant physical stride ..., so the span is still read in ONE range and each payload is decrypted in memory",
+   `Table.CRUD.cs:2752-2755`). This is a **capability**, not a gate relax, and it targets 52–73 % of the arm that is
+   1.67× behind its plaintext twin. ⚠️ It cannot be done by simply relaxing the snapshot's guard: the guard exists
+   because `TryOverwriteFieldsInPlaceActual` needs **plaintext** field offsets, so feeding it raw ciphertext would
+   corrupt records — the decryption has to happen per record *inside* the new path, exactly as the contiguous path
+   does it.
+2. **Cut the locate's per-call allocation** — 487 B/call (encrypted) / 279 B/call (plaintext) over 10,000 updates is
+   4.6 MB / 2.7 MB of garbage per pass, and it is a fresh `byte[]` per row for a payload that is only ever patched in
+   place and written back. A reused/pooled buffer is self-contained and does not need the range-read rework.
+3. **Skip the plaintext arm's 9.9 MB snapshot when the caller only ever needs a few bytes per row** — the raw arm's
+   `row-snapshot` is 6.3–12.7 % of its staged time in ONE call. Lower priority: that arm is not the product default.
+
+**5. Honest limits and validation.** (a) Every number here is from a profiled pass, so the *times* are not comparable
+to timed figures (the plan's rule); the load-independent parts are the call counts and the allocation columns.
+(b) Attribution is 73–77 % on the encrypted arm, not the plan §2 acceptance's ≥ 90 % — the remainder is named rather
+than guessed (the per-operation loop's list/tuple allocation, `TryParseSimpleWhereClause` being called twice per
+operation — `:2284` in the fastPatch gate and `:2349` in the locate — and the driver's outer transaction), and stamping
+*those* is a further 5.5 increment, not a claim to make now. (c) Validation: build **0 errors**; core suite **1919 / 0
+failed / 16 skipped** (158.3 s, i.e. the same as before the stamps — they are free when the profiler is off);
+`WritePathProfilerTests` 4/4 (it asserts the disabled path records nothing and the report orders by time, both of which
+still hold with 30 stages). **`--gate` was attempted twice and both runs were INCONCLUSIVE (exit 2)** — rep spreads
+**2.74×** and **3.34×** against the 2.5× limit, so the machine could not be quieted; exit 2 concludes nothing in either
+direction, and today's other attempts on this machine were 2.84×/3.07× (inconclusive) followed by one FAILED and one
+PASSED back to back. Because this is a diagnostics-only change — two stages plus two stamps that are three volatile
+reads when the profiler is off, with the suite time unchanged (158.3 s against 157.97 s before) and no behaviour
+touched — the gate cannot arbitrate it either way; the correctness evidence is the suite, and the gate is recorded as a
+documented failed-to-quiet re-run rather than as a pass.
+
+Artifact: `results/dual-mode-20260921_204131.json` (the run the table above is taken from).
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
 
 
 

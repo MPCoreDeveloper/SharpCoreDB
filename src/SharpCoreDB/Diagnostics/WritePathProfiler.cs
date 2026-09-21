@@ -217,9 +217,27 @@ public static class WritePathProfiler
         /// with no stamp while 84 % of the UPDATE wall time was unattributed.
         /// </summary>
         RowDecode = 27,
+
+        /// <summary>
+        /// The whole-file snapshot the per-row UPDATE reads are served from (<c>Table.CRUD.cs</c>'s
+        /// <c>TryLoadWholeFileForRowAccess</c>). Added (2026-09-21, plan §5.5) because it runs once per batch
+        /// UPDATE on the PK-less route and allocates the entire data file, so a per-operation cost was carrying
+        /// batch-level invisibility — the same class of blind spot the <c>row-decode</c> stamp closed on the
+        /// PageBased arm.
+        /// </summary>
+        RowSnapshot = 28,
+
+        /// <summary>
+        /// The per-operation row locate on the hash-predicate UPDATE route: the registered-index lookup plus the
+        /// record read/slice for the matched position (<c>Table.CRUD.cs:2344-2390</c>). Added (2026-09-21, plan
+        /// §5.5) to answer §5.3's question — what <c>UpdateMultiple</c>'s per-operation work actually is — because
+        /// the only pre-existing <c>row-locate</c> stamp on that route covers the *batch-level* contiguous
+        /// attempt, which never applies to a table without a primary key.
+        /// </summary>
+        RowLocateIndex = 29,
     }
 
-    private const int StageCount = 28;
+    private const int StageCount = 30;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -256,6 +274,7 @@ public static class WritePathProfiler
         "append-open", "append-write",
         "page-read", "page-update",
         "stmt-build", "row-decode",
+        "row-snapshot", "row-locate-index",
     ];
 
     private static int _enabled;
