@@ -812,7 +812,112 @@ DELETE` 1.03×). The static argument settles it independently: the gate prints `
 PageBased-only, so the gate's arms never execute the new branch — and the PageBased DELETE measurement moved the other
 way (183,864 → 269,757 / 297,160 ops/s in R1/R2).
 
+### 2026-09-21 — 5.2 PageBased UPDATE — CLOSED (DoD check; the measurement is follow-up 6's)
+- Session: closure record (the item's 2-session budget was spent long ago; follow-up 6 landed the lever)
+- Command(s): none new — this entry checks the brief's §5.2 DoD against follow-up 6's measurements
+- Verdict: **CLOSED** — 3 of the 4 DoD points met, #1 partially (two per-row regions in that path remain unstamped and are named below with line numbers)
+- Commit: `2bc3e947` (the fix), `cad4715c` (the stamps it is measured with)
+- NEXT: 5.3 (the entry below)
+
+**DoD check, point by point (brief §5.2):**
+
+1. *"`--pk-profile --engine=pagebased` shows every stage of the PageBased update path with call counts and
+   allocation — no unstamped region left in that path"* — **partially met.** The pass now attributes **88.3 ms of a
+   120 ms** profiled pass (**73.6 %**), against ~24 % when the item opened. Two regions in that path are still
+   unstamped, and they are named with line numbers rather than left as a suspicion: the **per-row locate**
+   (`Table.CRUD.cs:2344-2390` — the hash-index lookup plus `engine.Read`, which fires per operation) and the
+   **contiguous patch's internals** (`Table.CRUD.cs:2759+`, whose outer `row-locate` stamp fires once for the whole
+   batch and therefore cannot see it). Instrumenting them is §5.5 work, not §5.2 work.
+2. *"the dominant cost is named with evidence, not inferred from a ratio"* — **met.** `row-decode` = **100,000 calls
+   = one per table row**, 630 B/call, 79.7 % of the stamped pass, pinned by a one-line probe to
+   `Table.CRUD.cs:2239` → `EnsureAllRegisteredIndexesLoaded()` → `EnsureIndexLoaded`; the fix removes it and the
+   count now reads **0**.
+3. *"PageBased UPDATE ratio improved to ≥ 0.5× (gap ≤ 2×), or a documented REJECTED"* — **met, exceeded.** Same-session,
+   same-machine: **47,592 / 60,857 ops/s (5.9× / 4.6× behind SQLite) → 240,032 / 333,407 (1.0× / 0.8×)**.
+4. *"core suite green and `--gate` pass"* — **met.** Core suite **1919 / 0 failed / 16 skipped**; `--gate` failed
+   once (`default DELETE 1.68×` inside a ~1.25× whole-run offset) and **PASSED on the immediate re-run** (worst
+   1.06×). The gate's arms are `engine=AppendOnly` and this change is PageBased-only, so they never execute the new
+   branch — and the PageBased DELETE arm moved the other way (183,864 → 269,757 ops/s) in the same session.
+
+**Remaining delta, recorded rather than chased:** the two unstamped regions in point 1. The item's target is met and
+its hard stop is 2 sessions, so they are left as named work for 5.5 (on demand) instead of being instrumented here —
+the brief is explicit that an item must not keep being attacked past its timebox.
+
+### 2026-09-21 — 5.3 default-job UPDATE/DELETE (session 1 of 2) — the count-based attribution table exists; three switchable axes are refuted by counts, not times
+- Session: 1 of 2
+- Command(s): `--dual-mode` ×3 with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` — baseline, `+SHARPCOREDB_MAIN_FIXEDWIDTH=1`, `+SHARPCOREDB_HASH_INDEXES=0` (the inline-capacity arm was not run: see §3)
+- Regime: only the switch named per run; the harness's `[diag]` layout line is quoted per arm
+- Verdict: **BLOCKED on instrumentation** — the durable output exists (counts + allocation per stage, per switch), every stamped stage is now accounted for with code evidence, and the remaining 39–61 % is named by line number; no switchable lever survived, and no *fix* is proposed until that remainder is stamped
+- Commit: this worklog entry only
+- NEXT: 5.5 (on demand) — stamp exactly the two named regions (the per-row locate at `Table.CRUD.cs:2344-2390` and the batch driver's per-statement work around `parse`), re-read the counts, and only then decide between a fix and a documented `REJECTED`
+
+**1. The shape (stated once, because §2 rule 7 applies).** `--dual-mode`'s **default** arm, `engine=AppendOnly`,
+`reps=3`: `docs(name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)`, **no PK**, 100,000 rows inserted
+via `InsertBatch`, then **10,000 × `UPDATE docs SET score = <literal> WHERE name = 'User<i>'`** in ONE
+`ExecuteBatchSQL`, 1 row per statement. `[diag] docs layout: IsFixedWidthRecords=False` on the baseline run.
+
+**2. The count-based attribution (the deliverable).** Calls and allocation only. These runs re-prove the plan's rule
+as a side effect: two of them are the *same configuration* (the hash-index switch does not bite — §3) and their
+profiled times differ by 1.4× (41.02 vs 28.83 µs/update; 172.2 vs 92.7 ms staged) **while their call counts are
+identical**.
+
+| stage | calls | share of staged | alloc MB | B/call | what it is, in the code |
+|---|---:|---:|---:|---:|---|
+| `commit` | **1** | 41.5 % | 0.5 | 556,568 | the single `db.Flush()`; not per-operation work |
+| `index-maint` | **20,000** | 17.4 % | 0.8 | 43 | **two per update**: the hash remove + add pair for the *updated* column (`Table.CRUD.cs:2473-2484`) |
+| `engine-write` | 10,000 | 17.3 % | 2.7 | 287 | `engine.TryUpdateInPlaceSameLength` per row (`:2450`) |
+| `parse` | 10,000 | 15.1 % | 5.1 | 531 | one parse per statement — the driver does **not** skip the parser |
+| `in-place-patch` | 10,000 | 7.4 % | 1.7 | 175 | `TryOverwriteFieldsInPlaceActual` per row (`:2445`) |
+| `row-locate` | **1** | 0.7 % | 0.0 | 32 | the single batch contiguous attempt (`:2253`), inapplicable without a PK |
+| `classify` | 10,000 | 0.5 % | 0.0 | 0 | per-statement classification |
+
+`arena-write`, `arena-append`, `hash-index`, `validate`, `encode`, `row-build`, `row-decode`, `wal-*` **never fire** on
+this route. The default arm's staged total is 172.2 ms against a 410 ms pass (**42 % attributed**); the raw
+(plaintext) arm's is 43.1 ms against 110 ms (**39 %**).
+
+**3. What the counts refute — three axes, by counts rather than by times.**
+
+- **Record layout (`SHARPCOREDB_MAIN_FIXEDWIDTH=1`, `[diag] IsFixedWidthRecords=True`): the count structure is
+  identical.** `parse` 10,000, `index-maint` 20,000, `engine-write` 10,000, `in-place-patch` 10,000, `classify`
+  10,000, `commit` 1, `row-locate` 1 — the same seven rows in the same proportions, per-call allocation in the same
+  band (`in-place-patch` 175 → 144 B, `engine-write` 287 → 318 B). The layout moves *bytes*, not *work*.
+- **Inline capacity (`SHARPCOREDB_INLINE_BYTES`): provably inert on this shape, so the arm was not run.** The
+  fixed-width arm reports **no `arena-write` and no `arena-append` call at all** — with the product default of 16
+  inline bytes every value in this schema already fits, so there is no arena half to remove. The switch would have
+  produced the same table with a different number in a column that is already empty.
+- **Hash index (`SHARPCOREDB_HASH_INDEXES=0`): the switch does not bite.** `index-maint` still fires **20,000** times
+  and allocates the *identical* 0.8 MB, because the job registers its index through DDL
+  (`CREATE INDEX idx_docs_name ON docs(name)`, and `CREATE TABLE` in Columnar auto-registers a hash index for **every**
+  column — `SqlParser.DDL.cs:430-436`), which a config flag cannot undo. That is the trap the plan recorded for the
+  multi-row arm, now confirmed here — and it *explains the 2-per-update count without a guess*: `score` is
+  hash-indexed (auto-registered), so the update touches a hash-indexed column and pays the remove+add pair per row.
+
+**4. The one structural finding worth carrying forward.** `CREATE TABLE` in Columnar mode registers a hash index on
+**every** column (`SqlParser.DDL.cs:421-437`), so a five-column default table carries **five** registered hash
+indexes; `EnsureAllRegisteredIndexesLoaded()` loads all five at the first write, and an UPDATE of any single column
+then pays two hash operations per row for that column. On PageBased, that same auto-registration is what follow-up 6
+stopped paying *up front* — and it is why the count here is 20,000 rather than 10,000. Whether per-column
+auto-registration is worth its cost on a PK-less, append-only table is a **separate** question this table raises and
+does not answer; it is recorded in NEXT rather than acted on.
+
+**5. Honest limits.** (a) All three runs are profiled passes, so the *times* in them are not comparable to timed
+numbers (the plan's rule) — the table's claim is about calls and allocation. (b) The allocation column is stable in
+structure and magnitude but **not bit-identical** across runs: `engine-write` measured 287 B/call on the baseline and
+302 B/call on the hash-index arm for the same configuration — a 5 % spread. (c) `row-locate` = 1 means the per-row
+locate is *not* instrumented at all: the one stamp on this route covers only the batch-level contiguous attempt, so
+the 39–61 % unattributed share is exactly where the per-operation work sits — which is why the verdict is `BLOCKED`
+rather than `REJECTED`, which the DoD allows only with that work named. (d) `--dual-mode` does not honour
+`SHARPCOREDB_BENCH_REPS` (it is read on the `--pk` path only), so each arm above is a 3-rep run. (e) Artifacts, so the
+table is traceable: the three runs are `results/dual-mode-20260921_202354.json` (baseline),
+`…_202934.json` (fixed-width), `…_202958.json` (hash-index arm) — all committed alongside this entry. The follow-up 6
+`--pk` runs wrote to the repo-root `results/` (a git-ignored scratch path the harness uses for that flag), where the
+four files are `pk_comparative_20260921_180319.json` (before/R0), `…_180429.json` (after/R1), `…_181028.json`
+(after/R2) and `…_181156.json` (reverted/R3).
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
+
 
 
 
