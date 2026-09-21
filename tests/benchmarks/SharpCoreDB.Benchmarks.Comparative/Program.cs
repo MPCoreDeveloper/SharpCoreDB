@@ -1427,15 +1427,25 @@ class Program
             }
 
             sw.Restart();
+            // §9 priority 3 instrumentation (2026-09-21): the statement-text loop and the Flush run INSIDE the
+            // profiled and timed window, so leaving them unstamped charged harness text formatting and the page
+            // flush to the engine. WalFlush had no writer at all before this (plan §9 item 5).
+            long stmtBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             var updateStmts = new List<string>(UpdateCount);
             for (int i = 1; i <= UpdateCount; i++)
             {
                 updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
                     "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
             }
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtBuild, stmtBuildStart);
 
             db.ExecuteBatchSQL(updateStmts);
+
+            long flushStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             db.Flush();
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.WalFlush, flushStart);
             sw.Stop();
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);

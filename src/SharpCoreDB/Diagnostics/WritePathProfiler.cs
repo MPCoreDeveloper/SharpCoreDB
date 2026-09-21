@@ -184,9 +184,42 @@ public static class WritePathProfiler
         /// <c>Storage.AppendBytes</c>; its sibling above covers the open itself.
         /// </summary>
         AppendWrite = 23,
+
+        /// <summary>
+        /// The PageBased engine's record read (<c>PageBasedEngine.Read</c>): decode the storage reference,
+        /// resolve the page manager and copy the record bytes out of the page. Added (2026-09-21, plan §9
+        /// priority 3) because the PageBased UPDATE profile attributed only ~11 % of its wall time and
+        /// <c>row-locate</c> fired <b>once</b> for 10,000 updates — so the read the update path performs per
+        /// row was invisible, and "is the page read the cost?" could not be answered from the report.
+        /// </summary>
+        PageRead = 24,
+
+        /// <summary>
+        /// The PageBased engine's record update (<c>PageBasedEngine.Update</c>): decode the storage reference,
+        /// resolve the page manager and write the record into its page (in place, within-page relocation, or a
+        /// cross-page relocation whose new reference the caller must honour). Split from
+        /// <see cref="EngineWrite"/> so the page write's own share of a 4.4×-behind UPDATE column is measurable
+        /// separately from the driver's per-row work around it.
+        /// </summary>
+        PageUpdate = 25,
+
+        /// <summary>
+        /// Building the SQL statement text for a batch in the harness/statement layer (the
+        /// <c>string.Format</c> loop that produces the 10,000 <c>UPDATE … WHERE id = ?</c> strings). Added
+        /// (2026-09-21) because that loop runs <b>inside</b> the profiled and timed window for the fair-PK DML
+        /// arms, so leaving it unstamped charged harness text formatting to the engine.
+        /// </summary>
+        StmtBuild = 26,
+
+        /// <summary>
+        /// Decoding an existing record's bytes back into a row (<c>DeserializeRowFromSpan</c>) as the update
+        /// path's first per-row step. Added (2026-09-21) because on the PageBased arm this ran once per row
+        /// with no stamp while 84 % of the UPDATE wall time was unattributed.
+        /// </summary>
+        RowDecode = 27,
     }
 
-    private const int StageCount = 24;
+    private const int StageCount = 28;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -221,6 +254,8 @@ public static class WritePathProfiler
         "arena-write", "arena-append", "arena-load", "validate-only", "row-build",
         "hash-index", "stmt-validate", "dispatch", "table-batch", "classify", "stmt-split",
         "append-open", "append-write",
+        "page-read", "page-update",
+        "stmt-build", "row-decode",
     ];
 
     private static int _enabled;
