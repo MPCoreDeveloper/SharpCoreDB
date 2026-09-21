@@ -1371,7 +1371,58 @@ of collection/bucketing (two passes over the 10,000-entry dictionary plus one ~3
 ~17 ms of page I/O whose read/write split is still unmeasured. Artifacts:
 `results/dual-mode-20260921_{2141*,2142*,2143*}.json` (the two stage runs) and the unprofiled pair alongside them.
 
+### 2026-09-21 — 5.3 follow-up 4 — the flush split three ways: the page READS dominate, and follow-up 2's "refuted" verdict on the coalescing was wrong
+- Session: 1 (extension)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` ×3 (per-page split, then the coalesced build twice) · core suite
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only for the stage runs
+- Verdict: **CORRECTION + KEPT** — the coalescing is re-landed with a measured −9…−13 % on the flush, and follow-up 2's "refuted" is withdrawn: that comparison still contained the sort and never isolated the I/O half
+- Commit: `perf(storage)`: coalesce consecutive pages in the buffered-overwrite flush (plan §5.3 follow-up)
+- NEXT: price the reads against the per-record fallback (§3) — a one-line gate flip, and the last unknown in this flush
+
+**1. The flush, split three ways.** Adding the write-half stamp (`commit-ovw-write`) completes the decomposition of
+`commit-overwrites` on the encrypted default-job UPDATE arm:
+
+| build | `commit-overwrites` | `commit-ovw-prep` | `commit-ovw-write` | residual (page **reads** + evictions) |
+|---|---:|---:|---:|---:|
+| per-page (315 pages) | 25.1 ms | 6.1 ms | **1.5 ms / 315 calls** | **17.5 ms** |
+| **coalesced (2 ranges)** | **21.8 / 22.9 ms** | 5.7 / 6.0 ms | **0.2 ms / 2 calls** | 15.9 / 16.7 ms |
+
+Two things fall out of it. **Buffered writes are cheap** (1.5 ms for 315 × 4 KB, i.e. ~4.8 µs per write — the handle is
+cached and opened with `FileOptions.None`, so there is no write-through to blame), and **the cost is the reads**: ~55 µs
+per 4 KB page, ~1.3 MB in total for this batch, which is disk speed rather than page-cache speed — the file's pages are
+not resident on this machine. `EvictPage` was checked and is a `ConcurrentDictionary.TryRemove` plus a latch
+(`PageCache.Operations.cs:118-154`), so it is not the cost; the reads are.
+
+**2. The correction, which matters more than the number.** Follow-up 2 implemented this same coalescing, measured
+31.2 → 29.8 ms and reverted it as "refuted because 640 syscalls became 4 and nothing moved". That comparison was
+**confounded**: it still contained the offset sort, which was only removed in follow-up 3 and only then measured at
+8–14 ms of the flush, so the coalescing's effect on the I/O half was never isolated — and the numbers above now show it
+is real (**25.1 → 21.8/22.9 ms, −9…−13 %**, plus the write half collapsing from 315 calls to 2). The reverted verdict is
+withdrawn, the coalescing is re-landed, and the method's own doc comment carries both the history and the correction so
+the next reader sees why it survived the second attempt. The general lesson is the same one this plan keeps paying for:
+a candidate can be refuted by a measurement that contains another, unremoved cost.
+
+**3. What is left, and the one experiment that prices it.** The ~16 ms of page reads exists *only because the flush does
+read-modify-write on whole pages*: the alternative is the per-record path (`WriteRecordInPlace`, one 4-byte prefix write
+plus one payload write, **no page read at all**), which `TryFlushBufferedOverwritesBatched` already implements as its
+fallback. The plan's comment says that per-record path was the slower one — but that was decided before the sort was
+removed and before the halves were separated. **The experiment is a one-line gate flip** (raise the
+`overwrites.Count < 64` threshold so a 10,000-record batch takes the fallback) and it prices the two shapes directly:
+whichever wins becomes the default, and if the fallback wins the flush drops its ~16 ms of reads entirely. That is the
+next session's first run.
+
+**4. Validation, limits, and a note the human should see.** Build **0 errors**; core suite **1919 / 0 failed /
+16 skipped** (159.3 s) on the coalesced source. The flush change touches only *how* the same bytes reach the same
+offsets; the same records, the same page order, the same primitive — which is why it can be landed on stage metrics
+while the arm-level effect (~6 % of a ~165 ms pass) stays inside this machine's band. ⚠️ **The brief's §7 list is
+out of date on one item**: it records "record locate as the default-job UPDATE lever — eliminated by measurement", and
+that was true only while the *encrypted* arm had no whole-file snapshot; follow-up 6 restored it for that arm and
+measured **+20 %**. The correction is recorded here rather than by editing the brief, and the brief's "do NOT redo
+these" instruction should be read with that exception when the next session picks up 5.3. Artifacts:
+`results/dual-mode-20260921_{2217*,2218*}.json`.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 

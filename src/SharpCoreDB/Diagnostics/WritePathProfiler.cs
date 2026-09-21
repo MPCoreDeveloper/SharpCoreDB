@@ -264,9 +264,18 @@ public static class WritePathProfiler
         /// per-entry work outside the I/O loop, over 10,000 entries.
         /// </summary>
         CommitOverwritesPrep = 32,
+
+        /// <summary>
+        /// The <c>RandomAccess.Write</c> half of the buffered-overwrite flush's page loop (`Storage.Append.cs`,
+        /// `FlushOverwritePages`), split out (2026-09-21) so the read half can be derived as
+        /// <see cref="CommitOverwrites"/> − <see cref="CommitOverwritesPrep"/> − this: the write handle is cached and
+        /// opened with <c>FileOptions.None</c>, so write-through is not available as an explanation and the split has
+        /// to be measured rather than assumed.
+        /// </summary>
+        CommitOverwritesWrite = 33,
     }
 
-    private const int StageCount = 33;
+    private const int StageCount = 34;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -307,6 +316,7 @@ public static class WritePathProfiler
         "commit-buffer",
         "commit-overwrites",
         "commit-ovw-prep",
+        "commit-ovw-write",
     ];
 
     private static int _enabled;

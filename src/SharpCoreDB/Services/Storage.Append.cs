@@ -1472,18 +1472,26 @@ public partial class Storage
     }
 
     /// <summary>
-    /// Flushes every patched page once: the current on-disk page bytes are read into a pooled
-    /// buffer, every page-local overwrite payload is copied in, and the page is written back.
+    /// Upper bound on one coalesced overwrite range. Bounds the rented buffer and keeps the partial-read
+    /// fallback granular; a run of consecutive pages is split into several ranges once it reaches this size.
+    /// </summary>
+    private const int MaxCoalescedOverwriteRangeBytes = 1 << 20;
+
+    /// <summary>
+    /// Flushes every patched page once: the current on-disk page bytes are read into a pooled buffer, every
+    /// overwrite payload is copied in, and the buffer is written back. Consecutive pages are coalesced into one
+    /// range, so a run costs one read and one write instead of one pair per page.
+    /// <para>
+    /// ⚠️ History, because the first verdict here was wrong and the numbers below correct it. The coalescing was
+    /// implemented, measured at 29.8 ms against 31.2 ms and reverted as "refuted" — but that comparison still
+    /// contained an unremoved ~8-14 ms offset sort, so it never isolated the I/O half. With the sort gone and the
+    /// halves stamped, the per-page form shows what the runs are for: `commit-ovw-prep` 6.1 ms +
+    /// `commit-ovw-write` 1.5 ms (315 calls, so buffered writes are cheap) leaves **~17.5 ms of page READS**,
+    /// ~55 µs per 4 KB page — the shape of real disk reads, not of the page cache. See the worklog entry for the
+    /// re-measurement.
+    /// </para>
     /// Returns false on a partial read so the caller can fall back to the idempotent per-record loop.
     /// </summary>
-    /// <remarks>
-    /// ⚠️ Coalescing consecutive pages into one range was implemented here (2026-09-21) and **refuted by
-    /// measurement**: with all ~320 touched pages of a 10,000-row UPDATE batch merged into two ~1 MB ranges the
-    /// stage read 29.8 ms against 31.2 ms for the per-page form (inside this machine's noise) while its
-    /// allocation rose from 0.5 MB to 1.5 MB from the larger rented buffers. So the flush is *not* paying for
-    /// its syscall count — the per-page loop below is kept deliberately, and the read/write split inside it is
-    /// the next thing to measure rather than the I/O shape.
-    /// </remarks>
     private bool FlushOverwritePages(string path, long fileLength, int pageBytes, Dictionary<long, List<(int RelOffset, byte[] Payload)>> pages, List<long> pageStarts)
     {
         SafeFileHandle readHandle = GetOrOpenReadHandle(path);
@@ -1491,31 +1499,70 @@ public partial class Storage
         byte[]? pageBuffer = null;
         try
         {
-            pageBuffer = ArrayPool<byte>.Shared.Rent(pageBytes);
             pageStarts.Sort();
-            foreach (long pageStart in pageStarts)
+
+            int index = 0;
+            while (index < pageStarts.Count)
             {
-                int writeLength = (int)Math.Min(pageBytes, fileLength - pageStart);
-                if (writeLength <= 0)
+                long runStart = pageStarts[index];
+
+                int runPages = 1;
+                long runBytes = Math.Min(pageBytes, fileLength - runStart);
+                while (index + runPages < pageStarts.Count &&
+                       pageStarts[index + runPages] == runStart + ((long)runPages * pageBytes) &&
+                       (runPages + 1) * (long)pageBytes <= MaxCoalescedOverwriteRangeBytes)
                 {
+                    runPages++;
+                    runBytes = Math.Min((long)runPages * pageBytes, fileLength - runStart);
+                }
+
+                if (runBytes <= 0)
+                {
+                    index += runPages;
                     continue;
                 }
 
-                if (RandomAccess.Read(readHandle, pageBuffer.AsSpan(0, writeLength), pageStart) != writeLength)
+                if (pageBuffer is null || pageBuffer.Length < (int)runBytes)
+                {
+                    if (pageBuffer is not null)
+                    {
+                        ArrayPool<byte>.Shared.Return(pageBuffer);
+                    }
+
+                    pageBuffer = ArrayPool<byte>.Shared.Rent((int)runBytes);
+                }
+
+                if (RandomAccess.Read(readHandle, pageBuffer.AsSpan(0, (int)runBytes), runStart) != runBytes)
                 {
                     return false; // partial read — fall back to the idempotent per-record loop
                 }
 
-                foreach (var (relOffset, payload) in pages[pageStart])
+                for (int p = 0; p < runPages; p++)
                 {
-                    payload.CopyTo(pageBuffer.AsSpan(relOffset, payload.Length));
+                    long pageStart = pageStarts[index + p];
+                    int pageBaseInRun = (int)(pageStart - runStart);
+                    foreach (var (relOffset, payload) in pages[pageStart])
+                    {
+                        payload.CopyTo(pageBuffer.AsSpan(pageBaseInRun + relOffset, payload.Length));
+                    }
                 }
 
-                RandomAccess.Write(writeHandle, pageBuffer.AsSpan(0, writeLength), pageStart);
+                // Write half (2026-09-21): stamped so the read half can be derived — the write handle is cached and
+                // buffered (FileOptions.None), so write-through cannot be the explanation for this loop's cost and
+                // the split has to be measured.
+                long writeHalfStart = Diagnostics.WritePathProfiler.Stamp();
+                RandomAccess.Write(writeHandle, pageBuffer.AsSpan(0, (int)runBytes), runStart);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwritesWrite, writeHalfStart);
+
                 if (this.pageCache != null)
                 {
-                    this.pageCache.EvictPage(ComputePageId(path, pageStart));
+                    for (int p = 0; p < runPages; p++)
+                    {
+                        this.pageCache.EvictPage(ComputePageId(path, pageStarts[index + p]));
+                    }
                 }
+
+                index += runPages;
             }
         }
         finally
