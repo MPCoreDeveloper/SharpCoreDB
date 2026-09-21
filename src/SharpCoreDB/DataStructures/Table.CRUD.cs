@@ -2181,7 +2181,7 @@ public partial class Table
     /// <param name="newPosition">The storage position after relocation.</param>
     /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
     /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
-    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue) // NOSONAR:S1172 - oldPosition retained for call-site symmetry with relocation-reporting engines (all callers already hold it)
+    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue, string? changedColumn = null) // NOSONAR:S1172 - oldPosition retained for call-site symmetry with relocation-reporting engines (all callers already hold it)
     {
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -2198,8 +2198,20 @@ public partial class Table
 
         // Hash indexes are keyed by (column value → positions); without the pre-update row
         // values a precise repoint is not possible, so invalidate for a lazy rebuild.
+        // PERF (plan 9 priority 3, 2026-09-21): invalidating unconditionally threw away indexes the statement
+        // cannot have changed, and the next indexed operation rebuilds each of those via
+        // EnsureIndexLoaded — which on PageBased scans the whole table and full-decodes every row. Measured
+        // on the fair-PK arm: 100,000 decodes for a 10,000-row UPDATE batch that only sets `score` while the
+        // index is on `name`, i.e. 45 % of that arm's wall time for an index that cannot have gone stale.
+        // Callers that know the statement's column set pass it here; every other caller keeps the previous
+        // unconditional behaviour (changedColumn == null).
         foreach (var col in this.loadedIndexes)
         {
+            if (changedColumn is not null && !string.Equals(col, changedColumn, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             this.staleIndexes.Add(col);
             this._indexReadyCache.TryRemove(col, out _);
         }

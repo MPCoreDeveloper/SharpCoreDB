@@ -384,7 +384,9 @@ public partial class Table
                         : null;
 
                     long repointStart = Diagnostics.WritePathProfiler.Stamp();
-                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
+                    // Only the statement's own column can have made its index stale; passing it stops the
+                    // unrelated indexes from being invalidated and rebuilt by an O(rows) table scan.
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue, updateColumnName);
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                 }
 
