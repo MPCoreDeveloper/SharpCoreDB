@@ -176,4 +176,63 @@ there is no per-row string allocation to remove on the normalisation path.
 else"). So neither the plan §9 "SQL-layer" reading nor the multi-row profile describes the shape that is
 actually behind. Instrument first, then attack the largest **named** stage.
 
+### 2026-09-21 — 5.1 INSERT (session 2 of 2) — the fair-PK INSERT arm is attributed for the first time
+- Session: 2 of 2
+- Command(s): `SharpCoreDB.Benchmarks.Comparative.exe --pk-profile-insert`
+- Regime: `REGIME: no SHARPCOREDB_* switches set - harness and product defaults apply.`
+- Verdict: **KEPT** — new harness capability + the missing attribution; core suite 1916/0 failed/16 skipped, gate PASSED
+- Commit: see the commit for this entry (`perf(bench)`: `--pk-profile-insert`)
+- NEXT: 5.1 follow-up — attack `encode` (`FixedWidthCodec.SerializeRow(object[])`), the #1 leaf stage
+
+**Delivered — `--pk-profile-insert`.** The fair-PK INSERT arm had **no** stage attribution at all:
+`--pk-profile` covers UPDATE, `--pk-profile-delete` covers DELETE, and `--multirowinsert` measures a
+different shape (1,000 rows/statement driven by SQL statements). The new flag turns the profiler on for
+exactly the region that is timed — the `db.InsertBatch` loop over 10,000-row batches plus the `Flush`
+(`Program.cs`: `RunSharpCoreDBPk(profileInsertArm: true)` / `RunPkInsertProfile` / the `--pk-profile-insert`
+branch in `Main`).
+
+**Attribution — 100,000 rows, 10 × 10,000, AppendOnly, fixed-width plaintext:**
+
+| stage | total ms | calls | share | B/row | role |
+|---|---:|---:|---:|---:|---|
+| validate | 558.5 | 10 | 24.8% | 785 | envelope: validate-only + encode |
+| **encode** | **512.1** | 10 | **22.7%** | **785** | **leaf — the #1 cost** |
+| index-maint | 346.4 | 10 | 15.4% | 964 | envelope: hash-index + self |
+| hash-index | 258.3 | 10 | 11.4% | 882 | leaf |
+| arena-write | 222.8 | 99,000 | 9.9% | 362 | contains arena-append |
+| arena-append | 138.0 | 99,000 | 6.1% | 206 | leaf |
+| engine-write | 110.1 | 10 | 4.9% | 254 | leaf |
+| row-locate | 67.0 | 10 | 3.0% | 95 | leaf |
+| validate-only | 42.4 | 10 | 1.9% | **0** | leaf |
+| arena-load | 0.7 | 1 | 0.0% | 0 | leaf |
+
+Timed: 100,000 rows in 1.47 s = **67,962 ops/sec = 14.71 µs/row**. (`validate` = `validate-only` +
+`encode` to within 4 ms, so the corrected nesting rule from session 1 holds on this arm too.)
+
+**The finding that re-scopes the work.** Plan §9 attributes the INSERT deficit to "the SQL-only work:
+statement parsing, literal coercion, per-statement dispatch, WAL/metadata bookkeeping". **That is not this
+arm.** Here `parse`, `stmt-split`, `classify` and `row-build` fire **zero** times — the fair-PK INSERT goes
+through the Direct API (`db.InsertBatch`), not SQL statements. The real #1 leaf cost is **`encode` =
+`FixedWidthCodec.SerializeRow(object[])` at 22.7%**, then `hash-index` at 11.4%. Measuring the plan's
+reading against the instrumented stages is exactly why this flag was the first step.
+
+**The named next lever (read out of the code, not inferred from a ratio).**
+`SerializeRow(object[] row, …)` (`FixedWidthCodec.cs:68-108`) does, per row:
+1. `new byte[layout.FixedSize]` — the output record (necessary);
+2. for **each** variable column, `Table.EncodeVariablePayload(...)` → a fresh UTF-8 `byte[]`;
+3. if that payload fits the inline capacity (§4b, default 16) it is **copied into the slot and the array is
+   thrown away** — for this 6-column schema `name` (9 B) and `data` (13 B) take that path, so **two of the
+   three per-row payload allocations are pure garbage**;
+4. if it does not fit, **two `List<>` scratch objects are created per row** (`variableColumns`,
+   `variablePayloads`) — `email` (18 B) overflows, so both are allocated for every row.
+
+So the concrete next step is (a) a **string fast path that encodes straight into the inline slot** when
+`Encoding.UTF8.GetByteCount(s) <= layout.InlineValueBytes`, falling through to the existing path otherwise,
+and (b) replacing the two per-row `List<>`s with a pooled/stack scratch pair. Both are additive and
+behaviour-preserving on the fall-through.
+
+**What was NOT done (timebox discipline).** No engine change landed this session: the timebox closed on the
+instrumentation + attribution, which is the prerequisite the plan itself demands ("instrument first, then
+attack the largest named stage"). The optimisation above is scoped and ready for the next session.
+
 <!-- APPEND-ENTRIES-BELOW -->
