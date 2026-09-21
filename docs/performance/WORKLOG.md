@@ -1421,7 +1421,51 @@ measured **+20 %**. The correction is recorded here rather than by editing the b
 these" instruction should be read with that exception when the next session picks up 5.3. Artifacts:
 `results/dual-mode-20260921_{2217*,2218*}.json`.
 
+### 2026-09-21 — 5.3 follow-up 5 — the per-record fallback priced: 2.3× slower, so the page path is confirmed and this flush is at its floor
+- Session: 1 (extension)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` with the batching gate temporarily raised (one-line flip, reverted) · core suite
+- Regime: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` only for the stage run
+- Verdict: **REVERTED (the flip) / CONFIRMED (the page path)** — the read-modify-write page flush is the cheaper shape, now by measurement rather than by the code comment that asserted it
+- Commit: this worklog entry only
+- NEXT: the one hypothesis left in this flush is why its page reads are cold (the page cache's capacity versus the 12.6 MB whole-file snapshot read, and the per-page eviction) — see §3
+
+**1. The experiment.** The flush's remaining ~16 ms is page reads that exist only because it does read-modify-write
+on whole pages; the per-record fallback (`WriteRecordInPlace`: one prefix write plus one payload write, **no page read
+at all**) is one gate flip away, and the comment asserting it was the slower shape predates both the sort removal and
+the three-way split. So the gate was raised (`overwrites.Count < 64` → `< 1_000_000`) for one run and reverted:
+
+| shape | calls | `commit-overwrites` (encrypted arm) |
+|---|---:|---:|
+| per-record fallback (no page reads) | ~20,000 writes | **59.0 / 54.0 / 53.5 ms** |
+| per-page read-modify-write | 315 reads + 315 writes | 25.1 ms |
+| **coalesced per-page (shipped)** | 2 reads + 2 writes | **21.8 / 22.9 ms** |
+
+**The fallback is ~2.3× slower than the shipped shape**, so the comment was right and now has a measurement behind it —
+and the ~16 ms of page reads is *cheaper* than not reading at all, because 20,000 small writes cost more than 1.3 MB of
+serial reads. Nothing changes in the tree except this record: the flip was a probe, and the probe's answer is that this
+flush is at its practical floor for the shapes it has.
+
+**2. What that closes.** The flush went from 33.8 ms (start of this thread) to 21.8–22.9 ms across three landed changes
+— the preparation sort removed (follow-up 3) and consecutive pages coalesced (follow-up 4) — and its three components
+are now each attributed: preparation ~6 ms, writes ~0.2 ms, reads ~16 ms, with the alternative to the reads measured
+and rejected. A stage that was the single largest item on this cell is no longer the first place to look.
+
+**3. The one hypothesis left, named rather than chased.** Those reads are at disk speed, which means the file's pages
+are **not resident** — and two things in this very path could be pushing them out: the **12.6 MB whole-file snapshot**
+the UPDATE locate now reads before the batch (follow-up 6; it evicts whatever the page cache held), and the
+**`pageCache.EvictPage` after every page write** in this flush. Both are plausible and neither is measured; the check is
+cheap (compare the flush's read cost with and without the snapshot load, and read `PageCache`'s capacity against the
+snapshot's size) and it belongs to §5.2's instrumentation budget rather than to this thread. Recorded here so the next
+session starts from a named hypothesis instead of the raw number.
+
+**4. Validation.** Build **0 errors**; the probe run's numbers are above; the tree is back to the shipped shape and the
+core suite result for it is follow-up 4's (**1919 / 0 failed / 16 skipped**, 159.3 s). Also corrected here: follow-up 4's
+provenance line names `results/dual-mode-20260921_{2217*,2218*}.json`; the committed files are
+`dual-mode-20260921_{221000,221041,221052}.json`, and the JSON in this follow-up's probe run is
+`dual-mode-20260921_221457.json`.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
