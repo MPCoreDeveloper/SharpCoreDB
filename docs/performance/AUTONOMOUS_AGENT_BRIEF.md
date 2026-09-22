@@ -122,13 +122,23 @@ between runs): `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`, `SHARP
 
 | Shape | READ | UPDATE | DELETE | INSERT |
 |---|---:|---:|---:|---:|
-| fair-PK, tuned, plaintext, fixed-width | 1.05× ahead | 1.29× ahead | 2.19× ahead | **0.54× behind** |
+| fair-PK, tuned, plaintext, fixed-width | 1.21× ahead | 1.12× ahead | 1.72× ahead | **0.71× behind** |
 | default document-CRUD job (no PK) | 0.76× | **0.24×** | **0.31×** | 0.67× |
-| pure default (encrypted, `--pk-default`) | 1.2× behind | 3.6× behind | 2.1× behind | 1.6× behind |
-| PageBased (fixed-width) | 2.0× ahead | **0.17× (4.9× gap)** | ~0.8× | ~1.0× |
+| pure default (encrypted, `--pk-default`) | 0.65× | **0.42× (2.4× gap)** | **0.68× (1.5× gap)** | 0.58× |
+| PageBased (fixed-width) | **2.1× ahead** | **1.2× ahead (parity)** | 0.8× | 0.83× |
 
-Three of the four fair-PK columns already win. The remaining work is INSERT (5.1), PageBased UPDATE
-(5.2), then the default-job UPDATE/DELETE (5.3).
+**Re-measured 2026-09-21** (autonomous session; each number comes from a same-run SQLite arm, and its worklog entry
+names the flag and the artifact): rows 1, 3 and 4 from the worklog's §5.4 and §5.2 entries. Row 2 (the no-PK
+document-CRUD job) **was not re-measured against SQLite** in that session — its count-based attribution and its arms
+are in the §5.3 entries instead, and it is the one row whose UPDATE/DELETE cells still describe the pre-session build.
+
+**What that changes for the next session.** Two of the four rows have moved where it matters: **PageBased UPDATE is at
+parity (was 0.17×/4.9× behind)** — item **5.2 is CLOSED** — and the encrypted default row's UPDATE went 3.6× → 2.4×
+behind, with the remaining ~1.1× of its encryption tax now named as the per-record AEAD open. So the open work is
+**5.1 INSERT** (the fair-PK arm is still the only losing column there, and 5.4 measured **0.71×** against 0.54× before)
+and the **locate's tail** on the encrypted UPDATE path. Everything else in §5 is closed, `BLOCKED` with a named
+mechanism, or done — see the worklog's `SESSION CLOSE` entry for the per-commit table.
+
 
 ## 5. Work items, in priority order
 

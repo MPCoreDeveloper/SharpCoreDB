@@ -1645,9 +1645,11 @@ path **without** a scan fallback — the last of which is what the finding was a
 2. **5.1's INSERT delta** — the fair-PK INSERT arm is 0.71× (was 0.54×) and the default-job INSERT 1.7× behind; the
    plan's acceptance is ≥ 1.0× **and** ≥ 150K ops/s tuned plaintext. `--multirowinsert`'s profile is the shape to
    start from (`dispatch` 28.1 %, `table-batch` 20.6 %), all of it recorded in §5.1's entries.
-3. **`--gate` could never be run on a quiet machine in this session**: five attempts, **all INCONCLUSIVE (exit 2)**,
-   rep spreads 2.74 / 3.07 / 3.34 / 3.18 / 3.52×, with one `FAILED` → `PASSED` pair back to back in between. Nothing
-   was ever claimed as a gate pass. **On a quiet machine the first command is `tools\clean-benchmark.ps1 --gate`.**
+3. **`--gate` could never be run on a quiet machine in this session**: **six** attempts, **all INCONCLUSIVE (exit 2)**,
+   rep spreads 2.74 / 3.07 / 3.34 / 3.18 / 3.52 / **4.32×**, with one `FAILED` → `PASSED` pair back to back in between.
+   Nothing was ever claimed as a gate pass. **On a quiet machine the first command is `tools\clean-benchmark.ps1 --gate`** —
+   and if it reports INCONCLUSIVE again, that is a statement about the machine, not about the code, so re-run it before
+   changing anything.
 
 **3. Housekeeping done here, and the two corrections to published material.**
 - `tools/clean-benchmark.ps1` had the project path wrong (`tests\SharpCoreDB.Benchmarks.Comparative`, missing
