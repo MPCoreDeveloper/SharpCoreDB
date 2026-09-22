@@ -1705,12 +1705,12 @@ stamps that share a scope as two costs is the same error class this plan has pai
 rather than propagated into a target.
 
 **3. The two levers, with what argues for each.**
-- **Validation + serialization, 589 ms and 67.3 MB per batch call (7,058 B/row).** `validate-only` — the actual
-  validation — is **52 ms and 0 B/call**, so essentially all of it is *serialization*, and 7 KB per row is an order of
-  magnitude above the ~150 B record the fixed-width layout produces. That ratio, not the time, is the clue: something
-  per row is allocated and discarded. A `--pk-profile-insert` run with the serialization split into "layout
-  computation" and "record bytes" would name it in one pass (the split is one stamp away, in
-  `FixedWidthCodec.SerializeRow`).
+- **Validation + serialization, 589 ms and 6.73 MB per batch call (706 B/row).** `validate-only` — the actual
+  validation — is **52 ms and 0 B/call**, so essentially all of it is *serialization*, and 706 B per row is **~4.7×**
+  the ~150 B record the fixed-width layout produces (the row's own bytes are ~150 of those 706, so the rest is
+  intermediate buffering). The allocation ratio, not the time, is the cleaner clue because it is load-independent: a
+  `--pk-profile-insert` run with the serialization split into "layout computation" and "record bytes" would name it in
+  one pass (the split is one stamp away, in `FixedWidthCodec.SerializeRow`).
 - **`hash-index`, 325 ms and 8.8 MB per batch call (882 B/row)**, inside `index-maint`'s 9.6 MB/call. The batch path
   calls `HashIndex.AddBatchKeys` once per index per batch, so 882 B per added key is the whole per-key cost of a hash
   insert — worth a look because the batch form could size its buckets from the key count instead of growing them.
