@@ -1,6 +1,7 @@
 # SharpCoreDB — Insert & Update Performance Plan
 
-**Status:** draft for owner review · **Date:** 2026-09-13 · **Branch:** `release/v2.1.0.0-RC.3`
+**Status:** draft for owner review · **Date:** 2026-09-17 · **Branch:** `release/v2.1.0.0-RC.3`
+**Second-opinion addendum (Grok/xAI, 2026-09-17):** Deep codebase investigation completed. Detailed implementation hints, exact file+method references, profiler citations and prioritized next steps added at the end of this document (section 12). This serves as living reference for any AI continuing performance work. See also `PERFORMANCE_VALIDATION_AND_ADVICE_CSHARP15_NET11.md` (created alongside).
 **Companion docs:** [`V2_PERFORMANCE_PLAN.md`](V2_PERFORMANCE_PLAN.md) (the living v2.x roadmap),
 [`../benchmarks/V198_V20_V21_PERFORMANCE_COMPARISON.md`](../benchmarks/V198_V20_V21_PERFORMANCE_COMPARISON.md),
 [`../benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](../benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md),

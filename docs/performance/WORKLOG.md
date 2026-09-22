@@ -1612,7 +1612,65 @@ assertion (the same assertion, run with the pruning in place, reported 0 rows); 
 pass by not testing its case), the PK lookup survives it, and the index on the untouched column is usable through a
 path **without** a scan fallback — the last of which is what the finding was about.
 
+### 2026-09-21 — SESSION CLOSE (autonomous run) — state of the branch, what was corrected, and where to resume
+- Session: the whole autonomous run — **16 commits on `perf/autonomous-20260921`, none pushed**
+- Command(s): as recorded per entry; the session's final validation is in §3
+- Regime: every measurement carries its own `REGIME:` banner and artifact per entry
+- Verdict: **tree clean, build green, core suite 1920 / 0 failed / 16 skipped**
+- NEXT: the three open items in §2, in order; on a quiet machine the **first** action is the gate in §3
+
+**1. What landed, with its measured effect.**
+
+| commit | change | effect |
+|---|---|---|
+| `cad4715c` | page-read / page-update / row-decode stamps restored | the 744 s suite anomaly is **refuted** (190.5 s without the stamps, 170.0/158.0 s with, both 1916/0/16) |
+| `2bc3e947` | PageBased no longer pre-loads indexes before a write (+3 guard tests) | PageBased UPDATE **5.9×/4.6× behind → 1.0×/0.8×**; `row-decode` 100,000 → 0 |
+| `1c6a98a0` | 5.2 closed (DoD check) + 5.3 session 1 (count-based table) | the default job's per-operation work named |
+| `34214ac8` | `row-snapshot` + `row-locate-index` stamps | PageBased pass attribution 42 % → 73.6 % |
+| `5403e1ee` | 5.3 `BLOCKED` + 5.4 providers re-validation | 3 arms + 3 ladders + **281 provider tests, 0 failed** |
+| `6c8d3150` | encrypted UPDATE locate served from one whole-file snapshot | default-job UPDATE **+20.1 %**; encryption tax 1.37–2.13× → 1.09–1.14× |
+| `1966ba31` | commit stamp split (`CommitSync` / buffer flush) | buffer flush 0.0 ms — all of it is `CommitSync` |
+| `3e762cdd` | `commit-overwrites` stamp | 100 % of the commit is the overwrite flush |
+| `d6b86239` | the flush's pointless offset sort removed | flush 33.8 → 23.4 ms |
+| `851ac232` | consecutive pages coalesced in the flush | flush 25.1 → 21.8/22.9 ms, writes 315 calls → 2 |
+| `dd06ab11` `480b1b67` `349c64ce` `a08e0ea8` | the per-record fallback priced; the correctness finding; its test; its probes | fallback 2.3× worse (page path confirmed); the finding's prediction refuted *and* its mechanism measured |
+| **`514e0b9c`** | **fix (2)'s pruning reverted at the relocation site** | **silently missing rows fixed** (`FindByIndex` returned 0 for an existing row); test fails without it |
+
+**2. What is open, in priority order.**
+
+1. **The locate's tail** on the 5.3 cell (~18–27 ms profiled): one slice copy plus one AEAD open per record, on top
+   of the 12.6 MB snapshot. The snapshot itself is the coarsest remaining knob (it reads the whole file for ~1.5 MB of
+   touched records); the alternatives are a payload-only write path or a per-record read window, both of which need
+   their own experiment. The flush, the commit and the relocation case are **done**.
+2. **5.1's INSERT delta** — the fair-PK INSERT arm is 0.71× (was 0.54×) and the default-job INSERT 1.7× behind; the
+   plan's acceptance is ≥ 1.0× **and** ≥ 150K ops/s tuned plaintext. `--multirowinsert`'s profile is the shape to
+   start from (`dispatch` 28.1 %, `table-batch` 20.6 %), all of it recorded in §5.1's entries.
+3. **`--gate` could never be run on a quiet machine in this session**: five attempts, **all INCONCLUSIVE (exit 2)**,
+   rep spreads 2.74 / 3.07 / 3.34 / 3.18 / 3.52×, with one `FAILED` → `PASSED` pair back to back in between. Nothing
+   was ever claimed as a gate pass. **On a quiet machine the first command is `tools\clean-benchmark.ps1 --gate`.**
+
+**3. Housekeeping done here, and the two corrections to published material.**
+- `tools/clean-benchmark.ps1` had the project path wrong (`tests\SharpCoreDB.Benchmarks.Comparative`, missing
+  `benchmarks\`) — the brief documents the bug and tells the agent not to rely on the script. It is fixed and verified
+  by *running it* (its `--gate` invocation above is the proof), so the clean-shell protocol the plan describes now has
+  a working entry point.
+- The plan document carried an uncommitted **header edit from an earlier session** (a second-opinion addendum note,
+  2026-09-17). It is committed as-is rather than left dangling, so the tree is clean and every change has a commit.
+- ⚠️ **Brief §7 is out of date on one item**: it lists "record locate as the default-job UPDATE lever — eliminated by
+  measurement". That held only while the **encrypted** arm had no whole-file snapshot; restoring it for that arm
+  measured **+20 %** (§5.3 follow-up 6). Read §7 with that exception.
+- ⚠️ **fix (2) (`124b2a62`) was kept "on correctness grounds" and that ground failed**: its pruning made indexed
+  lookups miss rows after a cross-page relocation. It is reverted at its one call site here; if it is ever reapplied it
+  must be gated on the relocation staying **within its page**.
+
+**4. Final validation of the branch.** Build **0 errors**; core suite **1920 / 0 failed / 16 skipped** (156.8 s, the
+last run before the two housekeeping commits, which touch no compiled file); provider suites **281 / 0 failed** on this
+same build; `WritePathProfilerTests` 4/4 with 34 stages. Every stage the profiler gained this session (`row-snapshot`,
+`row-locate-index`, `commit-buffer`, `commit-overwrites`, `commit-ovw-prep`, `commit-ovw-write`) has a call-count and
+allocation reading in the entries above, and each was added to answer a question that was then answered.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
