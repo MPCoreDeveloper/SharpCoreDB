@@ -192,8 +192,12 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    been running benchmarks all session — and the gate **refused to write**, which is the correct behaviour: "a
    baseline recorded *during* a regression silently blesses it for every later run" applies equally to a baseline
    recorded on a loaded machine. **Open item: re-record on a quiet machine** (`--write-baseline`, then commit the
-   JSON). Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE reps
-   swing nearly 3× run to run, so that arm can only be judged on a rep ladder.
+   JSON) — **attempted 2026-09-22 on an idle machine and still refused**: `--write-baseline` returned INCONCLUSIVE
+   (exit 2) at a **3,31×** spread (raw DELETE 3,31×, default UPDATE 2,98×), so the gate declined to write and the
+   committed baseline is untouched (still dated 2026-09-15). The item is therefore blocked by **this machine**, not by
+   load: its floor measured 2,76× / 2,91× / 3,31× across three same-day attempts, i.e. above the 2,50× limit that a
+   write requires. Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE
+   reps swing 2,7–3,3× run to run, so that arm can only be judged on a rep ladder.
 
    🔬 **PROPOSED 2026-09-21 · ACCEPTED 2026-09-22 (option 2 — see the decision below).** The per-arm job runs INSERT → READ → UPDATE → DELETE
    against **one database**, so its late phases are not independent of its early ones. That stopped being theoretical:
