@@ -2060,7 +2060,49 @@ this entry; the branch is untouched by all of them, nothing is pushed, and every
 instrument (this branch's `tools\clean-benchmark.ps1` copied into each worktree) against the same committed baseline
 file.
 
+### 2026-09-21 — A `SHARPCOREDB_MAIN_PROFILE_DELETE` switch, and its first table refutes my own fix direction for the DELETE movement
+- Session: 1 · Changes: harness-only (`Program.cs`: the switch + the phase wrapper, mirroring `MainProfileUpdateOverride`); build 0 errors · Run: `SHARPCOREDB_MAIN_PROFILE_DELETE=1 dotnet run ... -- --gate`
+- Verdict: **the buffered-overwrite flush is not in DELETE's path at all** — `commit-overwrites 0,0 ms / 1 call` — so "make the coalescing free where it can't help" (the previous entry's proposed fix) cannot be the fix, and DELETE's cost is `parse` + `commit`
+- NEXT: the same profile on the `d6b86239` worktree, comparing `parse` and `commit` milliseconds, is now the one run that can say where the 33 % lives — the switch makes that a five-minute test instead of a bisect
+
+**1. Why the switch was needed.** The default arm had `SHARPCOREDB_MAIN_PROFILE_UPDATE` and no DELETE counterpart, so the phase the
+gate flagged at 1,33x was the one phase with no stage table. It is now the tenth line of the same pattern: reset+enable
+before `sw.Restart()`, disable+report after the phase prints, and the `--gate` path picks it up per job run. One caveat
+recorded in the code comment's spirit: **a profiled run must not be read as a gate result** — this one returned
+INCONCLUSIVE (spread 3,00x) precisely because profiling perturbs the timings it is measuring.
+
+**2. The table, at HEAD, for one job run** (`DELETE 10.000` in 0,03 s, 2,81 µs/delete — a fast rep; the *shape* is what
+matters and it is stable because it is per-phase work, not a wall-clock aggregate):
+
+| stage | total ms | calls | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| `parse` | 6,3 | 10.000 | **51,9 %** | 3,6 | 381 |
+| `commit` | 4,7 | 1 | **39,1 %** | 10,0 | 10.477.872 |
+| `engine-write` | 0,5 | 1 | 3,7 % | 0,3 | 262.640 |
+| `index-maint` | 0,4 | 1 | 3,7 % | 0,2 | 160.080 |
+| `classify` | 0,2 | 10.000 | 1,5 % | 0,0 | 0 |
+| **`commit-overwrites`** | **0,0** | **1** | 0,0 % | 0,0 | 64 |
+| `commit-buffer` | 0,0 | 1 | 0,0 % | 0,0 | 0 |
+
+**3. What it refutes, in my own previous words.** The entry above proposed the fix as "skip the merge when entries do not
+overlap/abut, or make the coalescing free when it cannot help". That presumes the coalescing runs on DELETE; the table
+shows it does not — the flush is stamped, it is called once, and it costs **0,0 ms**. So DELETE's own work is statement
+parsing (10.000 statements, half the phase) plus a single commit that allocates 10,0 MB. The remaining explanations for a
+33 % movement are therefore narrow, and the table even orders them: either **`commit`** grew inside (it is 39 % of the
+phase and is the only place the flush's changes could surface indirectly), or **the environment DELETE inherits** did —
+the harness runs this phase right after the UPDATE phase on the same file, and the coalescing deliberately changed *what
+the UPDATE phase writes* (315 page writes to 2), which changes page-cache and dirty-page state for whoever comes next.
+This is the sixth hypothesis of mine that this session's evidence has retired or narrowed, and it is retired by the
+instrument built to test it, not by an argument.
+
+**4. The next run, now five minutes instead of a bisect.** Same switch on the `d6b86239` worktree (sort removal without
+coalescing, the last tree where `default DELETE` was still 1,07x) and the same table: if `commit` is materially smaller
+there while `parse` is unchanged, the movement is inside the commit and the fix belongs in the flush's interaction with
+it; if `commit` matches while the phase is still slower, the movement is environmental and the fix — or the measurement —
+belongs in the harness, which would be a methodology finding rather than a product bug.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 

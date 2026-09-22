@@ -410,6 +410,16 @@ class Program
         Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_UPDATE") == "1";
 
     /// <summary>
+    /// DELETE-phase profiler switch, from <c>SHARPCOREDB_MAIN_PROFILE_DELETE=1</c>. Mirrors
+    /// <see cref="MainProfileUpdateOverride"/> because the 2026-09-21 gate found this phase at 1,33x baseline on the
+    /// default arm — reproduced twice (74.134 / 74.333 ops/s) and bisected to the buffered-overwrite flush
+    /// coalescing (`851ac232`) — while this arm had no DELETE profile at all. The question the table answers is
+    /// whether DELETE's own stages grew, or whether it measures an environment left behind by the phases before it.
+    /// </summary>
+    static bool MainProfileDeleteOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_DELETE") == "1";
+
+    /// <summary>
     /// Hash-index switch, from <c>SHARPCOREDB_HASH_INDEXES=0</c>. Diagnostic for plan §9 priority 1's profiler-free
     /// bisect: the default job's UPDATE pays two <c>index-maint</c> calls per row (the PK B-tree plus the hash index
     /// on the updated column), and this switch removes the hash half. ⚠️ It also changes how the row is *located*, so
@@ -928,7 +938,16 @@ class Program
                 Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
             }
 
-            // DELETE
+            // DELETE (2026-09-21: the gate put this phase at 1,33x baseline on the default arm, twice, bisected to the
+            // buffered-overwrite flush coalescing. SHARPCOREDB_MAIN_PROFILE_DELETE=1 profiles THIS phase only,
+            // mirroring the UPDATE override above, so the stage table can say whether DELETE's own work grew or
+            // whether it inherits an environment from the phases before it.)
+            if (MainProfileDeleteOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var deleteStmts = new List<string>(DeleteCount);
             for (int i = 0; i < DeleteCount; i++)
@@ -941,6 +960,16 @@ class Program
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+
+            if (MainProfileDeleteOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled DELETE pass: {result.DeleteTime:F2}s "
+                    + $"({result.DeleteOpsPerSec:N0} ops/sec, {result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
+
         }
         finally
         {
