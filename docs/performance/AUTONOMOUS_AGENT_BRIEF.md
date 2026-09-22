@@ -139,15 +139,25 @@ behind, with the remaining ~1.1× of its encryption tax now named as the per-rec
 and the **locate's tail** on the encrypted UPDATE path. Everything else in §5 is closed, `BLOCKED` with a named
 mechanism, or done — see the worklog's `SESSION CLOSE` entry for the per-commit table.
 
-**Re-measured 2026-09-22** (autonomous session, row 1's arm only; the worklog entry carries the tables): both open items
-above got a landed change, and both were accepted on the **allocation** column because this machine's gate returned
-INCONCLUSIVE (2,91× rep spread) in the session's one attempt. The fair-PK arm's serialization is **706 → 547 B/row
-(−22.4 %)** — the two per-row `List<>` scratch collections are gone (`--pk-profile-insert`, before/after on one machine)
-— and the encrypted UPDATE locate's per-record allocation is **431 → 279 B (−35 %)** and now *identical* to the plaintext
-arm's, with the AEAD open itself left in place. **Neither reaches the item's DoD**: the fair-PK INSERT ratio is still
-below 1.0× and was not measurable against SQLite in that session (the one `--pk` pair had both arms move further than
-the change: 0,62× and 0,81×, recorded and explicitly not claimed), and the provider re-run of 5.4 has **not** happened
-on this build even though the change added two default interface members. That is what §5.1 and §5.4 owe next.
+**Re-measured 2026-09-22** (two autonomous sessions — the worklog entries carry every table): both open items above got a
+landed change, and both were accepted on the **allocation** column because this machine's gate cannot arbitrate (two
+INCONCLUSIVE attempts that day, 2,91× and 2,76×, the second of them on a quiet machine). The fair-PK arm's serialization
+is **706 → 547 B/row (−22.4 %)** — the two per-row `List<>` scratch collections are gone — and the encrypted UPDATE
+locate's per-record allocation is **431 → 279 B (−35 %)** and now *identical* to the plaintext arm's, with the AEAD open
+itself left in place.
+
+**What the second session then measured, which is the part that matters for planning.** (a) **The fair-PK INSERT ratio
+did not move**: a three-run ladder (each arm already median-of-3) gives **0,68×** median against 0,71× published, with
+READ 1,08×, UPDATE 1,16× and DELETE 1,86× ahead — so the allocation win buys no ops/s on this shape and **5.1's
+allocation budget is spent**; what is left there is the SQL-layer per-statement work 5.1 names. (b) **§5.4 is satisfied
+for this build**: the SQL/Direct/StructRow ladders against same-run SQLite (0,63 / 0,88 / 0,96× on INSERT, and the
+Direct ladder 1,34× on READ) plus 319 provider/EF/sync tests, 248 vector tests and the core suite all green by EXE, with
+`SharpCoreDB.CI.slnf` building clean. (c) **`--pk-default`'s UPDATE cell looked better (0,42× → ~0,48×) and that is refuted**: a three-pair interleaved
+A/B on the same machine puts the two builds at **0,53 / 0,50 / 0,50 (after) against 0,57 / 0,51 / 0,54 (before)** — what
+moved is SQLite's own UPDATE reference (315K → 257–303K), while SharpCoreDB's UPDATE arm sits at 146–166K in both
+builds. So **the allocation wins of this day bought no ops/s on either cell they could plausibly have touched** — the
+honest form of the result, and the reason the plan's acceptance for these changes is the allocation column.
+**Neither reaches the item's DoD**: INSERT is still below 1.0× and the locate's 12.6 MB snapshot is a design item.
 
 
 ## 5. Work items, in priority order

@@ -2234,7 +2234,70 @@ for DELETE profiles, `Program.cs`, into the worktree so the instrument matches) 
 
 **6. What is refuted or left, so the next session does not re-derive it.** (a) **"Layout computation owns the 706 B/row" is refuted** on the fixed-width arm — 0 B/row over 100,000 calls, because the layout is cached per table. (b) **The remaining 48 B/row in `encode-scratch` is output, not scratch**: it is the arena-bound payload array, which `OverflowArena` caches and serves back from `Read`, so pooling it would need the arena's contract to change — out of scope for a scratch fix. (c) **The locate tail's remaining 279 B/record is not encryption-related** (identical on both arms), so the next candidate there is arm-independent scratch, and the AEAD open itself is not removable at all — it is the encryption contract §3-1c keeps. (d) **The coarser knob is still the whole-file snapshot** (12.6 MB read for ~1.5 MB touched, 1 call per batch), untouched by this session; plan §5.3's remaining options for it (a payload-only write path, or a per-record read window) are unchanged and still unmeasured.
 
+### 2026-09-22 (session 2, unattended) — §5.4 re-validated on the final build, the fair-PK ratios re-measured as a ladder, and the A/B that refuted my own first reading of the new codec
+- Session: 2 of 2026-09-22 (unattended — the user went to bed, so this is the quiet machine the plan kept asking for; nothing else ran on the CPU during the measurements)
+- Command(s): `--gate` (attempt 12) · `--pk` ×3 · `--pk-default` ×2 · `--multirowinsert` ×7 (1 in a `--detach` worktree at `112709e2`, then 3 interleaved pairs) · the plain comparative run ×3 · the six provider/EF/sync suites + `VectorSearch.Tests` by their EXEs · `dotnet build SharpCoreDB.CI.slnf`
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.` (every run printed it)
+- Verdict: **§5.4's DoD is met for this build** (all three harness arms plus the provider suites re-run, and one table per ladder against same-run SQLite arms); **the fair-PK INSERT ratio did not move** — 0,68× median here against 0,71× published, while the allocation fix is real at −22,4 %; and the gate is INCONCLUSIVE again (2,76×) *on a quiet machine*, which makes the noise floor a property of the machine rather than of the load
+- Commit: this worklog entry + the brief's §4 refresh (no product change in this session)
+- NEXT: 5.1 INSERT remains the only losing fair-PK column and its allocation budget is now **exhausted** as a lever (see §4 below) — the next thing that can move it is the SQL-layer per-statement work in 5.1's own list, or a decision to accept the allocation-only win; §5.4's provider numbers are current as of this build; and the locate's 12.6 MB snapshot is still the coarser knob, unmeasured
+
+**1. The quiet machine did not give the gate a verdict — that is now a machine property, not a load property.** Attempt 12 returned **INCONCLUSIVE (exit 2)** with a worst rep spread of **2,76×** (raw DELETE 2,76×, default UPDATE 2,74×) against the 2,50× limit, run with nothing else on the CPU. The four attempts of 2026-09-21/22 now read 2,50× (passed) / 2,48× (passed) / 2,91× / 2,76×, and between attempts 11 and 12 the only commits are docs, so the spread moved without the code moving. Conclusion, recorded so nobody re-derives it: **on this machine the gate's own rep spread sits on the 2,50× limit, so a verdict is a coin toss and the gate is informative-trend at best.** The acceptance rule this plan already carries (the load-independent allocation column) is therefore not a workaround — it is the only column that has been reproducible here.
+
+**2. The fair-PK ratio, as a ladder instead of a single sample** (`--pk`, final build, three consecutive runs, each arm already a median of three, ratio = SharpCoreDB ÷ same-run SQLite, fixed-width plaintext arm):
+
+| run | SC INSERT | SQLite INSERT | **INSERT** | **READ** | **UPDATE** | **DELETE** |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 130.464 | 190.989 | 0,68 | 1,05 | 1,16 | 1,22 |
+| 2 | 135.164 | 191.080 | 0,71 | 1,08 | 1,32 | 1,92 |
+| 3 | 135.264 | 199.418 | 0,68 | 1,08 | 0,80 | 1,86 |
+| **median** | 135.164 | 191.080 | **0,68** | **1,08** | **1,16** | **1,86** |
+
+Read against the brief's published row 1 (READ 1,21× ahead, UPDATE 1,12×, DELETE 1,72×, INSERT **0,71×** behind): three of the four columns are consistent and **INSERT is slightly worse (0,68× vs 0,71×)** — but note *why* the numbers are not directly comparable: this session's same-run SQLite INSERT reference is **191–199K ops/s** where the earlier publication used **155K**, i.e. SQLite itself moved ~25 % faster on a quieter machine while SharpCoreDB's INSERT arm moved 111K → 135K. **The honest reading is therefore two-part**: the −22,4 % allocation win is real and measurable (session 1, deterministic), and it buys **no** ops/s on this shape, because the removed bytes were cheap gen0 scratch and the arm's cost sits where the allocation column already said it does not — in per-statement SQL work. That is the predicted outcome, not a surprise: allocation was chosen as this arm's acceptance *because* the time column is unusable here.
+**3. §5.4 — the provider re-validation, now current for this build.** Three harness arms re-run, plus every suite the brief names, all by their own EXE (MTP — `dotnet test` refuses here: "*Testing with VSTest target is no longer supported by Microsoft.Testing.Platform on .NET 10 SDK and later*"). The three ladders, medians of three consecutive plain comparative runs, ratio = SharpCoreDB ÷ same-run SQLite:
+
+| ladder | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB (SQL) | 0,63× (91.160 / 145.365) | 0,65× (63.241 / 97.005) | 0,22× (63.609 / 289.110) | 0,30× (114.111 / 384.350) |
+| SharpCoreDB (Direct) | 0,88× (127.793 / 145.365) | **1,34×** (130.411 / 97.005) | 0,38× (108.989 / 289.110) | 0,61× (233.923 / 384.350) |
+| SharpCoreDB (StructRow) | 0,96× (139.649 / 145.365) | **1,20×** (116.638 / 97.005) | not measured by the arm | not measured by the arm |
+| LiteDB (context) | 0,43× | 0,15× | 0,04× | 0,04× |
+
+Against the brief's row 2 (the same no-PK document-CRUD job: READ 0,76×, UPDATE 0,24×, DELETE 0,31×, INSERT 0,67×) the SQL ladder lands on the same cells (0,65 / 0,22 / 0,30 / 0,63), so **that row is now re-measured against same-run SQLite** — the previous session had explicitly left it undone. Two readings worth keeping: the **StructRow ladder is at parity on INSERT (0,96×)** and ahead on READ, which is where the alloc-cheap paths show; and **the Direct ladder's DELETE (0,61×) is twice the SQL ladder's (0,30×) with four times its absolute READ (130K vs 63K)**, i.e. the SQL driver's per-statement work is still the separator between ladders — 5.3's standing finding, unchanged by this session's fixes.
+
+Suites, all on the final build, all green: `SharpCoreDB.Functional.Tests` **38 / 0 failed**, `SharpCoreDB.Functional.Dapper.Tests` **3 / 0**, `SharpCoreDB.Functional.Linq2DB.Tests` **24 / 0**, `SharpCoreDB.Functional.EntityFrameworkCore.Tests` **3 / 0**, `SharpCoreDB.EntityFrameworkCore.Tests` **116 / 0**, `SharpCoreDB.Provider.Sync.Tests` **135 / 0** (together **319 tests, 0 failed, 0 errors, 0 skipped**), plus `SharpCoreDB.VectorSearch.Tests` **248 / 0**. The ADO.NET provider has no separate suite — its tests live in the core suite (`tests/SharpCoreDB.Tests/DataProvider/*`), which is the **1920 / 0 failed / 16 skipped** run from session 1 — and `SharpCoreDB.Provider.YesSql` has no suite at all, so for it the compile-level check is what exists: **`dotnet build SharpCoreDB.CI.slnf -c Release` is 0 errors**, which builds `SharpCoreDB.Data.Provider`, `Provider.YesSql` and every other CI project against the two default interface members this session added.
+
+**4. The `--multirowinsert` arm: a same-build A/B that first looked like a 13 % regression, and the ladder that refuted it.** The shape is 20,000 rows at 1,000 rows/statement, median of five, and its allocation column is the most stable measurement in this repository (five samples inside 0,2 %):
+
+| | before (`112709e2`, worktree) | after (HEAD) | delta |
+|---|---:|---:|---:|
+| allocated per row (5 samples) | 4.266 (4.272 / 4.267 / 4.266 / 4.266 / 4.266) | **4.106** (4.112 / 4.107 / 4.105 / 4.106 / 4.106) | **−160 B/row (−3,75 %)**, deterministic |
+| median µs/row (first pair) | 13,19 | 15,22 | −13 % — **refuted below** |
+| median rows/s | 66.392 | 67.403 | +1,5 % (interleaved medians) |
+
+The first single pair looked like a 13 % slowdown, which would have been a reason to revert the codec change rather than keep it. Three **interleaved** pairs (after/before/after/before/after/before, same machine, minutes apart) give per-pair rows/s ratios of **1,015 / 1,082 / 0,897** and medians of **67.403 (after) vs 66.392 (before)** — the arms overlap, so **the time is unchanged within this machine's noise and the −13 % reading was an artefact of comparing two isolated runs**. The allocation delta reproduces in every run of this session on both shapes (706 → 547 B/row on the fair-PK arm, 4.266 → 4.106 B/row here). That is the plan's own rule (§2.7 / brief §8.1) doing exactly what it is for: the deterministic column decides, the wall clock is quoted and not concluded.
+
+**5. `--pk-default` (the pure-default encrypted arm) — the UPDATE gap narrowed, and it is the one cell this session's tail fix could plausibly touch.** Two runs, ratio = SharpCoreDB ÷ same-run SQLite:
+
+| run | INSERT | READ | UPDATE | DELETE | SQLite, the same runs |
+|---|---:|---:|---:|---:|---|
+| 1 | 0,59 (117.858) | 0,51 (55.697) | 0,50 (157.539) | 0,72 (278.318) | 201.112 / 108.337 / 315.527 / 387.682 |
+| 2 | 0,61 (122.277) | 0,50 (56.102) | 0,47 (146.520) | 0,65 (272.278) | 200.059 / 111.169 / 313.471 / 416.717 |
+
+The brief's published row 3 is INSERT 0,58×, READ 0,65×, UPDATE **0,42× (2,4× gap)**, DELETE 0,68×, so UPDATE looked like it had moved (0,42× → 0,47–0,50×). **That reading is refuted by a same-build interleaved A/B, and the refutation is the useful result.** Three alternating pairs (after/before/after/before/after/before, HEAD vs a `--detach` worktree at `112709e2`, same machine, each run carrying its own SQLite arm) give UPDATE ratios of **0,53 / 0,50 / 0,50 after** against **0,57 / 0,51 / 0,54 before** — per-pair deltas of −0,04 / −0,01 / −0,04, i.e. **the two builds are indistinguishable on that cell and the after-build is if anything a hair behind**. What actually moved is SQLite's own UPDATE reference (315K in the session that published 0,42×, 257–303K here) while SharpCoreDB's UPDATE arm sits at 146–166K in both builds. So `--pk-default`'s UPDATE "improvement" is **the same reference-drift artefact** that produced the INSERT and READ readings above — recorded here so no future session credits the locate fix with it. The allocation win on that path is real (431 → 279 B/record, deterministic); its ops/s effect on this machine is **zero within noise**, on both cells it could plausibly have touched.
+
+**6. State at the end of session 2, and what the next session should not re-derive.**
+- **The gate cannot arbitrate on this machine** (four attempts straddling the limit: 2,50× pass, 2,48× pass, 2,91×, 2,76× — with docs-only commits between the last two). Quote a verdict when one arrives; do not plan around one, and do not read an INCONCLUSIVE as a pass.
+- **The fair-PK INSERT arm's allocation budget is spent.** The 706 B/row is now fully attributed: 383 B arena traffic (`arena-write`, unchanged, closed as a target), ~158 B scratch (**removed**, session 1), 48 B payload array (output — the arena caches and serves it), and the remainder the record plus the caller's row list. Nothing left there is a lever on ops/s, and the ladder above shows ops/s did not move.
+- **§5.4 is satisfied for this build** — three harness arms, one table per ladder against same-run SQLite, the provider/EF/sync/vector suites green by EXE, and `SharpCoreDB.CI.slnf` building clean. It becomes due again after the next core change.
+- **Still open, untouched, and a design item rather than a tuning item:** the encrypted UPDATE locate's **12.6 MB whole-file snapshot** (one call per batch, ~1.5 MB of it touched) — plan §5.3's own options are a payload-only write path or a per-record read window, and the per-record window was already measured *worse* (2,3×, 5.3 follow-up 5). The remaining per-record allocation after this session is 279 B and is arm-independent, so it is not an encryption cost any more.
+- **Artifacts:** the `--pk`, `--pk-default` and comparative runs archive their JSON under the repo-root `results/` (git-ignored — `pk_comparative_20260922_*.json`, `comparative_20260922_*.json`); the profiler tables above (including the `--multirowinsert` budget) are console output, because neither `--multirowinsert` nor the PK arms archive a stage table.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
+
+
 
 
 

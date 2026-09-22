@@ -224,15 +224,19 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    is a labelling rule for the late phases, not a relaxation of the §2 protocol (the medians, the rep ladder and the
    tolerance factor all stay as they are).
 
-   ⚠️ **The gate is not a blocker, but a pass is a chance and not a certainty — recorded 2026-09-22 (attempt 11).**
+   ⚠️ **The gate is not a blocker, but a pass is a chance and not a certainty — recorded 2026-09-22 (attempts 11 and 12).**
    Attempt 11, run on the same machine as attempts 9 and 10 and with the §9-priority-2 / §5.3-tail fixes of
    2026-09-22 applied, returned **INCONCLUSIVE (exit 2)** with a worst rep spread of **2,91×** (default UPDATE 2,91×,
    raw UPDATE 2,69×) against the 2,50× limit — so the machine's noise floor straddles the limit in both directions and
-   the gate's verdict on this hardware is a coin toss rather than a signal. The rule that follows is already in this
-   plan (§2.6/§2.7) and is now the operative one for every change that lands here: **the load-independent column is
-   the acceptance** — allocation and call counts from `--pk-profile-insert` / `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` —
-   and a gate verdict is quoted when it exists, not required before a change may land. A `REGRESSED` verdict still
-   means "re-run on a quiet machine", never "revert" (BENCHMARK protocol §3.6).
+   the gate's verdict on this hardware is a coin toss rather than a signal. **Attempt 12 (later the same day, on an
+   otherwise idle machine) returned INCONCLUSIVE again at 2,76×** (raw DELETE 2,76×, default UPDATE 2,74×), and the only
+   commits between the two attempts are documentation — so the spread moved without the code moving, and the noise floor
+   is a property of **this machine**, not of its load. The four attempts of 2026-09-21/22 now read 2,50× (PASSED) / 2,48×
+   (PASSED) / 2,91× / 2,76×: a verdict here is possible but not reproducible, and a quiet machine does not buy one. That
+   is why the acceptance rule this plan already carries — the **load-independent allocation column** — is the operative
+   one for changes landing on this branch, and a gate verdict is quoted when it exists rather than required before a
+   change may land. A `REGRESSED` verdict still means "re-run on a quiet machine", never "revert" (BENCHMARK protocol
+   §3.6).
 
 
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage
