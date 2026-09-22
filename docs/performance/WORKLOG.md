@@ -1719,9 +1719,23 @@ rather than propagated into a target.
   so the 882 B per key cannot be the batching itself. That leaves two places to look, in this order: the managed
   backend's per-key `Dictionary<string, List<long>>` insert (a key string, a list, a node) when
   `_useUnsafeEqualityIndex` is off, and, when it is on, the per-key `BuildUnsafeKey(NormalizeKey(keys[i]))` calls —
-  each of which allocates its key, i.e. once per row rather than once per batch. Whichever arm the fair-PK config takes
-  is answerable in one run by reading the index's backend flag next to the allocation column, and the fix is small
-  either way (pool the normalised key, or pre-size the managed insert). It is named, not attempted: see §4.
+  each of which allocates its key, i.e. once per row rather than once per batch. **This question is now answered, by
+  reading rather than by running, and the answer is the managed path:** the backend is chosen by
+  `Table.Indexing.cs:26` (`_config?.EnableUnsafeEqualityIndex ?? ResolveUnsafeEqualityIndexFlag()`), whose config
+  property defaults to `false` (`DatabaseConfig.cs:443`) and whose only fallbacks are the
+  `SharpCoreDB.Indexing.UseUnsafeEqualityIndex` AppContext switch and the `SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX` env
+  var — both unset under this session's REGIME line — while the benchmark harness never sets the property at all (only
+  two unit tests do, and they do it to exercise *both* backends). So the fair-PK INSERT arm runs
+  `AddBatchKeysLockedCore`'s managed loop, and its 882 B per key is the managed map's per-key insert. That splits one
+  more time into (a) the structure's own growth, which is unavoidable for a new key, and (b) — **only when the indexed
+  column's collation is not `Binary`** — `CollationExtensions.NormalizeIndexKey`, which allocates a fresh string via
+  `ToUpperInvariant()`/`ToUpper()`/`TrimEnd()` *even when the key is already in normal form*, whereas `Binary` returns
+  the input unchanged (line 35). Which of the two applies is one `--pk-profile-insert` run away, by reading the column's
+  collation next to the allocation column; the safe fix in case (b) is an `char.IsUpper`/`IsWhiteSpace` pre-check so an
+  already-normal key skips the copy. Worth noting for whoever owns the *harness* rather than the product: the pooled
+  unsafe backend already exists and this arm is not using it, but turning it on for the fair-PK comparison is a change
+  to the arm's configuration, i.e. a measurement decision to be declared, not a product change to slip in — and it still
+  has to be shown faster for this shape. It is named, not attempted: see §4.
 
 **4. What was not done, and why that is the right call.** Five sessions into 5.1 with its timebox long expired, a 2.4×
 improvement still needs an implementation *and* a same-session `--pk` measurement to be a landed change; this session's
