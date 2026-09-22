@@ -2020,7 +2020,48 @@ say whether the two halves are separable or whether it is the *combination* that
 what matters, the fix is not "revert the sort" (that would give back the INSERT win) but to sort only where coalescing
 needs it, or to coalesce on a key that does not require a full sort.
 
+### 2026-09-21 — Bisect test point 3 (`d6b86239`) = **1,07x**: the sort removal is nearly free, and the rest of the slowdown arrives with the page coalescing (`851ac232`)
+- Session: 1 · Command: gate in a worktree at `d6b86239` (sort removal only, no coalescing yet) · INCONCLUSIVE (2,88x), read via the validated mapping
+- Verdict: **the bisect is complete — `851ac232` (coalesce consecutive pages in the buffered-overwrite flush) owns the `default DELETE` slowdown**, not the sort removal
+- NEXT: make the coalescing pay for itself instead of reverting it — that is a product change with two measurements to keep (the flush win and the DELETE cost), so it belongs in its own session
+
+**1. The four points, which together separate the pair.**
+
+| tree | `default DELETE` median | vs baseline 98.725 | what it contains |
+|---|---:|---:|---|
+| pre-session `92ac7b56` | 98.416 | 1,00x | — |
+| `1966ba31` | 100.558 | 0,98x | neither commit |
+| **`d6b86239`** | **92.148** | **1,07x** | sort removal only |
+| `a08e0ea8` | 73.844 | **1,34x** | sort removal + coalescing |
+| HEAD | 74.134 / 74.333 | 1,33x, twice | + the revert |
+
+`d6b86239`'s six DELETE values: 62.427 · 185.763 · 218.358 · 116.305 · 92.148 · 391.078 → `default` = {62.427, 92.148,
+116.305} → median 92.148; `raw` = {185.763, 218.358, 391.078} → median 218.358 (0,94x).
+
+**2. Reading the steps, with their sizes attached, because they are not the same size.** Removing the sort moved the
+default arm 0,98x → 1,07x, i.e. about **9 %** — small enough that a single run per point cannot call it signal rather
+than scatter (my one reproducibility datum for the median is 74.134 vs 74.333, 0,27 %, which is far tighter than 9 %,
+but that is one pair and not a variance estimate). Adding the coalescing moved it 1,07x → **1,34x**, about **25 %**, and
+that point is corroborated by HEAD's two independent runs at 1,33x. So the actionable finding is unambiguous — the
+coalescing commit owns the movement — while the sort removal's 9 % is left explicitly unresolved rather than attached to
+a story it may not have earned.
+
+**3. What the fix has to reconcile.** `851ac232` was written to make the buffered-overwrite flush cheaper, and it did:
+the commit-flush measurement went 33,8 → 21,8-22,9 ms. The same commit costs the default arm ~25-33 % on DELETE. The
+mechanism worth testing first is the one test point 3's tiny 9 % hints at: coalescing merges *consecutive* entries, so
+its benefit depends on the entries being contiguous, and DELETE's entries may rarely be — in which case the coalescing
+pass is pure overhead on that path. A fix along those lines (skip the merge when the entries do not overlap/abut, or
+fold the coalescing into a form that is free when it cannot help) keeps both numbers instead of trading one for the
+other, and it has to be measured on **both** the flush time and the DELETE cell in the same session, because this whole
+finding exists precisely because a change was measured on only one of the two.
+
+**4. Housekeeping.** The three bisect worktrees (`-pre92ac`, `-pre-flush`, `-bisect2`, `-bisect3`) are removed after
+this entry; the branch is untouched by all of them, nothing is pushed, and every measurement above came from the same
+instrument (this branch's `tools\clean-benchmark.ps1` copied into each worktree) against the same committed baseline
+file.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
