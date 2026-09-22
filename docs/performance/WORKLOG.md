@@ -1988,7 +1988,40 @@ started. If it lands on the flush pair, the next step is one more run between `d
 half, since "stop sorting" and "coalesce pages" have very different mechanisms: removing a sort is expected to be
 neutral-to-better, while coalescing merges writes and could plausibly hand the commit more work per page.
 
+### 2026-09-21 — Bisect test point 2 (`a08e0ea8`) = **1,34x** → the buffered-overwrite flush pair caused it, and the relocation revert is excluded
+- Session: 1 · Command: gate in a worktree at `a08e0ea8` (contains the flush pair `d6b86239`+`851ac232`, excludes the revert `514e0b9c`) · INCONCLUSIVE (2,57x), read via the validated mapping
+- Verdict: **cause located to the flush pair.** Test point 3 started at `d6b86239` to pick which half
+- NEXT: if the sort removal alone is the cause, the fix must restore ordering *for the coalescing's benefit*; if it is the coalescing, the fix is inside it — and either way the trade-off in §3 has to be decided deliberately, not silently
+
+**1. The numbers.** `a08e0ea8`'s six DELETE values: 60.357 · 236.312 · 250.593 · 73.844 · 99.674 · 390.893. By the
+validated mapping, `default` = {60.357, 73.844, 99.674} → median **73.844** → **1,34x** against baseline 98.725, and
+`raw` = {236.312, 250.593, 390.893} → median **250.593** → 0,82x against 204.393.
+
+| tree | `default DELETE` median | vs baseline |
+|---|---:|---:|
+| pre-session `92ac7b56` | 98.416 | 1,00x |
+| `1966ba31` (before the flush pair) | 100.558 | 0,98x |
+| **`a08e0ea8`** (flush pair, no revert) | **73.844** | **1,34x** |
+| HEAD | 74.134 / 74.333 | 1,33x, twice |
+
+**2. What this excludes, which is nearly as useful as what it finds.** The slowdown is present at `a08e0ea8` and absent
+at `1966ba31`, so it belongs to the flush pair — and that **clears the two candidates this session had left open**:
+`514e0b9c` (the revert of the relocation-pruning fix) is not the cause, and neither is `6c8d3150` (the encrypted UPDATE
+locate snapshot) nor `2bc3e947` (the PageBased preload removal), all of which are already present at `1966ba31`. The
+DELETE movement is in the commit/flush path, not in the UPDATE work.
+
+**3. The trade-off this exposes, stated plainly because it is mine.** The flush rework is where this session's INSERT win
+came from — `d6b86239` removed a sort and `851ac232` coalesced consecutive pages, together worth the 33,8 → 21,8-22,9 ms
+commit-flush improvement. The same pair now stands accused of `default DELETE` +33 %. One plausible mechanism ties the
+two halves together: coalescing merges *consecutive* entries, which works best — or only — on ordered input, so removing
+the sort may have quietly disabled the very thing the next commit added, leaving the commit to write pages in arrival
+order. That is a hypothesis for test point 3, not a conclusion: `d6b86239` alone (sort removal, no coalescing yet) will
+say whether the two halves are separable or whether it is the *combination* that hurts. Either way, if the ordering is
+what matters, the fix is not "revert the sort" (that would give back the INSERT win) but to sort only where coalescing
+needs it, or to coalesce on a key that does not require a full sort.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
