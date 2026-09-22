@@ -2149,7 +2149,54 @@ fine either. That is the state of the evidence, and it is written down rather th
 **5. Housekeeping.** The `-bisect4` worktree is removed after this entry; the branch is untouched, nothing is pushed,
 and the product (`src/`) has not been modified by any of the profiling work.
 
+### 2026-09-21 — STATE AT SESSION END (supersedes the gate status in the earlier `SESSION CLOSE` entry, which predates the nine commits after it)
+- Commits: **34** on `perf/autonomous-20260921` · tree clean · nothing pushed, nothing on `release/*` · all five bisect worktrees removed
+- Build: **0 errors**, 295 warnings (unchanged all session) · core suite **1920 / 0 failed / 16 skipped** · providers **281 / 0**
+- Regime for every number below: `no SHARPCOREDB_* switches set` unless a run says otherwise; same machine, same committed baseline (`708ccb73`, 2026-09-15)
+
+**1. The gate, which is no longer the blocker.** **Two passes** (attempt 9: worst spread 2,50×; attempt 10: 2,48×), both
+"nothing is slower than baseline × 1,50", after eight INCONCLUSIVE attempts (2,74×-4,32×). The machine's noise floor
+straddles the 2,50× spread limit, so **a pass is possible but not guaranteed on this machine**, and the gate's ratios
+come from the median — which reproduces across runs far better than the reps do (74.134 vs 74.333 ops/s, 0,27 %).
+
+**2. `default DELETE 1,33×` — attributed, then explained, and now a decision for the plan.** Bisected over five trees to
+the flush-coalescing commit, then cleared as DELETE's own work: its stages are identical pre/post **down to the
+allocation byte**, so the cell measures the state the *UPDATE* phase leaves behind in a single-database job. A PROPOSED
+amendment sits in the plan (line ~198) with two options and a recommendation; **until it is accepted, `1,33×` is neither
+a regression nor a clean bill.**
+
+**3. Two habits from this session that the next one should reuse rather than re-derive.**
+- **Reading an INCONCLUSIVE gate run.** The comparison table's "current" column is the median of three reps, and the
+  six rep values group as **blocks {1,4,5} = `default`, {2,3,6} = `raw`** — confirmed digit-exactly on attempts 9 and 10,
+  so any INCONCLUSIVE run's medians can be taken from its console output.
+- **Allocation is the load-independent acceptance column.** Every wall-clock claim this session that had to survive a
+  noisy machine was settled on bytes per call, and the one that was not (`parse` 2,4 vs 6,3 ms at identical call counts)
+  demonstrated why.
+
+**4. Next session's first actions, in order, with their acceptance.**
+1. **Accept or reject the PROPOSED plan item** on phase independence (plan §2, line ~198). Cheapest first action, and
+   it decides whether the DELETE cell is ever read as a verdict.
+2. **fair-PK INSERT** (0,71×; the arm's only remaining product target). One `--pk-profile-insert` with a stamp split
+   inside `FixedWidthCodec.SerializeRow` names the 706 B/row; the named candidate is the two `List<>` scratch
+   allocations per row (scratch, not output). **Acceptance: the allocation column, not ops/s** — so it is verifiable on
+   this machine. `hash-index` is closed as a product target (managed map, collation `Binary`, batch path already pooled).
+3. **The encrypted UPDATE locate's tail** (slice + one AEAD open per record), then whatever the plan's §5 order says.
+
+**5. What this session left deliberately undone**, so it is not mistaken for an oversight: the DELETE cell's
+methodology (above), the 9 % the sort removal may or may not own (single sample per bisect point), and `raw DELETE`'s
+movement (its own value moves 12 % between runs, so it was listed and not concluded). Six of my own hypotheses were
+refuted by evidence during the session — coalescing (twice), the relocation finding, a per-call/per-row unit slip, the
+"882 B/key is partly normalisation" split, and my own proposed fix for the DELETE cell — each with its refutation
+recorded rather than dropped.
+
+**6. Six commands that reproduce the session's key results** (all from the repo root; output to a file because these
+runs are minutes long): `tools\clean-benchmark.ps1 --gate` · `$env:SHARPCOREDB_MAIN_PROFILE_DELETE='1'; dotnet run -c
+Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -- --gate` · `--pk-profile-insert` ·
+`--pk-profile` · `git worktree add --detach <dir> <commit>` for any bisect point (copy `tools\clean-benchmark.ps1` and,
+for DELETE profiles, `Program.cs`, into the worktree so the instrument matches) · `git worktree remove --force <dir>`.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
