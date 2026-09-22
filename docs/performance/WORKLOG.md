@@ -1816,7 +1816,57 @@ FixedWidthRecordLayout=False, AutoFixedWidthRecords=True)` line in this output i
 analysis, which was measured on the `--pk` arm whose config sets the layout explicitly. The gate rows above are the
 default arm and have always been non-fixed-width.
 
+### 2026-09-21 — Gate attempt 9: **PASSED** (exit 0) — the session's first pass, and its margin stated honestly
+- Session: 1 · Command: `tools\clean-benchmark.ps1 --gate` (same tree, same regime, `no SHARPCOREDB_* switches set`) · Artifact: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/*.json`
+- Verdict: **PASS — "nothing is slower than baseline × 1,50."** Both gate criteria met: rep spread inside the limit *and* every arm inside tolerance
+- Commit: this worklog entry only (no product change in attempts 7-9)
+- NEXT: treat this as the tree's state, **not** as a machine property (see §3); the one cell that moved the wrong way is `default DELETE 1,33x`, flagged `watch` — first candidate for the next session
+
+**1. The pass, in full.** Rep spread — raw `I 1,12x R 1,44x U 2,18x D 1,49x`, default `I 1,71x R 1,88x U 2,50x D 1,84x`, **worst 2,50x**. Baseline
+comparison (`ratio = baseline ÷ current`, so >1 is slower than baseline):
+
+| metric | baseline | current | ratio | verdict |
+|---|---:|---:|---:|---|
+| raw INSERT | 140.440 | 112.868 | 1,24x | ok |
+| raw READ | 104.216 | 99.751 | 1,04x | ok |
+| raw UPDATE | 107.082 | 99.538 | 1,08x | ok |
+| raw DELETE | 204.393 | 178.107 | 1,15x | ok |
+| default INSERT | 123.493 | 105.072 | 1,18x | ok |
+| default READ | 81.198 | 71.947 | 1,13x | ok |
+| **default UPDATE** | 77.823 | 114.459 | **0,68x** | ok (faster) |
+| default DELETE | 98.725 | 74.134 | 1,33x | **watch** |
+
+**The `default UPDATE 0,68x` is this session's UPDATE work showing up in the gate**: the encrypted default-job
+UPDATE arm measured +20,1 % when the locate was taken out of the per-record snapshot, and the commit-flush
+rework (−34 %) sits in the same path. The gate is not the place that measured that work, so this is
+corroboration rather than evidence — the evidence stays the same-session `--default-profile` pair with call
+counts and artifact JSON that the earlier entries carry.
+
+**2. `default DELETE 1,33x` (watch) is the one cell that went the wrong way** — 33 % slower than baseline, inside
+the 1,50x tolerance so the gate passes, but it is a real movement and not attributed to anything in this
+worklog's entries. It is in the *default* arm (encrypted, default job), i.e. the arm this session touched most,
+so it deserves a same-shape profile pair (baseline vs current stage table, call counts included) before it is
+called noise. Recorded here so it is not discovered later as a mystery.
+
+**3. The margin, stated plainly, because a pass read as a property would be wrong.** The spread check landed on
+**2,50x against a 2,50x limit** — the pass holds only because the check is `> 2,50` and not `>= 2,50`. Within the
+same hour on the same quiet machine, attempt 7 was INCONCLUSIVE at 3,09x (default UPDATE) and attempt 8 at 2,62x
+(raw DELETE), and attempts 1-6 earlier in the session ranged 2,74x-4,32x. So:
+
+- **The gate can pass on this machine, but the same tree can also fail its spread check** — the noise floor
+  straddles the threshold. The eight-row table above is therefore best read as "no arm is *systematically*
+  slower than baseline", which is what the plan's §2.4 gate is for.
+- **What this pass does not licence:** recording a *new baseline* from it. The tool's own advice is to re-run on a
+  completely quiet machine for baseline recording, and a run whose spread cell is exactly at the limit is not
+  that run — a baseline built from it would bake this run's medians in as truth.
+- **What it does licence:** closing the "gate never ran to completion" state of this session. Attempts 7-9 also
+  answered the question attempt 7's entry left open — the offending cell moves between runs (default UPDATE,
+  then raw DELETE, then default UPDATE again) rather than staying put, which fits general rep-to-rep variance
+  more than one systematic bimodal mechanism. The write-path/GC hypothesis stays open but is now the *second*
+  priority behind `default DELETE 1,33x`, because that one is a measurement rather than a hypothesis.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
