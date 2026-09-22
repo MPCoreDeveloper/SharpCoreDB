@@ -2238,7 +2238,7 @@ for DELETE profiles, `Program.cs`, into the worktree so the instrument matches) 
 - Session: 2 of 2026-09-22 (unattended — the user went to bed, so this is the quiet machine the plan kept asking for; nothing else ran on the CPU during the measurements)
 - Command(s): `--gate` (attempt 12) · `--pk` ×3 · `--pk-default` ×2 · `--multirowinsert` ×7 (1 in a `--detach` worktree at `112709e2`, then 3 interleaved pairs) · the plain comparative run ×3 · the six provider/EF/sync suites + `VectorSearch.Tests` by their EXEs · `dotnet build SharpCoreDB.CI.slnf`
 - Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.` (every run printed it)
-- Verdict: **§5.4's DoD is met for this build** (all three harness arms plus the provider suites re-run, and one table per ladder against same-run SQLite arms); **the fair-PK INSERT ratio did not move** — 0,68× median here against 0,71× published, while the allocation fix is real at −22,4 %; and the gate is INCONCLUSIVE again (2,76×) *on a quiet machine*, which makes the noise floor a property of the machine rather than of the load
+- Verdict: **§5.4's DoD is met for this build** (all three harness arms plus the provider suites re-run, and one table per ladder against same-run SQLite arms); **5.1's DoD item 2 is met too** — the per-stage budget for the `--multirowinsert` shape is in §4 (calls, share, B/call, µs/row, B/row); **the fair-PK INSERT ratio did not move** — 0,68× median here against 0,71× published, while the allocation fix is real at −22,4 %; and the gate is INCONCLUSIVE again (2,76×) *on a quiet machine*, which makes the noise floor a property of the machine rather than of the load
 - Commit: this worklog entry + the brief's §4 refresh (no product change in this session)
 - NEXT: 5.1 INSERT remains the only losing fair-PK column and its allocation budget is now **exhausted** as a lever (see §4 below) — the next thing that can move it is the SQL-layer per-statement work in 5.1's own list, or a decision to accept the allocation-only win; §5.4's provider numbers are current as of this build; and the locate's 12.6 MB snapshot is still the coarser knob, unmeasured
 
@@ -2277,6 +2277,30 @@ Suites, all on the final build, all green: `SharpCoreDB.Functional.Tests` **38 /
 
 The first single pair looked like a 13 % slowdown, which would have been a reason to revert the codec change rather than keep it. Three **interleaved** pairs (after/before/after/before/after/before, same machine, minutes apart) give per-pair rows/s ratios of **1,015 / 1,082 / 0,897** and medians of **67.403 (after) vs 66.392 (before)** — the arms overlap, so **the time is unchanged within this machine's noise and the −13 % reading was an artefact of comparing two isolated runs**. The allocation delta reproduces in every run of this session on both shapes (706 → 547 B/row on the fair-PK arm, 4.266 → 4.106 B/row here). That is the plan's own rule (§2.7 / brief §8.1) doing exactly what it is for: the deterministic column decides, the wall clock is quoted and not concluded.
 
+**The per-stage budget for this shape, which is 5.1's DoD item 2** (profiled pass of the same run: 20,000 rows during 20 statements of 1,000, so per-statement stages divide their B/call by 1,000 for B/row; † marks a stage that nests what is below it, so the shares are not additive — plan §11's caveat):
+
+| stage | total ms | calls | share | alloc MB | B/call | µs/row | B/row |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `dispatch` † | 191,7 | 22 | 29,7 % | 78,3 | 3.733.497 | 9,59 | 3.733 |
+| `table-batch` † | 133,3 | 20 | 20,6 % | 40,3 | 2.115.433 | 6,67 | 2.115 |
+| `validate` † | 46,5 | 20 | 7,2 % | 12,1 | 635.436 | 2,33 | 635 |
+| `index-maint` | 46,3 | 20 | 7,2 % | 19,7 | 1.032.995 | 2,32 | 1.033 |
+| `encode` † | 43,1 | 20 | 6,7 % | 12,1 | 635.396 | 2,16 | 635 |
+| — `hash-index` inside it | 42,2 | 20 | 6,5 % | 18,2 | 951.792 | 2,11 | 952 |
+| `row-build` | 34,5 | 20.000 | 5,3 % | 7,6 | 400 | 1,73 | 400 |
+| `commit` | 26,9 | 20 | 4,2 % | 2,5 | 132.251 | 1,35 | 132 |
+| `arena-write` | 17,4 | 20.000 | 2,7 % | 8,9 | 467 | 0,87 | 467 |
+| `encode-scratch` (new) | 17,2 | 20.000 | 2,7 % | 0,9 | **48** | 0,86 | 48 |
+| `parse` | 15,4 | 20 | 2,4 % | 8,5 | 443.388 | 0,77 | 443 |
+| `arena-append` | 12,2 | 20.000 | 1,9 % | 4,7 | 246 | 0,61 | 246 |
+| `engine-write` | 6,3 | 20 | 1,0 % | 3,4 | 178.470 | 0,32 | 178 |
+| `row-locate` | 5,0 | 20 | 0,8 % | 2,0 | 104.672 | 0,25 | 105 |
+| `stmt-split` | 4,1 | 22 | 0,6 % | 5,7 | 269.413 | 0,21 | 269 |
+| `validate-only` | 3,4 | 20 | 0,5 % | **0,0** | 0 | 0,17 | 0 |
+| `encode-layout` (new) | 0,3 | 20.000 | 0,0 % | 0,0 | **0** | 0,02 | 0 |
+
+Three things this table says that the timing column cannot. **(a)** The two new stages behave exactly as the fair-PK arm predicted on a *second* shape: `encode-scratch` is **48 B/row** (the arena-bound payload array — one per row here, because only the 20-character `email` value overflows the 16-byte inline capacity while `name` and `payload-N` fit inline, which is why `arena-write` fires 20,000 times and not 60,000) and `encode-layout` is **0 B/row**. **(b)** `validate-only` is **0 bytes and 0,17 µs/row** across 20,000 rows — validation is genuinely free on this path, and `validate`'s 635 B/row is entirely the serialization nested inside it (the same reading session 1 corrected for the fair-PK arm). **(c)** The per-statement stages now carry the arm: `dispatch` at 29,7 % and `table-batch` at 20,6 % of a 646 ms profiled pass are both *nested containers* whose own work is the per-statement bookkeeping 5.1 names (statement build, split, parse, dispatch) — together with `stmt-split` (269 B/row per statement, 0,21 µs/row) that is where a future INSERT lever would have to come from, not from the row serialization, which this session has now measured down to 48 B/row of output.
+
 **5. `--pk-default` (the pure-default encrypted arm) — the UPDATE gap narrowed, and it is the one cell this session's tail fix could plausibly touch.** Two runs, ratio = SharpCoreDB ÷ same-run SQLite:
 
 | run | INSERT | READ | UPDATE | DELETE | SQLite, the same runs |
@@ -2290,6 +2314,7 @@ The brief's published row 3 is INSERT 0,58×, READ 0,65×, UPDATE **0,42× (2,4�
 - **The gate cannot arbitrate on this machine** (four attempts straddling the limit: 2,50× pass, 2,48× pass, 2,91×, 2,76× — with docs-only commits between the last two). Quote a verdict when one arrives; do not plan around one, and do not read an INCONCLUSIVE as a pass.
 - **The fair-PK INSERT arm's allocation budget is spent.** The 706 B/row is now fully attributed: 383 B arena traffic (`arena-write`, unchanged, closed as a target), ~158 B scratch (**removed**, session 1), 48 B payload array (output — the arena caches and serves it), and the remainder the record plus the caller's row list. Nothing left there is a lever on ops/s, and the ladder above shows ops/s did not move.
 - **§5.4 is satisfied for this build** — three harness arms, one table per ladder against same-run SQLite, the provider/EF/sync/vector suites green by EXE, and `SharpCoreDB.CI.slnf` building clean. It becomes due again after the next core change.
+- **5.1's DoD item 2 is satisfied by §4's budget table**, and that table is also the argument for where item 1 (the ≥ 1.0× ratio) would have to come from if anyone attacks it again: the per-statement stages (`dispatch`, `table-batch`, `stmt-split`, `parse`) and not the row serialization, which is now 48 B/row of output plus the record itself. Note that the previous session's 5.1 exit said exactly this and stopped for lack of budget; this session adds the measurement, not a fix.
 - **Still open, untouched, and a design item rather than a tuning item:** the encrypted UPDATE locate's **12.6 MB whole-file snapshot** (one call per batch, ~1.5 MB of it touched) — plan §5.3's own options are a payload-only write path or a per-record read window, and the per-record window was already measured *worse* (2,3×, 5.3 follow-up 5). The remaining per-record allocation after this session is 279 B and is arm-independent, so it is not an encryption cost any more.
 - **Artifacts:** the `--pk`, `--pk-default` and comparative runs archive their JSON under the repo-root `results/` (git-ignored — `pk_comparative_20260922_*.json`, `comparative_20260922_*.json`); the profiler tables above (including the `--multirowinsert` budget) are console output, because neither `--multirowinsert` nor the PK arms archive a stage table.
 
