@@ -1865,7 +1865,52 @@ same hour on the same quiet machine, attempt 7 was INCONCLUSIVE at 3,09x (defaul
   more than one systematic bimodal mechanism. The write-path/GC hypothesis stays open but is now the *second*
   priority behind `default DELETE 1,33x`, because that one is a measurement rather than a hypothesis.
 
+### 2026-09-21 — Gate attempt 10 PASSED as well, and `default DELETE` now looks systematic, not noise: 1,33x twice, 0,27 % apart
+- Session: 1 · Command: `tools\clean-benchmark.ps1 --gate` (attempt 10; same tree/regime as attempt 9) · Artifact: `results/*.json`
+- Verdict: **PASS again** (worst spread 2,48x). The entry above called `default DELETE 1,33x` "inside tolerance, unattributed, watch"; this run sharpens that to **reproducible**, and below is the triage that follows
+- NEXT: separate "this session" from "the six days before it" with one run on the pre-session tree (`92ac7b56`) — see §3. `default DELETE` does **not** block the gate (1,33x < 1,50x), so this is a finding, not a failure
+
+**1. The two runs, side by side.**
+
+| cell | attempt 9 | attempt 10 |
+|---|---|---|
+| `raw DELETE` | 178.107 → 1,15x | 158.997 → 1,29x |
+| `default DELETE` | 74.134 → **1,33x** | 74.333 → **1,33x** |
+| worst rep spread | 2,50x | 2,48x |
+| verdict | PASSED | PASSED |
+
+`default DELETE`'s current value differs by **0,27 %** between two runs while the reps *inside* each run disagree by
+2,5x. That is the important part, and it is a general property of this gate: **the spread banner describes within-run
+rep variance, while the ratio the gate reports comes from the median, and the median reproduces across runs far better
+than the reps do.** A ratio that lands on the same value twice is therefore a movement of the tree, not of the machine —
+which is exactly what the "watch" label on its own could not distinguish.
+
+**2. What this does and does not change.** The previous entry's *verdict* stands untouched: 1,33x is inside the 1,50x
+tolerance, so the gate passes and nothing is blocked. What changes is the *attribution question*: `default DELETE` is
+now a reproducible ~33 % slowdown against the 2026-09-15 baseline rather than a candidate noise blip, and the session's
+own evidence base has a hole that this finding sits in — **DELETE was never measured once during the whole session**
+(grepping the worklog for DELETE tables returns only the two gate rows above). `raw DELETE` is shakier (1,15x then
+1,29x, and its current value moved 12 % between runs), so it is listed but not concluded.
+
+**3. The next test, chosen because it is one run and it discriminates between two very different stories.** The baseline
+is six days old (`708ccb73`, 2026-09-15, whose own message says it is "the deliverable that would have caught the Flush
+regression"), so a DELETE gap can predate this session entirely — including the possibility that the baseline was
+recorded on a different machine state. Running the same gate on the pre-session tree (`92ac7b56`, this branch's base)
+answers that in one run:
+
+- if `default DELETE` is ~1,33x there too → **pre-existing** (six days or the baseline's own provenance), not this
+  session; the finding goes to the plan as an open baseline question, not as a regression to fix here;
+- if it is ~1,0x there → **this session** caused it, and the candidates are named and few, all in DELETE's path: the
+  commit-flush rework (page coalescing, the −34 % INSERT win), the relocation index fix, and the PageBased index-preload
+  removal.
+
+The profiler route is *not* available for this arm as it stands: `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` exists for the
+default arm's UPDATE, but there is no `MAIN_PROFILE_DELETE` counterpart (`--pk-profile-delete` profiles the *fair-PK*
+arm, not the default one). Adding that switch would be a ~10-line harness addition mirroring the UPDATE one, and it is
+worth doing only *after* the pre-session run says the movement belongs to this session.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
