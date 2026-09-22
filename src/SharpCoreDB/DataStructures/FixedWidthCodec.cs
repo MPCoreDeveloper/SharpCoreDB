@@ -300,9 +300,10 @@ public static class FixedWidthCodec
     /// <para>
     /// <b>Why this exists (plan §9 priority 2, 2026-09-22).</b> The fair-PK INSERT arm attributed
     /// <b>706 B/row</b> to a row's serialization, ~4.7× the record it produces, and the two lists the codec
-    /// allocated per row were the named candidate: two <c>List</c> objects (~40 B each) plus their first backing
-    /// arrays (an <c>int[4]</c> and a <c>byte[][4]</c>) is ~176 B/row, all of it scratch rather than output. The
-    /// pair is now rented from this thread and cleared before the call returns.
+    /// allocated per row were the named candidate: two <c>List</c> objects plus their first backing arrays (an
+    /// <c>int[4]</c> and a <c>byte[][4]</c>), all of it scratch rather than output. Removing them measured
+    /// <b>−158.4 B/row</b> (<c>encode</c> 7,058,333 → 5,474,352 B per 10,000-row batch call via
+    /// <c>--pk-profile-insert</c>). The pair is now rented from this thread and cleared before the call returns.
     /// </para>
     /// <para>
     /// <b>Why thread-static and not caller-owned.</b> <c>Table.ValidateAndSerializeBatchOutsideLock</c> serializes
