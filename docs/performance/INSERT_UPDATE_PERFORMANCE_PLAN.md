@@ -195,6 +195,28 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    JSON). Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE reps
    swing nearly 3× run to run, so that arm can only be judged on a rep ladder.
 
+   🔬 **PROPOSED (2026-09-21, needs acceptance — not applied).** The per-arm job runs INSERT → READ → UPDATE → DELETE
+   against **one database**, so its late phases are not independent of its early ones. That stopped being theoretical:
+   after the buffered-overwrite flush coalescing (`851ac232`) the gate's `default DELETE` cell stepped **1,07× → 1,34×**
+   and stayed there (reproduced twice; located by a bisect over five trees, `92ac7b56` 1,00× / `1966ba31` 0,98× /
+   `d6b86239` 1,07× / `a08e0ea8` 1,34× / HEAD 1,33×), yet a DELETE-phase profile — using a switch added for the purpose,
+   `SHARPCOREDB_MAIN_PROFILE_DELETE=1`, mirroring the UPDATE one — shows **DELETE's own stages unchanged between the
+   pre- and post-change trees down to the allocation byte**: `commit` 4,6 vs 4,7 ms at 10.477.872 B/call, `engine-write`
+   262.640 B, `index-maint` 160.080 B, `classify` 0 B, all identical; `parse` 2,4 vs 6,3 ms on **identical call counts
+   and identical 381 B/call**; and `commit-overwrites` 0,0 ms in both, i.e. the coalescing never runs inside DELETE.
+   The commit changed *what the UPDATE phase before it writes* (315 page writes → 2, and a different dirty-page/cache
+   state), and the harness then measures DELETE next on the same file. Two ways to handle it, for the plan's owner to
+   choose rather than have chosen silently:
+   1. **measure the DELETE phase against its own freshly created database** per arm — isolates the number; costs one
+      extra setup per arm and changes what the gate compares;
+   2. **keep the single-database sequence and stop reading late phases as standalone regression signals**, labelling
+      them as "in sequence" wherever the numbers are quoted.
+   Recommendation: **2 now, 1 when someone needs the DELETE number to be a verdict.** Option 1 is a real change to what
+   the gate measures and deserves its own before/after pair. Until one is chosen, `default DELETE 1,33×` stays recorded
+   as **unattributed and possibly an artefact of the measurement order — not a regression, and equally not evidence
+   that DELETE is fine.** Evidence chain: WORKLOG 2026-09-21 (gate attempts 9-10, the bisect, the two phase profiles).
+
+
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage
 instrumentation accounts for ≥90% of wall time in a write loop.
 
