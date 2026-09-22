@@ -2101,7 +2101,56 @@ there while `parse` is unchanged, the movement is inside the commit and the fix 
 it; if `commit` matches while the phase is still slower, the movement is environmental and the fix — or the measurement —
 belongs in the harness, which would be a methodology finding rather than a product bug.
 
+### 2026-09-21 — The profiled comparison clears `851ac232`: DELETE's own work is byte-identical pre- and post-coalescing, so the gate's DELETE cell is environmental
+- Session: 1 · Run: `SHARPCOREDB_MAIN_PROFILE_DELETE=1` in a worktree at `d6b86239`, same instrument (current `Program.cs` copied in, since that tree predates the switch) · INCONCLUSIVE (2,71x) as a gate, read only as a stage table
+- Verdict: **the DELETE movement is not DELETE's work.** `commit` is 4,6 vs 4,7 ms with **allocation identical to the byte** (10.477.872 B/call), and every other stage matches too — so my own `851ac232` did not make DELETE slower; it changed the *state* the DELETE phase runs in. Per the rule written down before the run, that is the environmental branch: the finding belongs to the harness/plan, not to a product fix
+- NEXT: the harness question (should the gate's DELETE cell be measured on its own database?) goes to the plan as a methodology item; the product work returns to the fair-PK INSERT and the locate tail, neither of which this touches
+
+**1. The comparison, side by side.**
+
+| stage | `d6b86239` (pre-coalescing) | HEAD (post) | delta |
+|---|---:|---:|---|
+| `commit` | 4,6 ms / 1 call / 10.477.872 B per call | 4,7 ms / 1 call / **10.477.872** B per call | ~2 %, allocation **identical** |
+| `parse` | 2,4 ms / 10.000 / 381 B | 6,3 ms / 10.000 / 381 B | 2,6x on time, calls and allocation identical |
+| `engine-write` | 0,6 ms / 262.640 B | 0,5 ms / 262.640 B | identical allocation |
+| `index-maint` | 0,4 ms / 160.080 B | 0,4 ms / 160.080 B | identical allocation |
+| `classify` | 0,3 ms / 10.000 / 0 B | 0,2 ms / 10.000 / 0 B | identical |
+| `commit-overwrites` | **0,0 ms / 1 call** | **0,0 ms / 1 call** | the flush is not in DELETE's path in either tree |
+| phase wall-clock | 0,03 s (360.937 ops/s) | 0,03 s (356.338 ops/s) | 1,3 % apart |
+
+**2. Why this is the load-independent kind of evidence.** Both runs landed in the fast-rep mode (0,03 s), so their
+wall-clocks cannot compare the gate's slow cells — but allocation is the column that does not depend on machine load,
+and there **every stage matches to the byte** across two different product trees. Combined with `parse`'s 2,6x on
+identical calls and identical allocation, the picture is consistent: the phase's variance lives in *scheduling and
+state*, not in work performed. `parse` moving 2,6x while doing exactly the same thing 10,000 times is itself a
+demonstration that per-stage wall-clock at this scale is noisy, which is precisely why the allocation column has been
+this session's acceptance signal everywhere else.
+
+**3. The correction this forces on my own record, stated because I accused myself two entries ago.** That entry said the
+bisect was "complete" and `851ac232` "owns" the slowdown. The bisect was right about *where* the movement appears — the
+gate's `default DELETE` cell steps from 1,07x to 1,34x exactly at that commit, reproduced across trees — but the
+mechanism I then proposed (the merge running on DELETE's entries, "pure overhead on that path") is wrong on two counts:
+the flush costs 0,0 ms inside DELETE, and DELETE's own stages are unchanged between the trees. What the commit really
+does is change **what the UPDATE phase before it writes** (315 page writes to 2, and a different dirty-page/page-cache
+state), and the harness then runs DELETE next on the same file. So the honest statement is: *the commit changed the
+environment that the later phase is measured in; whether it costs a user anything on a DELETE is unknown, and the
+existing measurement cannot separate the two.*
+
+**4. What that means for the gate, and why it is not an excuse.** The gate's per-arm job runs INSERT → READ → UPDATE →
+DELETE against one database, so the last phase's number is not independent of the earlier ones — a property that has
+been quietly true the whole time and only became visible because a change deliberately altered an earlier phase's write
+pattern. Two ways to handle it, both requiring the plan's agreement because they change what the §2.4 gate means:
+measure the DELETE phase on its own freshly created database (isolates it, costs one extra setup per arm), or report
+each phase's numbers as "in sequence on one database" and stop treating late phases as standalone regression signals.
+Until one of those is chosen, the `default DELETE 1,33x` must be recorded as **unattributed and possibly an artefact of
+the measurement order**, not as a regression, and the gate's PASS on it must not be read as evidence that DELETE is
+fine either. That is the state of the evidence, and it is written down rather than resolved by preference.
+
+**5. Housekeeping.** The `-bisect4` worktree is removed after this entry; the branch is untouched, nothing is pushed,
+and the product (`src/`) has not been modified by any of the profiling work.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
