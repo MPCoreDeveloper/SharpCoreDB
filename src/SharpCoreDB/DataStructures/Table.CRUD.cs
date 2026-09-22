@@ -4187,7 +4187,7 @@ public partial class Table
     /// at all (<see cref="TryLoadWholeFileForRowAccess"/> refuses it), so every update paid a per-record read
     /// while the plaintext arm read the file once. The 4-byte prefix is the stored (ciphertext) length even in
     /// an encrypted file, so the sliced bytes are a complete AEAD frame and
-    /// <see cref="IStorage.DecryptRecordPayload"/> returns the plaintext the field patcher needs — the same
+    /// <see cref="IStorage.DecryptRecordPayload(byte[])"/> returns the plaintext the field patcher needs — the same
     /// treatment the contiguous fixed-width path already gives encrypted spans
     /// (<c>TryReadContiguousFixedWidthRecords</c>).
     /// </para>
@@ -4205,10 +4205,39 @@ public partial class Table
             return null;
         }
 
+        int payloadOffset = (int)position + 4;
+        if (encrypted)
+        {
+            // §5.3 tail (2026-09-22): decrypt the frame where it lies in the snapshot instead of copying it into a
+            // right-sized array first. The plaintext array below is still allocated (it becomes the caller's record
+            // bytes), but the ciphertext copy that preceded every AEAD open is gone — one allocation per record
+            // instead of two, which is what the profile's B/call for row-locate-index was charging for.
+            var decrypted = this.storage?.DecryptRecordPayload(wholeFile, payloadOffset, recordLength);
+            if (decrypted is not null)
+            {
+                return decrypted;
+            }
+
+            // A storage implementation without the range overload: copy, then decrypt — the pre-2026-09-22 route.
+        }
+
         var payload = new byte[recordLength];
-        wholeFile.AsSpan((int)position + 4, recordLength).CopyTo(payload);
+        wholeFile.AsSpan(payloadOffset, recordLength).CopyTo(payload);
 
         return encrypted ? this.storage?.DecryptRecordPayload(payload) : payload;
+    }
+
+    /// <summary>
+    /// Copies the AEAD frame of the <paramref name="index"/>-th record out of a contiguous range read into its own
+    /// array — the fallback used when the storage has no range overload for
+    /// <see cref="IStorage.DecryptRecordPayload(byte[], int, int)"/>. The range overload replaced this per-record
+    /// copy on the encrypted contiguous path; the fallback keeps alternative storages working unchanged.
+    /// </summary>
+    private static byte[] SliceCipher(byte[] physical, int index, long physicalStride, int frameLength)
+    {
+        var cipher = new byte[frameLength];
+        physical.AsSpan((int)(index * physicalStride) + 4, frameLength).CopyTo(cipher);
+        return cipher;
     }
 
     /// <summary>
@@ -4318,10 +4347,11 @@ public partial class Table
                     return null; // tombstoned slot or layout mismatch -> generic per-row path
                 }
 
-                var cipher = new byte[prefix];
-                physical.AsSpan((int)(i * physicalStride) + 4, prefix).CopyTo(cipher);
-
-                var plain = this.storage.DecryptRecordPayload(cipher);
+                // §5.3 tail (2026-09-22): the frame is decrypted where it lies in the range read, so the per-record
+                // ciphertext copy (`new byte[prefix]` + copy) is gone — this path allocated two arrays per record
+                // and now allocates one. Falls back to the copy for a storage without the range overload.
+                var plain = this.storage.DecryptRecordPayload(physical, (int)(i * physicalStride) + 4, prefix)
+                    ?? this.storage.DecryptRecordPayload(SliceCipher(physical, i, physicalStride, prefix));
                 if (plain is null || plain.Length != layout.FixedSize)
                 {
                     return null;

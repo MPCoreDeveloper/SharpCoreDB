@@ -195,18 +195,22 @@ public sealed class CryptoService : ICryptoService, IDisposable
 
     /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
-    public byte[] Decrypt(byte[] key, byte[] encryptedData)
+    public byte[] Decrypt(byte[] key, byte[] encryptedData) => this.Decrypt(key, encryptedData.AsSpan());
+
+    /// <inheritdoc />
+    [MethodImpl(MethodImplOptions.AggressiveInlining | MethodImplOptions.AggressiveOptimization)]
+    public byte[] Decrypt(byte[] key, ReadOnlySpan<byte> encryptedData)
     {
         var cipherLength = encryptedData.Length - CryptoConstants.GCM_NONCE_SIZE - CryptoConstants.GCM_TAG_SIZE;
         if (cipherLength < 0)
             throw new ArgumentException("Invalid encrypted data length", nameof(encryptedData));
 
         var aes = GetCipher(key);
-        
+
         // OPTIMIZED: Use Span slicing instead of LINQ Take/Skip/TakeLast (zero allocation)
-        ReadOnlySpan<byte> nonce = encryptedData.AsSpan(0, CryptoConstants.GCM_NONCE_SIZE);
-        ReadOnlySpan<byte> cipher = encryptedData.AsSpan(CryptoConstants.GCM_NONCE_SIZE, cipherLength);
-        ReadOnlySpan<byte> tag = encryptedData.AsSpan(CryptoConstants.GCM_NONCE_SIZE + cipherLength, CryptoConstants.GCM_TAG_SIZE);
+        ReadOnlySpan<byte> nonce = encryptedData[..CryptoConstants.GCM_NONCE_SIZE];
+        ReadOnlySpan<byte> cipher = encryptedData.Slice(CryptoConstants.GCM_NONCE_SIZE, cipherLength);
+        ReadOnlySpan<byte> tag = encryptedData.Slice(CryptoConstants.GCM_NONCE_SIZE + cipherLength, CryptoConstants.GCM_TAG_SIZE);
         
         // Decrypt directly to result
         var plaintext = new byte[cipherLength];

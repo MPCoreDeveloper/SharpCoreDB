@@ -273,9 +273,33 @@ public static class WritePathProfiler
         /// to be measured rather than assumed.
         /// </summary>
         CommitOverwritesWrite = 33,
+
+        /// <summary>
+        /// The size/layout computation of one row's serialization, before any record byte is written:
+        /// <c>ComputeExactRowSize</c> on the legacy variable-length codec and <c>GetFixedWidthLayout</c> on the
+        /// fixed-width one (<c>Table.Serialization.cs</c>). Split out of <see cref="Encode"/> (2026-09-22, plan §9
+        /// priority 2 / WORKLOG 2026-09-21) because the fair-PK INSERT arm attributes 706 B/row to
+        /// serialization — about 4.7× the record it produces — and the plan's own reading named "layout
+        /// computation" as one of the two halves that could own it. On the fixed-width arm the expected answer is
+        /// zero bytes (the layout is computed once and cached per table), which is itself the reading: it moves the
+        /// question to <see cref="EncodeScratch"/> and to the record bytes.
+        /// </summary>
+        EncodeLayout = 34,
+
+        /// <summary>
+        /// The scratch half of a fixed-width row's serialization (<c>FixedWidthCodec.SerializeRow</c>): encoding a
+        /// variable-length value into its payload array, collecting the values that have to go to the overflow
+        /// arena, and the per-row collection handed to <c>IOverflowArena.WriteMany</c>. Split out (2026-09-22, plan
+        /// §9 priority 2) to name the intermediate buffering behind that same 706 B/row: the payload arrays are
+        /// output (the arena caches them and serves them back), but the <c>List&lt;int&gt;</c>/<c>List&lt;byte[]&gt;</c>
+        /// pair the earlier shape allocated per row was scratch — 176 B/row of it — and this stage is what measures
+        /// that before and after the fix. Measured at <b>one call per arena-bound value</b>, so its B/call is ~B/row
+        /// on this arm.
+        /// </summary>
+        EncodeScratch = 35,
     }
 
-    private const int StageCount = 34;
+    private const int StageCount = 36;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -317,6 +341,8 @@ public static class WritePathProfiler
         "commit-overwrites",
         "commit-ovw-prep",
         "commit-ovw-write",
+        "encode-layout",
+        "encode-scratch",
     ];
 
     private static int _enabled;

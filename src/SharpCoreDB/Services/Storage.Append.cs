@@ -217,6 +217,35 @@ public partial class Storage
     /// <inheritdoc />
     public byte[]? DecryptRecordPayload(byte[] payload) => DecryptRecord(payload);
 
+    /// <inheritdoc />
+    public byte[]? DecryptRecordPayload(byte[] buffer, int offset, int length)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (offset < 0 || length <= 0 || offset + length > buffer.Length)
+        {
+            return null;
+        }
+
+        if (!UseRecordEncryption)
+        {
+            // Same contract as the array overload: not encrypted → the caller's bytes, as a fresh array
+            // (the caller may hold the buffer, so it must not be handed out).
+            var plaintext = new byte[length];
+            Buffer.BlockCopy(buffer, offset, plaintext, 0, length);
+            return plaintext;
+        }
+
+        try
+        {
+            return crypto.Decrypt(key, buffer.AsSpan(offset, length));
+        }
+        catch
+        {
+            // Corrupt or legacy data — surface null so readers treat it as an invalid record.
+            return null;
+        }
+    }
+
     /// <summary>
     /// Looks up a not-yet-flushed buffered append by its physical position. Lock-free (the index is a
     /// <see cref="ConcurrentDictionary{TKey,TValue}"/>), mirroring how buffered overwrites are read.

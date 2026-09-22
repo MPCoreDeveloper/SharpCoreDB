@@ -202,7 +202,7 @@ public interface IStorage
     /// layer's cached file handle (no per-call handle open). Used by the fixed-width contiguous
     /// UPDATE/DELETE fast paths: on a plaintext file the range holds the logical records, and on an
     /// encrypted file (<see cref="AreRecordsEncrypted"/>) it holds their ciphertext, which the caller
-    /// repacks with <see cref="DecryptRecordPayload"/>. Implementations that cannot serve a raw range
+    /// repacks with <see cref="DecryptRecordPayload(byte[])"/>. Implementations that cannot serve a raw range
     /// (mocks) return null so the caller falls back to per-record reads.
     /// </summary>
     byte[]? ReadBytesRange(string path, long offset, int length) => null;
@@ -211,7 +211,7 @@ public interface IStorage
     /// True when the file at <paramref name="path"/> stores per-record encrypted (ciphertext)
     /// payloads (it carries the encrypted-table magic header). Such a file keeps a constant record
     /// stride, so a raw range read stays usable as long as every payload is passed through
-    /// <see cref="DecryptRecordPayload"/> before it is interpreted. The default returns false
+    /// <see cref="DecryptRecordPayload(byte[])"/> before it is interpreted. The default returns false
     /// (plaintext / legacy layouts).
     /// </summary>
     bool AreRecordsEncrypted(string path) => false;
@@ -225,6 +225,19 @@ public interface IStorage
     /// mock storage), which makes the caller fall back to per-record reads.
     /// </summary>
     byte[]? DecryptRecordPayload(byte[] payload) => null;
+
+    /// <summary>
+    /// Range variant of <see cref="DecryptRecordPayload(byte[])"/>: decrypts one AEAD frame that already sits
+    /// inside a larger caller-owned buffer (a whole-file snapshot, a contiguous range read) starting at
+    /// <paramref name="offset"/> and <paramref name="length"/> bytes long, so no intermediate ciphertext copy is
+    /// needed. The plaintext is still a fresh array — it is the caller's record — but the ciphertext copy that
+    /// used to precede every AEAD open is gone (one allocation per record instead of two). The default returns
+    /// <see langword="null"/> so implementations without it keep the copy-then-decrypt path.
+    /// </summary>
+    /// <param name="buffer">The buffer holding the AEAD frame.</param>
+    /// <param name="offset">The frame's start offset inside <paramref name="buffer"/>.</param>
+    /// <param name="length">The frame's length (including nonce and tag).</param>
+    byte[]? DecryptRecordPayload(byte[] buffer, int offset, int length) => null;
 
     /// <summary>
     /// Drops (and closes) any cached file handles for <paramref name="path"/>. Callers MUST invoke this

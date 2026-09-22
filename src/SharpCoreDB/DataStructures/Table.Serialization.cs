@@ -512,11 +512,27 @@ public partial class Table
 
     /// <summary>Serializes a row using the fixed-width record layout (variable values → overflow arena).</summary>
     private byte[] SerializeRowFixedWidth(Dictionary<string, object> row)
-        => FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+    {
+        // §9-priority-2 instrumentation (2026-09-22): the layout half of a serialization, separated from the record
+        // bytes so the fair-PK INSERT arm's 706 B/row can be split. This arm's layout is computed once per table and
+        // cached, so the expected reading is ~0 bytes/row — which is itself the answer (the allocation is not layout
+        // computation) and it is why the split is measured rather than assumed.
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        var layout = GetFixedWidthLayout();
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        return FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, layout, GetOverflowArena());
+    }
 
     /// <summary>Serializes a column-ordered row (full table column order) with the fixed-width layout.</summary>
     private byte[] SerializeRowFixedWidth(object[] row)
-        => FixedWidthCodec.SerializeRow(row, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+    {
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        var layout = GetFixedWidthLayout();
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        return FixedWidthCodec.SerializeRow(row, ColumnTypes, layout, GetOverflowArena());
+    }
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values read from the overflow arena).</summary>
     private Dictionary<string, object> DeserializeRowFixedWidth(ReadOnlySpan<byte> data)
@@ -671,7 +687,14 @@ public partial class Table
             return SerializeRowFixedWidth(row);
         }
 
-        byte[] buffer = new byte[ComputeExactRowSize(row)];
+        // §9-priority-2 instrumentation (2026-09-22): the size computation separated from the write, because on the
+        // legacy layout "serialization" was one stamp covering both and the plan's reading named layout computation
+        // as a possible owner of the intermediate buffering.
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        int size = ComputeExactRowSize(row);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        byte[] buffer = new byte[size];
         int bytesWritten = WriteRowOptimized(buffer.AsSpan(), row);
         return bytesWritten == buffer.Length
             ? buffer
@@ -694,7 +717,11 @@ public partial class Table
             return SerializeRowFixedWidth(values);
         }
 
-        byte[] buffer = new byte[ComputeExactRowSize(values)];
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        int size = ComputeExactRowSize(values);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        byte[] buffer = new byte[size];
         int bytesWritten = WriteRowGeneric(buffer.AsSpan(), values);
         return bytesWritten == buffer.Length
             ? buffer

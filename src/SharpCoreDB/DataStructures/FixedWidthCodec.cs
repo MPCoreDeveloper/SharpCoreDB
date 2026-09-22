@@ -6,6 +6,7 @@ namespace SharpCoreDB.DataStructures;
 
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using SharpCoreDB.Diagnostics;
 
 /// <summary>
 /// Shared fixed-width record codec (out-of-line overflow model). Every column occupies a constant
@@ -31,41 +32,62 @@ public static class FixedWidthCodec
         // are patched into the slots. The previous shape called arena.Write per value, and every one of those
         // opens the arena file with FileOptions.WriteThrough (measured 0.4597 ms per value) — three TEXT
         // columns meant three file opens per row, ~1.4 ms of the ~1.43 ms a fixed-width INSERT cost.
-        List<int>? variableColumns = null;
-        List<byte[]>? variablePayloads = null;
+        var (variableColumns, variablePayloads) = RentScratch();
 
-        for (int i = 0; i < columns.Count; i++)
+        try
         {
-            var value = row.TryGetValue(columns[i], out var v) ? v : DBNull.Value;
-            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+            for (int i = 0; i < columns.Count; i++)
+            {
+                var value = row.TryGetValue(columns[i], out var v) ? v : DBNull.Value;
+                var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
 
-            if (!layout.IsVariable[i])
-            {
-                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
-            }
-            else if (value == null || value == DBNull.Value)
-            {
-                WriteNullVariableSlot(slot);
-            }
-            else if (value is string text && types[i] != DataType.Blob
-                     && TryWriteInlineStringSlot(slot, layout, text))
-            {
-                continue;   // encoded into the slot directly: no throw-away payload array
-            }
-            else
-            {
-                var payload = Table.EncodeVariablePayload(types[i], value);
-                if (TryWriteInlineVariableSlot(slot, layout, payload))
+                if (!layout.IsVariable[i])
                 {
-                    continue;   // stored in the record: no arena traffic at all for this value
+                    _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
                 }
+                else if (value == null || value == DBNull.Value)
+                {
+                    WriteNullVariableSlot(slot);
+                }
+                else if (value is string text && types[i] != DataType.Blob
+                         && TryWriteInlineStringSlot(slot, layout, text))
+                {
+                    continue;   // encoded into the slot directly: no throw-away payload array
+                }
+                else
+                {
+                    // §9-priority-2 instrumentation (2026-09-22): this is the scratch half of the row's
+                    // serialization — the payload array plus the collection handed to the arena — measured
+                    // separately from the record bytes so the fair-PK arm's 706 B/row can be split. Every exit
+                    // closes the stamp: an open checkpoint would mis-attribute the next stage's bytes.
+                    long scratchStart = WritePathProfiler.Stamp();
+                    var payload = Table.EncodeVariablePayload(types[i], value);
+                    bool inlined = TryWriteInlineVariableSlot(slot, layout, payload);
+                    if (!inlined)
+                    {
+                        variableColumns.Add(i);
+                        variablePayloads.Add(payload);
+                    }
 
-                (variableColumns ??= []).Add(i);
-                (variablePayloads ??= []).Add(payload);
+                    WritePathProfiler.Add(WritePathProfiler.Stage.EncodeScratch, scratchStart);
+                    if (inlined)
+                    {
+                        continue;   // stored in the record: no arena traffic at all for this value
+                    }
+                }
             }
+
+            PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
+        }
+        finally
+        {
+            // Release the scratch before returning. The payload references must not outlive the call — the arena
+            // owns them once WriteMany has cached them — and the same pair is reused by the next row on this
+            // thread (which is what removes the two List<> allocations per row).
+            variableColumns.Clear();
+            variablePayloads.Clear();
         }
 
-        PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
         return buffer;
     }
 
@@ -79,41 +101,56 @@ public static class FixedWidthCodec
         var buffer = new byte[layout.FixedSize];
         var span = buffer.AsSpan();
 
-        List<int>? variableColumns = null;
-        List<byte[]>? variablePayloads = null;
+        // Same scratch pair and same single WriteMany call as the dictionary overload — see the notes there.
+        var (variableColumns, variablePayloads) = RentScratch();
 
-        for (int i = 0; i < row.Length && i < types.Count; i++)
+        try
         {
-            var value = row[i];
-            var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
+            for (int i = 0; i < row.Length && i < types.Count; i++)
+            {
+                var value = row[i];
+                var slot = span.Slice(layout.Offsets[i], layout.SlotSizes[i]);
 
-            if (!layout.IsVariable[i])
-            {
-                _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
-            }
-            else if (value == null || value == DBNull.Value)
-            {
-                WriteNullVariableSlot(slot);
-            }
-            else if (value is string text && types[i] != DataType.Blob
-                     && TryWriteInlineStringSlot(slot, layout, text))
-            {
-                continue;   // encoded into the slot directly: no throw-away payload array
-            }
-            else
-            {
-                var payload = Table.EncodeVariablePayload(types[i], value);
-                if (TryWriteInlineVariableSlot(slot, layout, payload))
+                if (!layout.IsVariable[i])
                 {
-                    continue;   // stored in the record: no arena traffic at all for this value
+                    _ = Table.WriteTypedValueToSpan(slot, value, types[i]);
                 }
+                else if (value == null || value == DBNull.Value)
+                {
+                    WriteNullVariableSlot(slot);
+                }
+                else if (value is string text && types[i] != DataType.Blob
+                         && TryWriteInlineStringSlot(slot, layout, text))
+                {
+                    continue;   // encoded into the slot directly: no throw-away payload array
+                }
+                else
+                {
+                    long scratchStart = WritePathProfiler.Stamp();
+                    var payload = Table.EncodeVariablePayload(types[i], value);
+                    bool inlined = TryWriteInlineVariableSlot(slot, layout, payload);
+                    if (!inlined)
+                    {
+                        variableColumns.Add(i);
+                        variablePayloads.Add(payload);
+                    }
 
-                (variableColumns ??= []).Add(i);
-                (variablePayloads ??= []).Add(payload);
+                    WritePathProfiler.Add(WritePathProfiler.Stage.EncodeScratch, scratchStart);
+                    if (inlined)
+                    {
+                        continue;   // stored in the record: no arena traffic at all for this value
+                    }
+                }
             }
+
+            PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
+        }
+        finally
+        {
+            variableColumns.Clear();
+            variablePayloads.Clear();
         }
 
-        PatchVariableOffsets(span, layout, variableColumns, variablePayloads, arena);
         return buffer;
     }
 
@@ -227,14 +264,19 @@ public static class FixedWidthCodec
     /// Writes the collected variable-length payloads to the arena in a single call and stores each returned
     /// offset in its column's slot. Does nothing when the row had no variable-length values.
     /// </summary>
+    /// <param name="span">The record being built.</param>
+    /// <param name="layout">The record layout.</param>
+    /// <param name="variableColumns">Caller-owned per-thread scratch, cleared by the caller.</param>
+    /// <param name="variablePayloads">Caller-owned per-thread scratch, cleared by the caller.</param>
+    /// <param name="arena">The table's overflow arena.</param>
     private static void PatchVariableOffsets(
         Span<byte> span,
         FixedWidthRecordLayout layout,
-        List<int>? variableColumns,
-        List<byte[]>? variablePayloads,
+        List<int> variableColumns,
+        List<byte[]> variablePayloads,
         IOverflowArena arena)
     {
-        if (variablePayloads is null)
+        if (variablePayloads.Count == 0)
         {
             return;
         }
@@ -242,11 +284,60 @@ public static class FixedWidthCodec
         var offsets = arena.WriteMany(variablePayloads);
         for (int k = 0; k < offsets.Length; k++)
         {
-            int column = variableColumns![k];
+            int column = variableColumns[k];
             var slot = span.Slice(layout.Offsets[column], layout.SlotSizes[column]);
             slot[0] = 1;
             BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offsets[k]);
         }
+    }
+
+    /// <summary>
+    /// Per-thread scratch for the variable-length collection: the column indexes and payloads that have to go to
+    /// the overflow arena, reused across rows instead of allocating a fresh <c>List&lt;int&gt;</c> and
+    /// <c>List&lt;byte[]&gt;</c> per row.
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>Why this exists (plan §9 priority 2, 2026-09-22).</b> The fair-PK INSERT arm attributed
+    /// <b>706 B/row</b> to a row's serialization, ~4.7× the record it produces, and the two lists the codec
+    /// allocated per row were the named candidate: two <c>List</c> objects (~40 B each) plus their first backing
+    /// arrays (an <c>int[4]</c> and a <c>byte[][4]</c>) is ~176 B/row, all of it scratch rather than output. The
+    /// pair is now rented from this thread and cleared before the call returns.
+    /// </para>
+    /// <para>
+    /// <b>Why thread-static and not caller-owned.</b> <c>Table.ValidateAndSerializeBatchOutsideLock</c> serializes
+    /// batches over 10,000 rows with <c>Parallel.For</c>, so any shared scratch would need a lock or a per-thread
+    /// slot — and a per-thread slot is exactly what this is, with the lifetime guaranteed by the <c>finally</c> in
+    /// both <see cref="SerializeRow(Dictionary{string, object}, IReadOnlyList{string}, IReadOnlyList{DataType},
+    /// FixedWidthRecordLayout, IOverflowArena)"/> overloads. It also keeps the codec's call surface unchanged,
+    /// which is why this fix did not need the caller-owns-scratch redesign the earlier reading proposed.
+    /// </para>
+    /// <para>
+    /// <b>Re-entrancy.</b> The pair is only ever in use for the duration of one <c>SerializeRow</c> call, and
+    /// nothing on that path calls back into the codec. If a future change did nest the calls, the lists would be
+    /// non-empty on entry and the inner call gets a private pair rather than the outer call's — correctness first,
+    /// and the nested case simply allocates what it did before this change.
+    /// </para>
+    /// </remarks>
+    [ThreadStatic]
+    private static List<int>? scratchColumns;
+
+    /// <summary>Per-thread partner of <see cref="scratchColumns"/>; see the remarks there.</summary>
+    [ThreadStatic]
+    private static List<byte[]>? scratchPayloads;
+
+    /// <summary>
+    /// Returns this thread's scratch pair, or a private pair when it is already in use (a nested call).
+    /// The caller MUST clear the returned lists before returning — see <see cref="scratchColumns"/>.
+    /// </summary>
+    private static (List<int> Columns, List<byte[]> Payloads) RentScratch()
+    {
+        var columns = scratchColumns ??= [];
+        var payloads = scratchPayloads ??= [];
+
+        // Non-empty on entry means an outer SerializeRow call on this thread is still running; give the nested
+        // call its own pair so it cannot clear the outer call's collection.
+        return columns.Count != 0 || payloads.Count != 0 ? ([], []) : (columns, payloads);
     }
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values ← arena).</summary>
