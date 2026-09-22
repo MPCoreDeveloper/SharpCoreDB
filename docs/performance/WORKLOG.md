@@ -1710,7 +1710,19 @@ rather than propagated into a target.
   the ~150 B record the fixed-width layout produces (the row's own bytes are ~150 of those 706, so the rest is
   intermediate buffering). The allocation ratio, not the time, is the cleaner clue because it is load-independent: a
   `--pk-profile-insert` run with the serialization split into "layout computation" and "record bytes" would name it in
-  one pass (the split is one stamp away, in `FixedWidthCodec.SerializeRow`).
+  one pass (the split is one stamp away, in `FixedWidthCodec.SerializeRow`). **That read was done, and it narrows the
+  target to something specific rather than inviting a rewrite:** `FixedWidthCodec.cs` is already the product of earlier
+  passes on this exact path — both `SerializeRow` overloads write inline slots directly, keep a throw-away payload array
+  from ever existing for strings that fit (`TryWriteInlineStringSlot`, whose own comment cites "plan §9 priority 2" and
+  this arm's two-of-three TEXT columns), and hand the arena one batched call instead of one file open per value. What
+  remains per row is therefore exactly three things: (i) `new byte[layout.FixedSize]`, the record itself, ~150 B and
+  irreducible; (ii) for each value that overflows the inline capacity, one `Table.EncodeVariablePayload` array; and
+  (iii) `(variableColumns ??= [])` / `(variablePayloads ??= [])` — **two `List<>` allocated on the first overflowing
+  value of every row**, which is scratch, not output, and is the only genuinely wasteful item left. Removing (iii) means
+  letting the caller own that scratch (pooled or reused across rows), which changes `PatchVariableOffsets`'s parameters
+  and this static class's call surface — a designed change with a blast radius across both storage modes, so it wants
+  its own session and its own `--pk-profile-insert` allocation reading (706 → ? B/row) rather than the tail of this one.
+  Allocation is the load-independent column, so that verification does not depend on a quiet machine.
 - **`hash-index`, 325 ms and 8.8 MB per batch call (882 B/row)**, inside `index-maint`'s 9.6 MB/call. The batch path
   calls `HashIndex.AddBatchKeys` once per index per batch, so 882 B per added key is the whole per-key cost of a hash
   insert. **Inspected before handing it on, so the next session does not re-read the whole method:** its *unsafe*
