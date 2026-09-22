@@ -1767,7 +1767,57 @@ every refuted hypothesis, then move on". Both levers are named with their number
 next session can start from a stage rather than from a hypothesis. Artifact: `results/pk_comparative_20260921_*.json`
 plus the profile run's console table above.
 
+### 2026-09-21 — Gate attempt 7 (quiet machine) — still INCONCLUSIVE, but the cause is now named: the rep noise is bigger than the effect the gate measures
+- Session: 1 · Command: `tools\clean-benchmark.ps1 --gate` (detached, output to file) · Regime: `no SHARPCOREDB_* switches set`
+- Verdict: **INCONCLUSIVE #7 — exit 2, worst rep spread 3,09× over a 2,50× limit.** Not a pass, not a fail, nothing concluded. The user closed everything unnecessary on this machine before the run, so this is its noise floor, not leftover load
+- NEXT: do **not** re-run to fish for a green. Test the named hypothesis below; if it holds, the fix is in the harness (write policy or warm-up), not in the product
+
+**1. The run's own numbers** (`engine=AppendOnly · reps=3 · tolerance=1,50x`), all six arm-runs per operation:
+
+| op | the six measurements (ops/s) | worst |
+|---|---|---|
+| INSERT 100.000 | 74.022 · 100.227 · 101.222 · 110.137 · 118.273 · 127.499 | 1,72× |
+| READ 10.000 | 42.042 · 55.898 · 74.348 · 82.194 · 97.770 · 112.693 | 2,68× |
+| UPDATE 10.000 | 52.425 · 84.134 · 94.552 · 102.369 · 162.140 · 171.614 | 3,27× |
+| DELETE 10.000 | 51.474 · 67.178 · 89.751 · 217.827 · 227.874 · 281.622 | 5,47× |
+
+UPDATE 10.000 took **0,06 s in one run and 0,19 s in another** — same work, 3× apart.
+
+**2. The assignment is pinned by arithmetic, not guessed.** The tool reports `raw U 2,04×` and `default U 3,09×`, and
+each ratio reconstructs exactly from one pair above — `171.614 / 84.134 = 2,0401` and `162.140 / 52.425 = 3,0931` — so
+the raw arm holds {84.134 … 171.614} and the default arm {52.425 … 162.140}. Two consequences follow, and they are the
+point of this entry:
+
+- **The arms overlap.** The slowest raw UPDATE (84.134) is *slower* than two of the three default UPDATEs (102.369,
+  162.140), and the fastest reading in the whole run (171.614) sits in the raw arm. So this run cannot even rank the two
+  configurations, let alone measure a regression against them.
+- **The rep noise (3,09×) is larger than the effect the gate exists to detect (tolerance 1,50×).** No number of reps
+  fixes that; more reps only make the median of a bimodal distribution look stable. That is why seven attempts produced
+  seven INCONCLUSIVE verdicts: the tool is doing its job correctly and refusing to conclude from this signal.
+
+**3. The named hypothesis, and why the write path is the place to look.** The variance is *not* uniform: it is smallest
+on INSERT (1,72×) and grows through READ (2,68×) to UPDATE (3,27×) and DELETE (5,47×). What separates those is the
+number of writes per measured row, and this project's arena is opened with `FileOptions.WriteThrough` — the very thing
+`FixedWidthCodec`'s comment blames for "0.4597 ms per value" and for early INSERT work. A write-through path is
+sensitive to the drive's own state (SLC write cache filling, then draining), which produces exactly this signature: a
+discrete 3-5× step between runs of identical work rather than a continuous drift. Two other candidates cannot be ruled
+out from this output and are listed so the test can separate them: a mid-measurement gen2 GC (allocation is tens of MB
+per rep here), and OS page-cache state differing between the arms because each rep rebuilds its database.
+
+**4. The test that decides it, which needs the profiler rather than the gate.** One `--gate`-shaped run with the
+profiler enabled on the default arm gives per-stage time *and* call counts per rep; `commit`/`arena-write`/`engine-write`
+being 3× across reps while `encode`/`validate` stay flat would confirm the write path, and flat stages everywhere would
+point at GC instead. That is one run and it is decisive; a reshaped gate that discards or warms the first rep would be a
+*harness methodology change* and must be declared in the plan first, never slipped in to make a gate go green.
+
+**5. Checked and closed, so it does not resurface:** the `[diag] docs layout: IsFixedWidthRecords=False (config
+FixedWidthRecordLayout=False, AutoFixedWidthRecords=True)` line in this output is already known and recorded
+(worklog:857/943; plan:2079 — "False by default, True only when forced"), and it does not touch this session's 5.1
+analysis, which was measured on the `--pk` arm whose config sets the layout explicitly. The gate rows above are the
+default arm and have always been non-fixed-width.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
