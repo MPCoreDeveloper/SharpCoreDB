@@ -1464,7 +1464,92 @@ provenance line names `results/dual-mode-20260921_{2217*,2218*}.json`; the commi
 `dual-mode-20260921_{221000,221041,221052}.json`, and the JSON in this follow-up's probe run is
 `dual-mode-20260921_221457.json`.
 
+### 2026-09-21 — 5.3 follow-up 6 — the flush's page reads are disk-bound, not cache-thrashed: the flush is at its floor
+- Session: 1 (extension)
+- Command(s): none new — this entry closes the last hypothesis of the thread by reading the read path, with follow-up 5's numbers
+- Verdict: **NO CHANGE (floor reached, and the hypothesis refuted by reading)** — every component of the flush is now attributed and both alternatives to the expensive one have been priced
+- Commit: this worklog entry only
+- NEXT: the locate's tail (§18–27 ms: slice + one AEAD open per record), `Table.CRUD.cs:2687`'s missing `changedColumn`, and 5.1's INSERT delta — this thread is done
+
+**1. The hypothesis, and why it is dead.** Follow-up 5 left one open question: why are the flush's page reads at disk
+speed, and could the 12.6 MB whole-file snapshot (read by the locate before every batch, follow-up 6 of the 5.3 thread)
+or the per-page `EvictPage` be evicting them? **Reading `Storage.PageCache.cs` answers the first half**: `ReadBytesRange`
+(`:64-103`) uses the cached *file handle* and `RandomAccess.Read` into a fresh buffer — it never touches the DB's page
+cache, so the snapshot cannot evict anything from it. The second half is not a defect either: `ReadBytesAt` (`:21-55`,
+the record-read path) *does* go through that cache, which is exactly why a page must be evicted after it is overwritten
+— the cache would otherwise serve stale bytes. So neither suspect is a bug, and the flush's reads are simply disk I/O on
+a machine that is not quiet (the same batch's snapshot read ran at 1.6–2.5 GB/s earlier in the pass, so the file *is*
+partly resident; the flushed pages are the ones that fall out).
+
+**2. The flush, fully attributed, with both alternatives priced.**
+
+| component | cost | alternative, and its measurement |
+|---|---:|---|
+| preparation (collect + bucket; sort removed) | ~6 ms | none left — one pass over 10,000 dictionary entries plus a ~315-element bucket map |
+| page **writes** (coalesced into 2 calls) | ~0.2 ms | 315 calls cost 1.5 ms — the coalescing bought that 1.3 ms |
+| page **reads** (coalesced into 2 calls, ~1.3 MB) | ~16 ms | per-record writes avoid the reads entirely: **59.0 / 54.0 / 53.5 ms**, i.e. 2.3× worse |
+| **total** | **21.8–22.9 ms** | was **33.8 ms** at the start of this thread (−34 %) |
+
+One structural idea remains and is named with its arithmetic rather than left as a hope: for a same-length overwrite the
+4-byte length prefix is unchanged, so a payload-only write (`WriteRecordInPlace` minus the prefix write) would need
+**one** syscall per record and no page read — 10,000 × ~154 B instead of 315 reads + 315 writes of 4 KB. At this
+machine's ~1–2 µs per small buffered write that is 10–20 ms, i.e. it *brackets* the current 16.2 ms rather than clearly
+beating it, and it changes a per-record write pattern that follow-up 5 just measured as the worse shape. It is recorded
+as the one remaining idea for this flush, not as a candidate, and the thread stops here — the commit is no longer the
+largest item on this cell, and three landed changes (sort removal, coalescing, plus the +20 % snapshot fix upstream of
+it) took the stage from 33.8 ms to 21.8–22.9 ms with the arm's remaining effect inside this machine's band.
+
+**3. Validation and limits.** No product change in this entry; the shipped shape is follow-up 4's, whose suite run is
+green (**1919 / 0 failed / 16 skipped**, 159.3 s) and whose install is committed as `851ac232`. ⚠️ The 1.6–2.5 GB/s
+snapshot read and the ~80 MB/s flushed-page reads in the *same* pass are a real inconsistency in the story — the
+honest reading is that the OS cache serves the large sequential read and not the batch of page-sized touches, and that
+the difference is not attributable from the numbers available here; it is recorded rather than explained away.
+
+### 2026-09-21 — CORRECTNESS FINDING — fix (2)'s `changedColumn` reasons about values, but a relocation invalidates POSITIONS
+- Session: n/a (found while reading the flush/locate paths in this thread; no product change made)
+- Command(s): none
+- Verdict: **OPEN — recorded, not fixed.** It needs a test that does not exist yet before either exit can be chosen
+- Commit: this worklog entry only
+- NEXT: write the test in §3 (PageBased, PK + an index on another column, an update that moves the record across a page, then an indexed lookup through that other column), then pick exit (a) or (b) in §4
+
+**1. The reasoning.** `RepointIndexesAfterRelocation(oldPosition, newPosition, oldPk, newPk, changedColumn)` skips the
+invalidation of every loaded index whose column is not `changedColumn` (`Table.CRUD.cs:2199-2218`), and fix (2)
+(`124b2a62`) passes the statement's updated column from `UpdateBatchViaPrimaryKeyLookup`
+(`Table.BatchUpdate.cs:386-390`). Its justification was *value*-based: "an index over a column the statement did not
+touch cannot have gone stale". That is true of values — and irrelevant to **positions**: `RepointIndexesAfterRelocation`
+is only called when the record physically **moved** (`updatedPos != pos`), and a moved record invalidates the position
+stored in *every* index that contains it, whatever column those indexes are keyed on.
+
+**2. Why the damage is bounded but real.** On PageBased the storage reference is `(page, slot)` and a read resolves
+through the slot array, so two cases must be separated. A **within-page** move repoints the slot itself
+(`PageManager.UpdateRecord`'s growth branch, `PageManager.cs:556-565`) — the position `(page, slot)` is *unchanged* and
+those indexes stay correct, which is presumably why the change measured no harm. A **cross-page** move flags the old
+slot `RecordFlags.Deleted` and inserts the record on another page (`:567-576`), so the position the non-invalidated
+indexes still hold now reads as `null` (`TryReadRecord` returns false for a deleted slot, `PageManager.cs:700-701`) —
+and because fix (2) deliberately does *not* mark those indexes stale, no later operation rebuilds them. A
+`WHERE <other_column> = 'x'` therefore **silently misses that row** until the index is rebuilt for an unrelated reason
+or the database is reopened. The append/Columnar path cannot reach this (the call site's branch is PageBased-only),
+which is what keeps the blast radius to PageBased cross-page relocations rather than turning into the "stale row
+returned" regression the pre-load guard exists for.
+
+**3. The test that settles it — and it does not exist.** The suite has no case that (a) uses PageBased, (b) registers
+an index on a column *other* than the one being updated, (c) makes the updated record grow past its page so the engine
+relocates it to a different page, and (d) then looks the row up through that other column. `PageBasedIndexRebuildTests`
+(added by §5.2 follow-up 6) covers the unloaded-index case and `FixedWidthPatchTests` covers the append path, so this
+corner is genuinely uncovered — which is why the finding is recorded as an open question rather than as a bug report:
+it is a prediction from reading, and the plan's rule is that a prediction becomes a finding when a measurement (here, a
+test) says so.
+
+**4. The two exits, for whoever writes that test.** (a) **Narrow `changedColumn` to the safe case**: pass it only when
+the relocation stayed inside its page, and pass `null` (invalidate everything) when the page changed — the caller
+already holds both references, so `(oldPosition / page) != (newPosition / page)` is the whole condition. That keeps
+fix (2)'s win for the common in-page case and removes the hole for the rare one. (b) **Revert fix (2)**, which costs
+the O(rows) rebuild it was introduced to avoid — but only for statements that actually relocate, and only on the arm
+that fix (2) never measured a win on. (a) is the better trade if the test shows the hole is reachable.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
 
 
 
