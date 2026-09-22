@@ -1671,7 +1671,59 @@ same build; `WritePathProfilerTests` 4/4 with 34 stages. Every stage the profile
 `row-locate-index`, `commit-buffer`, `commit-overwrites`, `commit-ovw-prep`, `commit-ovw-write`) has a call-count and
 allocation reading in the entries above, and each was added to answer a question that was then answered.
 
+### 2026-09-21 — 5.1 INSERT — the fair-PK arm's budget recorded (it had none), with a double-count corrected and two levers named
+- Session: 1 (extension; 5.1 is well past its 2-session timebox — this is the "record the largest stage" exit)
+- Command(s): `--pk-profile-insert` (default engine, tuned plaintext fixed-width, 100,000 rows in 10 `InsertBatch` calls) · core suite unchanged (no product change)
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.`
+- Verdict: **NO CHANGE — measurement + correction only.** Two levers named with their budget; neither is attempted in a session that cannot verify a 2.4× claim
+- Commit: this worklog entry only
+- NEXT: attack **`validate`+serialize** (589 ms, 23.9 %) or **`hash-index`** (325 ms, 13.2 %, 882 B/row) — both are in the fair-PK INSERT arm, which is at **0.71×** against a ≥1.0× acceptance
+
+**1. The budget, which the 5.1 entries never had for this arm** (they carry `--multirowinsert`'s, a different shape:
+1,000 SQL rows/statement rather than 10,000 dictionary rows per `InsertBatch` call):
+
+| stage | total ms | calls | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| `validate` (validation **and** serialization) | 589.1 | 10 | **23.9 %** | 67.3 | 7,058,373 |
+| `encode` (the serialization half again) | 531.9 | 10 | 21.6 % | 67.3 | 7,058,333 |
+| `index-maint` | 398.2 | 10 | 16.2 % | 91.9 | 9,638,564 |
+| — `hash-index` inside it | 324.7 | 10 | 13.2 % | 84.2 | 8,824,644 |
+| `arena-write` | 238.6 | 99,000 | 9.7 % | 36.2 | 383 |
+| `engine-write` | 140.8 | 10 | 5.7 % | 25.4 | 2,667,937 |
+| `arena-append` | 130.6 | 99,000 | 5.3 % | 20.6 | 217 |
+| `row-locate` | 55.9 | 10 | 2.3 % | 9.5 | 993,036 |
+| `validate-only` | 52.3 | 10 | 2.1 % | **0.0** | 0 |
+
+Timed arm in the same run: **63,676 ops/s (15.70 µs/row, profiled)**; the unprofiled `--pk` arm measured 111,139 ops/s
+against SQLite's 155,219 (§5.4), i.e. **0.71×**.
+
+**2. The correction.** `validate` and `encode` are **not additive**: `validate` wraps
+`ValidateAndSerializeBatchOutsideLock`, which the method's own comment says "does both", and `encode` is stamped inside
+it for the serialization half — which is why both show 67.3 MB and ~500-590 ms. The two together are therefore
+**~24 %, not 45.5 %**, and the single largest stage of this arm is validation-plus-serialization at 589 ms. Reading two
+stamps that share a scope as two costs is the same error class this plan has paid for before; it is corrected here
+rather than propagated into a target.
+
+**3. The two levers, with what argues for each.**
+- **Validation + serialization, 589 ms and 67.3 MB per batch call (7,058 B/row).** `validate-only` — the actual
+  validation — is **52 ms and 0 B/call**, so essentially all of it is *serialization*, and 7 KB per row is an order of
+  magnitude above the ~150 B record the fixed-width layout produces. That ratio, not the time, is the clue: something
+  per row is allocated and discarded. A `--pk-profile-insert` run with the serialization split into "layout
+  computation" and "record bytes" would name it in one pass (the split is one stamp away, in
+  `FixedWidthCodec.SerializeRow`).
+- **`hash-index`, 325 ms and 8.8 MB per batch call (882 B/row)**, inside `index-maint`'s 9.6 MB/call. The batch path
+  calls `HashIndex.AddBatchKeys` once per index per batch, so 882 B per added key is the whole per-key cost of a hash
+  insert — worth a look because the batch form could size its buckets from the key count instead of growing them.
+
+**4. What was not done, and why that is the right call.** Five sessions into 5.1 with its timebox long expired, a 2.4×
+improvement still needs an implementation *and* a same-session `--pk` measurement to be a landed change; this session's
+remaining budget cannot do both, and the plan's exit for an expired timebox is explicitly "record the largest stage and
+every refuted hypothesis, then move on". Both levers are named with their numbers, the arm's budget now exists, and the
+next session can start from a stage rather than from a hypothesis. Artifact: `results/pk_comparative_20260921_*.json`
+plus the profile run's console table above.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
