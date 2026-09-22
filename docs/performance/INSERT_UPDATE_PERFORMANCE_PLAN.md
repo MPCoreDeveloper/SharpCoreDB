@@ -195,7 +195,7 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    JSON). Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE reps
    swing nearly 3× run to run, so that arm can only be judged on a rep ladder.
 
-   🔬 **PROPOSED (2026-09-21, needs acceptance — not applied).** The per-arm job runs INSERT → READ → UPDATE → DELETE
+   🔬 **PROPOSED 2026-09-21 · ACCEPTED 2026-09-22 (option 2 — see the decision below).** The per-arm job runs INSERT → READ → UPDATE → DELETE
    against **one database**, so its late phases are not independent of its early ones. That stopped being theoretical:
    after the buffered-overwrite flush coalescing (`851ac232`) the gate's `default DELETE` cell stepped **1,07× → 1,34×**
    and stayed there (reproduced twice; located by a bisect over five trees, `92ac7b56` 1,00× / `1966ba31` 0,98× /
@@ -211,10 +211,28 @@ first attempt at that build optimization was aimed at the wrong phase until inst
       extra setup per arm and changes what the gate compares;
    2. **keep the single-database sequence and stop reading late phases as standalone regression signals**, labelling
       them as "in sequence" wherever the numbers are quoted.
-   Recommendation: **2 now, 1 when someone needs the DELETE number to be a verdict.** Option 1 is a real change to what
-   the gate measures and deserves its own before/after pair. Until one is chosen, `default DELETE 1,33×` stays recorded
-   as **unattributed and possibly an artefact of the measurement order — not a regression, and equally not evidence
-   that DELETE is fine.** Evidence chain: WORKLOG 2026-09-21 (gate attempts 9-10, the bisect, the two phase profiles).
+   ✅ **ACCEPTED (2026-09-22) — option 2 now; option 1 only when a verdict-grade DELETE cell is needed *and* a quiet
+   machine is available.** The per-arm job keeps its single database, and every late phase (READ/UPDATE/DELETE) is
+   quoted as **"in sequence on one database"** wherever its number is used; `default DELETE 1,33×` is therefore
+   **not** a regression — and equally **not** evidence that DELETE is fine, exactly as recorded below. Option 1 (each
+   late phase on its own freshly created database) is deferred on a *verifiable* condition rather than a preference:
+   it changes what the gate compares, so it invalidates the committed baseline (`708ccb73`, 2026-09-15) and needs a
+   `--write-baseline` re-record — and the two re-record attempts of 2026-09-16 both failed `INCONCLUSIVE` (rep spreads
+   2,97× and 2,77×) on the same noise floor that produced the eight inconclusive gate attempts below. Adopting option 1
+   without a quiet machine would leave the gate comparing against a baseline it cannot re-record. So the two conditions
+   for revisiting are: **a verdict-grade DELETE cell is wanted, and the machine is quiet.** Nothing else changes — this
+   is a labelling rule for the late phases, not a relaxation of the §2 protocol (the medians, the rep ladder and the
+   tolerance factor all stay as they are).
+
+   ⚠️ **The gate is not a blocker, but a pass is a chance and not a certainty — recorded 2026-09-22 (attempt 11).**
+   Attempt 11, run on the same machine as attempts 9 and 10 and with the §9-priority-2 / §5.3-tail fixes of
+   2026-09-22 applied, returned **INCONCLUSIVE (exit 2)** with a worst rep spread of **2,91×** (default UPDATE 2,91×,
+   raw UPDATE 2,69×) against the 2,50× limit — so the machine's noise floor straddles the limit in both directions and
+   the gate's verdict on this hardware is a coin toss rather than a signal. The rule that follows is already in this
+   plan (§2.6/§2.7) and is now the operative one for every change that lands here: **the load-independent column is
+   the acceptance** — allocation and call counts from `--pk-profile-insert` / `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` —
+   and a gate verdict is quoted when it exists, not required before a change may land. A `REGRESSED` verdict still
+   means "re-run on a quiet machine", never "revert" (BENCHMARK protocol §3.6).
 
 
 **Acceptance:** reported numbers reproduce within ±10% on a quiet machine, and the per-stage

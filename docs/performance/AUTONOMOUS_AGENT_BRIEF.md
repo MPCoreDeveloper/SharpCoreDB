@@ -139,6 +139,16 @@ behind, with the remaining ~1.1× of its encryption tax now named as the per-rec
 and the **locate's tail** on the encrypted UPDATE path. Everything else in §5 is closed, `BLOCKED` with a named
 mechanism, or done — see the worklog's `SESSION CLOSE` entry for the per-commit table.
 
+**Re-measured 2026-09-22** (autonomous session, row 1's arm only; the worklog entry carries the tables): both open items
+above got a landed change, and both were accepted on the **allocation** column because this machine's gate returned
+INCONCLUSIVE (2,91× rep spread) in the session's one attempt. The fair-PK arm's serialization is **706 → 547 B/row
+(−22.4 %)** — the two per-row `List<>` scratch collections are gone (`--pk-profile-insert`, before/after on one machine)
+— and the encrypted UPDATE locate's per-record allocation is **431 → 279 B (−35 %)** and now *identical* to the plaintext
+arm's, with the AEAD open itself left in place. **Neither reaches the item's DoD**: the fair-PK INSERT ratio is still
+below 1.0× and was not measurable against SQLite in that session (the one `--pk` pair had both arms move further than
+the change: 0,62× and 0,81×, recorded and explicitly not claimed), and the provider re-run of 5.4 has **not** happened
+on this build even though the change added two default interface members. That is what §5.1 and §5.4 owe next.
+
 
 ## 5. Work items, in priority order
 
