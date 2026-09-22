@@ -1945,7 +1945,51 @@ behavioural commits: the PageBased preload removal, the encrypted-locate snapsho
 Each test point is one `--gate` in its own worktree, ~4-7 min, and only ~2 of 3 runs reach the comparison table because
 of the spread check — so a bisect here is 2-4 runs, not 1-2. Worktrees are removed when done, and nothing is pushed.
 
+### 2026-09-21 — Bisect test point 1 (`1966ba31`, before the flush rework) = **0,98x**, parity — so the DELETE slowdown lives in one of three later commits
+- Session: 1 · Command: gate in a detached worktree at `1966ba31`, same instrument and baseline · INCONCLUSIVE (spread 2,83x), read via the validated median method below
+- Verdict: **not reproduced before the flush rework.** The culprit is in `d6b86239` (stop sorting the flush entries), `851ac232` (coalesce consecutive pages), or `514e0b9c` (revert of the relocation pruning) — next test point started, see §3
+- NEXT: one run at `a08e0ea8` (contains the flush pair, excludes the revert) decides between those two groups
+
+**1. A method finding, earned by using it twice, worth having in the record.** These gate runs keep ending INCONCLUSIVE
+on the spread check and printing no comparison table, which used to mean "unreadable". It does not: the table's
+"current" column is the median of three reps, so the median can be read off the rep lines — the only unknown is which
+three of the six values belong to the same arm. The block order is not simply alternating, and it is not the same in
+every rep; the mapping that reproduces attempts 9 and 10 *exactly* is **blocks {1,4,5} = `default`, {2,3,6} = `raw`**:
+
+| run | {1,4,5} median | table's `default` | {2,3,6} median | table's `raw` |
+|---|---:|---:|---:|---:|
+| attempt 9 | 74.134 | 74.134 ✓ | 178.107 | 178.107 ✓ |
+| attempt 10 | 74.333 | 74.333 ✓ | 158.997 | 158.997 ✓ |
+
+Two independent confirmations on values that agree to the digit, so the mapping is not a guess: it is the key that
+makes **every** INCONCLUSIVE gate run readable after the fact. It also means attempts 7 and 8 (both INCONCLUSIVE) could
+be re-read from their console output if their logs are still around — worth doing before the next machine comparison.
+
+**2. Test point 1's numbers.** `1966ba31`'s six DELETE values: 57.603 · 200.022 · 208.374 · 104.162 · 100.558 · 278.695.
+By the mapping, `default` = {57.603, 104.162, 100.558} → median **100.558** → **0,98x** against baseline 98.725, and
+`raw` = {200.022, 208.374, 278.695} → median **208.374** → 0,98x against 204.393.
+
+| tree | `default DELETE` median | vs baseline |
+|---|---:|---:|
+| pre-session `92ac7b56` | 98.416 | 1,00x |
+| **`1966ba31`** (before the flush rework) | **100.558** | **0,98x** |
+| this session (HEAD) | 74.134 / 74.333 | 1,33x, twice |
+
+Three points on a line, and the middle one sits with the pre-session tree: the slowdown was introduced **after**
+`1966ba31`. Note that the raw arm tracks it here (0,98x at parity, 1,15-1,29x at HEAD), so what changed affects both
+arms — which argues for a change on the *commit* path rather than one inside a single route.
+
+**3. What is left, and the ordering of the next test.** Only three commits between `1966ba31` and HEAD can move
+behaviour: `d6b86239` and `851ac232` (the buffered-overwrite flush pair, which change *what the commit writes*) and
+`514e0b9c` (the revert of the relocation-pruning fix, which is in the UPDATE/index path and is *later* than the pair).
+Testing `a08e0ea8` — the last commit before the revert, so it contains the flush pair and not the revert — splits those
+two groups in one run: `~1,33x` there puts the cause in the flush pair, `~1,00x` puts it in the revert. That run is
+started. If it lands on the flush pair, the next step is one more run between `d6b86239` and `851ac232` to pick which
+half, since "stop sorting" and "coalesce pages" have very different mechanisms: removing a sort is expected to be
+neutral-to-better, while coalescing merges writes and could plausibly hand the commit more work per page.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
