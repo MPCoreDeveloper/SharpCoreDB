@@ -1677,7 +1677,7 @@ allocation reading in the entries above, and each was added to answer a question
 - Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.`
 - Verdict: **NO CHANGE — measurement + correction only.** Two levers named with their budget; neither is attempted in a session that cannot verify a 2.4× claim
 - Commit: this worklog entry only
-- NEXT: attack **`validate`+serialize** (589 ms, 23.9 %) or **`hash-index`** (325 ms, 13.2 %, 882 B/row) — both are in the fair-PK INSERT arm, which is at **0.71×** against a ≥1.0× acceptance
+- NEXT: attack **`validate`+serialize** (589 ms, 23.9 %, 706 B/row) — after §3's refutation this is the fair-PK INSERT arm's **only** remaining product target; `hash-index` is closed. The arm is at **0.71×** against a ≥1.0× acceptance
 
 **1. The budget, which the 5.1 entries never had for this arm** (they carry `--multirowinsert`'s, a different shape:
 1,000 SQL rows/statement rather than 10,000 dictionary rows per `InsertBatch` call):
@@ -1735,7 +1735,18 @@ rather than propagated into a target.
   already-normal key skips the copy. Worth noting for whoever owns the *harness* rather than the product: the pooled
   unsafe backend already exists and this arm is not using it, but turning it on for the fair-PK comparison is a change
   to the arm's configuration, i.e. a measurement decision to be declared, not a product change to slip in — and it still
-  has to be shown faster for this shape. It is named, not attempted: see §4.
+  has to be shown faster for this shape. **And case (b) is now refuted too, which retires this lever as a product
+  target:** the Comparative harness contains no `COLLATE` clause and no `CollationType` reference at all, so its indexed
+  columns take the DDL default — `SqlParser.DDL.cs:151`, `var collation = CollationType.Binary` — and
+  `CollationExtensions.NormalizeIndexKey`'s `Binary` arm returns the input unchanged (its line 35). With `Binary`,
+  `NormalizeKey` is free, so the whole 882 B per key is the managed map inserting a new key: one list object plus one
+  dictionary node per key, with the map already pre-sized for the batch by `EnsureKeyCapacity(keys.Length)`. That is
+  structural to the data structure, not waste inside the loop — and the only way around it is the pooled unsafe backend
+  this arm is configured not to use, which is the harness decision above rather than something to change in the product.
+  **Conclusion, for the next session's benefit: the hash-index lever is closed as a product target.** The fair-PK INSERT
+  arm's remaining honest target is the serialization path (589 ms / 23.9 % / 706 B per row), not the index. This is the
+  fifth of my own hypotheses this session refuted — coalescing, then the relocation finding (twice), then the "882 B is
+  partly normalisation" split here — and it is recorded rather than quietly dropped.
 
 **4. What was not done, and why that is the right call.** Five sessions into 5.1 with its timebox long expired, a 2.4×
 improvement still needs an implementation *and* a same-session `--pk` measurement to be a landed change; this session's
