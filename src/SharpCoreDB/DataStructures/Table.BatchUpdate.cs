@@ -384,9 +384,16 @@ public partial class Table
                         : null;
 
                     long repointStart = Diagnostics.WritePathProfiler.Stamp();
-                    // Only the statement's own column can have made its index stale; passing it stops the
-                    // unrelated indexes from being invalidated and rebuilt by an O(rows) table scan.
-                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue, updateColumnName);
+                    // No `changedColumn` pruning here (reverted 2026-09-21 — see the worklog entry "fix (2)'s
+                    // changedColumn reasons about values, but a relocation invalidates POSITIONS").
+                    // The pruning is sound for VALUES and wrong for POSITIONS: this branch runs only when the record
+                    // physically moved, and a cross-page move flags the old slot RecordFlags.Deleted, so every index
+                    // that still holds the old position starts reading a dead slot. `Select` hides that behind its
+                    // scan fallback (which is why it survived a naive test), but `FindByIndex` — the same index with
+                    // no fallback — silently returned ZERO rows for a row that exists
+                    // (PageBasedRelocationIndexTests). Invalidating every loaded index costs one O(rows) rebuild on
+                    // the next indexed use; missing rows cost correctness, so the rebuild is the cheaper of the two.
+                    RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue);
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                 }
 

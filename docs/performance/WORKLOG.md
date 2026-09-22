@@ -1571,7 +1571,49 @@ fix (2)'s win for the common in-page case and removes the hole for the rare one.
 the O(rows) rebuild it was introduced to avoid — but only for statements that actually relocate, and only on the arm
 that fix (2) never measured a win on. (a) is the better trade if the test shows the hole is reachable.
 
+### 2026-09-21 — CORRECTNESS BUG CONFIRMED AND FIXED — fix (2)'s pruning made indexed lookups miss rows after a cross-page relocation
+- Session: 1 (extension)
+- Command(s): `-class SharpCoreDB.Tests.PageBasedRelocationIndexTests` (three probe iterations) · core suite
+- Verdict: **FIXED** — `124b2a62`'s pruning is removed at the relocation site (`Table.BatchUpdate.cs:387-396`), with the bug reproduced and the fix verified by the test that failed without it
+- Commit: `fix(index)!`: revert fix (2)'s pruning at the relocation site (silently missing rows)
+- NEXT: none in this thread — the flush is at its floor, the relocation case is fixed and pinned; the open items are the locate's tail and 5.1's INSERT delta
+
+**1. The chain, and where the first test was fooled.** The finding's own test passed, which I recorded as a refutation;
+the probes then showed why, and the third of them found the bug:
+- **Probe A** — the relocating update leaves the untouched column's index **loaded but not fresh**, and the lookup
+  decodes the whole table (12 rows); the in-place **control** leaves it fresh (0 decodes, 1 page-read). So the cause is
+  the relocation branch, not the update path.
+- **Probe B** — a temporary throw inside `RepointIndexesAfterRelocation` reports what it actually receives:
+  `changedColumn='payload'; loadedIndexes=[category]; oldPosition=65536; newPosition=262144`. The pruning therefore
+  **does** apply (it is not a mis-passed argument), and the old position is on a **different page** from the new one.
+- **Probe C** — the decisive one: `Select("category = 'alpha'")` finds the row, but **`FindByIndex("category",
+  "alpha")` returns ZERO rows for a row that exists**. `Select` only appears to work because `SelectInternal` has a
+  **scan fallback** — which *is* probe A's 12 decodes. The first version of the test used only `Select`, so the fallback
+  covered for the bug and the test passed.
+
+**2. The bug, in one sentence.** A relocating update invalidates only the updated column's index, but the record moved:
+a **cross-page** move flags the old slot `RecordFlags.Deleted` (`PageManager.cs:567-576`) and `TryReadRecord` returns
+false for it (`:700-701`), so every index still holding the old position reads a dead slot and any lookup that trusts
+the index **without** a scan fallback silently misses the row. `changedColumn` reasons about *values*; the relocation is
+about *positions*.
+
+**3. The fix, and why this one.** `UpdateBatchViaPrimaryKeyLookup` now calls
+`RepointIndexesAfterRelocation(pos, updatedPos, oldPkValue, newPkValue)` with no pruning column, so every loaded index
+is invalidated when the record moved. That costs one O(rows) rebuild on the next indexed use per relocating update;
+missing rows cost correctness, so the rebuild is the cheaper of the two — and it is also *faster* than the status quo,
+because today `Select` pays a full scan on **every** query against that index until an unrelated rebuild happens. The
+comment at the site records the reasoning and the test's name, and it keeps fix (2)'s remaining value visible: if the
+pruning is ever reapplied it must be gated on the relocation staying **within its page**, where the slot is repointed
+and the reference — and therefore the index — stays valid.
+
+**4. Validation.** Build **0 errors**; `PageBasedRelocationIndexTests` **1 / 0 failed** with the `FindByIndex`
+assertion (the same assertion, run with the pruning in place, reported 0 rows); the full suite **1920 / 0 failed /
+16 skipped** (156.8 s). The test pins three things at once: the relocation actually happened (asserted, so it cannot
+pass by not testing its case), the PK lookup survives it, and the index on the untouched column is usable through a
+path **without** a scan fallback — the last of which is what the finding was about.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 

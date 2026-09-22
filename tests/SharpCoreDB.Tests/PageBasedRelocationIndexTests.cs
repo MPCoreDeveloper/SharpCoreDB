@@ -101,6 +101,12 @@ public sealed class PageBasedRelocationIndexTests : IDisposable
 
         // ...and it must also still be reachable through the index on the column the statement did NOT touch.
         Assert.Single(table.Select("category = 'alpha'"));
+
+        // `Select` alone is not enough: it has a SCAN FALLBACK, which masked a stale index entry for as long as this
+        // test only used `Select` (the fallback is visible as row-decode == the table's row count). `FindByIndex` is
+        // the same hash index used WITHOUT that net, so it is the assertion that actually pins the fix: with the
+        // pruning in place it returned ZERO rows for a row that exists.
+        Assert.Single(table.FindByIndex("category", "alpha"));
     }
 
     private Table CreatePageBasedTable()
