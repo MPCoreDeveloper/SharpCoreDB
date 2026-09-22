@@ -1909,7 +1909,44 @@ default arm's UPDATE, but there is no `MAIN_PROFILE_DELETE` counterpart (`--pk-p
 arm, not the default one). Adding that switch would be a ~10-line harness addition mirroring the UPDATE one, and it is
 worth doing only *after* the pre-session run says the movement belongs to this session.
 
+### 2026-09-21 — The pre-session run settles it: `default DELETE` is 1,33x on this session's tree and **1,00x** on `92ac7b56`, so the ~33 % slowdown is ours
+- Session: 1 · Command: `git worktree add --detach <...>-pre92ac 92ac7b56` + `tools\clean-benchmark.ps1 --gate` there (same instrument: the fixed script from this branch, copied in; same baseline file, which is committed and unchanged since 2026-09-15)
+- Verdict: **attribution settled — this session caused the `default DELETE` movement.** The experiment was the one the previous entry proposed, and it answered the question it was designed for
+- NEXT: bisect it; test point 1 is already running (see §3)
+
+**1. The pre-session tree's own numbers.** That run was INCONCLUSIVE too (spread 3,08x), so it printed no comparison
+table — but the gate's "current" column *is* the median of three reps, so the median can be taken from the rep lines
+directly. The run's six DELETE values are 65.425 · 103.398 · 267.748 · 108.193 · 98.416 · 318.841, and the block→arm
+grouping is learned from attempt 9, whose table is ground truth (raw median 178.107, default median 74.134 — which pins
+that run's triplets as {48.666, 74.134, 89.353} = default and {178.107, 173.393, 258.417} = raw). Applying the same
+grouping:
+
+| tree | default DELETE (median of 3) | vs baseline 98.725 | raw DELETE (median of 3) | vs baseline 204.393 |
+|---|---:|---:|---:|---:|
+| pre-session `92ac7b56` | 98.416 | **1,00x** | 267.748 | 0,76x |
+| this session (HEAD) | 74.134 / 74.333 | **1,33x**, twice | 178.107 / 158.997 | 1,15x / 1,29x |
+
+The pre-session median landing **0,3 % from baseline** is what validates the grouping: a pairing error would not
+reproduce the baseline that closely by accident. And it is the decisive contrast — 1,00x before this session, 1,33x
+after it, with the current value reproducing within 0,27 % across two runs. `raw DELETE` stays inconclusive (faster than
+baseline before, slower now, but its own value moves 12 % between runs).
+
+**2. What this means for the session's claims, stated plainly.** Nothing that measured *faster* is affected, and the
+gate's verdict does not change (1,33x is inside tolerance, so it passes). But the session now owns a reproduced ~33 %
+slowdown it did not previously know about, in the arm it touched most, and the worklog has no DELETE measurement
+anywhere that could have caught it — the gate caught it. That is the gate doing exactly what the plan built it for.
+
+**3. The bisect, started.** The session's commits that can move DELETE are few, and the widest-reaching one is the
+buffered-overwrite flush rework (`d6b86239` stop sorting the flush entries, `851ac232` coalesce consecutive pages),
+because it changes what the commit writes rather than only how one route computes. Test point 1 is therefore the commit
+immediately before that pair, `1966ba31` (diagnostics-only, so behaviourally the session start plus the earlier
+behavioural commits: the PageBased preload removal, the encrypted-locate snapshot, the relocation revert):
+`~1,33x` there → the culprit is earlier than the flush rework; `~1,00x` there → the flush pair (or the revert) it is.
+Each test point is one `--gate` in its own worktree, ~4-7 min, and only ~2 of 3 runs reach the comparison table because
+of the spread check — so a bisect here is 2-4 runs, not 1-2. Worktrees are removed when done, and nothing is pushed.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 
