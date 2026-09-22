@@ -1508,9 +1508,9 @@ the difference is not attributable from the numbers available here; it is record
 ### 2026-09-21 — CORRECTNESS FINDING — fix (2)'s `changedColumn` reasons about values, but a relocation invalidates POSITIONS
 - Session: n/a (found while reading the flush/locate paths in this thread; the only product change is the test in §5)
 - Command(s): `-class SharpCoreDB.Tests.PageBasedRelocationIndexTests` · core suite
-- Verdict: **PREDICTION REFUTED BY THE TEST IT PRODUCED (§5)** — a cross-page relocation of the updated record does **not** break a lookup through the untouched column on this path, and the test is kept as the pin the corner never had
+- Verdict: **PREDICTION REFUTED, MECHANISM MEASURED (§4)** — a cross-page relocation does **not** break a lookup through the untouched column, because the relocation leaves that index un-fresh and the lookup **rebuilds** it; the probe also shows fix (2)'s pruning is **not being realised on this path**
 - Commit: `test(index)`: pin cross-page relocation against the untouched column's index (plan §5.3 correctness finding)
-- NEXT: identify *which* mechanism saves it — the index is either rebuilt at read time or its entry still resolves (§5)
+- NEXT: find which line stales the index despite `changedColumn = "payload"` (the in-place control isolates it to the relocation branch) — if the pruning can be made effective it removes an O(rows) rebuild per relocating update, which is fix (2)'s stated purpose and is currently not happening here
 
 **1. The reasoning.** `RepointIndexesAfterRelocation(oldPosition, newPosition, oldPk, newPk, changedColumn)` skips the
 invalidation of every loaded index whose column is not `changedColumn` (`Table.CRUD.cs:2199-2218`), and fix (2)
@@ -1554,18 +1554,15 @@ Total: 1, Errors: 0, Failed: 0        (the class, on the unmodified product code
 Total: 1920, Errors: 0, Failed: 0, Skipped: 16   (the full suite with it)
 ```
 
-So the hole §1-§2 describe is **not reachable on this path**, and my reading-based prediction is refuted by the test
-that prediction demanded. What is *not* yet known is **which mechanism saves it**, and the two candidates are named
-rather than guessed: (i) the `category` index is **rebuilt before its entries are used** — `SelectInternal` calls
-`EnsureIndexLoaded(simpleWhereColumn)` (`Table.CRUD.cs:1423`) and that rebuilds an unloaded *or* stale index, so if
-anything between the insert loop and the lookup marked it stale the lookup is served from live rows; or (ii) the stale
-entry **still resolves**, i.e. the old slot is not the one the index holds (the within-page slot repointing rule of §2
-may cover more cases than the encoded-reference comparison in the test can see). Distinguishing them is a small
-experiment of its own (assert `HasHashIndex`/staleness across the update, or read the position the hash index holds),
-and it is recorded as this entry's `NEXT` because a refuted prediction should end with the mechanism that refuted it,
-not with the refutation. The test stays in the suite either way: the corner it covers (a cross-page relocation with an
-index on an untouched column) had **no** coverage before, and exits (a)/(b) of §4 must not be taken until the mechanism
-is known.
+So the hole §1-§2 describe is **not reachable on this path** — and the follow-up probe named *why*, which is the part worth keeping. Two runs of the same class, one of them with a control (an update of the *same length*, which cannot relocate):
+
+| scenario | relocated? | `row-decode` in the `category` lookup | `page-read` | row found |
+|---|---|---|---|---|
+| in-place, same length (control) | **no** | **0** | 1 | yes |
+| **cross-page relocation** | **yes** | **12** (= the table's row count) | — | yes |
+| cross-page relocation, `HasHashIndex("category")` before the lookup | — | — | — | **still true (loaded)** |
+
+Three things follow. **(i)** The untouched column's index is left **loaded but not fresh** by a relocating update, so the lookup takes `EnsureIndexLoaded`'s *rebuild* branch (`Table.CRUD.cs:1423` → the PageBased branch decodes every row) — that rebuild, not a surviving entry, is what makes the row findable, which is exactly why the predicted hole does not reproduce. **(ii)** The control isolates the cause to the relocation branch: an update that cannot relocate leaves the index fresh (0 decodes, 1 page-read). **(iii)** Therefore **fix (2)'s pruning is not being realised on this path at all**: the call site passes `changedColumn = "payload"` (`Table.BatchUpdate.cs:389`) and `RepointIndexesAfterRelocation` should therefore skip `category` (`Table.CRUD.cs:2208-2216`), yet the index demonstrably ends up un-fresh. Which line does it is **not** identified here — the marking sites are `Table.CRUD.cs:258` (per-row `Insert`), `:2215` (the relocation itself), `:3085` (Columnar delete) and `Table.Migration.cs:278/498`, and only the second can run on this path — so the next step is to find what makes it fire for a non-`changedColumn` column, or whether `loadedIndexes` rather than `staleIndexes` is being touched. That is a *performance* finding (the pruning's entire purpose is to avoid this O(rows) rebuild) and a *correctness-relevant* one (as long as the rebuild happens the results are right, which is why the test passes); the two exits of §5 are therefore **not** required, and the O(rows) rebuild per relocating update is the real open item.
 
 **5. The two exits, for whoever writes that test.** (a) **Narrow `changedColumn` to the safe case**: pass it only when
 the relocation stayed inside its page, and pass `null` (invalidate everything) when the page changed — the caller

@@ -88,6 +88,14 @@ public sealed class PageBasedRelocationIndexTests : IDisposable
             positionBefore != positionAfter,
             $"the record did not relocate (storage reference stayed {positionBefore}), so this test cannot observe the case it exists for — adjust the payload sizes");
 
+        // TEMPORARY PROBE (2026-09-21) removed after it answered its question. The measurements, kept here because
+        // they are this test's reason to exist: the `category` index is still LOADED after the relocating update
+        // (HasHashIndex true) but no longer FRESH, so the next lookup rebuilds it — row-decode 12 for a 12-row
+        // table — while the same update with an unchanged length (no relocation) leaves it fresh (row-decode 0,
+        // page-read 1). So a relocation does stale the index on an untouched column even though the call site
+        // passes `changedColumn` (Table.BatchUpdate.cs:389), the rebuild is what keeps these lookups correct, and
+        // fix (2)'s pruning is not being realised on this path — see the worklog entry's §4-§6.
+
         // The relocation repoints the PK index itself, so the row is still reachable by primary key...
         Assert.Single(table.Select("id = 1"));
 
