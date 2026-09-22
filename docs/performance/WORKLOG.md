@@ -1713,7 +1713,15 @@ rather than propagated into a target.
   one pass (the split is one stamp away, in `FixedWidthCodec.SerializeRow`).
 - **`hash-index`, 325 ms and 8.8 MB per batch call (882 B/row)**, inside `index-maint`'s 9.6 MB/call. The batch path
   calls `HashIndex.AddBatchKeys` once per index per batch, so 882 B per added key is the whole per-key cost of a hash
-  insert — worth a look because the batch form could size its buckets from the key count instead of growing them.
+  insert. **Inspected before handing it on, so the next session does not re-read the whole method:** its *unsafe*
+  backend already avoids the obvious waste — `HashIndex.cs:411+` rents a `byte[][]` and a `long[]` from
+  `ArrayPool.Shared` once per batch and fills them in place, with the managed path getting an `EnsureKeyCapacity` hint —
+  so the 882 B per key cannot be the batching itself. That leaves two places to look, in this order: the managed
+  backend's per-key `Dictionary<string, List<long>>` insert (a key string, a list, a node) when
+  `_useUnsafeEqualityIndex` is off, and, when it is on, the per-key `BuildUnsafeKey(NormalizeKey(keys[i]))` calls —
+  each of which allocates its key, i.e. once per row rather than once per batch. Whichever arm the fair-PK config takes
+  is answerable in one run by reading the index's backend flag next to the allocation column, and the fix is small
+  either way (pool the normalised key, or pre-size the managed insert). It is named, not attempted: see §4.
 
 **4. What was not done, and why that is the right call.** Five sessions into 5.1 with its timebox long expired, a 2.4×
 improvement still needs an implementation *and* a same-session `--pk` measurement to be a landed change; this session's
