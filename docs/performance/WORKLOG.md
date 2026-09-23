@@ -2320,7 +2320,49 @@ The brief's published row 3 is INSERT 0,58×, READ 0,65×, UPDATE **0,42× (2,4�
 - **Still open, untouched, and a design item rather than a tuning item:** the encrypted UPDATE locate's **12.6 MB whole-file snapshot** (one call per batch, ~1.5 MB of it touched) — plan §5.3's own options are a payload-only write path or a per-record read window, and the per-record window was already measured *worse* (2,3×, 5.3 follow-up 5). The remaining per-record allocation after this session is 279 B and is arm-independent, so it is not an encryption cost any more.
 - **Artifacts:** the `--pk`, `--pk-default` and comparative runs archive their JSON under the repo-root `results/` (git-ignored — `pk_comparative_20260922_*.json`, `comparative_20260922_*.json`); the profiler tables above (including the `--multirowinsert` budget) are console output, because neither `--multirowinsert` nor the PK arms archive a stage table.
 
+### 2026-09-22 (session 3, unattended) — 5.1's remaining lever is measured and costed: the inline capacity's knee is **24**, worth **+33 % on the tracked fair-PK INSERT ratio** at a total-footprint wash
+- Session: 3 of 2026-09-22 (unattended; every run's regime was `SHARPCOREDB_INLINE_BYTES=<n>` and nothing else, declared with each number below)
+- Command(s): `--pk-profile-insert` at 16 / 24 / 32 · `--multirowinsert` at 16 / 24 / 32 (5 runs) · `--pk` as 3 interleaved pairs (24 vs 16, each run carrying its own SQLite arm) · two code reads: the arena/append path, and both reopen paths
+- Verdict: **NO CHANGE LANDED — the lever is measured, costed and handed to the owner.** The value is a deliberately pinned policy default (`Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout`), the technical prerequisite is already shipped (re-verified by reading both reopen paths), and even the flip leaves the fair-PK INSERT ratio at ~0,84× — not the ≥ 1,0× decision 4 requires
+- Commit: this worklog entry + the plan's §4b extension (no product change)
+- NEXT: decision 4 still needs more than the capacity. With the flip the fair-PK INSERT arm sits at ~0,84×, and the remainder has to come from the per-statement/engine path or from a batch-level arena call — *not* from more bytes, which this same day already showed do not convert. The `--pk` arm's remaining staged cost is `index-maint` (963 B/row, structural and closed) plus the engine/append plumbing
+
+**1. Why this item, and why the two biggest remaining posts were not attacked.** Session 2 closed with the lesson "the allocation wins of this day bought no ops/s on either cell they could plausibly have touched", and the hash-index lever was already retired by evidence (its 882 B/row is the managed map's per-key node + list under `Binary` collation, where `NormalizeIndexKey` is free — WORKLOG 2026-09-21, re-read here rather than re-run). Reading the two largest per-row posts that were left: the **arena plumbing** (383 B/call for a ~20-byte payload) is `WriteMany`'s `long[]` + its `ConcurrentDictionary` cache node + the buffered append's list entry and lookup node; the **engine/append** post (267 B/row) is the same buffered-append bookkeeping one layer out. Both are structures that exist so unflushed rows are readable by position and in order — i.e. they are *more bytes, not less work*. The one knob that removes **work** is the inline capacity: with capacity 16 the 18-byte `email` overflows for every row whose index is ≥ 1.000, so **99.000 of 100.000 rows make one arena write each** (the call count in every `--pk-profile-insert` table of this campaign).
+
+**2. The knee is 24, and the total footprint is a wash there.** `--multirowinsert` (20.000 rows, 1.000 rows/statement, median of 5, two runs per setting), declared regime `SHARPCOREDB_INLINE_BYTES=<n>`:
+
+| `SHARPCOREDB_INLINE_BYTES` | rows/s | allocated/row | data file | arena file | **total** |
+|---|---:|---:|---:|---:|---:|
+| 16 (the shipped default) | 63.291 / 62.045 → **62.668** | 4.106 B | 1.840.000 B | 488.890 B | 2.328.890 B |
+| 24 | 79.787 / 73.594 → **76.691 (+22,4 %)** | **3.555 B (−13,4 %)** | 2.320.000 B | **0** | **2.320.000 B (−0,4 %)** |
+| 32 | 75.610 | 3.575 B | 2.800.000 B | 0 | 2.800.000 B (+20,2 %) |
+
+**3. On the fair-PK arm the tracked ratio moves for the first time.** `--pk-profile-insert`, 100.000 rows in 10 `InsertBatch` calls, one run per setting (profiled pass; call counts and `B/row` are the transferable columns, the ops/s is one sample each):
+
+| `SHARPCOREDB_INLINE_BYTES` | INSERT ops/s | serialization B/row (`encode`) | `arena-write` / `arena-append` / `encode-scratch` calls | `index-maint` | `row-locate` |
+|---|---:|---:|---|---:|---:|
+| 16 (default) | 72.364 | 547 | 99.000 / 99.000 / 99.000 | 9.638.629 B/call | 993.036 B/call |
+| 24 | 91.041 | **144** | **0 / 0 / 0** | 9.638.568 | 993.036 |
+| 32 | **94.558** | 168 | 0 / 0 / 0 | 9.638.570 | 993.036 |
+
+`index-maint` and `row-locate` are byte-identical across all three runs — the control that says only the arena/record path moved, not the index and not the locate. Then the ratio itself, three **interleaved** pairs of `--pk` (arm order 24, 16, 24, 16, 24, 16; every run carries its own same-run SQLite arm, and the harness prints the gap as SQLite ÷ SC, so the ratio below is SC ÷ SQLite):
+
+| pair | ib=24: SC / SQLite / **ratio** | ib=16: SC / SQLite / **ratio** |
+|---|---|---|
+| 1 | 157.909 / 187.969 / **0,84** | 116.525 / 194.560 / 0,60 |
+| 2 | 148.715 / 157.589 / **0,94** | 120.731 / 191.449 / 0,63 |
+| 3 | 161.240 / 195.689 / **0,82** | 124.827 / 190.346 / 0,66 |
+| **median** | **0,84×** | **0,63×** |
+
+The other three columns are parity at both settings (ib=24: READ 0,95–1,07, UPDATE 0,96–1,01, DELETE 1,00–1,06), so the capacity's effect is specific to INSERT — which is the column the plan needs. Note also what this does to the *published* numbers: the brief's row 1 (INSERT **0,71×**) and session 2's ladder (**0,68×**) are both measured at the shipped default 16; at 24 the same arm reads **0,84×**, and the difference is the capacity, not the code.
+
+**4. Why this is a decision for the owner, not a landing.** (a) The capacity is a policy value about every **new** table's record size and it is deliberately pinned (`Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout`): each variable-length column reserves `2 + N` bytes, so on a schema whose values are *shorter* than the capacity it is pure disk with no arena write to save (a table of 5-character codes would grow ~27 % in record size for nothing), while on this one it is free. (b) The blocker the CHANGELOG recorded for the flip is **gone**, and that was re-verified by reading rather than assumed: the capacity is persisted per table and restored on reopen in **both** storage modes — directory mode through the `Table` JSON round-trip (`Database.Core.cs:385`), single-file mode through `DatabaseExtensions.LoadTables:870` → `TableDirectoryEntry.FixedWidthInlineValueBytes` (written by `TableDirectoryManager.CreateTable:118`, carved out of the entry's reserved area) — so a flip is a policy choice now, not a correctness risk. (c) Even so, §0.1 keeps owner decisions with the owner, and the honest bound goes with the evidence: **the flip takes the fair-PK INSERT ratio to ~0,84×, not to ≥ 1,0×**, so decision 4 would still need something else on top.
+
+**5. What this session did *not* do.** No product change, no default flipped, no baseline touched, and the two largest allocation posts were read and explained rather than attacked — both are read-your-writes structures (the buffered-append lookup and the arena cache), i.e. bytes the engine needs, not bytes it wastes. The campaign's ratio table is therefore unchanged by this session: **0,63–0,68× stays the shipped-default INSERT number** until the owner decides, and the 0,84× is what the decision is worth.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
+
 
 
 

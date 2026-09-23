@@ -159,6 +159,20 @@ builds. So **the allocation wins of this day bought no ops/s on either cell they
 honest form of the result, and the reason the plan's acceptance for these changes is the allocation column.
 **Neither reaches the item's DoD**: INSERT is still below 1.0× and the locate's 12.6 MB snapshot is a design item.
 
+**Measured 2026-09-22 (session 3): 5.1's remaining lever is a *decision*, and its size is now known.** The fair-PK INSERT
+arm is bounded by one per-row overflow-arena write, and the shipped inline capacity (16) is two bytes too small for its
+18-byte `email` value: at `SHARPCOREDB_INLINE_BYTES=24` every TEXT column inlines, `arena-write`/`arena-append`/
+`encode-scratch` fall from 99,000 calls to **zero** over 100,000 rows, and the **tracked ratio moves 0,63× → 0,84×**
+(three interleaved `--pk` pairs, each with its own same-run SQLite arm), with +22 % on the multi-row shape, −13 %
+allocation and a **total-footprint wash** (the arena's per-block framing leaves as the record grows; 32 is past the knee
+at +20 % disk for no speed). That is a policy choice about every new table's record size — pinned by
+`Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout`, and worth nothing on schemas whose values are shorter
+than the capacity (a table of 5-character codes grows ~27 % in record size for no arena write saved) — so it is recorded
+as an **owner decision, not landed**. The correctness blocker the CHANGELOG named is gone: the capacity is persisted and
+restored on reopen in both storage modes (verified by reading both paths). **Even the flip leaves INSERT at ~0,84×, so
+decision 4 still needs more than the capacity.** Tables: the plan's §4b extension under §9 priority 2 and the WORKLOG's
+session-3 entry.
+
 
 ## 5. Work items, in priority order
 
