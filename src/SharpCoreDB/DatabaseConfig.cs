@@ -167,6 +167,33 @@ public class DatabaseConfig
     public int FixedWidthInlineValueBytes { get; init; } = 24;
 
     /// <summary>
+    /// Gets the minimum number of bytes a single-file (<c>.scdb</c>) database adds when it has to grow its file.
+    /// <b>Default 0, which keeps the historical 10 MiB minimum</b>
+    /// (<c>FreeSpaceManager.MinExtensionBytesDefault</c>). Applies to the next open, never to an already-open file.
+    /// <para>
+    /// ⚠️ <b>Why this exists: the 10 MiB minimum is why a 100-row <c>.scdb</c> is 14,7 MB.</b> The single-file file
+    /// starts at <b>1.037 pages</b> (4.247.552 B at a 4 KiB page size: header, block registry, FSM, table directory and
+    /// the first data/overflow blocks), and the first allocation that does not fit adds
+    /// <c>max(requiredPages, currentSize / 2, minExtensionPages)</c> where <c>minExtensionPages = thisValue / pageSize</c>.
+    /// For a small database both of the first two terms are far below 2.560 pages, so <b>the minimum decides</b>:
+    /// 1.037 + 2.560 = <b>3.597 pages = 14.733.312 B</b>, and that size is then <b>independent of the row count</b> —
+    /// measured 2026-09-23 with the harness's <c>--scdb</c> arm at <b>100, 500 and 2.000 rows, both caller shapes and
+    /// both inline capacities: 14.733.312 B in all four cells</b>.
+    /// </para>
+    /// <para>
+    /// Lowering it trades <b>file size</b> for <b>more extension calls</b> (each extension re-writes the block registry
+    /// and the FSM), so it is a policy choice rather than a free win: the doubling term still grows the file
+    /// exponentially once the database is larger than twice this value, which means a large database's growth pattern
+    /// is unchanged. It has <b>no effect on the on-disk format</b> — the file is a whole number of pages either way, and
+    /// a database grown under one setting is read and extended under another without conversion — so this is safe to
+    /// change on an existing file.
+    /// </para>
+    /// <para>Covered by <c>SingleFileFileGrowthTests</c>: the default keeps the historical floor, a small configured
+    /// value shrinks the file, and every row is still readable after both.</para>
+    /// </summary>
+    public long SingleFileMinExtensionBytes { get; init; } = 0;
+
+    /// <summary>
     /// Gets the pending-append threshold, in bytes, at which buffered appends are flushed
     /// (only used when <see cref="EnableBufferedAppends"/> is enabled). Bounds both the memory the
     /// buffer can hold and the amount of work a crash can lose. Default 1 MB.

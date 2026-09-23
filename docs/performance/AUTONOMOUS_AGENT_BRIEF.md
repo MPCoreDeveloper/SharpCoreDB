@@ -113,7 +113,8 @@ inline-capacity run self-describing.
 Harness-only env switches (used by the §9 experiments; set them explicitly and never let them leak
 between runs): `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`, `SHARPCOREDB_HASH_INDEXES`,
 `SHARPCOREDB_MAIN_PROFILE_UPDATE`, `SHARPCOREDB_WAL_DURABILITY`, `SHARPCOREDB_BUFFERED_APPENDS`,
-`SHARPCOREDB_MULTIROW_ROWS`.
+`SHARPCOREDB_MULTIROW_ROWS`, `SHARPCOREDB_SCDB_ROWS`, `SHARPCOREDB_SCDB_MIN_EXTENSION` (the `.scdb` file-size floor,
+2026-09-23 — see §9's growth item).
 
 ## 3. Measurement protocol (non-negotiable)
 
@@ -220,9 +221,14 @@ begins a block-registry batch and flushes **once per table** (`SingleFileTable.c
 shape the single-file mode is **4,4× the multi-file mode's batched arm** (84.263 rows/s at 3.555 B/row) — the fastest
 INSERT path in the codebase — so the quadratic belongs to the *solo-statement shape* (guidance, now in
 `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`), not to the mode, and the "make the block write incremental" redesign is
-**not justified by any measured INSERT cost**. The 14,7 MB file for 2.000 rows survives as a *space* finding only
-(identical in all four cells → block/registry growth, not shape). Both shapes in the same process is what made the
-distinction visible; plan §9 and the session-9 worklog entry carry the tables.
+**not justified by any measured INSERT cost**. What *did* survive is a **file-size** finding, and measuring it properly
+turned it into a flat **floor** rather than growth: a `.scdb` database is **14,733,312 B whatever it holds** — measured at
+1, 100, 500 and 2.000 rows, both shapes, both capacities — because the file starts at 1.037 pages and the first
+extension adds `max(requiredPages, currentSize / 2, 10 MiB / pageSize)` = 2.560 pages, so 1.037 + 2.560 = 3.597 pages.
+That is now a **knob** (`DatabaseConfig.SingleFileMinExtensionBytes`, default 0 = unchanged), which takes the same
+100-row database to **6.369.280 B** at 64 KiB, with `SingleFileFileGrowthTests` pinning both ends. Both shapes in the
+same process is what made the shape distinction visible; plan §9 and the session-9/session-10 worklog entries carry the
+tables.
 
 
 ## 5. Work items, in priority order

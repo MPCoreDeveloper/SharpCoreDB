@@ -403,13 +403,31 @@ class Program
     /// </summary>
     static int InlineBytesOverride()
     {
-        // Unset means the PRODUCT default, not 0: the product default became 16 when §4b shipped (2026-09-16), and an
-        // unconditional 0 here silently pinned every arm to the historical layout — which made a "default" measurement
-        // reproduce the old numbers exactly and hide the change. An explicit value, including 0, wins.
+        // Unset means the PRODUCT default, not 0: the product default became 16 when §4b shipped (2026-09-16) and 24
+        // by owner decision (2026-09-22), and an unconditional 0 here silently pinned every arm to the historical
+        // layout — which made a "default" measurement reproduce the old numbers exactly and hide the change. An
+        // explicit value, including 0, wins.
         var value = Environment.GetEnvironmentVariable("SHARPCOREDB_INLINE_BYTES");
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? Math.Max(0, parsed)
             : new DatabaseConfig().FixedWidthInlineValueBytes;
+    }
+
+    /// <summary>
+    /// Overrides <see cref="DatabaseConfig.SingleFileMinExtensionBytes"/> from <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c>
+    /// (plan §9's file-growth item, 2026-09-23). Unset keeps the product default, which is <c>0</c> = the historical
+    /// 10 MiB minimum extension: the single-file file starts at 1.037 pages and the first extension that does not fit
+    /// adds <c>max(requiredPages, currentSize / 2, 10 MiB / pageSize)</c>, so a small <c>.scdb</c> database is
+    /// 3.597 pages = 14.733.312 B <em>whatever its row count</em> — which the <c>--scdb</c> arm measures at 100, 500
+    /// and 2.000 rows. Same shape as <see cref="InlineBytesOverride"/>: unset means the product default, and an explicit
+    /// value (including 0) wins.
+    /// </summary>
+    static long SingleFileMinExtensionOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_MIN_EXTENSION");
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : new DatabaseConfig().SingleFileMinExtensionBytes;
     }
 
     /// <summary>
@@ -668,6 +686,7 @@ class Program
         Console.WriteLine($"  ExecuteSQL per statement   {inserts / statementMedian,8:N0}  {statementMedian * 1_000_000 / inserts,10:F2}   {statementShape.AllocPerRow,12:N0} B   {statementShape.FileBytes,11:N0} B");
         Console.WriteLine($"  ExecuteBatchSQL (one call) {inserts / batchMedian,8:N0}  {batchMedian * 1_000_000 / inserts,10:F2}   {batchShape.AllocPerRow,12:N0} B   {batchShape.FileBytes,11:N0} B");
         Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {statementShape.Gen0} / {batchShape.Gen0} (statementwise / batched)");
+        Console.WriteLine($"    [diag] minimum file extension {SingleFileMinExtensionOverride()} B (0 = the product default 10 MiB, SHARPCOREDB_SCDB_MIN_EXTENSION) — the knob behind the .scdb file size above");
     }
 
     /// <summary>
@@ -852,9 +871,14 @@ class Program
             // records; the fixed-width arm forces FixedWidthRecordLayout.
             AutoFixedWidthRecords = !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
-            // §4b inline capacity — SHARPCOREDB_INLINE_BYTES. Unset keeps the PRODUCT default (16 since §4b shipped),
-            // so the arms track it; set it (e.g. 0) to measure the historical layout.
+            // §4b inline capacity — SHARPCOREDB_INLINE_BYTES. Unset keeps the PRODUCT default (24 since the
+            // 2026-09-22 owner decision; it was 16 from §4b's landing on 2026-09-16), so the arms track it;
+            // set it (e.g. 0) to measure the historical layout.
             FixedWidthInlineValueBytes = InlineBytesOverride(),
+            // §9 file-growth knob — SHARPCOREDB_SCDB_MIN_EXTENSION. Unset keeps the product default (0 = the
+            // historical 10 MiB minimum extension, which is why a small .scdb file is 14,7 MB whatever it holds);
+            // set it to a byte count to see that floor move. Read per open, and it is not part of the on-disk format.
+            SingleFileMinExtensionBytes = SingleFileMinExtensionOverride(),
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,
             HighSpeedInsertMode = true,

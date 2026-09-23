@@ -150,8 +150,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // ✅ Dynamic metadata (issue #345): the FSM is a named block (sys:fsm) whose location is
         // resolved from the block registry instead of a fixed header offset.
         _freeSpaceManager = _blockRegistry.TryGetBlock(ScdbFileHeader.FSM_BLOCK_NAME, out var fsmEntry)
-            ? new FreeSpaceManager(this, fsmEntry.Offset, fsmEntry.Length, header.PageSize)
-            : new FreeSpaceManager(this, 0, 0, header.PageSize);
+            ? new FreeSpaceManager(this, fsmEntry.Offset, fsmEntry.Length, header.PageSize,
+                options.DatabaseConfig?.SingleFileMinExtensionBytes ?? 0)
+            : new FreeSpaceManager(this, 0, 0, header.PageSize,
+                options.DatabaseConfig?.SingleFileMinExtensionBytes ?? 0);
         _walManager = new WalManager(this, header.WalOffset, header.WalLength, options.WalBufferSizePages);
         _tableDirectoryManager = new TableDirectoryManager(this, header.TableDirOffset, header.TableDirLength);
         

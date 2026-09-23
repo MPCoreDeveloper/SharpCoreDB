@@ -213,9 +213,15 @@ db.ExecuteBatchSQL(new[]
 db.ExecuteSQL("INSERT INTO users VALUES (3, 'Carol'), (4, 'Dave')");
 ```
 
-⚠️ One space caveat that is **not** shape-dependent: a 2,000-row `.scdb` measured **14,733,312 B in all four cells**
-above (~7 KB/row), because block rewrites allocate fresh pages and the file never shrinks. That is recorded as a
-separate finding (plan §9) rather than as an insert cost.
+⚠️ One caveat that is **not** shape-dependent, and it is about **file size** rather than speed: a `.scdb` database is
+**14,733,312 B whatever it holds** — measured 2026-09-23 at **1, 100, 500 and 2.000 rows**, at both inline capacities and
+in both shapes. The file starts at **1.037 pages** (4.247.552 B) and the first extension adds
+`max(requiredPages, currentSize / 2, minExtensionPages)`, where the **10 MiB historical minimum** is 2.560 pages at a
+4 KiB page size — so 1.037 + 2.560 = 3.597 pages, and the row count never enters the sum.
+`DatabaseConfig.SingleFileMinExtensionBytes` trades size for growth steps: the same 100-row database measures **6.369.280 B** at
+64 KiB, because the halving term then decides (1.037 + 518 = 1.555 pages). The setting is read **per open** and is not
+part of the on-disk format, so it is safe to change on an existing file. Full derivation in plan §9; pinned by
+`SingleFileFileGrowthTests`.
 
 ---
 
