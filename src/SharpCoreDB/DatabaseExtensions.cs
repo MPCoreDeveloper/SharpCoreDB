@@ -868,6 +868,17 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
                 // config-vs-records disagreement makes IsFixedWidthDataBlock's record-length test fail, the block is
                 // then treated as legacy JSON and EnsureCacheLoaded throws on a binary record.
                 table.SetFixedWidthInlineValueBytes(metadata.Value.FixedWidthInlineValueBytes);
+                // §8c (2026-09-22): the auto-upgrade the multi-file path does beside its format migration — an
+                // existing table stored at a LOWER capacity than the caller configured is rewritten once, here, on a
+                // writable open, and the new capacity lands in this entry so the next open finds nothing to do. A
+                // read-only database never rewrites, and a config asking for a lower capacity never rewrites either.
+                if (!_options.IsReadOnly
+                    && _options.DatabaseConfig is { FixedWidthInlineValueBytes: var configuredCapacity }
+                    && metadata.Value.FixedWidthInlineValueBytes < configuredCapacity)
+                {
+                    table.MigrateToInlineCapacity(configuredCapacity);
+                }
+
                 _tables[tableName] = table;
             }
         }
@@ -1120,6 +1131,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // B6: forward the database config's fixed-width flag so new single-file tables store
         // binary fixed-width records (with the overflow block) instead of JSON rows.
         table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
+        // §4b/§8c (2026-09-22): and the inline capacity WITH it. Until now this construction site — the one a SQL
+        // `CREATE TABLE` goes through — forwarded only the fixed-width flag, so a new single-file table always started
+        // at the historical capacity 0 and stored that in its directory entry: this storage mode never got the inline
+        // layout, and therefore never the 20–33 % INSERT win it buys, no matter what the caller configured. The
+        // multi-file path has taken the capacity from the config all along, so this also makes the two modes agree.
+        table.SetFixedWidthInlineValueBytes(_options.DatabaseConfig?.FixedWidthInlineValueBytes ?? 0);
         _tables[tableName] = table;
 
         // Register table schema with the directory manager so it persists on disk

@@ -163,6 +163,84 @@ public partial class Table
     }
 
     /// <summary>
+    /// Plan §8c: raises this table's inline capacity in place — the upgrade path for data written under a lower
+    /// capacity, and the deliberate sibling of <see cref="MigrateToFixedWidth"/>: read every row through the
+    /// <b>old</b> layout, drop the arena, re-serialise under the new capacity, swap the data file atomically and
+    /// rebuild the indexes. Returns the number of rows rewritten; <c>0</c> when the table is not fixed-width, is not
+    /// Columnar, or is already at or above <paramref name="newCapacity"/> — so a caller can treat 0 as "nothing to do"
+    /// and does not need to probe the layout itself.
+    /// <para>
+    /// <b>One-way by design.</b> Only an *increase* rewrites anything, so a config asking for a lower capacity — or
+    /// for the historical 0 — never re-layouts a database behind the caller's back. The read path is unaffected
+    /// either way: a reopened table always decodes with the capacity stored in its metadata.
+    /// </para>
+    /// </summary>
+    public int MigrateToInlineCapacity(int newCapacity)
+    {
+        if (isReadOnly)
+        {
+            throw new InvalidOperationException("Cannot migrate a read-only table's inline capacity.");
+        }
+
+        newCapacity = Math.Max(0, newCapacity);
+
+        rwLock.EnterWriteLock();
+        try
+        {
+            if (!_fixedWidthRecords || newCapacity <= _fixedWidthInlineValueBytes || StorageMode != StorageMode.Columnar)
+            {
+                return 0;
+            }
+
+            // 1. Read every row through the OLD layout — the old codec and the old arena are still the active ones
+            //    here, which is the whole reason this rewrite happens in this order. The PK index is rebuilt from disk
+            //    first because it may be empty right after metadata load.
+            if (PrimaryKeyIndex >= 0)
+            {
+                RebuildPrimaryKeyIndexFromDisk();
+            }
+
+            var rows = Select();
+
+            // 2. Switch the layout and start a fresh arena. Every block in the old arena is referenced only by the
+            //    records being replaced, and those are in memory by now. The deleted file's cached handles are dropped
+            //    too: it is about to be recreated, and a stale handle would read the replaced file.
+            var arenaPath = System.IO.Path.ChangeExtension(DataFile, ".ovf");
+            if (File.Exists(arenaPath))
+            {
+                File.Delete(arenaPath);
+                storage?.InvalidateFileHandles(arenaPath);
+            }
+
+            _overflowArena = null;
+            FixedWidthInlineValueBytes = newCapacity; // the setter clears the cached layout
+
+            // 3. Re-serialise through the new layout, then swap and rebuild exactly as the format migration does.
+            var records = new List<byte[]>(rows.Count);
+            foreach (var row in rows)
+            {
+                records.Add(SerializeRowFixedWidth(row));
+            }
+
+            WriteMigratedRecordsAndSwap(DataFile + ".inlmig.tmp", records);
+
+            RebuildPrimaryKeyIndex();
+            foreach (var col in loadedIndexes.ToList())
+            {
+                RebuildHashIndex(col);
+            }
+
+            Interlocked.Exchange(ref _cachedRowCount, rows.Count);
+
+            return rows.Count;
+        }
+        finally
+        {
+            rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
     /// Converts this table from page-based to columnar (append-only) storage in place: the
     /// page-based engine and its <c>.pages</c> files are dropped, <see cref="StorageMode"/> is set
     /// to Columnar and <see cref="DataFile"/> switches to the <c>.dat</c> convention. The rows

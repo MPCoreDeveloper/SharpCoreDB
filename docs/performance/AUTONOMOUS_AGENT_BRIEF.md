@@ -197,6 +197,18 @@ closed on that basis** (see the WORKLOG's close entry): item 1 is *absolute met,
 moved*, item 2 (the per-stage budget) is met, and the residual is the drift of the reference rather than a named lever
 in our code. The plan's §8e carries the full table.
 
+**§8c landed too (2026-09-22, session 7 — the compatibility half of decision 8).** An existing table whose **stored**
+inline capacity is below the configured one now rewrites itself once, on the first **writable** open, on **both** storage
+modes (`Table.MigrateToInlineCapacity` for multi-file, `SingleFileTable.MigrateToInlineCapacity` for `.scdb`, with the new
+capacity persisted in the metadata DTO / table-directory entry). It is one-way — a config asking for a lower capacity,
+the historical `0` included, never re-layouts anything — and a read-only open never rewrites, so a skipped upgrade is
+harmless. Two defects surfaced while landing it and both are fixed: the `.scdb` `CREATE TABLE` path had **ignored the
+configured capacity entirely** (so that mode had never used the inline layout, nor earned the 20–33 % INSERT win), and a
+**zero-byte block** threw on both halves of a rewrite (`AllocatePages(0)` and `FreePages(offset, 0)`) — which is the root
+cause of the older "the 16-byte default broke the single-file reopen matrix" note, since at capacity 16 that schema still
+overflowed and no test had ever produced an empty arena. Suite **1924 / 0 failed / 16 skipped**; the plan has **one**
+technical item left (§5.3's snapshot) and **no** open INSERT lever.
+
 
 ## 5. Work items, in priority order
 

@@ -256,9 +256,15 @@ internal sealed class FreeSpaceManager : IDisposable
 
     public void FreePages(ulong offset, int count)
     {
-        if (count <= 0)
+        ArgumentOutOfRangeException.ThrowIfNegative(count);
+
+        if (count == 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(count));
+            // A zero-page free is the correct no-op for an EMPTY block, and empty blocks are legitimate now: the
+            // single-file overflow block of a table whose values all fit inline has a zero-byte payload (plan §8c /
+            // decision 8). Every caller derives `count` from a block length, so throwing here failed the free half of
+            // rewriting such a block — after the allocate half had already been taught to skip zero pages.
+            return;
         }
 
         var startPage = offset / (ulong)_pageSize;

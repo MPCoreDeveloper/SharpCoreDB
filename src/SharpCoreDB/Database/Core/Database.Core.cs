@@ -426,6 +426,22 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                         migratedAnyTable = true;
                     }
                 }
+                // §8c (2026-09-22): the same idea one layer in — an existing FIXED-WIDTH table whose stored inline
+                // capacity is below the configured one is rewritten once, on the first writable open, so that "open it
+                // and it upgrades" is true rather than half true (new tables got the capacity, existing ones kept
+                // theirs). One-way: a config asking for a lower capacity never rewrites anything, and a read-only open
+                // never does either — until the rewrite happens, the STORED capacity stays authoritative for reading,
+                // which is what makes an interrupted or skipped upgrade harmless.
+                else if (!isReadOnly &&
+                         table.IsFixedWidthRecords &&
+                         config is not null &&
+                         table.FixedWidthInlineValueBytes < config.FixedWidthInlineValueBytes)
+                {
+                    if (table.MigrateToInlineCapacity(config.FixedWidthInlineValueBytes) > 0)
+                    {
+                        migratedAnyTable = true;
+                    }
+                }
 
                 
                 // ✅ CRITICAL FIX: Complete initialization of new DDL properties

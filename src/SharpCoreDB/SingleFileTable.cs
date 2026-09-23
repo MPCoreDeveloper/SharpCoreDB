@@ -934,6 +934,47 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
     }
 
+    /// <summary>
+    /// Plan §8c for the single-file (<c>.scdb</c>) path: raises this table's inline capacity and rewrites every cached
+    /// row through the new layout. The setter drops the cached layout, the flush re-serialises all rows and sweeps the
+    /// arena's now-unreferenced blocks (a value that becomes inline leaves its old block free), and the new capacity is
+    /// persisted in the table-directory entry so the next reopen reads with it instead of migrating again.
+    /// Returns the number of rows rewritten, or <c>0</c> when there is nothing to raise.
+    /// </summary>
+    internal int MigrateToInlineCapacity(int newCapacity)
+    {
+        lock (_tableLock)
+        {
+            EnsureCacheLoaded();
+            newCapacity = Math.Max(0, newCapacity);
+            if (newCapacity <= _fixedWidthInlineValueBytes)
+            {
+                return 0;
+            }
+
+            SetFixedWidthInlineValueBytes(newCapacity);
+            _isDirty = true;
+            FlushCache();
+            RebuildPkIndex();
+
+            if (_storageProvider is SingleFileStorageProvider provider)
+            {
+                provider.TableDirectoryManager.UpdateTableMetadata(
+                    Name, entry => UpdateEntryCapacity(entry, newCapacity));
+                provider.TableDirectoryManager.Flush();
+            }
+
+            return _rowCache.Count;
+        }
+    }
+
+    /// <summary>The metadata update applied after an inline-capacity migration; extracted so it reads as one step.</summary>
+    private static TableMetadataEntry UpdateEntryCapacity(TableMetadataEntry entry, int capacity)
+    {
+        entry.FixedWidthInlineValueBytes = capacity;
+        return entry;
+    }
+
     private readonly Dictionary<string, long> _columnUsage = new(StringComparer.OrdinalIgnoreCase);
 
     private void EnsureCacheLoaded() // NOSONAR:S3776 - row-cache warm-up with per-region schema guards; must stay sequential to keep the JSON parse inside one lock

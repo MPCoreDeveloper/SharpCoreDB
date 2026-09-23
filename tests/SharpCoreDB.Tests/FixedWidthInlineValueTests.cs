@@ -167,8 +167,102 @@ public sealed class FixedWidthInlineValueTests : IDisposable
         Assert.Empty(db.ExecuteQuery("SELECT * FROM t WHERE id = 2"));
     }
 
+    // ── The upgrade path for existing data (plan §8c) ───────────────────────────────────────────
+
     /// <summary>
-    /// Pins the shipped default and the escape hatch. Both layouts are first-class: the capacity is persisted per table
+    /// Plan §8c: an existing fixed-width table whose <b>stored</b> capacity is below the configured one upgrades
+    /// itself on a writable open, and its records are read with the capacity they were rewritten to.
+    /// <para>
+    /// This test exists because the first attempt at that migration failed a reopen — <c>SELECT … WHERE id = 1</c>
+    /// found no row — and the assertions it used could not tell *no row* from *misdecoded value*: both surface as
+    /// <see langword="null"/>. The assertion order here is therefore deliberate. First the stored capacity (did the
+    /// migration happen and is it recorded), then the row count (are the records still there), then the primary-key
+    /// lookup (is the index rebuilt on the new positions), and only then the values — one of which is <b>longer</b>
+    /// than the new capacity, so it must still round-trip through the arena on every later reopen.
+    /// </para>
+    /// </summary>
+    [Fact]
+    public async Task ExistingTable_AutoUpgradesInlineCapacity_OnWritableOpen_AndTheRowsStayReachable()
+    {
+        var dir = Path.Combine(_dirPath, "upgrade24");
+        long dataFileBytesBefore;
+
+        // A pre-upgrade database: fixed-width records at capacity 0, one short value and one long one.
+        await using (var created = _factory.Create(dir, "pw", isReadOnly: false, config: Inline(0)))
+        {
+            created.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, note TEXT)");
+            created.ExecuteSQL($"INSERT INTO t VALUES (1, 'short', '{LongValue}'), (2, 'User2', 'payload-2')");
+            created.Flush();
+            Assert.True(created.TryGetTable("t", out var beforeTable));
+            dataFileBytesBefore = new FileInfo(((SharpCoreDB.DataStructures.Table)beforeTable).DataFile).Length;
+        }
+
+        // Writable open at a higher capacity — the upgrade is expected here.
+        await using (var upgraded = _factory.Create(dir, "pw", isReadOnly: false, config: Inline(24)))
+        {
+            Assert.True(upgraded.TryGetTable("t", out var table));
+            Assert.Equal(24, ((SharpCoreDB.DataStructures.Table)table).FixedWidthInlineValueBytes);
+
+            // The rewrite really happened: a variable slot grows from 5 bytes to 7 + 24, so the records on disk must
+            // have grown. Without this, a future "migration" that only flips the property would still pass the
+            // value assertions below.
+            Assert.True(
+                new FileInfo(((SharpCoreDB.DataStructures.Table)table).DataFile).Length > dataFileBytesBefore,
+                $"expected the data file to grow when the capacity went 0 -> 24 (was {dataFileBytesBefore} bytes)");
+            Assert.Equal(2, upgraded.ExecuteQuery("SELECT * FROM t").Count);
+            Assert.Single(upgraded.ExecuteQuery("SELECT * FROM t WHERE id = 1"));
+            Assert.Equal("short", ValueOf(upgraded, 1, "name"));
+            Assert.Equal(LongValue, ValueOf(upgraded, 1, "note"));
+            Assert.Equal("payload-2", ValueOf(upgraded, 2, "note"));
+
+            // The upgraded table must also accept writes, and they must be readable without another reopen.
+            upgraded.ExecuteSQL("INSERT INTO t VALUES (3, 'after', 'migration')");
+            Assert.Equal("after", ValueOf(upgraded, 3, "name"));
+            upgraded.Flush();
+        }
+
+        // Reopen again: the layout is self-describing now, so there is nothing left to migrate and no row may be lost.
+        await using (var again = _factory.Create(dir, "pw", isReadOnly: false, config: Inline(24)))
+        {
+            Assert.Equal(3, again.ExecuteQuery("SELECT * FROM t").Count);
+            Assert.Single(again.ExecuteQuery("SELECT * FROM t WHERE id = 3"));
+            Assert.Equal("after", ValueOf(again, 3, "name"));
+            Assert.Equal(LongValue, ValueOf(again, 1, "note"));
+        }
+
+        // A read-only open must only read: same capacity, every row reachable, nothing rewritten.
+        await using var readOnly = _factory.Create(dir, "pw", isReadOnly: true, config: Inline(24));
+        Assert.True(readOnly.TryGetTable("t", out var roTable));
+        Assert.Equal(24, ((SharpCoreDB.DataStructures.Table)roTable).FixedWidthInlineValueBytes);
+        Assert.Equal(3, readOnly.ExecuteQuery("SELECT * FROM t").Count);
+        Assert.Equal(LongValue, ValueOf(readOnly, 1, "note"));
+    }
+
+    /// <summary>
+    /// The upgrade is <b>one-way and opt-in by capacity</b>: a database written at a higher capacity is never
+    /// rewritten <i>down</i>, and a config that asks for the historical layout (0) leaves an existing inline table
+    /// exactly as it is. Without this, a caller could silently re-layout data by opening it with a different config.
+    /// </summary>
+    [Fact]
+    public async Task ExistingTable_IsNeverDowngraded_ByALowerConfiguredCapacity()
+    {
+        var dir = Path.Combine(_dirPath, "nodowngrade");
+
+        await using (var created = _factory.Create(dir, "pw", isReadOnly: false, config: Inline(24)))
+        {
+            created.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, note TEXT)");
+            created.ExecuteSQL("INSERT INTO t VALUES (1, 'short', 'note1')");
+            created.Flush();
+        }
+
+        await using var openedWithZero = _factory.Create(dir, "pw", isReadOnly: false, config: Inline(0));
+        Assert.True(openedWithZero.TryGetTable("t", out var table));
+        Assert.Equal(24, ((SharpCoreDB.DataStructures.Table)table).FixedWidthInlineValueBytes);
+        Assert.Equal("short", ValueOf(openedWithZero, 1, "name"));
+        Assert.Equal("note1", ValueOf(openedWithZero, 1, "note"));
+    }
+
+
     /// on <b>both</b> paths — the multi-file metadata DTO and the single-file <c>TableMetadataEntry</c> (carved out of
     /// its reserved bytes, so older files read 0 = the historical layout) — so a reopened database always decodes with
     /// the capacity its records were written with, never with whatever this config now says. 24 is the owner's default
