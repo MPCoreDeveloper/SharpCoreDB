@@ -100,7 +100,8 @@ dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparat
 ```
 
 Known flags: `--pk`, `--pk-default`, `--pk-ab`, `--dual-mode`, `--multirowinsert`, `--pk-profile`,
-`--scdb` (single-file INSERT arm, added 2026-09-22), `--engine=pagebased`, `--gate`, `--gate-factor=X`,
+`--scdb` (single-file INSERT arm, added 2026-09-22; **reports both caller shapes** — per-statement `ExecuteSQL` and a
+single `ExecuteBatchSQL` call — since session 9), `--engine=pagebased`, `--gate`, `--gate-factor=X`,
 `--gate-baseline=<path>`, `--write-baseline`.
 
 Every write arm prints a `[diag]` line naming the shape it measured (2026-09-22): `--multirowinsert` and the fair-PK arm
@@ -209,6 +210,19 @@ configured capacity entirely** (so that mode had never used the inline layout, n
 cause of the older "the 16-byte default broke the single-file reopen matrix" note, since at capacity 16 that schema still
 overflowed and no test had ever produced an empty arena. Suite **1924 / 0 failed / 16 skipped**; the plan has **one**
 technical item left (§5.3's snapshot) and **no** open INSERT lever.
+
+**The §9 single-file item was corrected the same day (session 9), and the correction matters more than the item did.**
+Session 8 measured that mode with one `ExecuteSQL` per statement and read 819–994 rows/s as a property of the *mode*
+("not competitive on INSERT, needs an incremental block write"). Session 9 gave the `--scdb` arm the second shape a caller
+has — **one `ExecuteBatchSQL` call** — and the numbers inverted: **703 rows/s → 368.535 rows/s**, **844.563 B/row →
+1.444 B/row**, gen0 265 → 0, because the batch extension (`SingleFileDatabase.Batch.cs:47`) already disables auto-flush,
+begins a block-registry batch and flushes **once per table** (`SingleFileTable.cs:465` is the suppressed flush). At that
+shape the single-file mode is **4,4× the multi-file mode's batched arm** (84.263 rows/s at 3.555 B/row) — the fastest
+INSERT path in the codebase — so the quadratic belongs to the *solo-statement shape* (guidance, now in
+`docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`), not to the mode, and the "make the block write incremental" redesign is
+**not justified by any measured INSERT cost**. The 14,7 MB file for 2.000 rows survives as a *space* finding only
+(identical in all four cells → block/registry growth, not shape). Both shapes in the same process is what made the
+distinction visible; plan §9 and the session-9 worklog entry carry the tables.
 
 
 ## 5. Work items, in priority order

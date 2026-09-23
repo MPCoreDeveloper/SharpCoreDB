@@ -180,6 +180,43 @@ var results = db.ExecuteQuery("SELECT * FROM users WHERE full_name LIKE 'A%' ORD
 var joined  = db.ExecuteQuery("SELECT u.full_name, o.total FROM users u JOIN orders o ON u.id = o.user_id");
 ```
 
+### Bulk inserts: use `ExecuteBatchSQL`, because one `ExecuteSQL` per statement is quadratic
+
+The single-file table keeps a table's rows in **one block** and rewrites that block on every flush, so a loop of
+individual `ExecuteSQL` inserts pays for the whole table on every statement — O(n²) in the row count. `ExecuteBatchSQL`
+is the supported fast path: it disables auto-flush for the duration, begins a block-registry batch and flushes once per
+table.
+
+Measured 2026-09-22 with `SharpCoreDB.Benchmarks.Comparative --scdb` (2,000 rows, `INSERT … VALUES` with 1,000 rows per
+statement, median of 5, `FixedWidthInlineValueBytes` at the shipped default 24):
+
+| How the statements are issued | rows/s | µs/row | allocated/row |
+|---|---:|---:|---:|
+| `ExecuteSQL` per statement | 703 | 1,423 | 844,563 B |
+| **`ExecuteBatchSQL` (one call)** | **368,535** | **2.71** | **1,444 B** |
+
+The batch shape is ~525× faster and allocates ~580× less, and **at that shape the single-file mode is the fastest
+INSERT path in the codebase** — about 4.4× the multi-file mode's batched arm (84,263 rows/s at 3,555 B/row). It also
+sits above this machine's SQLite INSERT reference on the `--pk` arm (176–199K ops/s), which is a *different* shape and
+is quoted as context rather than as a like-for-like ratio. Both shapes gain from the inline capacity: going 0 → 24 moves
+the batched shape 300,436 → 368,535 rows/s and the solo shape 545 → 703 rows/s.
+
+```csharp
+// Preferred: many statements in one call — one flush per table.
+db.ExecuteBatchSQL(new[]
+{
+    "INSERT INTO users VALUES (1, 'Alice')",
+    "INSERT INTO users VALUES (2, 'Bob')",
+});
+
+// A single multi-row INSERT … VALUES (…) , (…) statement is also batched internally.
+db.ExecuteSQL("INSERT INTO users VALUES (3, 'Carol'), (4, 'Dave')");
+```
+
+⚠️ One space caveat that is **not** shape-dependent: a 2,000-row `.scdb` measured **14,733,312 B in all four cells**
+above (~7 KB/row), because block rewrites allocate fresh pages and the file never shrinks. That is recorded as a
+separate finding (plan §9) rather than as an insert cost.
+
 ---
 
 ## Error Messages You Might See

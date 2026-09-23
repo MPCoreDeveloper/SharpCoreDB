@@ -550,18 +550,20 @@ class Program
     }
 
     /// <summary>
-    /// Single-file (<c>.scdb</c>) INSERT … VALUES arm (2026-09-22). Runs the same shape as
-    /// <see cref="RunMultiRowInsertMicroBenchmark"/> against a single-file database, so the two storage modes can be
-    /// compared, and reports allocated bytes per row from the harness's own profiler-free counter plus the file size
-    /// and the capacity the table actually resolved to. It honours <c>SHARPCOREDB_INLINE_BYTES</c> (through
-    /// <c>BuildConfig</c>) because that is the setting whose effect on this mode was invisible until the single-file
-    /// <c>CREATE TABLE</c> path started forwarding it (plan §8c, 2026-09-22).
+    /// Single-file (<c>.scdb</c>) INSERT … VALUES arm (2026-09-22; extended the same day to two shapes).
     /// <para>
-    /// <b>The row count defaults to 2,000 here, not 20,000, and that is a property of this storage mode rather than a
-    /// convenience:</b> the single-file table keeps the whole table in one block and rewrites that block on every
-    /// flush, so a statement-per-flush shape is O(n²) in the row count — 20,000 rows did not finish inside five
-    /// minutes on this machine, while 2,000 rows gives a usable per-row cost in seconds. Override with
-    /// <c>SHARPCOREDB_SCDB_ROWS</c>, and read any number from this arm together with the row count it printed.
+    /// It runs the <c>--multirowinsert</c> statement shape against a single-file database in the two ways a caller can
+    /// drive it, because on this storage mode they are not equivalent: <b>(a) one <c>ExecuteSQL</c> per statement</b>,
+    /// where every statement is its own flush and the table rewrites its whole block on a flush — O(n²) in the row
+    /// count — and <b>(b) one <c>ExecuteBatchSQL</c> call</b>, where the batch extension already disables auto-flush,
+    /// begins a BlockRegistry batch and flushes once per table. Reporting both is what separates "this mode is slow"
+    /// from "this shape is slow on this mode", which is the difference between a redesign and a documentation line.
+    /// </para>
+    /// <para>
+    /// It honours <c>SHARPCOREDB_INLINE_BYTES</c>, prints the capacity the table actually resolved to, and declares its
+    /// one shape difference from <c>--multirowinsert</c>: no secondary index, because this mode has none to maintain.
+    /// <b>The row count defaults to 2,000</b> because shape (a) is quadratic — 20,000 rows did not finish inside five
+    /// minutes on this machine — and can be overridden with <c>SHARPCOREDB_SCDB_ROWS</c>.
     /// </para>
     /// </summary>
     static void RunSingleFileInsertBenchmark(SharpCoreDB.Interfaces.StorageEngineType engineType)
@@ -586,21 +588,23 @@ class Program
         var factory = services.BuildServiceProvider().GetRequiredService<DatabaseFactory>();
 
         var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
-        double[] times = new double[reps];
-        long allocPerRow = 0;
-        int gen0 = 0;
-        long fileBytes = 0;
+        double[] statementTimes = new double[reps];
+        double[] batchTimes = new double[reps];
+        (long AllocPerRow, int Gen0, long FileBytes) statementShape = default;
+        (long AllocPerRow, int Gen0, long FileBytes) batchShape = default;
         int resolvedCapacity = -1;
 
-        double RunPass()
+        (long AllocPerRow, int Gen0, long FileBytes) RunPass(bool batched, out double elapsed)
         {
+            elapsed = 0;
             var path = Path.Combine(Path.GetTempPath(), $"scdb-scdbinsert-{Guid.NewGuid()}.scdb");
             var options = DatabaseOptions.CreateSingleFileDefault();
             options.DatabaseConfig = BuildConfig(engineType, fixedWidth: true);
 
             long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
             int gen0Before = GC.CollectionCount(0);
-            double elapsed;
+            long allocBytes = 0;
+            int gen0 = 0;
 
             var db = factory.CreateWithOptions(path, BenchDbPassword, options);
             try
@@ -612,14 +616,24 @@ class Program
                 }
 
                 var sw = Stopwatch.StartNew();
-                foreach (var statement in statements)
+                if (batched)
                 {
-                    db.ExecuteSQL(statement);
+                    // The batch extension disables auto-flush, begins a BlockRegistry batch and flushes once per table.
+                    db.ExecuteBatchSQL(statements);
+                }
+                else
+                {
+                    foreach (var statement in statements)
+                    {
+                        db.ExecuteSQL(statement);
+                    }
                 }
 
                 db.Flush();
                 sw.Stop();
                 elapsed = sw.Elapsed.TotalSeconds;
+                allocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+                gen0 = GC.CollectionCount(0) - gen0Before;
             }
             finally
             {
@@ -628,28 +642,32 @@ class Program
                 db.DisposeAsync().AsTask().GetAwaiter().GetResult();
             }
 
-            allocPerRow = (GC.GetTotalAllocatedBytes(precise: false) - allocBefore) / inserts;
-            gen0 = GC.CollectionCount(0) - gen0Before;
-            fileBytes = File.Exists(path) ? new FileInfo(path).Length : 0;
+            long fileBytes = File.Exists(path) ? new FileInfo(path).Length : 0;
             try { File.Delete(path); } catch { /* best-effort temp cleanup */ }
-            return elapsed;
+            return (allocBytes / inserts, gen0, fileBytes);
         }
 
         for (int r = 0; r < reps; r++)
         {
-            times[r] = RunPass();
+            statementShape = RunPass(batched: false, out statementTimes[r]);
         }
 
-        Array.Sort(times);
-        double median = times[reps / 2];
+        for (int r = 0; r < reps; r++)
+        {
+            batchShape = RunPass(batched: true, out batchTimes[r]);
+        }
+
+        Array.Sort(statementTimes);
+        Array.Sort(batchTimes);
+        double statementMedian = statementTimes[reps / 2];
+        double batchMedian = batchTimes[reps / 2];
 
         Console.WriteLine();
         Console.WriteLine($"═══ Single-file (.scdb) INSERT … VALUES benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, median of {reps}) ═══");
-        Console.WriteLine($"  rows/s (median) : {inserts / median:N0}");
-        Console.WriteLine($"  min {times[0]:F3}s   median {median:F3}s   max {times[^1]:F3}s");
-        Console.WriteLine($"  median µs/row   : {median * 1_000_000 / inserts:F2}");
-        Console.WriteLine($"    [diag] .scdb file {fileBytes:N0} B · allocated {allocPerRow * inserts:N0} B ({allocPerRow:N0} B/row) · gen0 {gen0}");
-        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default)");
+        Console.WriteLine("  shape                        rows/s      µs/row   allocated/row     .scdb file");
+        Console.WriteLine($"  ExecuteSQL per statement   {inserts / statementMedian,8:N0}  {statementMedian * 1_000_000 / inserts,10:F2}   {statementShape.AllocPerRow,12:N0} B   {statementShape.FileBytes,11:N0} B");
+        Console.WriteLine($"  ExecuteBatchSQL (one call) {inserts / batchMedian,8:N0}  {batchMedian * 1_000_000 / inserts,10:F2}   {batchShape.AllocPerRow,12:N0} B   {batchShape.FileBytes,11:N0} B");
+        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {statementShape.Gen0} / {batchShape.Gen0} (statementwise / batched)");
     }
 
     /// <summary>

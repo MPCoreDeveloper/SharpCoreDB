@@ -2478,6 +2478,31 @@ The `resolved inline capacity 24` line is the proof that the previous session's 
 
 **4. Scope, honestly.** This session **did not attempt** the single-file flush redesign (dirty ranges or an append-region layout). It is a design change on that mode's storage layer, it has nothing to do with the INSERT levers this plan tracks, and the arm's numbers are what make it actionable: the plan now carries it as a scoped item under §9 with the shape and the figures above, so whoever owns that mode starts from a measurement rather than from the assumption that "single-file is slower because of blocks". Note also that the 14,7 MB file is a *space* finding on the same path (block rewrites never return pages to the OS), and it is recorded in the same item.
 
+### 2026-09-22 (session 9, unattended continuation) — session 8's single-file reading was a *shape* artefact: on `ExecuteBatchSQL` the same mode is the **fastest INSERT path in the codebase** (368.535 rows/s)
+- Session: 9 of 2026-09-22 (continuation; corrects the entry above before anything is built on it)
+- Command(s): `--scdb` (**extended this session to measure both shapes**) at `SHARPCOREDB_INLINE_BYTES` 0 and 24 — 2,000 rows in 1,000-row statements, median of 5
+- Regime: `REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply.` and `REGIME (overridden): SHARPCOREDB_INLINE_BYTES=0`; each run also prints the capacity the table **resolved to**
+- Result (both shapes in one process): per-statement 703 rows/s / 844.563 B per row vs **`ExecuteBatchSQL` 368.535 rows/s / 1.444 B per row** (524× faster, 584× less allocation, gen0 265 → 0); capacity 0 → 24 lifts both shapes (545 → 703 and 300.436 → 368.535)
+- Verdict: **KEPT** — the arm reports both shapes, plan §9's item is corrected from "the mode needs a storage redesign" to "the *solo-statement* shape is quadratic, guidance is the fix, and the file-growth finding stands", and the user-facing rule now lives in `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
+- Commit: `bench(scdb)`: both shapes in the single-file arm · this entry · plan §9 corrected · brief §4 · limitations doc
+- NEXT: §5.3's 12,6 MB snapshot (the only design item left) or the unsafe-backend item for its owner
+
+**1. What I read before measuring.** The suspect was the mode's flush, so the batch path came first: `SingleFileDatabase.ExecuteBatchSQL` → `SingleFileDatabaseBatchExtension.ExecuteBatchSQLOptimized`, which sets `AutoFlush = false` on every `SingleFileTable`, calls `blockRegistry.BeginBatch()`, begins a transaction when not already in one, groups INSERT/UPDATE by table and flushes **once per table** — the per-statement flush it suppresses is `SingleFileTable.cs:465` (`AutoFlush && _isDirty && !_isInTransaction`). So "single-file INSERT is quadratic" needed a shape qualifier, and the arm had only ever measured the shape that produces it. Two loops and one `RunPass(bool batched, out double elapsed)` later, the qualifier is measured.
+
+**2. The corrected table** (same run, same process, same 2,000-row build):
+
+| shape | capacity 0 | capacity 24 (shipped default) | allocated/row at 24 | gen0 at 24 |
+|---|---:|---:|---:|---:|
+| `ExecuteSQL` per statement | 545 rows/s | 703 rows/s | 844.563 B | 265 |
+| **`ExecuteBatchSQL` (one call)** | **300.436 rows/s** | **368.535 rows/s** | **1.444 B** | **0** |
+
+**3. What this settles.** (a) The batched shape is **4,4× the multi-file mode's batched arm** (84.263 rows/s at 3.555 B/row), so once the caller batches, the single-file mode is the fastest INSERT path in this codebase — "not competitive" was true of the *shape* the previous entry chose, and saying it of the *mode* was wrong. (b) The inline capacity helps **both** shapes (per-statement +29,0 %, batched +22,7 % going 0 → 24), so the previous session's `CREATE TABLE` fix earns more here than the +21,4 % it first looked like.
+
+**4. What is *not* retracted.** A **solo** `ExecuteSQL` insert still pays a whole-block flush, so the honest claim is "the flush-per-statement shape is quadratic on this mode": guidance is the fix (written into the limitations doc with this table), and a product-side polish would mean coalescing consecutive solo statements by deferring the flush — a semantics change, scoped in §9 and not attempted. The **14,7 MB file is re-filed rather than retracted**: it is **identical in all four cells** (14.733.312 B at both capacities and both shapes), so it is a property of the block/registry layer, not an insert cost. And the "incremental block writes (dirty ranges / append region)" redesign the previous entry asked for is **no longer justified by any INSERT cost measured here** — it would only speed up the shape that guidance already tells callers to avoid.
+
+**5. Same-run discipline.** The per-statement absolutes differ from session 8's (703 vs 994 at 24; 545 vs 819 at 0), so this entry rests on the ratio **between shapes in one process** (524×), not on any single rows/s figure — the lesson this campaign already paid for once.
+
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 
