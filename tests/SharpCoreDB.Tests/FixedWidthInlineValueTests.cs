@@ -171,13 +171,15 @@ public sealed class FixedWidthInlineValueTests : IDisposable
     /// Pins the shipped default and the escape hatch. Both layouts are first-class: the capacity is persisted per table
     /// on <b>both</b> paths — the multi-file metadata DTO and the single-file <c>TableMetadataEntry</c> (carved out of
     /// its reserved bytes, so older files read 0 = the historical layout) — so a reopened database always decodes with
-    /// the capacity its records were written with, never with whatever this config now says. 16 is the owner's default;
-    /// 0 restores the historical layout byte for byte.
+    /// the capacity its records were written with, never with whatever this config now says. 24 is the owner's default
+    /// since 2026-09-22 (it was 16 from 2026-09-16): it is the value that removes the per-row overflow-arena write on
+    /// the plan's tracked shapes, worth 0,63× → 0,84× on the fair-PK INSERT ratio and +22 % on the multi-row shape,
+    /// while measuring no further gain at 32 and no net byte cost at 24. 0 restores the historical layout byte for byte.
     /// </summary>
     [Fact]
     public void Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout()
     {
-        Assert.Equal(16, new DatabaseConfig().FixedWidthInlineValueBytes);
+        Assert.Equal(24, new DatabaseConfig().FixedWidthInlineValueBytes);
         Assert.Equal(0, new DatabaseConfig { FixedWidthInlineValueBytes = 0 }.FixedWidthInlineValueBytes);
     }
 }

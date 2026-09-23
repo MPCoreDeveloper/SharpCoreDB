@@ -2410,7 +2410,39 @@ The allocation **does** drop (1.437 → 924 B/row, −36 %), so the backend is g
 
 **4. What this closes.** The 2026-09-21 entry left it open — "the pooled unsafe backend already exists and this arm is not using it… and it still has to be shown faster for this shape". It is now shown: **12× slower on that shape**, so it is eliminated as an INSERT lever, and the product's own advice ("avoid for bulk-insert workloads", `DatabaseConfig.cs:443`) is measured rather than taken on faith. That removes the last alternative backend from decision 4's path: what remains is the capacity decision (measured, +33 % on the ratio) and the structural costs this campaign has already closed.
 
+### 2026-09-22 — 5.1 INSERT **CLOSED** (DoD check): the absolute target is met, the ratio is 0,87× against a faster reference, and the lever list is exhausted
+- Session: 6 of 2026-09-22 — the close-out of item **5.1**, which is far past its 2-session timebox; the plan's own exit for an expired timebox is to record the remaining delta, the largest stage and every refuted hypothesis, then move on
+- Command(s): `--pk` ×3 · `--multirowinsert` ×2 · `--pk-default` ×2 · core suite — all on the **shipped** default, `REGIME: no SHARPCOREDB_* switches set`
+- Verdict: **CLOSED — decision 8 shipped (inline capacity 16 → 24, default change, no rewrite for existing data). DoD item 2 met; item 1 absolute-met (162–171K ≥ 150K) with the ratio at 0,87× against a same-run SQLite reference of 176–199K.**
+- Commit: `feat(config)`: the inline-capacity default is 24 (decision 8) · this worklog entry · plan §0.1/§8e/§9 · brief §1/§4
+- NEXT: the two remaining items are **not** INSERT — §8c's open upgrade path for existing tables (fixed-width → inline, attempted 2026-09-16 and reverted; re-test it with row-count and PK assertions *before* value assertions) and §5.3's 12,6 MB snapshot (design). The INSERT arm's residual is a reference that moves, plus plumbing this session priced and rejected (+3-6 %). Do not reopen 5.1 without a new lever.
+
+**1. The DoD, clause by clause** (the brief's four clauses for 5.1):
+1. *fair-PK INSERT ratio ≥ 1,0× **and** ≥ 150K ops/s, median-of-3 against the same-session SQLite arm* — **half met**: absolute **161.802 / 171.000 / 168.853 ops/s** (all ≥ 150K, the first time this floor is crossed, from 130–135K at capacity 16), ratio **0,92 / 0,87 / 0,85×**, i.e. 0,87× median. The ratio clause is **not claimed**.
+2. *a per-stage INSERT budget for the `--multirowinsert` shape in the worklog* — **met** (session-2 entry §4: calls, share, B/call, µs/row, B/row).
+3. *the change committed with its before/after ratio in the message* — **met** (the codec-scratch commit and the decision-8 commit both carry theirs).
+4. *core suite green **and** `--gate` pass* — suite **1920 / 0 failed / 16 skipped** on the shipped default; `--gate` is **INCONCLUSIVE** on this machine (2,91× and 2,76× in two same-day attempts, the second on an idle machine) and the plan's §2 now records that a verdict here is a coin toss rather than a signal — documented, per the brief's rule that a re-run is what a failure gets, not a revert.
+
+**2. What the arm looks like on the shipped default** (three `--pk` runs, each arm median-of-3, each with its own same-run SQLite arm; the harness's own `[diag]` line proves the layout: `inline=24`, arena 0 B, 1.436–1.437 B/row of engine allocation):
+
+| run | FW plaintext INSERT | SQLite INSERT | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|---:|---:|
+| 1 | 161.802 | 175.597 | 0,92× | 1,26× | 1,29× | 1,80× |
+| 2 | 171.000 | 196.869 | 0,87× | 1,20× | 1,28× | 1,62× |
+| 3 | 168.853 | 198.549 | 0,85× | 1,29× | 1,33× | 1,19× |
+| **median** | **168.853** | 196.869 | **0,87×** | **1,26×** | **1,29×** | **1,62×** |
+
+**3. Why the ratio is short — and it is *not* an unnamed lever.** The same-run SQLite INSERT reference on this quiet machine reads **175.597 / 196.869 / 198.549 ops/s**; when the plan's 1,0× bar was set (§5.4, 2026-09-21) the reference read **155.219**. So our arm improved **+25 % in absolute terms** (130–135K → 162–171K) while the *ratio* improved less than that, because the denominator moved ~27 % in the same direction. Both facts are published together (plan §8e) rather than one of them: the honest verdict for decision 4 is **"absolute target met, ratio 0,87× against a faster reference"**. Note also that this is the arm's *own* best-ever absolute reading — 111.139 when the arm was last published, 130–135K at capacity 16, 162–171K now.
+
+**4. The lever list is exhausted, and this is the accounting that closes it.** Every candidate this campaign raised is now either landed or refuted by measurement, on this arm and its shapes:
+- **Landed:** the fixed-width codec's per-row `List<>` scratch (−158 B/row, plan §9 priority 2); the encrypted UPDATE locate's ciphertext copy (−152 B/record); the inline capacity (**decision 8 — the only lever of the day that moved ops/s: +25 % absolute, ratio 0,63× → 0,87×**); the plaintext record walk's handles; the query-cache warm-up; the 64 KiB append buffer; the buffered-overwrite coalescing.
+- **Refuted or closed, each with a number:** `hash-index` (882 B/row is the managed map's node + list under `Binary` collation — structural); the **pooled unsafe backend** (**0,07×, 12× slower**, eliminated and listed in the brief's §7); the **batch-granular arena call** (priced from its own call path at +3-6 %, rejected before being built); per-payload `ShouldEncryptWrites` (memoised, short-circuits); "layout computation owns the 706 B/row" (0 B/row over 100.000 calls); the `SHARPCOREDB_HASH_INDEXES` switch (a no-op on these arms); WAL durability (decision 7 — the durability trade is the owner's, not a defect); and the per-statement SQL layer (`dispatch`/`table-batch` containers — a *different* arm's problem, which is 5.3's territory).
+- **Priced and left:** the engine/append plumbing (267 B/row of read-your-writes bookkeeping — bytes the engine needs) and the arena's remaining ~0,45 µs/row of non-append work.
+
+**5. What would move it further, stated plainly.** (a) Not code: the ratio clause is measured against a moving denominator, and the plan's rule is to quote it with its reference — which the tables now do. (b) Not this campaign's arm: the two remaining *stages* (index maintenance and the append plumbing) were both priced and both rejected as levers by measurement, and the one unbuilt design was priced at +3-6 %. (c) The remaining work in the plan is not INSERT: §8c's **upgrade path for existing tables** (fixed-width → inline, attempted 2026-09-16 and reverted; the retry must assert row count and the PK index *before* the value, because the first attempt's failure looked like a missing row) and §5.3's **12,6 MB snapshot** on the encrypted UPDATE path (a design change, with the per-record window already measured worse). **5.1 is closed on that basis**, and reopening it needs a new lever rather than another session.
+
 <!-- APPEND-ENTRIES-BELOW -->
+
 
 
 

@@ -109,24 +109,34 @@ public class DatabaseConfig
 
     /// <summary>
     /// Gets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width record
-    /// slot instead of writing them to the overflow arena. <b>Default 16.</b>
+    /// slot instead of writing them to the overflow arena. <b>Default 24.</b>
     /// <para>
-    /// ⚠️ <b>This is 16 by owner decision (2026-09-16).</b> It was briefly blocked: making it 16 broke
-    /// <c>ReopenRoundTripMatrixTests</c> on the <b>single-file</b> variant, because that format supplied the capacity
-    /// from the opening config rather than storing it, so a mismatch made <c>SingleFileTable.IsFixedWidthDataBlock</c>
-    /// classify a binary block as legacy JSON and <c>EnsureCacheLoaded</c> threw
-    /// <c>JsonException: '0x14' is an invalid start of a value</c>. That is fixed: the capacity is now persisted in the
-    /// SCDB table metadata entry (<c>TableMetadataEntry.FixedWidthInlineValueBytes</c>, carved out of its reserved
+    /// ⚠️ <b>24 by owner decision (2026-09-22); it was 16 from 2026-09-16 to that date.</b> The 16 default was itself
+    /// blocked for a day: making it non-zero broke <c>ReopenRoundTripMatrixTests</c> on the <b>single-file</b> variant,
+    /// because that format supplied the capacity from the opening config rather than storing it, so a mismatch made
+    /// <c>SingleFileTable.IsFixedWidthDataBlock</c> classify a binary block as legacy JSON and <c>EnsureCacheLoaded</c>
+    /// threw <c>JsonException: '0x14' is an invalid start of a value</c>. That is fixed: the capacity is persisted in
+    /// the SCDB table metadata entry (<c>TableMetadataEntry.FixedWidthInlineValueBytes</c>, carved out of its reserved
     /// bytes so the entry size and every offset are unchanged) and a reopened table takes it from there, never from
-    /// this config. The measured case for the default is below.
+    /// this config — which is what makes a change to this value a policy decision rather than a correctness risk.
+    /// </para>
+    /// <para>
+    /// <b>Why 24 and not more.</b> 24 removes the overflow-arena write entirely on the shapes this plan tracks (the
+    /// longest value in the benchmark schema is the 18-byte <c>user99999@test.com</c>) while 32 buys no further speed
+    /// and 20 % more file. Measured with the tracked harness on 2026-09-22, same machine and session, everything else
+    /// at product defaults: the fair-PK INSERT arm goes <b>0,63× → 0,84×</b> of a same-run SQLite over five
+    /// interleaved pairs (16 → 24), its engine allocation <b>1.923 → 1.437 B/row (−25,3 %)</b>, and the batched
+    /// multi-row shape <b>62,668 → 76,691 rows/s (+22,4 %)</b>; <c>arena-write</c>, <c>arena-append</c> and
+    /// <c>encode-scratch</c> all fall from 99.000 calls to <b>zero</b> over 100.000 rows. 32 measures 94.558 ops/s
+    /// against 24's 91.041 (inside the arm's noise) at <b>+20 % total bytes</b>, so 24 is the knee.
     /// </para>
     /// <para>
     /// Context (plan §4b): the fixed-width record already implements the stable-slot + overflow model — fixed-size
     /// columns inline, String/Blob as a 5-byte <c>[null-flag(1)][overflow offset(4)]</c> slot — so at capacity 0
     /// *every* variable-length value, however short, costs an arena write. Measured on the batched multi-row INSERT
-    /// shape at 1,000 rows/statement (median of 5), raising this to 16 took <b>62,545 → 74,634 rows/s (+19.3 %)</b>,
-    /// <b>15.99 → 13.40 µs/row (−16.2 %)</b> and <b>4,943 → 4,348 B allocated/row (−12 %)</b>, by halving the
-    /// overflow arena (1,006,670 → 488,890 B).
+    /// shape at 1,000 rows/statement (median of 5), raising this from 0 to 16 took <b>62,545 → 74,634 rows/s
+    /// (+19.3 %)</b>, <b>15.99 → 13.40 µs/row (−16.2 %)</b> and <b>4,943 → 4,348 B allocated/row (−12 %)</b>, by
+    /// halving the overflow arena (1,006,670 → 488,890 B).
     /// </para>
     /// <para>
     /// Above zero, a variable slot becomes <c>[null-flag(1)][offset(4)][inline length(2)][inline payload(N)]</c> —
@@ -136,19 +146,25 @@ public class DatabaseConfig
     /// </para>
     /// <para>
     /// ⚠️ <b>This is part of the on-disk record layout and it costs space.</b> Every variable-length column reserves
-    /// <c>2 + N</c> extra bytes per record, so the benchmark schema's table file grew 2.4× (760,000 → 1,840,000 B) for
-    /// the +19.3 % above, and a value *longer* than N pays the reserve as well as its arena write.
+    /// <c>2 + N</c> extra bytes per record, so the benchmark schema's table file grew 760,000 → 1,840,000 B when this
+    /// went 0 → 16 and 1,840,000 → 2,320,000 B when it went 16 → 24. The <b>total</b> footprint (data + arena) is what
+    /// to compare, and there the 24 step is a wash on that schema (2,328,890 → 2,320,000 B, −0,4 %) and +2,0 % on the
+    /// fair-PK schema, because the arena's per-block framing disappears as the record grows. A table whose values are
+    /// <b>shorter</b> than this still pays the reserve with no arena write left to save (a 5-byte-code table grows
+    /// ~27 % in record size going 16 → 24), which is the trade this default makes on purpose: the plan's tracked
+    /// shapes gain 20-33 %, and a schema of very short values pays disk.
     /// </para>
     /// <para>
-    /// <b>The layout is self-describing on the multi-file path, which is what makes a non-zero default safe there.</b>
+    /// <b>The layout is self-describing on both storage paths, which is what makes a non-zero default safe.</b>
     /// The value is persisted per table in metadata (<c>Table.FixedWidthInlineValueBytes</c>, written by
-    /// <c>Database.Core.cs</c>) and a reopened table decodes with the capacity it was *written* with rather than with
-    /// this config — so a database created under the old default keeps its capacity-0 layout and needs no rewrite,
-    /// while new tables take whatever this is. An older build reading a new file would misread its slots; that is a
-    /// downgrade, which this format deliberately does not support (upgrade-only, owner decision).
+    /// <c>Database.Core.cs</c>) and restored on reopen — in directory mode through the <c>Table</c> JSON round-trip, in
+    /// single-file mode through the SCDB table entry — so a reopened table decodes with the capacity it was *written*
+    /// with rather than with this config: a database created under the old default keeps its capacity-16 layout and
+    /// needs no rewrite, while new tables take whatever this is. An older build reading a new file would misread its
+    /// slots; that is a downgrade, which this format deliberately does not support (upgrade-only, owner decision).
     /// </para>
     /// </summary>
-    public int FixedWidthInlineValueBytes { get; init; } = 16;
+    public int FixedWidthInlineValueBytes { get; init; } = 24;
 
     /// <summary>
     /// Gets the pending-append threshold, in bytes, at which buffered appends are flushed
