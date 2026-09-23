@@ -2387,6 +2387,29 @@ The other three columns are parity at both settings (ib=24: READ 0,95–1,07, UP
 
 **3. What would have to become true for the design to pay.** If the storage's buffered branch ever batches its own per-payload appends — one `appendLock` acquisition and one bookkeeping pass per call instead of per payload — then the call overhead collapses and the deferred-patch design would be worth its cost. Until then, the only way to remove the arena's per-payload work is to not write to the arena, which is the capacity decision.
 
+### 2026-09-22 (session 5, unattended continuation) — the pooled unsafe hash-index backend is measured and eliminated for the fair-PK INSERT arm: 0,07×, and the switch that would have measured it was dead code
+- Session: 5 of 2026-09-22 (continuation of sessions 3-4 in the same unattended run)
+- Command(s): `--pk` ×6 (3 interleaved pairs at ib=24, backend ON vs unset) · `--pk-profile-insert` with the same switch · code reads (`Table.Indexing.cs:26`, `DatabaseConfig.cs:443`, `UnsafeEqualityIndex.Add/AddBatch`, `HashIndex.AddBatchKeys`)
+- Regime: `REGIME (overridden): SHARPCOREDB_INLINE_BYTES=24 SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX=1` — both switches declared, and every number below says which arm it belongs to
+- Verdict: **REJECTED — the pooled unsafe backend is not a route to the INSERT target**, and the switch that selects it could never have been reached through its environment variable, which is why this had never been measured
+- Commit: the harness config switch · this worklog entry · the brief's §7 · a plan bullet
+- NEXT: the fair-PK INSERT arm's only sized lever remains the inline-capacity default (owner decision, two-line diff in plan §9 priority 2); this session's anomaly is flagged for the backend's owner but is **not** on the campaign's path
+
+**1. The switch had to be made reachable first, and that is a finding on its own.** `Table.Indexing.cs:26` resolves the backend as `_config?.EnableUnsafeEqualityIndex ?? ResolveUnsafeEqualityIndexFlag()`, and `DatabaseConfig.EnableUnsafeEqualityIndex` is a **non-nullable `false`** (`DatabaseConfig.cs:443`) — so whenever a config object exists (every normal construction path) the `??` never evaluates and neither the `SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX` environment variable nor the `SharpCoreDB.Indexing.UseUnsafeEqualityIndex` AppContext switch can take effect. The first run proves it engaged nothing: allocation came back **byte-identical** (1.437 vs 1.436 B/row). The harness now sets the config property itself from that variable (`BuildConfig`, declared in the regime line), which is exactly the "measurement decision to be declared, not a product change to slip in" the 2026-09-21 entry asked for — and no product behaviour changed.
+
+**2. Measured: 12× slower, and the stage table names the owner.** Three interleaved pairs at ib=24, each run carrying its own SQLite arm:
+
+| arm | engine alloc/row | SC INSERT (3 runs) | SQLite, same runs | ratio |
+|---|---:|---|---:|---:|
+| unsafe backend **ON** | **924** | 13.112 / 13.181 / 13.255 | 193.825 / 196.298 / 197.358 | **0,07×** |
+| unsafe backend off | 1.437 | 158.204 / 163.079 / 161.169 | 189.418 / 163.912 / 192.889 | 0,84 / 0,99 / 0,84 |
+
+The allocation **does** drop (1.437 → 924 B/row, −36 %), so the backend is genuinely engaged and its batch path genuinely pools — and it is still catastrophic. `--pk-profile-insert` with both switches attributes it in one line: **`hash-index` 7.561,8 ms over 10 calls = 756 ms per 10.000-key batch = 75,6 µs per key**, against the managed path's **24,5 ms per batch (2,45 µs per key)** — 48,6 % of an 8,07 s profiled pass, with the INSERT arm at 12.386 ops/s (80,7 µs/row).
+
+**3. What is *not* established is flagged as a hypothesis, not claimed as a finding.** 75,6 µs per key is ~10⁴× an O(1) hash insert and sits in the range of a per-key O(n) scan, so the hypothesis is degraded probe chains or another accidental per-key O(n). A read of `UnsafeEqualityIndex.Add`/`AddBatch` does **not** show it — a clean open-addressing table with correct `_slotUsed` accounting and amortised `AppendKey`/`AppendRowNode` growth — so it stays unproven, with the pointers for whoever owns that backend: `HashIndex.AddBatchKeys` (`HashIndex.cs:411-447`, the pooled path), `AddBatchKeysLockedCore` (`:476-497`, the per-key path), both reached from `Table.CRUD.cs:814`. This campaign's INSERT work does not depend on the answer, which is why it stops here rather than spinning on an alternative configuration.
+
+**4. What this closes.** The 2026-09-21 entry left it open — "the pooled unsafe backend already exists and this arm is not using it… and it still has to be shown faster for this shape". It is now shown: **12× slower on that shape**, so it is eliminated as an INSERT lever, and the product's own advice ("avoid for bulk-insert workloads", `DatabaseConfig.cs:443`) is measured rather than taken on faith. That removes the last alternative backend from decision 4's path: what remains is the capacity decision (measured, +33 % on the ratio) and the structural costs this campaign has already closed.
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 

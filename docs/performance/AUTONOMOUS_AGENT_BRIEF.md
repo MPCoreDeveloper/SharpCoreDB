@@ -325,6 +325,14 @@ below the dispatcher are uncovered. Add stamps only where needed to answer 5.1/5
 - Fixed-width inline capacity recovering the PK-less penalty — **refuted** (still ~20% worse there).
 - The `QueryCache.Count` gate and the 64 KiB `AppendBytes` buffer — **already fixed**; the remaining
   single-row-statement floor is a *durability* decision, not a defect.
+- The **pooled unsafe hash-index backend** (`EnableUnsafeEqualityIndex`) as an INSERT lever — **measured and
+  eliminated 2026-09-22**: on the fair-PK arm at capacity 24 it is **0,07× (12× slower)** in three interleaved pairs
+  while *cutting* allocation (1.437 → 924 B/row), with the profiler attributing it to `hash-index` at **75,6 µs per
+  key** against the managed path's 2,45 µs. The unproven hypothesis for the size is degraded probe chains (an
+  accidental per-key O(n)); the pointers for its owner are in the session-5 worklog entry. ⚠️ Note also that its
+  documented environment variable and AppContext switch **could not reach it** before that session — the config
+  property is a non-nullable `false`, so `_config?.EnableUnsafeEqualityIndex ?? Resolve…` never consulted them; a
+  "safe-backend" measurement taken that way would have been the same configuration twice.
 
 ## 8. Traps that have already fooled the team (read before profiling)
 

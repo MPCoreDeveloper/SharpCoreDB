@@ -742,6 +742,13 @@ class Program
             UseMemoryMapping = true,
             UseBufferedIO = true,
             EnableHashIndexes = HashIndexesOverride(),
+            // Pooled (unsafe) hash-index backend, as a DECLARED measurement configuration. The product's
+            // EnableUnsafeEqualityIndex is a non-nullable `false`, so `_config?.EnableUnsafeEqualityIndex ??
+            // ResolveUnsafeEqualityIndexFlag()` (Table.Indexing.cs:26) can never reach the
+            // SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX env var or the AppContext switch once a config object exists —
+            // the arm has to set the property itself, which is exactly why this is a switch here rather than a
+            // product change. Unset = false = the product default, so every other arm is unchanged.
+            EnableUnsafeEqualityIndex = Environment.GetEnvironmentVariable("SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX") == "1",
             // DELETE index maintenance (plan §7). Deferred maintenance is the PRODUCT DEFAULT since
             // v2.1, so this arm follows the default unless the env var explicitly opts out — set
             // SHARPCOREDB_DEFER_DELETE_INDEXES=0 to measure the eager behaviour.
