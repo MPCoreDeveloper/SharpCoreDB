@@ -98,6 +98,12 @@ dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparat
 Known flags: `--pk`, `--pk-default`, `--pk-ab`, `--dual-mode`, `--multirowinsert`, `--pk-profile`,
 `--engine=pagebased`, `--gate`, `--gate-factor=X`, `--gate-baseline=<path>`, `--write-baseline`.
 
+Every write arm prints a `[diag]` line naming the shape it measured (2026-09-22): `--multirowinsert` and the fair-PK arm
+both report allocation per row, gen0 collections and both file sizes — the fair-PK arm's allocation is **engine-scoped**
+(read around the `db.InsertBatch` calls, so the harness's own row dictionaries are excluded) — and the fair-PK arm also
+prints its resolved layout (`fixedWidth`, `noEncrypt`, `atRest`, `IsFixedWidthRecords`, `inline`), which is what makes an
+inline-capacity run self-describing.
+
 Harness-only env switches (used by the §9 experiments; set them explicitly and never let them leak
 between runs): `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`, `SHARPCOREDB_HASH_INDEXES`,
 `SHARPCOREDB_MAIN_PROFILE_UPDATE`, `SHARPCOREDB_WAL_DURABILITY`, `SHARPCOREDB_BUFFERED_APPENDS`,
@@ -164,8 +170,9 @@ arm is bounded by one per-row overflow-arena write, and the shipped inline capac
 18-byte `email` value: at `SHARPCOREDB_INLINE_BYTES=24` every TEXT column inlines, `arena-write`/`arena-append`/
 `encode-scratch` fall from 99,000 calls to **zero** over 100,000 rows, and the **tracked ratio moves 0,63× → 0,84×**
 (three interleaved `--pk` pairs, each with its own same-run SQLite arm), with +22 % on the multi-row shape, −13 %
-allocation and a **total-footprint wash** (the arena's per-block framing leaves as the record grows; 32 is past the knee
-at +20 % disk for no speed). That is a policy choice about every new table's record size — pinned by
+allocation and a **footprint that is neutral within ±2 %** (−0,4 % on the multi-row schema, +2,0 % on the PK one: the
+arena's per-block framing leaves as the record grows; 32 is past the knee at +20 % disk for no speed), and it also cuts
+the tracked arm's **engine allocation by 25,3 %** (1.923 → 1.437 B/row, profiler-free and deterministic). That is a policy choice about every new table's record size — pinned by
 `Default_InlineCapacity_IsPinned_AndZeroKeepsTheHistoricalLayout`, and worth nothing on schemas whose values are shorter
 than the capacity (a table of 5-character codes grows ~27 % in record size for no arena write saved) — so it is recorded
 as an **owner decision, not landed**. The correctness blocker the CHANGELOG named is gone: the capacity is persisted and

@@ -481,26 +481,14 @@ class Program
         double[] times = new double[reps];
 
         // Diagnostics: whether the overflow arena is actually used for this schema, and how big the two files
-        // are. If the arena is in play, its per-value write cost is the leading explanation for the
-        // validate-and-serialize stamp; if it is not, the cost is somewhere else entirely.
-        static (long OvfBytes, long DataBytes) FileSizes(SharpCoreDB.Database db)
-        {
-            if (!db.TryGetTable("docs", out var t) || t is not SharpCoreDB.DataStructures.Table dt || string.IsNullOrEmpty(dt.DataFile))
-            {
-                return (0, 0);
-            }
-
-            var ovf = Path.ChangeExtension(dt.DataFile, ".ovf");
-            return (File.Exists(ovf) ? new FileInfo(ovf).Length : 0,
-                    File.Exists(dt.DataFile) ? new FileInfo(dt.DataFile).Length : 0);
-        }
+        // are. Shared with the fair-PK arm's diag line — see TableFileSizes.
 
         double RunPass()
         {
             var path = Path.Combine(Path.GetTempPath(), $"scdb-multirow-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(path, "pw", isReadOnly: false, config: config))
             {
-                var before = FileSizes(db);
+                var before = TableFileSizes(db);
                 db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
                 db.ExecuteSQL(CreateDocsIndexSql);
 
@@ -516,7 +504,7 @@ class Program
                 var elapsed = sw.Elapsed.TotalSeconds;
                 long allocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
                 int gen0 = GC.CollectionCount(0) - gen0Before;
-                var after = FileSizes(db);
+                var after = TableFileSizes(db);
                 Console.WriteLine($"    [diag] data file {after.DataBytes:N0} B · overflow arena {after.OvfBytes:N0} B (before: {before.DataBytes:N0}/{before.OvfBytes:N0})");
                 Console.WriteLine($"    [diag] allocated {allocBytes:N0} B ({allocBytes / Math.Max(1, inserts):N0} B/row) · gen0 collections {gen0}");
                 try { Directory.Delete(path, true); } catch { /* best-effort temp-dir cleanup */ }
@@ -784,6 +772,24 @@ class Program
     /// <see langword="true"/> on 2026-09-13 (plan §3-1c deliverable 2), and the arms report it.
     /// </summary>
     static bool ProductAtRestDefault => new DatabaseConfig().EnableAtRestRecordEncryption;
+
+    /// <summary>
+    /// The two on-disk sizes a write arm's cost is explained by: the table's data file and its overflow arena
+    /// (<c>.ovf</c>, absent when nothing overflowed). Shared by <c>--multirowinsert</c> and by the fair-PK arm's own
+    /// <c>[diag]</c> line (2026-09-22), because the plan's rules require every published figure to name the shape it
+    /// was measured on — and the arena-versus-record split is the one shape fact that changes a figure's meaning.
+    /// </summary>
+    static (long OvfBytes, long DataBytes) TableFileSizes(SharpCoreDB.Database db)
+    {
+        if (!db.TryGetTable("docs", out var t) || t is not SharpCoreDB.DataStructures.Table dt || string.IsNullOrEmpty(dt.DataFile))
+        {
+            return (0, 0);
+        }
+
+        var ovf = Path.ChangeExtension(dt.DataFile, ".ovf");
+        return (File.Exists(ovf) ? new FileInfo(ovf).Length : 0,
+                File.Exists(dt.DataFile) ? new FileInfo(dt.DataFile).Length : 0);
+    }
 
     /// <summary>
     /// Builds the variant DatabaseConfig used by the --pk-default arm. The variant name comes from
@@ -1398,6 +1404,23 @@ class Program
             }
 
             var sw = Stopwatch.StartNew();
+            // §2.7 instrumentation (2026-09-22, session 3): the fair-PK arm is the tracked-ratio arm and its
+            // allocation was only visible through the write-path profiler — whose times are biased under
+            // Parallel.For serialization and whose stages nest — so the engine's own allocation is read here with
+            // the profiler-free counter, scoped to the `db.InsertBatch` calls so the harness's row dictionaries are
+            // excluded (the shape --multirowinsert gets for free by building its statements outside the timed
+            // region). The layout probe travels with the number because the inline capacity decides whether a TEXT
+            // value reaches the arena at all.
+            bool pkFixedWidth = false;
+            int pkInline = -1;
+            if (db.TryGetTable("docs", out var pkProbe) && pkProbe is SharpCoreDB.DataStructures.Table pkProbeTable)
+            {
+                pkFixedWidth = pkProbeTable.IsFixedWidthRecords;
+                pkInline = pkProbeTable.FixedWidthInlineValueBytes;
+            }
+
+            long pkEngineAlloc = 0;
+            int pkEngineGen0 = 0;
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
@@ -1415,7 +1438,11 @@ class Program
                     });
                 }
 
+                long pkAllocBefore = GC.GetTotalAllocatedBytes(precise: false);
+                int pkGen0Before = GC.CollectionCount(0);
                 db.InsertBatch("docs", rows);
+                pkEngineAlloc += GC.GetTotalAllocatedBytes(precise: false) - pkAllocBefore;
+                pkEngineGen0 += GC.CollectionCount(0) - pkGen0Before;
             }
 
             db.Flush();
@@ -1423,6 +1450,13 @@ class Program
             result.InsertTime = sw.Elapsed.TotalSeconds;
             result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            var pkFiles = TableFileSizes(db);
+            Console.WriteLine($"    [diag] pk INSERT fixedWidth={fixedWidth} noEncrypt={noEncrypt} "
+                + $"atRest={config.EnableAtRestRecordEncryption} IsFixedWidthRecords={pkFixedWidth} inline={pkInline}");
+            Console.WriteLine($"    [diag] pk INSERT engine allocated {pkEngineAlloc:N0} B "
+                + $"({pkEngineAlloc / InsertCount:N0} B/row) · gen0 {pkEngineGen0} "
+                + $"· data file {pkFiles.DataBytes:N0} B · overflow arena {pkFiles.OvfBytes:N0} B");
 
             if (profileInsertArm)
             {
