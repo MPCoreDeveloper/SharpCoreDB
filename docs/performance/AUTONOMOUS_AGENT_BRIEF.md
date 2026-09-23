@@ -100,7 +100,8 @@ dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparat
 ```
 
 Known flags: `--pk`, `--pk-default`, `--pk-ab`, `--dual-mode`, `--multirowinsert`, `--pk-profile`,
-`--engine=pagebased`, `--gate`, `--gate-factor=X`, `--gate-baseline=<path>`, `--write-baseline`.
+`--scdb` (single-file INSERT arm, added 2026-09-22), `--engine=pagebased`, `--gate`, `--gate-factor=X`,
+`--gate-baseline=<path>`, `--write-baseline`.
 
 Every write arm prints a `[diag]` line naming the shape it measured (2026-09-22): `--multirowinsert` and the fair-PK arm
 both report allocation per row, gen0 collections and both file sizes — the fair-PK arm's allocation is **engine-scoped**

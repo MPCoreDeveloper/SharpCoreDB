@@ -2455,6 +2455,29 @@ The allocation **does** drop (1.437 → 924 B/row, −36 %), so the backend is g
 
 **4. Honest scope notes.** (a) **No ops/s claim comes with this.** The tracked arms were already measured on freshly created tables at 24 (previous session), and the single-file mode has no harness arm at all: what this session claims, and tests, is that the upgrade preserves every row and that the single-file mode now writes and reads the layout those numbers were measured on. (b) On the owner's third preference — *use C# 15 / .NET 11* — the new code uses the repo's preview idioms where they are natural (target-typed collection expressions, `is { …: var x }` property patterns, `ArgumentOutOfRangeException.ThrowIfNegative`) and deliberately does **not** retrofit newer syntax where it would only be noise: the project already compiles at `LangVersion=preview` on `net11.0`, so a feature is adopted where it buys clarity or a guard, which is what the throw-helper conversions above did. (c) The plan's only remaining technical item is §5.3's snapshot.
 
+### 2026-09-22 (session 8, unattended continuation) — the single-file mode becomes measurable, and it measures badly: 819–994 rows/s at 1,2 MB per row, quadratic by construction
+- Session: 8 of 2026-09-22 (continuation; this closes the loop the previous entry opened, "the single-file mode has no harness arm")
+- Command(s): `--scdb` (**new arm**) at `SHARPCOREDB_INLINE_BYTES` 0 and 24 — 2,000 rows in 1,000-row statements, median of 5
+- Regime: `REGIME (overridden): SHARPCOREDB_INLINE_BYTES=<0|24>`; the arm prints the capacity the table **resolved to**, so the run is self-describing
+- Verdict: **KEPT** — the mode is measurable now, the inline fix is confirmed to reach it (**+21,4 % rows/s, −31,2 % allocation**), and the mode's own INSERT cost is recorded as a scoped design item rather than left implicit
+- Commit: `bench(scdb)`: the single-file INSERT arm · this entry · plan §9's new item · brief §2
+- NEXT: §9's single-file flush item (incremental block writes) — a design change for that mode; nothing else on the campaign's list is open except §5.3's snapshot
+
+**1. Why the arm had to exist.** Every harness arm until now ran the **multi-file** path, so the storage mode whose `CREATE TABLE` silently ignored the inline capacity (previous entry) was also the mode nothing measured. `--scdb` runs the `--multirowinsert` shape — same statement builder, same 1,000 rows/statement, median of five — against a `.scdb` database with `BuildConfig(...)`, so it honours `SHARPCOREDB_INLINE_BYTES` and both modes are directly comparable. One shape difference is declared: this arm does not create the secondary index (the single-file path has no hash-index implementation to maintain), so its per-statement work is *less* than `--multirowinsert`'s.
+
+**2. The numbers, and the fix's effect on this mode.**
+
+| `SHARPCOREDB_INLINE_BYTES` | rows/s (median of 5) | allocated/row | `.scdb` file | capacity resolved |
+|---|---:|---:|---:|---:|
+| 0 (the historical layout) | **819** | 1.227.001 B | 14.733.312 B | 0 |
+| 24 (the shipped default) | **994 (+21,4 %)** | **844.556 B (−31,2 %)** | 14.733.312 B | **24** |
+
+The `resolved inline capacity 24` line is the proof that the previous session's `CREATE TABLE` fix reaches this mode; before it, this row would have read 0 whatever the config said.
+
+**3. The real finding: this mode's INSERT is quadratic, and that is not a tuning problem.** The first attempt at this arm used the **20,000-row** shape and did not finish inside five minutes, which is the clue rather than an inconvenience: the single-file table keeps the whole table in one block and **rewrites that block on every flush**, so a statement-per-flush workload re-serialises 1,000 + 2,000 + … + 20,000 rows and re-writes the block that many times. At 2,000 rows the cost is measurable and still enormous: **819–994 rows/s against the multi-file arm's 84.263** (≈ 85×), **1,2 MB allocated per row** (2,45 GB for one 2,000-row pass, against 3.555 B/row there), and a **14,7 MB file for 2,000 rows** (~7 KB per row) because each rewrite allocates fresh pages and the file never shrinks. So: the inline capacity is worth +21 % here, and the mode is still nowhere near its sibling — let alone SQLite — for this shape.
+
+**4. Scope, honestly.** This session **did not attempt** the single-file flush redesign (dirty ranges or an append-region layout). It is a design change on that mode's storage layer, it has nothing to do with the INSERT levers this plan tracks, and the arm's numbers are what make it actionable: the plan now carries it as a scoped item under §9 with the shape and the figures above, so whoever owns that mode starts from a measurement rather than from the assumption that "single-file is slower because of blocks". Note also that the 14,7 MB file is a *space* finding on the same path (block rewrites never return pages to the OS), and it is recorded in the same item.
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 

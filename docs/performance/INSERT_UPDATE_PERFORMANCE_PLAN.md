@@ -2390,6 +2390,15 @@ of the evidence.
 - **Acceptance:** the deterministic columns this session established — the arm's own `[diag]` engine allocation per row (1.923 B/row today, ~1.5 KB/row if the per-row arena plumbing is removed) and the tracked ratio over interleaved pairs. Not a single pre-change ops/s sample.
 
 
+🔬 **Scoped 2026-09-22 (session 8): the single-file (`.scdb`) INSERT path is quadratic in the row count — 819–994 rows/s at 1,2 MB per row, ~85× the multi-file arm's cost.** Measured with the harness's new `--scdb` arm (shape: 2,000 rows in 1,000-row `INSERT … VALUES` statements, median of 5, **without** the secondary index the multi-file arm maintains, so its per-statement work is *less*):
+
+| `SHARPCOREDB_INLINE_BYTES` | rows/s | allocated/row | `.scdb` file |
+|---|---:|---:|---:|
+| 0 (historical layout) | 819 | 1.227.001 B | 14.733.312 B |
+| 24 (shipped default) | **994 (+21,4 %)** | **844.556 B (−31,2 %)** | 14.733.312 B |
+
+**The cause is structural, not a knob.** The single-file table keeps the whole table in one block and **rewrites that block on every flush**, so a statement-per-flush workload is O(n²): the same arm at 20,000 rows did not finish inside five minutes, which is why the arm defaults to 2,000 rows and prints the row count beside every figure. Two consequences to keep: the inline capacity **does** now reach this mode (previous entry's `CREATE TABLE` fix; the arm prints the capacity the table resolved to), and the mode is **not competitive on INSERT** until its flush becomes incremental — dirty ranges, or an append region instead of a whole-block rewrite. The same property explains the **14,7 MB file for 2,000 rows (~7 KB/row)**: a block rewrite allocates fresh pages and the file never shrinks, so a *space* item lives here too. No INSERT lever in this plan touches that path, and the fix is a design change on that mode's storage layer — scoped here with its numbers rather than attempted.
+
 ⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
 `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)
 **once for the whole call**, and `BulkIndexRowsInBTree` (:822) is already bulk — the "per row" figures came from the

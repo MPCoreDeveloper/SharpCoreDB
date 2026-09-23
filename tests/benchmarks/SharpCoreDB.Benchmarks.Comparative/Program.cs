@@ -119,6 +119,17 @@ class Program
             return;
         }
 
+        // Optional: --scdb → the single-file (.scdb) INSERT … VALUES arm (2026-09-22). This is the storage mode the
+        // harness could not measure before that date: the single-file SQL CREATE TABLE path forwarded only the
+        // fixed-width flag and never the inline capacity, so its tables silently ran the historical 5-byte-slot layout
+        // and the inline capacity's win was invisible there. Same shape as --multirowinsert (20,000 rows, 1,000
+        // rows/statement, median of five) so the two modes are comparable, and it honours SHARPCOREDB_INLINE_BYTES.
+        if (args.Any(a => a.Equals("--scdb", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunSingleFileInsertBenchmark(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk → fair PK-based comparison: SharpCoreDB on a table with an
         // `id INTEGER PRIMARY KEY` (mirroring the SQLite harness schema) with UPDATE/DELETE by PK,
         // so the PK B-tree fast paths and the recommended usage are measured vs SQLite.
@@ -536,6 +547,109 @@ class Program
         Console.WriteLine();
         Console.WriteLine($"  profiled pass: {profiled:F3}s");
         Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+    }
+
+    /// <summary>
+    /// Single-file (<c>.scdb</c>) INSERT … VALUES arm (2026-09-22). Runs the same shape as
+    /// <see cref="RunMultiRowInsertMicroBenchmark"/> against a single-file database, so the two storage modes can be
+    /// compared, and reports allocated bytes per row from the harness's own profiler-free counter plus the file size
+    /// and the capacity the table actually resolved to. It honours <c>SHARPCOREDB_INLINE_BYTES</c> (through
+    /// <c>BuildConfig</c>) because that is the setting whose effect on this mode was invisible until the single-file
+    /// <c>CREATE TABLE</c> path started forwarding it (plan §8c, 2026-09-22).
+    /// <para>
+    /// <b>The row count defaults to 2,000 here, not 20,000, and that is a property of this storage mode rather than a
+    /// convenience:</b> the single-file table keeps the whole table in one block and rewrites that block on every
+    /// flush, so a statement-per-flush shape is O(n²) in the row count — 20,000 rows did not finish inside five
+    /// minutes on this machine, while 2,000 rows gives a usable per-row cost in seconds. Override with
+    /// <c>SHARPCOREDB_SCDB_ROWS</c>, and read any number from this arm together with the row count it printed.
+    /// </para>
+    /// </summary>
+    static void RunSingleFileInsertBenchmark(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        int inserts = 2_000;
+        var insertEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_ROWS");
+        if (int.TryParse(insertEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedInserts) && parsedInserts > 0)
+        {
+            inserts = parsedInserts;
+        }
+
+        int reps = 5;
+        int rowsPerStatement = 1_000;
+        var rowsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ROWS");
+        if (int.TryParse(rowsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRows) && parsedRows > 0)
+        {
+            rowsPerStatement = parsedRows;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var factory = services.BuildServiceProvider().GetRequiredService<DatabaseFactory>();
+
+        var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
+        double[] times = new double[reps];
+        long allocPerRow = 0;
+        int gen0 = 0;
+        long fileBytes = 0;
+        int resolvedCapacity = -1;
+
+        double RunPass()
+        {
+            var path = Path.Combine(Path.GetTempPath(), $"scdb-scdbinsert-{Guid.NewGuid()}.scdb");
+            var options = DatabaseOptions.CreateSingleFileDefault();
+            options.DatabaseConfig = BuildConfig(engineType, fixedWidth: true);
+
+            long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
+            int gen0Before = GC.CollectionCount(0);
+            double elapsed;
+
+            var db = factory.CreateWithOptions(path, BenchDbPassword, options);
+            try
+            {
+                db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                if (db.TryGetTable("docs", out var table) && table is SharpCoreDB.Interfaces.ITable typed)
+                {
+                    resolvedCapacity = typed.FixedWidthInlineValueBytes;
+                }
+
+                var sw = Stopwatch.StartNew();
+                foreach (var statement in statements)
+                {
+                    db.ExecuteSQL(statement);
+                }
+
+                db.Flush();
+                sw.Stop();
+                elapsed = sw.Elapsed.TotalSeconds;
+            }
+            finally
+            {
+                // IDatabase is IAsyncDisposable (the multi-file mode's concrete Database class is IDisposable as well,
+                // which is why the other arms can use `using`); this arm drives both through one shape.
+                db.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            allocPerRow = (GC.GetTotalAllocatedBytes(precise: false) - allocBefore) / inserts;
+            gen0 = GC.CollectionCount(0) - gen0Before;
+            fileBytes = File.Exists(path) ? new FileInfo(path).Length : 0;
+            try { File.Delete(path); } catch { /* best-effort temp cleanup */ }
+            return elapsed;
+        }
+
+        for (int r = 0; r < reps; r++)
+        {
+            times[r] = RunPass();
+        }
+
+        Array.Sort(times);
+        double median = times[reps / 2];
+
+        Console.WriteLine();
+        Console.WriteLine($"═══ Single-file (.scdb) INSERT … VALUES benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, median of {reps}) ═══");
+        Console.WriteLine($"  rows/s (median) : {inserts / median:N0}");
+        Console.WriteLine($"  min {times[0]:F3}s   median {median:F3}s   max {times[^1]:F3}s");
+        Console.WriteLine($"  median µs/row   : {median * 1_000_000 / inserts:F2}");
+        Console.WriteLine($"    [diag] .scdb file {fileBytes:N0} B · allocated {allocPerRow * inserts:N0} B ({allocPerRow:N0} B/row) · gen0 {gen0}");
+        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default)");
     }
 
     /// <summary>
