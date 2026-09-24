@@ -2709,5 +2709,35 @@ A is the control and is won. **B and C are the mission**, and B is the row decis
 
 **10. What was NOT done, deliberately.** No `src/` change; no default flipped; no worklog entry rewritten; no rail touched. The research report's citations were mechanically checked (`recon_kit.py citations` → `ok: true`, no dangling markers, no orphaned rows) and the memlog carries the 12-claim ledger with honest confidence (2 claims `unverified`, including the single-source runtime-async numbers).
 
-**11. Evidence locations.** Plan: `docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`. Research: `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/` (report, 8 digests, 31-entry memlog, empty `imports/` — a native run).
+---
+
+### 2026-09-24 (session 14, unattended continuation) — S1 lands: the SQLite reference's pragma set was always tuned and always *unprinted*, so half of every regime was invisible; it now travels with the number
+
+- Session: 1 of 1 for S1 (timebox 1 — met)
+- Command(s): `--pk-default` ×2 (reps=1: default reference set, then an overridden one) · `--gate` ×2 (before and after shutting down 11 stray MSBuild servers) · core suite ×1
+- Regime: `REGIME: SHARPCOREDB_BENCH_REPS=1` on the two validation runs; no `SHARPCOREDB_*` switch set on the `--gate` and suite runs — and, new in this entry, `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` on every one of them
+- Verdict: **KEPT** — both banners print on every run, the comparator is written into the JSON archive, the `SHARPCOREDB_SQLITE_PRAGMAS` override is honoured, and the read-back reports what SQLite *actually took* rather than what we asked for
+- Commit: `test(bench)`: the SQLite reference's pragma set becomes a printed, archived part of the regime (plan §4 S1)
+- NEXT: **S3** — re-measure the §8 trap-3 control at capacity 24 (plan §4 S3). No `src/` change, no build: reproduce the PK-less control both ways, attribute the delta with `--pk-profile`, and record a `KEPT`/`REJECTED`/`BLOCKED` verdict with its table
+
+**1. What was actually wrong, found by reading rather than by assuming.** `RunSQLite()` had always opened its reference database with `PRAGMA journal_mode=WAL` and `PRAGMA synchronous=NORMAL` (`Program.cs:1598-1599` before this change) — a **deliberate fair-comparison choice**, per the old comment. But `journal_mode` and `synchronous` are exactly the two knobs SQLite's own vendor documentation identifies as the largest write-throughput levers, and the value was printed **nowhere**: not in the banner, not in any `comparative_*.json`. The harness's regime banner named only our own switches. So every published ratio carried one side of its regime and left the other implicit — the precise defect research finding D4 names, in *our* reporting rather than in SQLite.
+
+**2. What changed (harness only — no `src/`, no change to the measurement itself).** (a) The set is now one resolved list (`DefaultSqlitePragmas` = WAL + NORMAL, i.e. byte-for-byte the previous behaviour) with `SHARPCOREDB_SQLITE_PRAGMAS` as a `;`-separated override, so §9 row 1 (which reference regime?) is answerable by an environment variable instead of a code edit. (b) A second banner line prints the resolved set beside ours. (c) `RunSQLite()` applies from that list and then **reads each pragma back**, printing and archiving the *effective* values. (d) `BenchmarkResult.SqlitePragmas` carries the effective string — additively, like `Reps`, null on our own arms; `RunPkMedian` now carries it across the median rebuild, because a median is a fresh object and would otherwise silently drop it. (e) `ToRecord` passes it through the dual-mode projection.
+
+**3. Validation — the banner, both ways.** Default run:
+`REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` and `SQLite reference pragmas (effective): journal_mode=wal, synchronous=1`.
+Overridden run (`SHARPCOREDB_SQLITE_PRAGMAS='journal_mode=DELETE;synchronous=FULL'`):
+`REGIME (SQLite reference): journal_mode=DELETE, synchronous=FULL  [from SHARPCOREDB_SQLITE_PRAGMAS]` and `... (effective): journal_mode=delete, synchronous=2`. Both exit 0. The second run is the proof that matters: the read-back detected and reported a *different* engine configuration, so a future `page_size` request silently refused inside WAL mode cannot pass as applied.
+
+**4. Validation — the archive.** The `pk_default_*.json` for the default run now contains `"SqlitePragmas": "journal_mode=wal, synchronous=1"` on the `SQLite` entry and `"SqlitePragmas": null` on the SharpCoreDB entry — the comparator's regime lands on the comparator and nowhere else. `Reps: 1` is written beside it, so a reader can tell a single shot from a median.
+
+**5. Both validation archives were then deleted, deliberately — a protocol decision, not a tidy-up.** They were `reps=1` readings, and their ratios (0,84 / 0,49 / 0,24 / 0,34) sit well outside the recorded B-arm band (0,70 / 0,57 / 0,48 / 0,59). Session 12 of this campaign measured SQL-INSERT at **0,31–0,69 across four runs of the identical binary**, and §6.4 of the new plan is that a single run cannot support a claim in either direction. Leaving two single-shot files named `pk_default_*` in the tracked `results/` folder beside median-of-3 archives is exactly the misreading hazard this repo has already paid for; the S1 evidence is the banner and the field, and both are quoted verbatim above.
+
+**6. `--gate`: two runs, both INCONCLUSIVE, documented rather than retried.** Run 1 — worst spread **2,99×** (raw U 1,16 / D 1,99; default R 1,91 / U 2,99). Run 2, after `dotnet build-server shutdown` removed **11 stray MSBuild servers plus VBCSCompiler** (0 remaining) — worst spread **2,92×** (raw U 2,86; default R 2,33 / U 2,92). Both over the 2,50× limit, so both verdicts read `GATE INCONCLUSIVE … this run measures the machine's load and not the code. Nothing is concluded.` **No regression is claimed and none is hidden:** the run explicitly concludes nothing, the spread sits on the UPDATE cell, and S1 cannot influence this gate at all — `--gate` exercises the dual-mode **SharpCoreDB** write path (raw/default), while S1 touches only the **SQLite** reference arm. Per §0 rule 6 the failure is recorded with its re-run, and §11's rail against re-recording a baseline on a loaded machine is why no `--write-baseline` was attempted.
+
+**7. Core suite: green.** 1824 / 0 failed / 0 skipped (62,3 s) with the CI filter. `Program.cs` is the only modified file and the harness is not part of `SharpCoreDB.Tests`, so the suite is unaffected by construction — the run is the confirmation, not the evidence.
+
+**8. What S1 leaves behind for the owner.** §9 row 1 is now a one-line experiment rather than a code change: `SHARPCOREDB_SQLITE_PRAGMAS='journal_mode=WAL;synchronous=FULL' --pk-default` measures the same reference under a second regime, and both runs print the set they used. The built-in default stays WAL + NORMAL, unchanged, so no recorded number in this repo is invalidated by this entry.
+
+
 

@@ -222,6 +222,16 @@ reproduce the SQLite reference without reading the harness source.
 **Deliberately not in scope:** re-tuning SQLite to its maximum. The point is a *named* comparator, not
 a slower one — and choosing the reference regime is an owner decision (see §9).
 
+**Landed 2026-09-24 (worklog session 14) — `KEPT`.** The SQLite arm's pragma set is now one resolved
+list with a `SHARPCOREDB_SQLITE_PRAGMAS` override, printed in a second `REGIME (SQLite reference):`
+banner line beside our own switches, **read back** after being applied so the archive records what
+SQLite actually accepted, and written into every archive that serializes a SQLite arm
+(`BenchmarkResult.SqlitePragmas`, null on our own arms). Built-in default unchanged at WAL + NORMAL, so
+no previously recorded number is invalidated. Validation: two `--pk-default` runs printed the correct
+banners (`[built-in reference set]` and `[from SHARPCOREDB_SQLITE_PRAGMAS]`), the override read back
+`journal_mode=delete, synchronous=2`, and the archive carried
+`"SqlitePragmas": "journal_mode=wal, synchronous=1"` on the SQLite entry only.
+
 ### S2 — The HOT gate: skip index maintenance when nothing indexed changed — **timebox 2 sessions**
 
 **Why.** PostgreSQL's HOT qualifies when "the update does not modify any columns referenced by the

@@ -46,6 +46,46 @@ class Program
     const string CreateDocsIndexSql = "CREATE INDEX idx_docs_name ON docs(name)";
     const string SelectDocsByNameSql = "SELECT * FROM docs WHERE name = @name";
 
+    // ── S1 (plan §4): the SQLite arm's pragma set is HALF the regime banner ──────────────────────
+    // The SQLite side of every ratio was always tuned (WAL + NORMAL) and that tuning was printed
+    // nowhere, so a reader could not reproduce the reference. That mattered less when the only reader
+    // was the author; it matters now, because the plan's goal is a public claim. SQLite's own
+    // documented surface can swing its write throughput by more than 2× (sqlite.org/pragma.html; the
+    // vendor's own obsolete benchmark page shows nosync at 1.4–1.7× on write tests), and SQLite
+    // publishes NO CRUD benchmark at all — so the reference is a *choice*, and a choice has to travel
+    // with the number. SHARPCOREDB_SQLITE_PRAGMAS overrides the set for a deliberate A/B; the override
+    // is printed, so a tuned reference can never be mistaken for the default one.
+    const string SqlitePragmaEnvVar = "SHARPCOREDB_SQLITE_PRAGMAS";
+
+    /// <summary>The reference regime: what the SQLite arm is opened with unless overridden.</summary>
+    static readonly string[] DefaultSqlitePragmas =
+    [
+        "journal_mode=WAL",
+        "synchronous=NORMAL",
+    ];
+
+    /// <summary>
+    /// The pragma set the SQLite reference arm is opened with — <see cref="DefaultSqlitePragmas"/>, or
+    /// <c>SHARPCOREDB_SQLITE_PRAGMAS</c> (<c>;</c>-separated <c>name=value</c> pairs) when set.
+    /// </summary>
+    static string[] SqlitePragmas()
+    {
+        var raw = Environment.GetEnvironmentVariable(SqlitePragmaEnvVar);
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            var parsed = raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parsed.Length > 0)
+            {
+                return parsed;
+            }
+        }
+
+        return DefaultSqlitePragmas;
+    }
+
+    /// <summary>The resolved pragma set as one printable string, for the banner.</summary>
+    static string SqlitePragmaBanner() => string.Join(", ", SqlitePragmas());
+
     static async Task Main(string[] args)
     {
         // §2 rule 6: the regime travels with every number. These switches are environment variables and the shell that
@@ -61,6 +101,14 @@ class Program
         Console.WriteLine(regimeSwitches.Count == 0
             ? "REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply."
             : $"REGIME (overridden): {string.Join("  ", regimeSwitches)}");
+
+        // S1 (plan §4): the OTHER half of the regime. Every ratio this harness publishes is SharpCoreDB
+        // over SQLite, so the SQLite arm's tuning is part of the number rather than a detail of the
+        // harness. Print it on every run, beside our own switches, so neither side can drift silently.
+        Console.WriteLine($"REGIME (SQLite reference): {SqlitePragmaBanner()}"
+            + (Environment.GetEnvironmentVariable(SqlitePragmaEnvVar) is null
+                ? "  [built-in reference set]"
+                : $"  [from {SqlitePragmaEnvVar}]"));
 
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
         if (args.Any(a => a.Equals("--readtest", StringComparison.OrdinalIgnoreCase)))
@@ -1594,9 +1642,30 @@ class Program
                 cmd.ExecuteNonQuery();
             }
 
-            // Pragmas for fair comparison
-            using (var cmd = conn.CreateCommand()) { cmd.CommandText = "PRAGMA journal_mode=WAL"; cmd.ExecuteNonQuery(); }
-            using (var cmd = conn.CreateCommand()) { cmd.CommandText = "PRAGMA synchronous=NORMAL"; cmd.ExecuteNonQuery(); }
+            // S1 (plan §4): pragmas are applied from ONE resolved list and then READ BACK, so the
+            // archive records the values SQLite actually took rather than the ones the harness asked
+            // for — a pragma can be silently refused (SQLite documents that page_size is immutable once
+            // a database is in WAL mode, and unknown pragmas are ignored without error). Requested and
+            // effective are printed together when they differ.
+            var plannedPragmas = SqlitePragmas();
+            foreach (var pragma in plannedPragmas)
+            {
+                using var pragmaCmd = conn.CreateCommand();
+                pragmaCmd.CommandText = $"PRAGMA {pragma}";
+                pragmaCmd.ExecuteNonQuery();
+            }
+
+            var effectivePragmas = new List<string>(plannedPragmas.Length);
+            foreach (var pragma in plannedPragmas)
+            {
+                var name = pragma.Split('=', 2)[0].Trim();
+                using var readCmd = conn.CreateCommand();
+                readCmd.CommandText = $"PRAGMA {name}";
+                effectivePragmas.Add($"{name}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
+            }
+
+            result.SqlitePragmas = string.Join(", ", effectivePragmas);
+            Console.WriteLine($"  SQLite reference pragmas (effective): {result.SqlitePragmas}");
 
             // INSERT (batched in transactions)
             var sw = Stopwatch.StartNew();
@@ -1948,6 +2017,9 @@ class Program
             ReadTime = MedianOf(runs, static r => r.ReadTime),
             UpdateTime = MedianOf(runs, static r => r.UpdateTime),
             DeleteTime = MedianOf(runs, static r => r.DeleteTime),
+            // S1: a median is a fresh object, so the comparator's regime has to be carried across
+            // explicitly or the archived median loses the very thing S1 exists to record.
+            SqlitePragmas = runs.Count > 0 ? runs[0].SqlitePragmas : null,
         };
 
         median.InsertOpsPerSec = median.InsertTime > 0 ? (int)(InsertCount / median.InsertTime) : 0;
@@ -2411,6 +2483,8 @@ class Program
         r.ReadOpsPerSec,
         r.UpdateOpsPerSec,
         r.DeleteOpsPerSec,
+        // S1 (plan §4): the comparator travel with the number, even in this projected shape.
+        r.SqlitePragmas,
     };
 
     // ══════════════════════════════════════
@@ -2824,6 +2898,14 @@ class BenchmarkResult
     /// single-shot reading without the console log, and it default-deserializes to 0 on older archives.
     /// </summary>
     public int Reps { get; set; } = 1;
+
+    /// <summary>
+    /// S1 (plan §4): the SQLite reference arm's pragma set as actually applied and read back
+    /// (<c>name=value</c>, comma-separated). Null on SharpCoreDB arms and on runs that never touch
+    /// SQLite — this field documents the *comparator*, and only the comparator has one. Additive and
+    /// additive-only, like <see cref="Reps"/>: older archives default-deserialize it to null.
+    /// </summary>
+    public string? SqlitePragmas { get; set; }
     public double InsertTime { get; set; }
     public int InsertOpsPerSec { get; set; }
     public double ReadTime { get; set; }
