@@ -527,6 +527,34 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > The "give UPDATE the B3 structured predicate" item (session 36) is **cancelled by measurement**; do not
 > re-open it.
 
+> ✅ **The SQL-free batch path landed and is measured (2026-09-24, session 45).** `Database.UpdateBatch` /
+> `Database.DeleteBatch` (new, optional API: `DataStructures/Table.StructuredDml.cs`,
+> `Table.UpdateMultipleStructured` + the shared `UpdateMultipleCore`, `Database.Batch.cs`) are the
+> UPDATE/DELETE siblings of `InsertBatch(object[][], columnOrder)`: typed keys, no statement text, no
+> per-statement classification. Measured by `--fair-ni-batch` — three arms in **one process** (SQL batch,
+> SQL-free batch, SQLite), rotated every rep, paired ranges printed — on the same fair shape, index and values:
+>
+> | cell | batch/SQLite | SQL/SQLite (control) | batch/SQL (attribution) |
+> |---|---:|---:|---:|
+> | 5 reps · UPDATE | **2,24×** (0,95–2,36) | 0,64× (0,52–1,19) | **3,47×** (0,80–4,12) |
+> | 5 reps · DELETE | **12,01×** (2,55–13,19) | 7,81× (2,76–8,11) | **1,50×** (0,33–1,80) |
+> | 9 reps · UPDATE | **2,05×** (0,83–2,44) | 1,04× (0,28–1,47) | **1,82×** (0,84–7,14) |
+> | 9 reps · DELETE | **10,42×** (4,82–13,03) | 6,05× (3,27–7,08) | **1,84×** (0,69–2,94) |
+> | both runs · INSERT | 2,05–2,20× | 2,04–2,23× | **0,98–1,01×** ← identical code in A and B |
+> | both runs · READ | 1,96–1,99× | 1,55–1,97× | **1,01–1,02×** ← identical code in A and B |
+>
+> **The fair UPDATE cell moves from 0,90× (0,68–0,97) on the SQL path to 2,05–2,24× ahead**, reproduced in two
+> independent runs, and the per-rep count agrees with the median (run 2: UPDATE 7 of 9 paired reps ≥ 1,00×,
+> 6 of 9 ≥ 1,66×; DELETE 8 of 9 ≥ 1,70×). What reads as the protocol's own resolution is the INSERT/READ
+> column — 0,98–1,02× where the two arms are the *same code* — so ±20 % per-rep noise is the bar the
+> UPDATE/DELETE medians clear. **The ranges still straddle on single-rep stalls of the batched arm, so the
+> medians stand and the floors do not**: neither UPDATE nor DELETE may be quoted as a single number. Arm B
+> (`--pk-default`) and arm C (the no-PK `docs` job) are **not** re-measured — the `SHARPCOREDB_FAIR_BATCH_DML`
+> dial is wired to the fair arm only, and no default-posture cell moves. Archives:
+> `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
+> `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
+> `INCONCLUSIVE` (exit 2, spread 3,27× against the 2,50× limit — recorded, not a regression verdict).
+
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
 

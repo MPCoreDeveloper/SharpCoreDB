@@ -241,6 +241,17 @@ class Program
             return;
         }
 
+        // Optional: --fair-ni-batch → the fair shape with THREE arms in one process: the SQL batch path,
+        // the SQL-free batch path (Database.UpdateBatch/DeleteBatch), and SQLite's reference. Reports
+        // batch/SQLite (the mission cell), SQL/SQLite (the control) and batch/SQL (the attribution), each
+        // as a median of PAIRED per-rep ratios with its range. Inserted before --fair-ni's sibling checks
+        // because the two flags must not be confused: --fair-ni keeps the published protocol untouched.
+        if (args.Any(a => a.Equals("--fair-ni-batch", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunFairNoPkIndexedBatchComparison(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk-ab → same-window interleaved A/B: runs arm A and arm B as alternating
         // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
         // machine drift affects both arms of each pair equally. Arms are config variants named by
@@ -1911,6 +1922,12 @@ class Program
     const string FairNiNameIndex = "idx_fni_name";
 
     /// <summary>
+    /// The predicate column the fair arm's UPDATE/DELETE statements match on (<c>name</c>) — the column the
+    /// SQL-free batch API is given as a key column, so both shapes locate through the same index.
+    /// </summary>
+    const string FairNiKeyColumn = "name";
+
+    /// <summary>
     /// The columns the fair arm indexes on the SQLite side. SharpCoreDB's Columnar <c>CREATE TABLE</c>
     /// already registers a hash index per column (<c>SqlParser.DDL.cs:430-436</c>), so listing the same
     /// columns here is what MATCHES the index sets instead of assuming they match.
@@ -1951,6 +1968,68 @@ class Program
         }
         return list;
     });
+
+    /// <summary>
+    /// The fair arm's SQL-free batch operation lists, built <b>once</b> and reused for the same reason the
+    /// statement lists above are cached: harness work must not sit inside a timed phase (§6 rule 11 — the
+    /// interpolated statements cost 0–17 ms of a 21–65 ms window before they were cached). Same work, same
+    /// order, same values as the SQL statements: key <c>name = User{i}</c>, set <c>score = i * 99.9</c>.
+    /// </summary>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>> FairNiBatchUpdates = new(() =>
+    {
+        var list = new List<(string, object?, Dictionary<string, object>)>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}", new Dictionary<string, object>(1) { [ScoreColumn] = i * 99.9 }));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="FairNiBatchUpdates"/>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue)>> FairNiBatchDeletes = new(() =>
+    {
+        var list = new List<(string, object?)>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}"));
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// SQL-free batch DML dial — <c>SHARPCOREDB_FAIR_BATCH_DML</c>. <c>1</c> (or <c>both</c>/<c>all</c>)
+    /// routes BOTH phases through <c>Database.UpdateBatch</c>/<c>Database.DeleteBatch</c>; a comma-separated
+    /// list (<c>update</c>, <c>delete</c>) routes only the named phases, which is what makes a per-phase
+    /// attribution possible. Unset keeps every published cell's shape: the SQL batch path.
+    /// <para>
+    /// Why this dial exists: the campaign's best PK cell (INSERT) has a dedicated SQL-free batch path while
+    /// UPDATE and DELETE hand the engine statement text and pay a per-statement classification. This dial is
+    /// the only way to measure what removing that layer is worth without changing a shipped default.
+    /// </para>
+    /// </summary>
+    static bool FairBatchDml(string phase)
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_FAIR_BATCH_DML");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        if (value is "1" || value.Equals("both", StringComparison.OrdinalIgnoreCase) || value.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.Equals(phase, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     /// <summary>
     /// Arm B's statement lists, built once and reused — the same correction the fair arm received in session
@@ -2355,6 +2434,134 @@ class Program
     }
 
     /// <summary>
+    /// <c>--fair-ni-batch</c>: the SQL batch path and the SQL-free batch path on the <b>same</b> fair shape, in
+    /// one process, with SQLite's reference beside them — the paired attribution the campaign's protocol
+    /// requires (§6 rules 4, 10 and 12): discarded warm-up reps, the three arms rotated every measured rep,
+    /// and a per-rep spread printed beside every median.
+    /// <para>
+    /// The three ratios answer three different questions and all three are needed: <b>batch/SQLite</b> is the
+    /// cell the mission is about, <b>SQL/SQLite</b> is the control that proves this run reproduces the
+    /// published shape, and <b>batch/SQL</b> is the attribution — what removing the per-statement text layer
+    /// is actually worth, measured on the same engine, same machine, same index, same values.
+    /// </para>
+    /// </summary>
+    static void RunFairNoPkIndexedBatchComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║  S5 fair arm: SQL-free batch DML vs SQL batch      ║");
+        Console.WriteLine("║  and vs SQLite — three arms, one process           ║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("Arms (identical shape, identical index, identical values):");
+        Console.WriteLine("  A = SharpCoreDB, SQL batch path   (ExecuteBatchSQL, cached statements)");
+        Console.WriteLine("  B = SharpCoreDB, SQL-free batch   (Database.UpdateBatch / Database.DeleteBatch)");
+        Console.WriteLine("  C = SQLite reference              (one prepared command, re-bound parameters)");
+        Console.WriteLine();
+
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false);
+            _ = RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true);
+            _ = RunFairNoPkSqlite();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        int reps = ResolveReps();
+        var sqlRuns = new List<BenchmarkResult>(reps);
+        var batchRuns = new List<BenchmarkResult>(reps);
+        var sqliteRuns = new List<BenchmarkResult>(reps);
+
+        for (int r = 0; r < reps; r++)
+        {
+            // Rotate the arm order every rep: drift has to land on each arm equally often, which is the same
+            // correction the two-arm fair protocol already carries.
+            int order = r % 3;
+            string orderLabel = order switch { 0 => "A,B,C", 1 => "B,C,A", _ => "C,A,B" };
+            Console.WriteLine($"── rep {r + 1}/{reps} · {orderLabel} ──");
+            switch (order)
+            {
+                case 0:
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    break;
+                case 1:
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    break;
+                default:
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    break;
+            }
+        }
+        Console.WriteLine();
+
+        ReportBatchComparisonCell("INSERT", sqlRuns, batchRuns, sqliteRuns, static x => x.InsertOpsPerSec);
+        ReportBatchComparisonCell("READ", sqlRuns, batchRuns, sqliteRuns, static x => x.ReadOpsPerSec);
+        ReportBatchComparisonCell("UPDATE", sqlRuns, batchRuns, sqliteRuns, static x => x.UpdateOpsPerSec);
+        ReportBatchComparisonCell("DELETE", sqlRuns, batchRuns, sqliteRuns, static x => x.DeleteOpsPerSec);
+
+        Console.WriteLine();
+        Console.WriteLine("  Reading the three ratios:");
+        Console.WriteLine("    batch/SQLite  — the mission cell, with the SQL-free API in place.");
+        Console.WriteLine("    SQL/SQLite    — the control: this run's reproduction of the published SQL shape.");
+        Console.WriteLine("    batch/SQL     — the attribution: what the API change alone is worth on this engine.");
+        Console.WriteLine("  INSERT and READ are the same code in arms A and B, so their batch/SQL column is a");
+        Console.WriteLine("  sanity control on the protocol itself; a straddling range means re-run, not rounding.");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL batch, fair no-PK)"] = MedianArm(sqlRuns),
+            ["SharpCoreDB (SQL-free batch, fair no-PK)"] = MedianArm(batchRuns),
+            ["SQLite (reference, fair no-PK)"] = MedianArm(sqliteRuns, sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null),
+        };
+        var path = Path.Combine(ResultsDirectory(), $"fair_ni_batch_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// One phase of <c>--fair-ni-batch</c>: the three medians and the three paired ratios with their ranges.
+    /// Paired per rep, never median-over-median, because this campaign has already published one cell that
+    /// looked resolved and was not.
+    /// </summary>
+    static void ReportBatchComparisonCell(
+        string phase,
+        List<BenchmarkResult> sqlRuns,
+        List<BenchmarkResult> batchRuns,
+        List<BenchmarkResult> sqliteRuns,
+        Func<BenchmarkResult, int> select)
+    {
+        var sqlVals = sqlRuns.Select(select).ToList();
+        var batchVals = batchRuns.Select(select).ToList();
+        var sqliteVals = sqliteRuns.Select(select).ToList();
+
+        var (batchVsSqlite, bMin, bMax) = RatioSpread([.. batchVals.Zip(sqliteVals, (a, b) => PairedRatio(a, b))]);
+        var (sqlVsSqlite, sMin, sMax) = RatioSpread([.. sqlVals.Zip(sqliteVals, (a, b) => PairedRatio(a, b))]);
+        var (batchVsSql, aMin, aMax) = RatioSpread([.. batchVals.Zip(sqlVals, (a, b) => PairedRatio(a, b))]);
+
+        Console.WriteLine($"  {phase,-7} medians:  SQL {MedianOps(sqlVals),9:N0}   batch {MedianOps(batchVals),9:N0}   SQLite {MedianOps(sqliteVals),9:N0}  (ops/sec)");
+        Console.WriteLine($"           batch/SQLite {batchVsSqlite:F2}x ({bMin:F2}-{bMax:F2}x)"
+            + $"   SQL/SQLite {sqlVsSqlite:F2}x ({sMin:F2}-{sMax:F2}x)"
+            + $"   batch/SQL {batchVsSql:F2}x ({aMin:F2}-{aMax:F2}x)");
+    }
+
+    /// <summary>
     /// SQLite side of the S5 fair arm. Two things are deliberately withdrawn from the default job's
     /// SQLite arm: the <c>id INTEGER PRIMARY KEY</c> (which made every access a rowid descent) and the
     /// absent secondary index (which left the updated column unindexed). What remains is the shape
@@ -2496,8 +2703,22 @@ class Program
     /// variables left are the engines. Plaintext and the product configuration are held constant here
     /// on purpose — this arm measures the index/predicate shape, not the encryption posture.
     /// </summary>
-    static BenchmarkResult RunFairNoPkSharp(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    /// <summary>
+    /// SharpCoreDB side of the S5 fair arm.
+    /// </summary>
+    /// <param name="engineType">The storage engine under test.</param>
+    /// <param name="batchUpdate">
+    /// Overrides the SQL-free batch dial for the UPDATE phase; <c>null</c> reads
+    /// <see cref="FairBatchDml"/> (the <c>--fair-ni</c> behaviour).
+    /// </param>
+    /// <param name="batchDelete">Overrides the SQL-free batch dial for the DELETE phase.</param>
+    static BenchmarkResult RunFairNoPkSharp(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool? batchUpdate = null,
+        bool? batchDelete = null)
     {
+        bool useBatchUpdate = batchUpdate ?? FairBatchDml("UPDATE");
+        bool useBatchDelete = batchDelete ?? FairBatchDml("DELETE");
         var dbPath = Path.Combine(BenchTempDirectory(), $"bench-fairni-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
@@ -2610,7 +2831,7 @@ class Program
             // The statement list comes from the cache — see FairNiUpdateStatements for why harness work does
             // not belong in this window — and the phase is split like DELETE's (plan §6 rule 11), so the
             // engine's share is separable from the flush.
-            var updateStmts = new List<string>(FairNiUpdateStatements.Value);
+            var updateStmts = useBatchUpdate ? null : new List<string>(FairNiUpdateStatements.Value);
             var gcBeforeUpdate = GcCheckpoint();
             if (FairProfile("UPDATE"))
             {
@@ -2619,8 +2840,17 @@ class Program
             }
 
             sw.Restart();
-            db.ExecuteBatchSQL(updateStmts);
-            sw.Stop();
+            if (useBatchUpdate)
+            {
+                int updated = db.UpdateBatch(FairNiTable, FairNiBatchUpdates.Value);
+                sw.Stop();
+                Console.WriteLine($"    [diag] UPDATE shape: SQL-free batch (SHARPCOREDB_FAIR_BATCH_DML) — {updated:N0}/{UpdateCount:N0} rows reported updated");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(updateStmts!);
+                sw.Stop();
+            }
             double updateExecMs = sw.Elapsed.TotalMilliseconds;
 
             sw.Restart();
@@ -2640,6 +2870,15 @@ class Program
                 Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
             }
 
+            // Correctness gate (plan §6: no ratio without reading what produced it). AFTER the timed
+            // phase so the cell stays untouched, and BEFORE the DELETE phase, which removes exactly the
+            // rows this samples. It runs for whichever shape drove this rep — the SQL-free batch API and,
+            // in the A/B mode, the SQL batch path beside it, so neither shape is trusted on faith.
+            if (batchUpdate.HasValue || useBatchUpdate)
+            {
+                VerifyFairBatchUpdate(db, UpdateCount);
+            }
+
             // DELETE through the secondary index.
             //
             // The phase is SPLIT into statement-build, ExecuteBatchSQL and Flush (S7 follow-up). The reason is
@@ -2655,10 +2894,19 @@ class Program
                 SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
 
-            var deleteStmts = new List<string>(FairNiDeleteStatements.Value);
+            var deleteStmts = useBatchDelete ? null : new List<string>(FairNiDeleteStatements.Value);
             sw.Restart();
-            db.ExecuteBatchSQL(deleteStmts);
-            sw.Stop();
+            if (useBatchDelete)
+            {
+                int deleted = db.DeleteBatch(FairNiTable, FairNiBatchDeletes.Value);
+                sw.Stop();
+                Console.WriteLine($"    [diag] DELETE shape: SQL-free batch (SHARPCOREDB_FAIR_BATCH_DML) — {deleted:N0}/{DeleteCount:N0} rows reported deleted");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(deleteStmts!);
+                sw.Stop();
+            }
             double deleteExecMs = sw.Elapsed.TotalMilliseconds;
 
             sw.Restart();
@@ -2677,6 +2925,12 @@ class Program
                 SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
                 Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
             }
+
+            // DELETE correctness gate — same placement rule as the UPDATE gate above.
+            if (batchDelete.HasValue || useBatchDelete)
+            {
+                VerifyFairBatchDelete(db, DeleteCount);
+            }
         }
         finally
         {
@@ -2684,6 +2938,67 @@ class Program
         }
 
         return result;
+    }
+
+    /// <summary>
+    /// Samples the fair arm's UPDATE targets and checks the value actually landed. 200 keys spread across
+    /// the updated range, read back by the same indexed predicate the workload uses; reports empties and
+    /// wrong values rather than throwing, so a failing gate is visible in the run's own output beside the
+    /// ratio it qualifies (plan §6: no ratio without reading what produced it).
+    /// </summary>
+    static void VerifyFairBatchUpdate(SharpCoreDB.Database db, int updateCount)
+    {
+        const int samples = 200;
+        int empty = 0;
+        int wrong = 0;
+        int stride = Math.Max(1, updateCount / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int key = s * stride;
+            var rows = db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                new Dictionary<string, object?> { [NameParam] = $"User{key}" });
+
+            if (rows.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
+            double expected = key * 99.9;
+            var actual = rows[0].TryGetValue(ScoreColumn, out var value) ? value : null;
+            if (actual is null ||
+                Math.Abs(Convert.ToDouble(actual, CultureInfo.InvariantCulture) - expected) > 1e-6)
+            {
+                wrong++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] UPDATE correctness gate: {samples} sampled keys · {empty} empty · {wrong} wrong value");
+    }
+
+    /// <summary>
+    /// Samples the fair arm's DELETE targets and checks the rows are actually gone — the same gate shape as
+    /// the UPDATE one above, and the reason a fast batch DELETE cannot be published on speed alone.
+    /// </summary>
+    static void VerifyFairBatchDelete(SharpCoreDB.Database db, int deleteCount)
+    {
+        const int samples = 200;
+        int stillPresent = 0;
+        int stride = Math.Max(1, deleteCount / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int key = s * stride;
+            var rows = db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                new Dictionary<string, object?> { [NameParam] = $"User{key}" });
+            if (rows.Count > 0)
+            {
+                stillPresent++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] DELETE correctness gate: {samples} sampled keys · {stillPresent} still present (expected 0)");
     }
 
     // ══════════════════════════════════════

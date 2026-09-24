@@ -505,6 +505,131 @@ public partial class Database
 
     #endregion
 
+    #region SQL-Free Direct Update/Delete Batch API (Phase 2 sibling of InsertBatch)
+
+    /// <summary>
+    /// ✅ SQL-free batch UPDATE — the UPDATE sibling of <see cref="InsertBatch(string, List{Dictionary{string,object}})"/>:
+    /// the caller supplies each target's key column with its <b>already-typed</b> value plus the typed SET
+    /// values, so the engine performs no statement classification, no WHERE-string rebuild and no
+    /// literal-to-typed conversion per operation.
+    /// <para>
+    /// Each operation is a (key column, typed key value, typed values) triple. The key column must be the
+    /// table's primary key or carry a registered index for the batch to resolve through the engine's direct
+    /// locate paths; any other column still updates correctly through the predicate fallback, whose text is
+    /// built once per operation and only when that fallback is actually reached. Key columns are matched
+    /// case-sensitively against the registered indexes, exactly as the SQL batch dispatcher's canonical path
+    /// matches them.
+    /// </para>
+    /// <para>
+    /// New optional API — the SQL batch path (<see cref="ExecuteBatchSQL"/>) is untouched. See
+    /// docs/performance/WORKLOG.md session 45 for the comparison this exists for.
+    /// </para>
+    /// </summary>
+    /// <param name="tableName">The table to update.</param>
+    /// <param name="operations">One (key column, typed key value, typed values) triple per target row.</param>
+    /// <returns>The number of rows updated.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the table does not exist or the database is readonly.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public int UpdateBatch(
+        string tableName,
+        IReadOnlyList<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)> operations)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        ArgumentNullException.ThrowIfNull(operations);
+
+        if (operations.Count == 0) return 0;
+        if (isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
+        if (!tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table '{tableName}' does not exist");
+        if (table is not DataStructures.Table concreteTable)
+            throw new NotSupportedException(
+                $"The SQL-free batch UPDATE path requires a SharpCoreDB table; '{tableName}' is a {table.GetType().Name}.");
+
+        lock (_walLock)
+        {
+            return RunInBatchTransaction(() => concreteTable.UpdateMultipleStructured(operations));
+        }
+    }
+
+    /// <summary>
+    /// ✅ SQL-free batch DELETE — the DELETE sibling of <see cref="InsertBatch(string, List{Dictionary{string,object}})"/>:
+    /// each target is a (key column, <b>already-typed</b> key value) pair, so no statement is scanned, no
+    /// literal is unquoted and no text is converted back to the column's type.
+    /// <para>
+    /// The key column must be the primary key or carry a registered index for the batch to stay text-free;
+    /// any other column still deletes correctly through the predicate fallback.
+    /// </para>
+    /// <para>New optional API — the SQL batch path is untouched.</para>
+    /// </summary>
+    /// <param name="tableName">The table to delete from.</param>
+    /// <param name="keys">One (key column, typed key value) pair per delete target.</param>
+    /// <returns>The number of rows deleted.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the table does not exist or the database is readonly.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public int DeleteBatch(string tableName, IReadOnlyList<(string KeyColumn, object? KeyValue)> keys)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        ArgumentNullException.ThrowIfNull(keys);
+
+        if (keys.Count == 0) return 0;
+        if (isReadOnly) throw new InvalidOperationException("Cannot delete in readonly mode");
+        if (!tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table '{tableName}' does not exist");
+        if (table is not DataStructures.Table concreteTable)
+            throw new NotSupportedException(
+                $"The SQL-free batch DELETE path requires a SharpCoreDB table; '{tableName}' is a {table.GetType().Name}.");
+
+        lock (_walLock)
+        {
+            return RunInBatchTransaction(() => concreteTable.DeleteBatchStructured(keys));
+        }
+    }
+
+    #endregion
+
+    /// <summary>
+    /// Runs a SQL-free batch DML call under the same transaction contract as <see cref="ExecuteBatchSQL"/>:
+    /// an outer transaction is opened only when the caller does not already hold one, and the single
+    /// durability point is the commit plus the buffered-append flush — the same pair the SQL batch path pays,
+    /// so a comparison between the two paths compares the paths rather than the commits.
+    /// </summary>
+    private int RunInBatchTransaction(Func<int> body)
+    {
+        var isInTransactionBefore = storage.IsInTransaction;
+
+        if (!isInTransactionBefore)
+        {
+            storage.BeginTransaction();
+        }
+
+        try
+        {
+            int affected = body();
+
+            if (!isInTransactionBefore)
+            {
+                long commitStart = Diagnostics.WritePathProfiler.Stamp();
+                storage.CommitSync();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+
+                long commitBufferStart = Diagnostics.WritePathProfiler.Stamp();
+                storage.FlushTransactionBuffer();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitBuffer, commitBufferStart);
+            }
+
+            return affected;
+        }
+        catch
+        {
+            if (!isInTransactionBefore)
+            {
+                storage.Rollback();
+            }
+
+            throw;
+        }
+    }
+
     /// <summary>
     /// Detects if a SQL statement is an INSERT.
     /// </summary>

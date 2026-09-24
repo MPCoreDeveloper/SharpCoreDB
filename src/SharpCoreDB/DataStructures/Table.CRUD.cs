@@ -2281,13 +2281,79 @@ public partial class Table
     /// Processes multiple UPDATE operations under a single write lock.
     /// PERF: Avoids N lock acquisitions + N SelectInternal calls when each WHERE targets
     /// a single row via an indexed column. Caches column metadata once for the batch.
+    /// <para>
+    /// Text adapter: the operation's key is resolved from its WHERE string inside the shared core,
+    /// once per operation — the same single parse the PK branch and the registered-index branch used
+    /// to perform separately. Callers that already hold the key as a typed value use
+    /// <see cref="UpdateMultipleStructured"/> instead, which skips that parse entirely.
+    /// </para>
     /// </summary>
     /// <param name="operations">List of (whereClause, updates) pairs.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal void UpdateMultiple(List<(string where, Dictionary<string, object> updates)> operations)
     {
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
         if (operations.Count == 0) return;
+
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
+        foreach (var (where, updates) in operations)
+        {
+            structured.Add((where, null, null, updates));
+        }
+
+        UpdateMultipleCore(structured);
+    }
+
+    /// <summary>
+    /// SQL-free batch UPDATE — the UPDATE sibling of the INSERT fast path
+    /// (<c>InsertBatch(object[][], columnOrder)</c>): the caller supplies the key column with its
+    /// <b>already-typed</b> value plus the typed SET values, so the engine performs no statement
+    /// classification, no WHERE-string rebuild and no literal-to-typed conversion per operation.
+    /// </summary>
+    /// <param name="operations">One (key column, typed key value, typed SET values) triple per operation.</param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal int UpdateMultipleStructured(
+        IReadOnlyList<(string KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        if (operations.Count == 0) return 0;
+
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
+        foreach (var (keyColumn, keyValue, updates) in operations)
+        {
+            if (string.IsNullOrWhiteSpace(keyColumn))
+            {
+                throw new ArgumentException("A key column is required for every batch UPDATE operation.", nameof(operations));
+            }
+
+            if (keyValue is null)
+            {
+                throw new ArgumentException("A non-null key value is required for every batch UPDATE operation.", nameof(operations));
+            }
+
+            ArgumentNullException.ThrowIfNull(updates);
+            structured.Add((string.Empty, keyColumn, keyValue, updates));
+        }
+
+        return UpdateMultipleCore(structured);
+    }
+
+    /// <summary>
+    /// Shared UPDATE batch core. Every operation carries either a WHERE string (text callers) or an
+    /// already-typed key (structured callers). The key is resolved <b>once</b> per operation — parsed
+    /// out of the predicate text when that is what the caller had, taken as given otherwise — and both
+    /// fast branches below read that single resolution, so no predicate is ever parsed twice.
+    /// </summary>
+    /// <param name="operations">One (where text, optional key column, optional typed key value, updates) per operation.</param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private int UpdateMultipleCore(
+        List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
+        if (operations.Count == 0) return 0;
+
+        int updatedRows = 0;
 
         this.rwLock.EnterWriteLock();
         try
@@ -2321,13 +2387,27 @@ public partial class Table
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, contiguousStart);
             if (handledContiguously)
             {
-                return;
+                // The contiguous path reports success only after patching EVERY operation's record
+                // (any miss or failed patch falls back), so its updated-row count is the op count.
+                return operations.Count;
             }
 
             int appendedInBatch = 0; // only appends create stale versions that need compaction
 
-            foreach (var (where, updates) in operations)
+            foreach (var (where, structuredKeyColumn, structuredKeyValue, updates) in operations)
             {
+                // One key resolution per operation. Text callers get it from the predicate text —
+                // the parse both fast branches below used to perform separately; structured callers
+                // hand it in already typed, so nothing is parsed at all.
+                string? keyColumn = structuredKeyColumn;
+                object? keyValue = structuredKeyValue;
+                if (keyColumn is null && !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var parsedKeyColumn, out var parsedKeyValue))
+                {
+                    keyColumn = parsedKeyColumn;
+                    keyValue = parsedKeyValue;
+                }
+
                 // B7: when the operation only touches non-indexed, non-PK columns on a table
                 // without CHECK constraints, matching rows are patched directly on their raw bytes
                 // (only the changed fields at their actual slot offsets) — no full-row
@@ -2339,10 +2419,12 @@ public partial class Table
                 // are written at their fixed slot offsets), so the write cannot relocate and the storage reference
                 // stays valid, which is the property this gate was protecting. The Columnar half is unchanged: a
                 // legacy variable-width patch may change the length, and that engine handles the case as it always has.
+                // The gate consumes the SAME resolved key as the branches below (structured callers
+                // carry no predicate text, so a gate that re-parsed `where` would silently send every
+                // structured operation down the full deserialize/re-serialize fallback).
                 bool fastPatch = (StorageMode == StorageMode.Columnar || _fixedWidthRecords) &&
-                    !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var fastWhereCol, out _) &&
-                    !updates.ContainsKey(fastWhereCol) &&
+                    keyColumn is not null &&
+                    !updates.ContainsKey(keyColumn) &&
                     (this.PrimaryKeyIndex < 0 || !updates.ContainsKey(this.Columns[this.PrimaryKeyIndex])) &&
                     this.TableCheckConstraints.Count == 0 &&
                     !HasColumnCheckConstraints();
@@ -2381,11 +2463,10 @@ public partial class Table
                 // nothing measurable (30,037 vs 33,933 ops/s); paired with the fast patch it is the route that keeps
                 // the record as raw bytes instead of materializing it.
                 if (this.PrimaryKeyIndex >= 0 &&
-                    !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var pkWhereCol, out var pkWhereVal) &&
-                    string.Equals(pkWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                    keyColumn is not null &&
+                    string.Equals(keyColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
                 {
-                    var fastSearch = this.Index.Search(pkWhereVal?.ToString() ?? string.Empty);
+                    var fastSearch = this.Index.Search(keyValue?.ToString() ?? string.Empty);
                     if (fastSearch.Found)
                     {
                         byte[]? fastData;
@@ -2416,23 +2497,22 @@ public partial class Table
                 }
 
                 long locateIndexStart = 0L;
-                if (rows is null && !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
-                    this.registeredIndexes.ContainsKey(whereCol))
+                if (rows is null && keyColumn is not null &&
+                    this.registeredIndexes.ContainsKey(keyColumn))
                 {
                     // §5.5 instrumentation (2026-09-21): the per-operation locate on this route — the
                     // registered-index lookup plus the record read/slice — had no stamp at all, which is why
                     // §5.3 could attribute only 39-61 % of the arm. It is stamped as its own stage so the
                     // batch-level `row-locate` reading (one call, the contiguous attempt) stays comparable.
                     locateIndexStart = Diagnostics.WritePathProfiler.Stamp();
-                    EnsureIndexLoaded(whereCol);
-                    if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex))
+                    EnsureIndexLoaded(keyColumn);
+                    if (this.hashIndexes.TryGetValue(keyColumn, out var hashIndex))
                     {
-                        var colIdx = this.Columns.IndexOf(whereCol);
+                        var colIdx = this.Columns.IndexOf(keyColumn);
                         if (colIdx >= 0)
                         {
-                            var key = ParseValueForHashLookup(
-                                whereVal?.ToString() ?? string.Empty,
+                            var key = CoerceStructuredKeyForHashLookup(
+                                keyValue,
                                 this.ColumnTypes[colIdx]);
 
                             if (key != null)
@@ -2485,8 +2565,13 @@ public partial class Table
                     // unattributed. PageBased reaches here for every statement because its contiguous,
                     // PK-lookup and raw-byte fast paths are all gated away from it (StorageMode gates at
                     // :2226 and :2260).
+                    // Text callers already hold the predicate; a structured caller gets it built here —
+                    // this branch is the only one that needs the string at all.
+                    var fallbackWhere = where.Length > 0 || keyColumn is null
+                        ? where
+                        : BuildStructuredWhereText(keyColumn, keyValue);
                     long locateStart = Diagnostics.WritePathProfiler.Stamp();
-                    foreach (var row in SelectInternal(where, orderBy: null, asc: true, noEncrypt: false))
+                    foreach (var row in SelectInternal(fallbackWhere, orderBy: null, asc: true, noEncrypt: false))
                     {
                         long position = -1;
                         if (this.PrimaryKeyIndex >= 0 &&
@@ -2505,6 +2590,11 @@ public partial class Table
 
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
                 }
+
+                // Every located row is written in one of the branches below (the in-place patch falls
+                // back to a full serialization when a field does not fit), so the located count is the
+                // updated count — and it is the only single place both branches pass through.
+                updatedRows += rows.Count;
 
                 foreach (var (rowPosition, resolvedRow, rawData) in rows)
                 {
@@ -2799,6 +2889,8 @@ public partial class Table
                 Interlocked.Add(ref _updatedRowCount, appendedInBatch);
                 TryAutoCompact();
             }
+
+            return updatedRows;
         }
         finally
         {
@@ -2826,7 +2918,7 @@ public partial class Table
     /// </summary>
     private bool TryBulkUpdateContiguousFixedWidth(
         IStorageEngine engine,
-        List<(string where, Dictionary<string, object> updates)> operations)
+        List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
     {
         int count = operations.Count;
         if (count < 2)
@@ -2865,10 +2957,29 @@ public partial class Table
 
         for (int i = 0; i < count; i++)
         {
-            var (where, updates) = operations[i];
-            if (string.IsNullOrEmpty(where) ||
-                !TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) ||
-                !string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
+            var (where, structuredKeyColumn, structuredKeyValue, updates) = operations[i];
+
+            // Key resolution mirrors the shared UPDATE core: the structured key when the caller
+            // supplied one (the SQL-free API), the parsed predicate otherwise (the text adapters).
+            string whereCol;
+            object? whereVal;
+            if (structuredKeyColumn is not null)
+            {
+                whereCol = structuredKeyColumn;
+                whereVal = structuredKeyValue;
+            }
+            else if (!string.IsNullOrEmpty(where) &&
+                     TryParseSimpleWhereClause(where, out var parsedCol, out var parsedVal))
+            {
+                whereCol = parsedCol;
+                whereVal = parsedVal;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
                 whereVal is null)
             {
                 return false;
@@ -2948,7 +3059,7 @@ public partial class Table
             var payload = new byte[layout.FixedSize];
             raw.AsSpan((int)(i * stride) + 4, layout.FixedSize).CopyTo(payload);
 
-            var patched = TryOverwriteFixedWidthInPlace(payload, operations[i].updates);
+            var patched = TryOverwriteFixedWidthInPlace(payload, operations[i].Updates);
             if (patched is null || !engine.TryUpdateInPlaceSameLength(Name, positions[i], patched))
             {
                 return false;
@@ -2992,7 +3103,7 @@ public partial class Table
 
                 var slot = raw.AsSpan((int)(i * stride) + 4 + layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
                 oldKeys[i] = ReadTypedValueFromSpan(slot, type, out _);
-                newKeys[i] = operations[i].updates[colName];
+                newKeys[i] = operations[i].Updates[colName];
             }
 
             hashIdx.RemoveBatchKeys(oldKeys, positions);

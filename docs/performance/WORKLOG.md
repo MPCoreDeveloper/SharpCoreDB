@@ -3744,3 +3744,51 @@ Ours is monotone through measured rep 5 — **pass 8 overall** — and only then
 
 
 
+
+---
+
+### 2026-09-24 (session 45) — the campaign's first optimisation lands: the SQL-free batch path puts UPDATE **1,82–3,47×** ahead of the SQL batch path and moves the fair UPDATE cell from **0,90× behind** to **2,05–2,24× ahead** of SQLite, reproduced in two independent runs
+
+- Session: 1 of 1 for the SQL-free batch-DML item (new item; the plan's §5 work items were already closed)
+- Command(s): `--fair-ni-batch` ×2 (5 and 9 measured reps, `SHARPCOREDB_WARMUP_REPS=8`, arms A/B/C rotated every rep) · core suite ×1 · `--gate` ×1 (attempted once, after `dotnet build-server shutdown`) · `quiet-machine.ps1` ×1
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp` — Defender exclusion confirmed at **1,16×** by the check · `MaxFreq 100 %` · total CPU **4,5 %** · disk queue **0** · **`VERDICT: NOISY`, one finding: `WSearch` running** — `Stop-Service WSearch` **refused without elevation** (attempted once, not retried, per §5) · SQLite at its built-in reference pragma set
+- Verdict: **KEPT** — new optional API, no default changed, **no correctness gate missed in any rep of either run**, and the paired medians reproduce across two independent runs
+- Commit: `perf(batch-dml)`: SQL-free `UpdateBatch`/`DeleteBatch` — the INSERT fast path's siblings, and what they are worth (plan §5, session 45)
+- NEXT: **extend the same dial to arm B and the no-PK `docs` job** (`RunSharpCoreDBPk`'s `PkUpdateStatements`/`PkDeleteStatements` and the `docs` job's `updateStmts`/`deleteStmts` are the same shape), because 0,39×/0,38× is the cell the mission is actually about and the fair arm was already near parity; then, and only then, decide whether the fair arm's ranges justify a third run at a higher rep count. Four owner items unchanged (dead-config ×7, elevation for `--gate`, the VS C++ workload, retiring the refuted auto-index question).
+
+**1. The change, and why it is the one the evidence pointed at.** Session 44's finding was that the campaign's *best* PK cell (INSERT) has a dedicated SQL-free batch path (`InsertBatch(object[][], columnOrder)`) while UPDATE and DELETE hand the engine statement text and pay a per-statement classification. This session built the missing siblings:
+
+| file | what |
+|---|---|
+| `src/SharpCoreDB/DataStructures/Table.StructuredDml.cs` (new) | typed-key batch DELETE (PK → registered hash index → generic fallback; reuses `DeleteRecordsCore`), the hash-key coercion, the fallback literal builder |
+| `src/SharpCoreDB/DataStructures/Table.CRUD.cs` | `UpdateMultiple` is now a **text adapter** over a shared `UpdateMultipleCore` that resolves **one** key per operation (the PK branch and the registered-index branch used to parse the same WHERE string twice); `UpdateMultipleStructured` is the typed twin; the core returns the rows matched |
+| `src/SharpCoreDB/Database/Execution/Database.Batch.cs` | public `UpdateBatch`/`DeleteBatch` + `RunInBatchTransaction` (the same transaction/commit/flush contract `ExecuteBatchSQL` uses, so the comparison compares the paths and not the commits) |
+| `tests/benchmarks/.../Program.cs` | `--fair-ni-batch` (three arms in one process: SQL batch, SQL-free batch, SQLite; rotated per rep, paired ranges printed) and `SHARPCOREDB_FAIR_BATCH_DML` (both phases, or `update`/`delete` alone) |
+| `tests/SharpCoreDB.Tests/StructuredBatchDmlTests.cs` (new) | 12 tests: indexed key, PK, fixed-width contiguous, PageBased, encrypted, reopen-durability ×2, unindexed fallback, null key ×2, no-match, unknown table |
+
+
+
+**2. The measurement.** Same shape, same index, same values in all three arms; ratio = SharpCoreDB ÷ SQLite, and the attribution = batch ÷ SQL.
+
+| run | cell | batch/SQLite | SQL/SQLite (control) | batch/SQL (attribution) |
+|---|---|---|---|---|
+| 5 reps | INSERT | 2,20× (2,00–2,25) | 2,23× (1,98–2,24) | **1,01×** (0,90–1,10) |
+| 5 reps | READ | 1,99× (1,54–2,10) | 1,55× (1,35–2,11) | **1,01×** (0,75–1,53) |
+| 5 reps | **UPDATE** | **2,24×** (0,95–2,36) | 0,64× (0,52–1,19) | **3,47×** (0,80–4,12) |
+| 5 reps | **DELETE** | **12,01×** (2,55–13,19) | 7,81× (2,76–8,11) | **1,50×** (0,33–1,80) |
+| 9 reps | INSERT | 2,05× (1,64–2,16) | 2,04× (1,96–2,20) | **0,98×** (0,83–1,04) |
+| 9 reps | READ | 1,96× (1,47–2,14) | 1,97× (1,61–2,43) | **1,02×** (0,61–1,22) |
+| 9 reps | **UPDATE** | **2,05×** (0,83–2,44) | 1,04× (0,28–1,47) | **1,82×** (0,84–7,14) |
+| 9 reps | **DELETE** | **10,42×** (4,82–13,03) | 6,05× (3,27–7,08) | **1,84×** (0,69–2,94) |
+
+The fair arm's **published** UPDATE cell is 0,90× (0,68–0,97) on the SQL path; the SQL-free path reads **2,05–2,24× ahead in both runs**. Archives: `results/fair_ni_batch_20260924_190931.json` (5 reps) and `…_191233.json` (9 reps); raw console logs at `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Run 2 was taken at **9** measured reps, not 5, because run 1's ranges straddled — and per §6 rule 10 the lever chosen was measured reps, not warm-up: the warm-up is already at the validated 8, and the stalling reps are mid-run single reps, which is the one thing more warm-up cannot reach.
+
+**3. The control cells are what make those medians readable, and they are why INSERT and READ are printed at all.** Arms A and B run *identical code* in the INSERT and READ phases, so their batch/SQL cell measures the protocol itself: **1,01× (0,90–1,10) / 0,98× (0,83–1,04)** on INSERT and **1,01× / 1,02×** on READ, against paired medians of 1,82–3,47× (UPDATE) and 1,50–1,84× (DELETE). The protocol's own per-rep noise is therefore roughly **±20 %**, and the UPDATE/DELETE medians sit outside it in both runs.
+
+**4. Per-rep honesty: every range straddles, and the cause is the campaign's known isolated-stall signature — this time on the batch arm.** Run 2's per-rep UPDATE batch/SQL ratios: `1,05 6,16 1,66 7,14 1,82 0,84 2,32 0,95 3,85` (median 1,82×; **7 of 9 ≥ 1,00×, 6 of 9 ≥ 1,66×**); DELETE: `1,70 2,25 1,72 1,87 0,69 1,84 2,94 2,26 1,71` (median 1,84×; **8 of 9 ≥ 1,70×**). The sub-1,00 cells are single-rep stalls of the *batch* arm (rep 6: 349.902 updated/s against its siblings' 616k–831k), and one high cell is the pair-mate of a *SQL*-arm stall (rep 4: SQL 86.416 updated/s → 7,14×). So: **the medians stand, the floors do not, and neither cell may be quoted as a single number** — the discipline the fair DELETE cell already carries.
+
+**5. A code-read finding that would have produced a false negative, found before the first measurement.** The `fastPatch` gate in the UPDATE core re-parsed the WHERE text (`!string.IsNullOrEmpty(where) && TryParseSimpleWhereClause(...)`), so a structured caller — which by construction carries no predicate text — would have silently taken the **full deserialize → mutate → re-serialize** fallback instead of the raw-byte in-place patch. The gate now consumes the same resolved key as the branches below it (`Table.CRUD.cs`, the B7 gate). It was not hypothesised: it was found by reading which branch the new entry point would take, and fixing it before the run — the same class of error (a ratio read without reading the code that produces it) this campaign has already paid for four times.
+
+**6. Validation.** Builds clean (`src`, tests, benchmarks: 0 errors). Core suite **1836 / 0 failed / 0 skipped** in 59,6 s — 1824 + the 12 new tests, canaries included. `--gate` was attempted **once** after `dotnet build-server shutdown`: **`GATE INCONCLUSIVE (exit 2)`** — worst rep spread **3,27×** against the 2,50× limit, so it "measures the machine's load and not the code". That is not a regression verdict (exit 1), it is the known elevation-bound `WSearch` finding plus the still-2026-09-15 baseline, and per §5 it was recorded rather than retried.
+
+**7. What is explicitly NOT claimed.** (a) Arm B (`--pk-default`) and the no-PK `docs` job were **not** run through the new path — the dial is wired to the fair arm only, so no default-posture cell moves. (b) The SQL path remains the **default**; the new API is optional and nothing shipped changed behaviour. (c) No absolute ops/s is quoted as a verdict, and this run's absolutes differ from the published ones by up to ~2× (SQLite's own UPDATE reference reads 315k here against ~136k in the published cells) — which is precisely why every number above is a **within-run paired ratio**. (d) The API is new surface: it is not yet on `IDatabase` (the precedent is `InsertBatch`, which is also only on the concrete `Database`), and its key columns are matched case-sensitively against registered indexes, as the SQL canonical path matches them.
