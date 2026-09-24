@@ -1854,26 +1854,104 @@ class Program
         Console.WriteLine("SQLite explicitly — so the SET column is indexed on both sides. No rowid shortcut either way.");
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, no PK, hash-indexed predicate) ━━━");
-        var scdb = RunPkMedian(() => RunFairNoPkSharp(engineType));
+        // S5 (plan §6.4): the arms are INTERLEAVED and the SPREAD is printed. Two reasons, both required by
+        // the measurement protocol. (1) The first version ran every SharpCoreDB rep and then every SQLite
+        // rep, so a slow window landed on one arm's block and not the other's — drift has to hit both arms
+        // of a pair, so the arm order alternates every rep. (2) A median without a spread cannot be told
+        // from a lucky draw, and this campaign has already thrown away one reading that had no error bar.
+        int reps = 3;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
+        {
+            reps = envReps;
+        }
+
+        var scdbRuns = new List<BenchmarkResult>(reps);
+        var sqliteRuns = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            bool scdbFirst = r % 2 == 0;
+            Console.WriteLine($"── rep {r + 1}/{reps} · {(scdbFirst ? "SharpCoreDB" : "SQLite")} first ──");
+            if (scdbFirst)
+            {
+                scdbRuns.Add(RunFairNoPkSharp(engineType));
+                sqliteRuns.Add(RunFairNoPkSqlite());
+            }
+            else
+            {
+                sqliteRuns.Add(RunFairNoPkSqlite());
+                scdbRuns.Add(RunFairNoPkSharp(engineType));
+            }
+        }
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SQLite (reference, no PK, secondary-indexed predicate) ━━━");
-        var sqlite = RunPkMedian(() => RunFairNoPkSqlite());
+        static int MedianOps(IEnumerable<int> xs)
+        {
+            var sorted = xs.OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+        }
+
+        static double Paired(int a, int b) => b > 0 ? a / (double)b : 0;
+
+        static (double Median, double Min, double Max) Spread(List<double> xs)
+        {
+            var sorted = xs.Where(x => x > 0).OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? (0, 0, 0) : (sorted[sorted.Length / 2], sorted[0], sorted[sorted.Length - 1]);
+        }
+
+        var scdb = new BenchmarkResult
+        {
+            Reps = reps,
+            InsertOpsPerSec = MedianOps(scdbRuns.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(scdbRuns.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(scdbRuns.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(scdbRuns.Select(r => r.DeleteOpsPerSec)),
+        };
+        var sqlite = new BenchmarkResult
+        {
+            Reps = reps,
+            InsertOpsPerSec = MedianOps(sqliteRuns.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(sqliteRuns.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(sqliteRuns.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(sqliteRuns.Select(r => r.DeleteOpsPerSec)),
+            // S1: the comparator's regime travels with the comparator, even through this aggregation.
+            SqlitePragmas = sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null,
+        };
+
+        var ratioInsert = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.InsertOpsPerSec, b.InsertOpsPerSec)).ToList();
+        var ratioRead = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.ReadOpsPerSec, b.ReadOpsPerSec)).ToList();
+        var ratioUpdate = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.UpdateOpsPerSec, b.UpdateOpsPerSec)).ToList();
+        var ratioDelete = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.DeleteOpsPerSec, b.DeleteOpsPerSec)).ToList();
+
+        Console.WriteLine($"  per-rep, {reps} paired reps, arm order alternated (ops/sec):");
+        Console.WriteLine("  rep │ SCDB  INSERT      READ    UPDATE    DELETE │ SQLITE INSERT      READ    UPDATE    DELETE │ paired ratios I / R / U / D");
+        for (int r = 0; r < reps; r++)
+        {
+            var s = scdbRuns[r];
+            var q = sqliteRuns[r];
+            Console.WriteLine($"  {r + 1,3} │ {s.InsertOpsPerSec,12:N0} {s.ReadOpsPerSec,8:N0} {s.UpdateOpsPerSec,8:N0} {s.DeleteOpsPerSec,8:N0}"
+                + $" │ {q.InsertOpsPerSec,13:N0} {q.ReadOpsPerSec,8:N0} {q.UpdateOpsPerSec,8:N0} {q.DeleteOpsPerSec,8:N0}"
+                + $" │ {ratioInsert[r]:F2} {ratioRead[r]:F2} {ratioUpdate[r]:F2} {ratioDelete[r]:F2}");
+        }
         Console.WriteLine();
 
-        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
-        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine("║ Database (median) │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB       │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite            │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
         Console.WriteLine();
-        Console.WriteLine("  SharpCoreDB / SQLite   (reuses the harness's Ratio helper: it prints n/a when a phase failed)");
-        Console.WriteLine($"    INSERT: {Ratio(scdb.InsertOpsPerSec, sqlite.InsertOpsPerSec)}"
-            + $"   READ: {Ratio(scdb.ReadOpsPerSec, sqlite.ReadOpsPerSec)}"
-            + $"   UPDATE: {Ratio(scdb.UpdateOpsPerSec, sqlite.UpdateOpsPerSec)}"
-            + $"   DELETE: {Ratio(scdb.DeleteOpsPerSec, sqlite.DeleteOpsPerSec)}");
-        Console.WriteLine("  (> 1,00x means SharpCoreDB is ahead.) Compare against the default job's no-PK arm: if the");
-        Console.WriteLine("   gap shrinks HERE, the default job's gap was row LOCATION, not the row write path — that");
-        Console.WriteLine("   separation is the whole point of this arm.");
+
+        var (mI, iMin, iMax) = Spread(ratioInsert);
+        var (mR, rMin, rMax) = Spread(ratioRead);
+        var (mU, uMin, uMax) = Spread(ratioUpdate);
+        var (mD, dMin, dMax) = Spread(ratioDelete);
+        Console.WriteLine("  SharpCoreDB / SQLite — median of the PAIRED per-rep ratios, with the range:");
+        Console.WriteLine($"    INSERT: {mI:F2}x  ({iMin:F2}x - {iMax:F2}x)      (> 1,00x means SharpCoreDB is ahead)");
+        Console.WriteLine($"    READ:   {mR:F2}x  ({rMin:F2}x - {rMax:F2}x)");
+        Console.WriteLine($"    UPDATE: {mU:F2}x  ({uMin:F2}x - {uMax:F2}x)");
+        Console.WriteLine($"    DELETE: {mD:F2}x  ({dMin:F2}x - {dMax:F2}x)");
+        Console.WriteLine("  A range that does not straddle 1,00x supports that cell's direction; one that does means the");
+        Console.WriteLine("  cell sits inside this box's noise and must be re-run, not rounded.");
+        Console.WriteLine("  Compare against the default job's no-PK arm: if the gap shrinks HERE, the default job's gap");
+        Console.WriteLine("  was row LOCATION, not the row write path — that separation is the whole point of this arm.");
 
         var results = new Dictionary<string, BenchmarkResult>
         {

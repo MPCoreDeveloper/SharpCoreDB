@@ -342,24 +342,24 @@ exactly the separation §2.1's diagnosis depends on.
 **Landed 2026-09-24 (worklog session 20) — `KEPT`, and it inverts arm C.** `--fair-ni` removes both
 asymmetries: no primary key on either side, the same predicate through a secondary index on `name` on
 both sides, and SQLite given an explicit index on **every** column to match SharpCoreDB's implicit five.
-Median of 3 per arm, same run:
+
+**Re-measured 2026-09-24 (session 21) with the arms interleaved and the spread printed** (§6.4), five
+paired reps:
 
 | | INSERT | READ | UPDATE | DELETE |
 |---|---:|---:|---:|---:|
-| SharpCoreDB | 116.650 | 107.251 | 81.538 | 202.265 |
-| SQLite | 96.872 | 94.211 | 135.126 | 49.749 |
-| **ratio** | **1,20×** | **1,14×** | **0,60×** | **4,07×** |
+| SharpCoreDB (median) | 148.640 | 176.607 | 142.527 | 281.640 |
+| SQLite (median) | 102.088 | 95.490 | 136.300 | 52.159 |
+| **median paired ratio** | **1,45×** | **1,85×** | **1,04×** | **5,33×** |
+| **range** | 1,28–1,59× | 1,07–2,26× | **0,47–1,75×** | 2,62–8,41× |
 | *default job, no PK (arm C)* | *0,67×* | *0,76×* | *0,24×* | *0,31×* |
 
-**Three of four operations flip from behind to ahead and UPDATE more than doubles: most of arm C's
-deficit was the comparison, not the engine.** The DELETE inversion (SQLite 49.749 against its own
-135.126 UPDATE) is explained by the index set — with five secondary indexes and no rowid predicate,
-SQLite must remove the row from every index, while our hash entries are cheap to remove.
-
-**Two gaps before this is publishable**, both recorded rather than papered over: (1) the run was
-**`NOISY`** (Windows Search had restarted) so the figures are **directional only** — re-run on a `QUIET`
-box before quoting them; (2) `RunPkMedian` reports the median only, so **§6.4's spread is not printed**
-for this arm — the follow-up is a per-rep paired print (the `--pk-ab` pattern).
+**INSERT, READ and DELETE clear 1,00× and stand; the UPDATE cell straddles it and does not.** The
+session-20 `0,60×` UPDATE is **retracted as unsupported** — the honest statement is "somewhere between
+0,47× and 1,75×, unresolved at five reps". The DELETE inversion (SQLite 52.159 against its own 136.300
+UPDATE) is the index set: with five secondary indexes and no rowid predicate SQLite removes the row from
+every index, while our hash entries are cheap to remove. See **S7** — this run also showed that the
+per-rep variance is ours, not the machine's.
 
 ### S6 — Shape-matched runtime wins, only where the JIT's own conditions hold *(opportunistic)* — **timebox 1 session**
 
@@ -375,6 +375,37 @@ columnar codecs `[9]`.
 
 **Acceptance.** Each change is measured on the harness or reverted. This item is scheduled **only after
 S1–S3** and must never delay them. It is explicitly the lowest-priority item in the plan.
+
+### S7 — Explain the engine-side variance *(new 2026-09-24; measurement + at most one diagnostic switch)* — **timebox 2 sessions**
+
+**Why, and why it outranks S4.** The S5 spread run (worklog session 21) measured both engines in the same
+process, on the same box, in alternating order, five times. **SQLite was nearly deterministic — UPDATE
+135.099–137.338, i.e. ±1 % — while our own arms moved 3,72× on UPDATE and 3,14× on DELETE.** Machine load
+cannot produce an asymmetry in which one engine is stable and the other is wild for five consecutive
+pairs, so **the campaign's recurring 3–4× spreads and `--gate` `INCONCLUSIVE` verdicts are at least
+partly engine-side** — which is a different problem from the one session 16 solved (the Defender/IO
+filter is a real per-I/O cost, but it is not what makes *our* numbers move 3,7× and SQLite's 1 %). This
+is **upstream of every measure-first item**, including S4: measuring an AOT build with a 3,7× noise floor
+would repeat session 15's mistake at larger cost.
+
+**Prime suspect, named and falsifiable.** `DatabaseConfig.ColumnarAutoCompactionThreshold` defaults to
+**1000** (`DatabaseConfig.cs:827`) and each arm performs 10.000 updates + 10.000 deletes — ~20 threshold
+crossings per arm — while `Table.TryAutoCompact()` (`Table.Compaction.cs:36`) exposes **no counter**, so
+"did a compaction overlap this phase?" cannot be answered from the report today. A background compaction
+landing inside a measured phase is exactly the shape that yields a bimodal 3–4× spread.
+
+**What.** (1) Add a diagnostic `SHARPCOREDB_COMPACTION_THRESHOLD` override (precedent:
+`SHARPCOREDB_INLINE_BYTES`) and, if cheap, a compaction counter in the profiler. (2) Run `--fair-ni` three
+ways — default threshold, `0` (off), and a value above the pass total — at 5 paired reps, and compare the
+**per-rep variance** rather than the medians. (3) If the variance collapses, that is the campaign's noise
+cause with a name, and the follow-up is a measurement-protocol change plus, if warranted, an owner
+decision on the default.
+
+**Acceptance.** A verdict on whether compaction explains the variance: `KEPT` (variance collapses with it
+disabled), `REJECTED` (it does not, with the variance table as evidence), or `BLOCKED`. **Either outcome
+is a success** — a refuted cause still removes it from the list, and the variance table itself is a
+permanent asset for reading every later result. No `src/` change beyond a diagnostic switch may ship
+without an owner decision.
 
 ---
 
@@ -475,18 +506,20 @@ fails.
 
 ## 8. Execution order and timeboxes
 
-| Order | Item | Timebox | Ships `src/`? | Why here |
-|---|---|---:|---|---|
-| 1 | **S1** two-sided regime banner | 1 | no | costs docs + harness only, and every later number depends on it |
-| 2 | **S3** trap-3 control re-measured | 2 | no | answers the plan's highest-value question *before* any build |
-| 3 | **S5** fair non-PK indexed arm | 1 | no | turns arm C from an artefact into a comparison; feeds the attribution S3 needs |
-| 4 | **S2** HOT index gate | 2 | yes | narrow, reversible, and independent of the layout question |
-| 5 | **S4** NativeAOT dispatch, measured | 1 | build cfg | helps every arm at once; measure-first |
-| 6 | **S6** shape-matched JIT/SIMD | 1 | yes | opportunistic; must never delay 1–5 |
+| Order | Item | Timebox | Ships `src/`? | Status | Why here |
+|---|---|---:|---|---|---|
+| 1 | **S1** two-sided regime banner | 1 | no | ✅ `KEPT` (`b11903e3`) | every later number depends on it |
+| 2 | **S3** trap-3 control re-measured | 2 | no | ⛔ `REJECTED` (`5494b594`) | answered before any build, and the plan §2.2 note was corrected |
+| 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, spread in session 21) | turns arm C from an artefact into a comparison |
+| 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
+| 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | **← next** | **must precede S4**: a measure-first item cannot be measured on a 3,7× noise floor |
+| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | blocked on S7 | helps every arm at once, but only readable once S7 explains the variance |
+| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | after S7 | opportunistic; must never delay the items above |
 
-**Total timebox: 8 sessions.** S3 and S5 are ordered before S2 deliberately: if arm C's gap turns out
-to be location-dominated, S2's value is smaller than it looks, and that ordering costs nothing while
-inverting it could waste two sessions.
+**Total timebox: 10 sessions** (8 as originally scoped, +2 for S7, which the S5 spread run added).
+S3, S5 and S7 all sit before a *build* deliberately: each is a measurement that decides whether the build
+is worth making, and each has now paid for itself — S3 refuted a hypothesis, S2 refuted its own target
+before a line of it shipped beyond a correct no-op gate, and S5 refuted one of its own cells.
 
 **Decision points.** If S3 returns `REJECTED` (the −24 % reproduces at capacity 24), arm C's target
 moves to a §9 owner decision rather than a build, and S2 becomes the plan's main lever. If S3 returns

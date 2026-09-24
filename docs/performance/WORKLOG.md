@@ -2958,6 +2958,44 @@ PageBased reports **no `index-maint` at all**, because the auto-`CreateHashIndex
 
 **5. What this changes in the plan.** Arm C's target stops being "an unattainable in-place update problem" and becomes **"close a 0,60× UPDATE on a shape where the other three operations already win"** — and §9 row 5 (the auto hash index per column) now has a measured counterpart: with a matched index set, our hash indexes are *faster* to maintain than SQLite's B-trees on DELETE. That weakens the case for narrowing the auto-index default, which is worth saying before the owner acts on row 5.
 
+---
+
+### 2026-09-24 (session 21, unattended continuation) — S5's spread is printed, and **it refutes the UPDATE cell while exposing something bigger: the noise is OURS, not the machine's**
+
+- Session: 1 of 1 for the S5 follow-up (the item's remaining acceptance gap)
+- Command(s): harness build ×1 · `quiet-machine.ps1` ×1 · `--fair-ni` with `SHARPCOREDB_BENCH_REPS=5` ×1
+- Regime: `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `quiet-machine.ps1` returned **`NOISY` 1 finding — Windows Search**, which restarted by itself; CPU 2,6 %, `MaxFreq` 100 %, disk queue 0. The `SHARPCOREDB_*` set was `SHARPCOREDB_BENCH_REPS=5`.
+- Verdict: **KEPT** — the arm now interleaves and prints the spread, and the spread does its job: it **refutes one cell and promotes a new, higher-priority item**
+- Commit: `test(bench)`: the S5 fair arm interleaves its arms and prints the paired spread
+- NEXT: **S7 — explain the engine-side variance** (new item, plan §4), because it is upstream of S4: S4 is a measure-first item and its measurement would inherit exactly this noise.
+
+**1. The arm was interleaved and the spread printed, which is what §6.4 asked for.** The previous version ran every SharpCoreDB rep and then every SQLite rep, so a slow window landed on one arm's block; the arm order now alternates each rep and the report prints the per-rep rows plus the **median of the paired ratios with its range**. Five paired reps:
+
+| | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB (median) | 148.640 | 176.607 | 142.527 | 281.640 |
+| SQLite (median) | 102.088 | 95.490 | 136.300 | 52.159 |
+| **median paired ratio** | **1,45×** | **1,85×** | **1,04×** | **5,33×** |
+| **range** | 1,28×–1,59× | 1,07×–2,26× | **0,47×–1,75×** | 2,62×–8,41× |
+
+**2. The spread refutes the UPDATE cell and supports the other three.** Per the rule the report now prints: a range that does not straddle 1,00× supports its cell's direction; one that does must be re-run, not rounded. **INSERT (1,28–1,59), READ (1,07–2,26) and DELETE (2,62–8,41) all clear 1,00× and stand. UPDATE spans 0,47×–1,75× and therefore does NOT** — the previous session's 0,60× UPDATE is **retracted as unsupported**, and the honest statement is "somewhere between 0,47× and 1,75×, unresolved at 5 reps".
+
+**3. The finding that matters more than the arm: our own per-rep variance is 2–4× while SQLite's is ≤ 5 % in the SAME window.**
+
+| phase | SharpCoreDB across 5 reps | SQLite across 5 reps |
+|---|---|---|
+| INSERT | 107.071 → 162.392 (**1,52×**) | 83.633 → 102.537 (1,23×) |
+| READ | 95.952 → 216.735 (**2,26×**) | 90.002 → 98.855 (1,10×) |
+| UPDATE | 63.870 → 237.537 (**3,72×**) | 135.099 → 137.338 (**1,02×**) |
+| DELETE | 136.844 → 430.020 (**3,14×**) | 49.874 → 52.823 (1,06×) |
+
+SQLite is very nearly **deterministic** (UPDATE ±1 % across five reps); ours is not. Both ran in the same process, on the same box, in alternating order within each rep. **Machine load cannot explain an asymmetry in which one engine is stable and the other is wild for five consecutive pairs**, so the variance is at least partly **engine-side** — which reframes session 16's "the load is Defender" finding: the filter is a real per-I/O cost, but it is not what makes *our* numbers move 3,7× while SQLite's move 1 %.
+
+**4. Prime suspect, named and falsifiable: automatic compaction.** `DatabaseConfig.ColumnarAutoCompactionThreshold` defaults to **1000** (`DatabaseConfig.cs:827`), documented as "when the sum of UPDATEs and DELETEs since the last compaction reaches this threshold, a background compaction is triggered". Each arm performs **10.000 updates + 10.000 deletes**, i.e. ~20 threshold crossings per arm, and `Table.TryAutoCompact()` (`Table.Compaction.cs:36`) exposes **no counter** — so "did a compaction overlap this phase?" is currently unanswerable from the report. A background compaction overlapping a measured phase is exactly the shape that produces a bimodal 3–4× spread. **This is a hypothesis, not a finding**, and it is cheap to test: a diagnostic `SHARPCOREDB_COMPACTION_THRESHOLD` override (precedent: `SHARPCOREDB_INLINE_BYTES`), run the fair arm with the threshold at 0 and at a value above the pass's total, and compare the per-rep variance. If the variance collapses with compaction out of the picture, the campaign's recurring `--gate` INCONCLUSIVE verdicts and 3–4× spreads have a single cause — and a single, addressable one.
+
+**5. Process note on the archive.** The `fair_ni_*.json` from this run was **not committed**, under a rule now stated mechanically so the decision stops being a judgement call: **an archive is committed only if the headline cells' ranges do not straddle 1,00×.** Here UPDATE straddles, so the run is not publishable as a whole; all five per-rep rows and the medians are quoted in this entry instead, and the JSON holds only the aggregates anyway.
+
+
 
 
 
