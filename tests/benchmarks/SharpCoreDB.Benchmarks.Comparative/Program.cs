@@ -538,16 +538,23 @@ class Program
 
     /// <summary>
     /// How many <b>discarded</b> warm-up reps to run before the measured ones (plan §6 rule 10, from S7's
-    /// verdict). Default 1; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables it, which is what makes this a
+    /// verdict). Default <b>3</b>; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables it, which is what makes this a
     /// protocol change rather than a hidden behaviour.
     /// <para>
-    /// The reason is measured, not assumed: in two independent 5-rep runs our per-rep numbers improved
+    /// The reason is measured, not assumed. In two independent 5-rep runs our per-rep numbers improved
     /// <em>monotonically</em> from rep 1 to rep 5 while SQLite's stayed flat, and because every rep builds a
-    /// fresh database only <em>process</em> state can carry across them. The cost is JIT tiering on a
-    /// 100 %-managed hot path — and <c>DOTNET_TieredCompilation=0</c> collapses the spreads (INSERT
-    /// 1,70× → 1,10×, DELETE 3,20× → 1,54×), which confirms it. Warm-up is used rather than that switch
-    /// because a warm-up rep measures the <b>shipped</b> configuration, while the switch measures one no
-    /// user runs; the switch stays a diagnostic for attributing variance.
+    /// fresh database only <em>process</em> state can carry across them — JIT tiering on a 100 %-managed hot
+    /// path. <c>DOTNET_TieredCompilation=0</c> collapses the spreads (INSERT 1,70× → 1,10×, DELETE
+    /// 3,20× → 1,54×), which confirms it. Warm-up is used rather than that switch because a warm-up rep
+    /// measures the <b>shipped</b> configuration, while the switch measures one no user runs.
+    /// </para>
+    /// <para>
+    /// <b>Why 3 and not 1.</b> One warm-up rep was tried first (session 23) and it removed the *monotone*
+    /// ramp but not the spread: the measured UPDATE cell still moved 2,05× per rep and its ratio range
+    /// straddled 1,00× (0,86–1,71×), so it could not be resolved. Raising it to 3 (session 25) collapsed
+    /// UPDATE's per-rep spread to <b>1,18×</b>, and a second independent run reproduced it at 1,26× — with
+    /// every one of the four cells' ranges clearing 1,00× in both runs (UPDATE 1,66–2,02× and 1,43–1,81×).
+    /// One warm-up rep was therefore <b>under-provisioned</b>, and the number that matters is this one.
     /// </para>
     /// </summary>
     static int ResolveWarmupReps()
@@ -555,12 +562,12 @@ class Program
         var value = Environment.GetEnvironmentVariable("SHARPCOREDB_WARMUP_REPS");
         if (string.IsNullOrWhiteSpace(value))
         {
-            return 1;
+            return 3;
         }
 
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
             ? Math.Max(0, parsed)
-            : 1;
+            : 3;
     }
 
     /// <summary>
@@ -1872,6 +1879,38 @@ class Program
     static readonly string[] FairNiAllColumns = ["name", "email", "age", "score", "data"];
 
     /// <summary>
+    /// A GC checkpoint for the fair arm (S7 follow-up). The UPDATE cell is the last unresolved one: our
+    /// per-rep UPDATE moves 2,05× while SQLite's moves 1,04×, and compaction, CPU, disk and thermal are all
+    /// ruled out by measurement. The remaining asymmetry is allocation — this engine allocates roughly
+    /// 750 B per update (in-place-patch 175 + row-locate-index 279 + engine-write 302, measured) against
+    /// SQLite's near-zero per row — so a collection landing inside a measured pass is a live suspect, and
+    /// a collection count per phase is what turns that from a story into a reading.
+    /// </summary>
+    static (int G0, int G1, int G2, long Alloc) GcCheckpoint() =>
+        (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), GC.GetTotalAllocatedBytes(precise: false));
+
+    /// <inheritdoc cref="GcCheckpoint"/>
+    static string GcDelta((int G0, int G1, int G2, long Alloc) from, (int G0, int G1, int G2, long Alloc) to) =>
+        $"gen0+{to.G0 - from.G0} gen1+{to.G1 - from.G1} gen2+{to.G2 - from.G2}"
+        + $" alloc+{(to.Alloc - from.Alloc) / 1048576.0:F1}MB";
+
+    /// <summary>
+    /// Turns the write-path profiler on for the fair arm's UPDATE phase only, from
+    /// <c>SHARPCOREDB_FAIR_PROFILE_UPDATE=1</c>. Diagnostic only, and the same shape the document job
+    /// already uses (<c>SHARPCOREDB_MAIN_PROFILE_UPDATE</c>): <c>Reset</c> before the phase so the report
+    /// describes the UPDATE batch alone, <c>Disable</c> after so the remaining phases are not stamped.
+    /// <para>
+    /// It exists because the fair arm's UPDATE cell is the campaign's last unresolved measurement — it
+    /// varies 2,07× per rep while SQLite's varies 1,04× — and the two probes run so far have only produced
+    /// <em>negatives</em>: allocation is constant across reps (+31,8–31,9 MB) and the compaction counters
+    /// read 0. A stage table per rep is what converts "something in this pass varies" into "this stage
+    /// varies", which is the difference between a story and an attribution.
+    /// </para>
+    /// </summary>
+    static bool FairProfileUpdate() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_FAIR_PROFILE_UPDATE") == "1";
+
+    /// <summary>
     /// The fair comparison the default job cannot provide.
     /// <para>
     /// The default job compares a SharpCoreDB table with <b>no primary key</b> and a predicate on an
@@ -2266,6 +2305,13 @@ class Program
             ReportCompactions("after READ");
 
             // UPDATE through the secondary index, setting the same score column SQLite's side sets
+            var gcBeforeUpdate = GcCheckpoint();
+            if (FairProfileUpdate())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var updateStmts = new List<string>(UpdateCount);
             for (int i = 0; i < UpdateCount; i++)
@@ -2280,6 +2326,12 @@ class Program
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
             ReportCompactions("after UPDATE");
+            Console.WriteLine($"    [diag] UPDATE GC: {GcDelta(gcBeforeUpdate, GcCheckpoint())}");
+            if (FairProfileUpdate())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
 
             // DELETE through the secondary index
             sw.Restart();

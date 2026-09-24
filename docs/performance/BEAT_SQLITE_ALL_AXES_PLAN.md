@@ -373,6 +373,20 @@ UPDATE) is the index set: with five secondary indexes and no rowid predicate SQL
 every index, while our hash entries are cheap to remove. See **S7** — this run also showed that the
 per-rep variance is ours, not the machine's.
 
+**UPDATE resolved 2026-09-24 (session 25) — and it is a win.** With `SHARPCOREDB_WARMUP_REPS=3` (see §6
+rule 10), two independent runs give **all four cells clear of 1,00×**:
+
+| run | INSERT | READ | UPDATE | DELETE |
+|---|---|---|---|---|
+| `WARMUP_REPS=3`, run 1 | **1,48× (1,47–1,50)** | **2,09× (1,92–2,16)** | **1,87× (1,66–2,02)** | **7,59× (3,13–7,79)** |
+| `WARMUP_REPS=3`, run 2 | **1,56× (1,52–1,57)** | **2,06× (1,43–2,08)** | **1,78× (1,43–1,81)** | **7,75× (3,00–7,96)** |
+
+**Four of four ahead**, against the default job's no-PK arm of 0,67 / 0,76 / 0,24 / 0,31 — the UPDATE cell
+moved **~7×** with no engine optimisation at all. Both archives are committed (`Reps: 4`, pragma set
+recorded). **Residual wrinkle:** DELETE's range is wide because one rep per run is slow on DELETE
+(150.623 / 161.641 against 326k–401k) while SQLite stays flat — the cell stands regardless, and
+`SHARPCOREDB_WARMUP_REPS` is the dial if the *range* ever needs tightening.
+
 ### S6 — Shape-matched runtime wins, only where the JIT's own conditions hold *(opportunistic)* — **timebox 1 session**
 
 **Why.** The .NET JIT's measured wins are **shape-conditional**: assertions derived from `switch`
@@ -508,13 +522,16 @@ does not replace it.
    *shipped* engine, whereas `DOTNET_TieredCompilation=0` measures a configuration no user runs, so that
    switch is a **diagnostic for attributing variance only**. Consequence: any ratio this campaign
    published from a cold single rep is re-read with that in mind, and re-taken if a cold rep decided it.
-   **Implemented and confirmed 2026-09-24 (session 23):** `SHARPCOREDB_WARMUP_REPS` (default **1**, `0`
-   disables) runs the real arm pair and discards it. It reproduces the diagnostic switch's effect **without
-   changing the configuration**: INSERT's spread fell **1,70× → 1,16×** (tiering off: 1,10×) and DELETE's
-   **3,20× → 1,54×** (tiering off: 1,54×); rep 1 stopped being the outlier and the variability became
-   scattered instead of ordered. **Still open:** UPDATE keeps a 2,05× spread and a range that straddles
-   1,00× (**0,86×–1,71×**) *after* the warm-up, so it is now a genuine open question rather than a
-   measurement defect.
+   **Implemented and confirmed 2026-09-24 (session 23):** `SHARPCOREDB_WARMUP_REPS` runs the real arm pair
+   and discards it. It reproduces the diagnostic switch's effect **without changing the configuration**:
+   INSERT's spread fell **1,70× → 1,16×** (tiering off: 1,10×) and DELETE's **3,20× → 1,54×** (tiering off:
+   1,54×); rep 1 stopped being the outlier and the variability became scattered instead of ordered.
+   **The default is 3, not 1 (session 25).** One warm-up rep removed the *monotone* ramp but not the
+   spread — the measured UPDATE cell still moved 2,05× and its range straddled 1,00× (0,86–1,71×). Three
+   warm-up reps collapsed that spread to **1,18×**, reproduced at **1,26×** in a second independent run,
+   with **all four cells' ranges clearing 1,00× in both** (UPDATE **1,87× [1,66–2,02]** and **1,78×
+   [1,43–1,81]**). One warm-up rep was simply under-provisioned. If a range ever straddles again, this
+   count is the dial — it has now demonstrably moved exactly that.
 
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
@@ -553,7 +570,7 @@ fails.
 |---|---|---:|---|---|---|
 | 1 | **S1** two-sided regime banner | 1 | no | ✅ `KEPT` (`b11903e3`) | every later number depends on it |
 | 2 | **S3** trap-3 control re-measured | 2 | no | ⛔ `REJECTED` (`5494b594`) | answered before any build, and the plan §2.2 note was corrected |
-| 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, spread in session 21) | turns arm C from an artefact into a comparison |
+| 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, `e686727d`); **UPDATE resolved 1,78–1,87× (session 25)** | turns arm C from an artefact into a comparison — and it did |
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
 | 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
 | 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ **`BLOCKED`** on the missing VS C++ workload (§9 row 6) | hypothesis **untested, not refuted** — see the entry |

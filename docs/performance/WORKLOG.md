@@ -3108,6 +3108,40 @@ So, measured on a fair shape with a warm-up and a printed spread: **SharpCoreDB 
 
 **6. One finding is deliverable anyway, and it is the deployment caveat S4 was told to watch for.** AOT being unavailable is a *build-machine* fact, not a product fact — but the reason it is unavailable here is worth recording for the product story: **NativeAOT requires the Visual Studio C++ workload on the build machine**, which sits alongside `net11`'s raised minimum hardware requirements (research finding `[9]`) as a real, non-obvious cost of "just publish AOT". Anyone who later writes that recommendation into the docs must state both.
 
+---
+
+### 2026-09-24 (session 25) — the UPDATE cell is **resolved, and it is a win**: **1,87× and 1,78×** in two independent runs, every cell's range clear of 1,00×. The cause was that **one warm-up rep was under-provisioned** — three collapse UPDATE's per-rep spread from **2,05× to 1,18× and 1,26×**
+
+- Session: 1 of 1 (the UPDATE-cell follow-up the user chose over S6)
+- Command(s): `--fair-ni` ×4 — one at `SHARPCOREDB_BENCH_REPS=5` with `SHARPCOREDB_FAIR_PROFILE_UPDATE=1` (per-rep stage tables + GC deltas), then ×2 at `SHARPCOREDB_WARMUP_REPS=3` with `BENCH_REPS=4`, plus the harness build
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `quiet-machine.ps1` was not re-run before each arm; CPU 2,6–2,8 %, `MaxFreq` 100 %, disk queue 0 in the runs that were checked
+- Verdict: **KEPT** — the UPDATE cell stands at **1,78–1,87×**, and the warm-up default moves from 1 to 3
+- Commit: `test(bench)`: the UPDATE cell resolved — three warm-up reps, not one, and the first committed fair-arm archives
+- NEXT: **S6** (shape-matched JIT/SIMD, the last plan item), with DELETE's residual single-rep outlier the only remaining wrinkle on the fair arm.
+
+**1. Three probes produced only negatives before the answer turned out to be the protocol, not the engine.** (a) **GC volume:** per-phase `GC.CollectionCount`/`GetTotalAllocatedBytes` instrumentation showed allocation is **constant across reps — +31,8 to +31,9 MB per UPDATE pass** — while the pass varied 2,07×, so allocation *volume* is not the driver. (b) **GC timing:** exactly one gen2 collection appeared, in the slowest rep, so it is a *contributor in one rep* and not the cause. (c) **Stage attribution:** with `SHARPCOREDB_FAIR_PROFILE_UPDATE=1` giving a stage table per rep, **every stage scaled together with the pass** (engine-write 5,8×, row-locate-index 2,1×, index-maint 2,05×, in-place-patch 1,95× from slowest to fastest) and the named stages accounted for only **20–29 %** of the pass in every rep. Pass-wide co-scaling with no allocation change points at *process* state, not at a code path — which is what sent me back to the warm-up count.
+
+**2. The measurement that resolved it: the warm-up was too short, and the earlier ramp had not actually gone.** With one discarded rep, the *measured* reps still improved monotonically (session 24: 124k → 110k → 204k → 224k), i.e. the ramp had moved rather than vanished. Raising `SHARPCOREDB_WARMUP_REPS` to **3**:
+
+| run | INSERT | READ | UPDATE | DELETE | UPDATE per-rep spread |
+|---|---|---|---|---|---|
+| `WARMUP_REPS=3`, run 1 | **1,48× (1,47–1,50)** | **2,09× (1,92–2,16)** | **1,87× (1,66–2,02)** | **7,59× (3,13–7,79)** | **1,18×** |
+| `WARMUP_REPS=3`, run 2 | **1,56× (1,52–1,57)** | **2,06× (1,43–2,08)** | **1,78× (1,43–1,81)** | **7,75× (3,00–7,96)** | **1,26×** |
+| `WARMUP_REPS=1` (session 24) | 1,45× (1,35–1,56) | 2,00× (1,36–2,24) | **0,98× (0,86–1,71)** | 6,39× (5,07–8,24) | 2,05× |
+
+**All four cells now clear 1,00× in both runs**, and the UPDATE cell — the campaign's last unresolved measurement — reads **1,78–1,87× in SharpCoreDB's favour**. Two independent runs, the same conclusion. The change is committed as the new default rather than left as a flag, because the evidence for three over one is measured and the mechanism is understood.
+
+**3. What this means for the campaign, stated plainly.** On the fair shape, measured with three discarded warm-up reps, a printed paired spread and a warm-up rep that measures the *shipped* configuration:
+
+**INSERT 1,48–1,56× · READ 2,06–2,09× · UPDATE 1,78–1,87× · DELETE 7,59–7,75× — four of four, ahead.**
+
+Against the default job's no-PK arm of **0,67 / 0,76 / 0,24 / 0,31**. The UPDATE cell moved by **~7×** (0,24× → 1,78×) without a line of engine optimisation: the entire change is **fixing the comparison** (S5: another engine's rowid shortcut plus an index-set mismatch) and **fixing the measurement** (S7: warm-up). That is the campaign's central result and it was invisible until both were corrected.
+
+**4. The archives are now committable, and that is a milestone rather than a rule change.** The session-21 rule was "commit only if the headline cells' ranges do not straddle 1,00×"; with three warm-up reps they no longer do, so **the two `fair_ni_*.json` archives are committed — the first publishable results this campaign has produced.** They carry `Reps: 4` and the SQLite pragma set, so a reader can tell a median from a single shot and reproduce the comparator.
+
+**5. One wrinkle left open, recorded rather than smoothed over.** DELETE's range is wide in both runs (**3,00–3,13×** at its worst) because **one rep per run** shows a slow DELETE (150.623 and 161.641 against 326k–401k in the others) while SQLite stays flat at ~50k. The cell stands either way — even the slow reps are 3× ahead — so this is second-order, but it is the next thing to look at if DELETE's *range* rather than its *direction* ever needs tightening, and `SHARPCOREDB_WARMUP_REPS` is the dial that just proved it can move this.
+
+
 
 
 
