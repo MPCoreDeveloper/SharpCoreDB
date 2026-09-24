@@ -245,6 +245,16 @@ class Program
         // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
         // machine drift affects both arms of each pair equally. Arms are config variants named by
         // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
+        // Optional: --update-parse-cost → split the batch dispatcher's per-statement parse allocation into its
+        // components, so the UPDATE optimisation is aimed at a measured piece. Diagnostic only; measures the
+        // pieces in isolation rather than adding sub-stages inside the 10.000-statement loop, which would
+        // perturb the phase it describes.
+        if (args.Any(a => a.Equals("--update-parse-cost", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunUpdateParseCostDiagnostic();
+            return;
+        }
+
         // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
         // the columns side by side, so the cost of protection is a published per-operation number
         // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
@@ -3301,6 +3311,77 @@ class Program
     /// arm — the §3-1c audit table stays as the historical record. Publish the columns together or not
     /// at all.
     /// </remarks>
+    /// <summary>
+    /// Diagnostic only (<c>--update-parse-cost</c>): splits the <b>531 B/statement</b> that worklog session 31
+    /// attributed to the batch dispatcher's <c>parse</c> stage into the components the canonical UPDATE path
+    /// actually allocates, so the next optimisation targets a measured piece instead of an assumed one.
+    /// <para>
+    /// The obvious alternative — sub-stages inside the 10.000-statement loop — is not viable: every stage stamp
+    /// is a clock read, so four stamp/add pairs per statement would perturb the very phase being described.
+    /// Measure the pieces in isolation instead, and report bytes as well as time.
+    /// </para>
+    /// <para>
+    /// BCL-only on purpose: it touches no engine internals, so the numbers describe the allocation itself rather
+    /// than this harness's access to it. Whatever remains after the measured components is what the canonical
+    /// scanner (<c>TryScanCanonicalDml</c>) and <c>SqlParser.ParseValue</c> are left with.
+    /// </para>
+    /// </summary>
+    static void RunUpdateParseCostDiagnostic()
+    {
+        const int N = 500_000;
+
+        // Deliberately NOT const: with a constant literal the compiler folds `"id" + " = " + whereLit` into a
+        // single interned string, so the first version of this diagnostic reported **0 B and 1,9 ns** for the
+        // WHERE rebuild — it was measuring the compiler, not the runtime. Built at runtime instead, so the
+        // concatenation actually happens in the loop.
+        string whereLit = new string(['5']);
+        string setCol = new string(['s', 'c', 'o', 'r', 'e']);
+
+        static (double NsPerOp, double BytesPerOp) Measure(int n, Action body)
+        {
+            // Warm the shape first: a tiered-JIT promotion inside the measured loop would be charged to it.
+            for (int i = 0; i < 20_000; i++)
+            {
+                body();
+            }
+
+            long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < n; i++)
+            {
+                body();
+            }
+            sw.Stop();
+            long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+            return (sw.Elapsed.TotalNanoseconds / n, (allocAfter - allocBefore) / (double)n);
+        }
+
+        Console.WriteLine("UPDATE canonical parse — per-statement component cost");
+        Console.WriteLine();
+        Console.WriteLine($"  iterations {N:N0} per shape, each shape warmed before measuring");
+        Console.WriteLine();
+        Console.WriteLine($"  {"shape",-48}{"ns/op",11}{"B/op",10}");
+
+        var dict = Measure(N, () =>
+        {
+            var d = new Dictionary<string, object>(1) { [setCol] = 5L };
+            _ = d.Count;
+        });
+        var concat = Measure(N, () => { _ = "id" + " = " + whereLit; });
+        var bare = Measure(N, () => { _ = new object(); });
+
+        Console.WriteLine($"  {"A  Dictionary<string,object>(1) + one entry (the `updates` arg)",-48}{dict.NsPerOp,11:F1}{dict.BytesPerOp,10:F0}");
+        Console.WriteLine($"  {"B  WHERE rebuild: \"col\" + \" = \" + literal",-48}{concat.NsPerOp,11:F1}{concat.BytesPerOp,10:F0}");
+        Console.WriteLine($"  {"   reference: bare object allocation",-48}{bare.NsPerOp,11:F1}{bare.BytesPerOp,10:F0}");
+        Console.WriteLine();
+        Console.WriteLine("  Session 31 measured the whole `parse` stage at 531 B/statement across 10.000 calls, in every");
+        Console.WriteLine("  rep. A + B is the part this diagnostic can name; the residue is what the canonical scanner");
+        Console.WriteLine("  and SqlParser.ParseValue are left with. Whichever component dominates is the one worth");
+        Console.WriteLine("  removing — and that decision should not be taken from the 531 B total alone, because the");
+        Console.WriteLine("  tuple also has to keep a non-empty WHERE for TryBulkUpdateContiguousFixedWidth (B8) to fire.");
+    }
+
     static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)
     {
         const int Failed = -1;

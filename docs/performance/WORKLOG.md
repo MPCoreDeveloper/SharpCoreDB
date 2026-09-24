@@ -3470,6 +3470,36 @@ None of the first two is a fact about encryption, and the third says so out loud
 **5. One thing that is *not* the fix, so the next session does not chase it.** Arm B's DELETE (0,41× AppendOnly, 0,31× PageBased) is *worse* than its UPDATE, and DELETE already has the B3 structured path. So the DELETE deficit is not an allocation problem and B3 did not solve it — on the PK shape the cost is the row operation itself against SQLite's `INTEGER PRIMARY KEY`-is-rowid in-place edit, which session 32 identified. **UPDATE is the phase with an unattributed, now-located, structural cost; DELETE's is attributed and is a different kind of problem.** Keeping those separate is the whole reason the stage table was built.
 
 **6. Scoping note added after reading the reference implementation (same session, before the edit was attempted).** `DeleteMultipleKeys` (`Table.CRUD.cs:3710`) is **not a small overload** — it is 80+ lines of layered hot-path code: a B9 contiguous fixed-width bulk branch, B1 key-column-restricted decoding, an A1 whole-file in-memory resolution pass, a sequential ascending-PK batch resolver, a PK fast path and a hash-index fast path, with a generic fallback that rebuilds the WHERE lazily. Mirroring it for UPDATE is a different job again, because an update must **patch** the located row rather than tombstone it, which is where the `row-snapshot` (9,9 MB, one call) and `in-place-patch` stages come from. **So the NEXT item is a real engineering cycle — estimate it as such, not as "add the sibling overload".** Also worth recording from the same read: even `DeleteMultipleKeys` **does** rebuild `Col + " = " + Literal` strings (lines 3725–3729) whenever it wants the B9 contiguous path, so the "no per-statement string allocation" comment is true of the paths that avoid needing the string, not of the method unconditionally. The next session should measure before assuming where the UPDATE win actually is, because this campaign has now been corrected four times by exactly that assumption.
+
+---
+
+### 2026-09-24 (session 37) — the UPDATE refactor is **cancelled by its own measurement**: the 531 B/statement is allocation *bytes*, not *time*, worth ≤ 1,6 % of the cell against a 156 % gap
+
+- Session: 1 of 1 (item 3, the measurement step that had to come before the edit)
+- Command(s): `--update-parse-cost` ×2 (the first version measured the compiler and was thrown away)
+- Regime: n/a — a micro-benchmark of BCL allocation shapes, no file I/O, no engine internals. Nothing here depends on the machine beyond the usual
+- Verdict: **KEPT (the item is re-scoped and a session is saved)** — the planned change would have been speculative, and the measurement says so before it was written
+- Commit: `test(bench)`: `--update-parse-cost`, and why the UPDATE refactor is not worth building
+
+**1. The components, measured in isolation, 500.000 iterations per shape after a 20.000-iteration warm-up.**
+
+| shape | ns/op | B/op |
+|---|---:|---:|
+| **A** `Dictionary<string,object>(1)` + one entry — the `updates` argument | **91,9** | **240** |
+| **B** WHERE rebuild `"col" + " = " + literal`, at runtime | **13,1** | **40** |
+| reference — bare `object` allocation | 5,9 | 24 |
+
+**A + B = 280 B of the 531 B (53 %)**, and the residue is what the canonical scanner and `SqlParser.ParseValue` are left with.
+
+**2. The first version of this diagnostic was wrong, and the way it was wrong is the point.** It reported **0 B and 1,9 ns** for the WHERE rebuild, because `whereLit` was a `const string` — so `"id" + " = " + whereLit` is **constant-folded by the compiler into one interned literal** and never concatenates at runtime. It was measuring `csc`, not the CLR. Fixed by building both strings at runtime (`new string(['5'])`) and re-run. **A diagnostic that silently measures the optimiser is worse than no diagnostic**, and this one was caught only because a zero-byte result for an operation that obviously allocates is not a plausible number — the same instinct that has caught four wrong ratios in this campaign, now applied to an instrument.
+
+**3. The measurement cancels the refactor, which is its real output.** A + B are **105 ns of the ~1.630 ns per statement** that the `parse` stage costs (session 31: 16,3 ms over 10.000 calls on a warm rep, 10.000 calls and 531 B in every rep). So removing *both* — the `Dictionary` **and** the WHERE rebuild, i.e. the entire "structured predicate" item I scoped in session 36 — buys **≈ 6 % of `parse`**, and `parse` is **≈ 11–33 % (median ≈ 25 %)** of the UPDATE phase. **Ceiling: ~1,6 % of the UPDATE cell.** The UPDATE deficit is **0,39× against 1,00×, a 156 % gap.** Writing an 80-line mirror of `DeleteMultipleKeys` for 1,6 % would have been the exact speculative change this plan's rules exist to prevent — **and it would have looked like progress, because 531 B/statement is a real and ugly number.** Bytes are not time: the Dictionary is 45 % of the allocation and 5,6 % of the time.
+
+**4. Where the UPDATE time actually is, now that the false lead is closed.** Of the ~1.630 ns/statement in `parse`, ~1.525 ns is the canonical scanner plus `SqlParser.ParseValue`. And `parse` is only the *largest single* stage — session 31's table has **`row-locate-index` (~16–24 %) + `index-maint` (~11–20 %) ≈ 32–40 % combined**, which is the bigger block. Both matter; neither is an allocation problem.
+
+**5. And the sharper lead, which replaces this item: `index-maint` fires 20.000 times for 10.000 updates.** Session 31: `index-maint 9,0 ms · **20,000** calls · 43 B/call`. **That is two index operations per statement** — on an update that changes one **non-indexed** column (`score`) and does not touch the PK (`id`). An in-place patch of an unindexed column should need **zero** index maintenance, and even a relocated row should need at most one re-point. Twenty thousand is where the UPDATE phase's second-largest block is being spent, and unlike the 531 B it is in the *time* column (7,6–20,3 % of the phase). **This is the next target, and it is a correctness-adjacent question — "which index operation runs twice, and why" — not an optimisation.** The session-36 item ("give UPDATE the B3 structured predicate") is **re-scoped to this** and the predicate work is dropped.
+- NEXT: **`index-maint` runs twice per UPDATE** (20.000 calls for 10.000 statements) on an update that changes one non-indexed column and leaves the PK alone — find which two index operations those are and whether either is necessary. That is 7,6–20,3 % of the phase and it is *time*, unlike the 531 B. Do not re-open the structured-predicate work: session 37 measured its ceiling at ~1,6 % against a 156 % gap.
+
 - NEXT: **give UPDATE the B3 structured predicate** (`Database.Batch.cs:888` — stop rebuilding `where` per statement; mirror `DeleteMultipleKeys`' `(Column, Literal)` form and the dictionary-free INSERT fast path), then the full core suite and `--gate`. Internal only, precedent-backed, and it targets the one phase that is behind in *both* engines (arm B UPDATE 0,39× AppendOnly / 0,47× PageBased). DELETE's deficit is a different problem and is already attributed.
 
 
