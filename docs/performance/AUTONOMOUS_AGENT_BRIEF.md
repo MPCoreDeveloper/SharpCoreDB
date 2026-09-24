@@ -302,6 +302,15 @@ failure.
 
 ### 5.3 P1 — default-job UPDATE/DELETE (0.24× / 0.31×) — *measurement-first, lower confidence*
 
+**STATUS 2026-09-23: CLOSED — `REJECTED (documented)`, timebox rule applied; next item is 5.4.** The count-based
+attribution table now exists for the two `--dual-mode` arms (six interleaved profiled passes, plan §9) and it says the
+residual is **(a) AEAD-per-record**, which is the encryption contract and not a defect (`in-place-patch` 8,3 ms vs
+1,2 ms for the *same* 175 B/call; `commit-overwrites` writes 1,60 MB vs 0,55 MB for the same 10.000 overwrites),
+**(b) `parse` (14,2 %, 10.000 × 531 B)**, shape-inherent to 10.000 distinct literal statements, and **(c) two candidates
+that need an owner decision, not a benchmark** (`commit-overwrites`' non-prep half on the durability boundary, and
+`index-maint`). The 12,6 MB snapshot that dominated this item is 5,7 % of the pass, one call, and its per-record
+fallback was already measured worse.
+
 - The reconciliation is done; the 6.2× between the fair-PK arm and the PK-less arm is **real but not
   yet explained**. Four plausible readings have already failed their control runs.
 - **Durable output:** priority 1 is now a **count-based** attribution of `UpdateMultiple`'s
@@ -331,6 +340,19 @@ failure.
   `BLOCKED` or `REJECTED`, and move to 5.4.
 
 ### 5.4 Providers re-validation — *after every core change*
+
+**STATUS 2026-09-23/24 (session 12): DONE for this build — with one honest caveat about the SQL ladder.** The three
+harness arms and the five provider suites were re-run on the current build (results archived in the project's
+`results/`), the worklog's session-12 entry carries the tables, and **no provider re-introduced row-by-row overhead**:
+EFCore 116, EFCore.Functional 3, Dapper 3, Linq2DB 24, Sync 135 = **281 tests, 0 failures** (YesSql/`Data.Provider` have
+no separate suite; they are exercised inside the core and functional projects). The caveat: **the SQL/Direct/StructRow
+ladder run is single-shot per invocation, and on this machine its own SQL cell varies 0,31–0,69× across four runs of the
+identical binary** (our arm moved 35K → 84K ops/s while the same-run SQLite moved 9 %), so §5.4's ladder half is reported
+as **"no detectable regression"** rather than as a comparison — Direct (0,83 vs the 0,88 recorded) and StructRow
+(0,94 vs 0,96) reproduce the recorded picture, and the deterministic columns (`--multirowinsert` 3.556 B/row, data file
+2.320.000 B, arena 0 B; `--pk` fixed-width UPDATE/DELETE/READ 1,18× / 1,14× / 1,13× ahead of SQLite) are unchanged. **A
+future §5.4 should run the ladder arm three times and report medians, or treat the ladders as tracked arms in their own
+right** — running it once and quoting the ratio is what the recorded 0,63× did.
 
 Re-run the comparative harness (`--pk`, `--pk-default`, `--multirowinsert`) plus the provider test
 projects (EF Core, Dapper, Linq2DB, ADO.NET/`Data.Provider`, YesSql, Sync) and report the

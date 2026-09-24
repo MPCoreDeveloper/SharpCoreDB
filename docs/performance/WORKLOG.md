@@ -2549,6 +2549,47 @@ The `resolved inline capacity 24` line is the proof that the previous session's 
 **4. What this changes.** §5.3's next candidates, in the order the table implies: `commit-overwrites` (16,4 %, one 1,5 MB call — the durability boundary, so any change there is a durability decision), then `index-maint` (7,6 %, 43 B × 20.000), then the locate (13,9 %, already reduced twice). Nothing was changed in `src/`.
 
 
+### 2026-09-23/24 (session 12, unattended continuation) — §5.3 closed as `REJECTED (documented)` on its own timebox rule; §5.4 re-validated the providers and found the ladder arm's own noise is the story
+- Session: 12 of 2026-09-22/24
+- Command(s): `--pk`, `--pk-default`, `--multirowinsert`, the default SQL/Direct/StructRow ladder run **×4**, and five provider suites by EXE (`SharpCoreDB.EntityFrameworkCore.Tests`, `…Functional.EntityFrameworkCore/ Dapper/ Linq2DB`, `…Provider.Sync.Tests`)
+- Regime: `REGIME: no SHARPCOREDB_* switches set` on every run (checked in each output)
+- Verdict: **KEPT (docs + harness only, no `src/` change)** — §5.3 is closed with its attribution table, §5.4 is green on every provider suite, and the harness can no longer write evidence into an ignored folder
+- Commit: `test(bench)`: all results writers anchor at the project dir · this entry · plan §9's §5.3 close · brief §5.3/§5.4 · the six runs' archived `results/*.json`
+- NEXT: nothing open on the plan's list except the two owner-decision candidates §5.3 names and the unsafe-backend item for its owner
+
+**1. §5.3's table, both arms side by side** (six interleaved profiled passes; full text in plan §9):
+
+| stage | default (encrypted) | raw | delta |
+|---|---:|---:|---:|
+| `commit-overwrites` | 19,5 ms / 1,60 MB | 3,4 ms / 0,55 MB | +16,1 ms, **3× the bytes** |
+| `in-place-patch` | 8,3 ms | 1,2 ms (**same 175 B/call**) | +7,1 ms |
+| `engine-write` | 15,6 ms | 6,0 ms | +9,6 ms |
+| `row-locate-index` | 16,6 ms | 10,6 ms | +6,0 ms |
+| `commit-ovw-prep` | 5,1 ms | 0,6 ms | +4,5 ms |
+| `row-snapshot` | 6,8 ms / 12,6 MB / **1 call** | 4,1 ms / 12,6 MB / 1 call | +2,7 ms |
+
+One cause explains the pattern: **AEAD is per record**, so patching one field re-encrypts and re-integrates the whole record — hence 7× the patch time at *identical* allocation, and a commit that writes whole frames instead of the changed bytes. `parse` (14,2 %, 10.000 × 531 B) is shape-inherent (10.000 distinct literal statements). Per the item's own rule ("2 sessions, hard stop … mark BLOCKED or REJECTED and move to 5.4"), §5.3 is closed; the snapshot that dominated it is 5,7 % of the pass.
+
+**2. §5.4's ladder runs — four runs of identical code, one at a time, each with its own same-run SQLite reference.** This is the part that needed doing twice:
+
+| cell | run 1 | run 2 | run 3 | run 4 | median | 2026-09-22 reading |
+|---|---:|---:|---:|---:|---:|---:|
+| SQL INSERT | 0,31 | 0,48 | 0,69 | 0,63 | 0,55 | 0,63 |
+| SQL READ | 0,33 | 0,66 | 0,72 | 0,52 | 0,59 | — |
+| SQL UPDATE / DELETE | 0,21 / 0,22 | 0,18 / 0,29 | 0,18 / 0,28 | 0,21 / 0,26 | 0,20 / 0,27 | — |
+| Direct INSERT / READ | 0,77 / 1,25 | 0,83 / 1,53 | 0,83 / 1,30 | 0,97 / 1,30 | 0,83 / 1,30 | 0,88 / 1,34 |
+| Direct UPDATE / DELETE | 0,55 / 0,45 | 0,50 / 0,64 | 0,44 / 0,50 | 0,40 / 0,71 | 0,47 / 0,57 | — |
+| StructRow INSERT / READ | 0,98 / 1,23 | 0,91 / 1,30 | 0,97 / 1,21 | 0,87 / 1,12 | 0,94 / 1,22 | 0,96 / — |
+
+**The Direct and StructRow ladders reproduce the recorded picture (0,83 vs 0,88 and 0,94 vs 0,96 on INSERT; 1,30 vs 1,34 on Direct READ). The SQL ladder is the finding: its own spread across four runs of the *same binary* is 0,31-0,69 on INSERT** — SCDB's SQL-INSERT arm read 35.121 / 58.235 / 84.481 / 78.753 while SQLite's read 112.207 / 122.429 / 122.239 / 125.796 (9 % spread), so **the variance is on our side of the ratio**. Consequence, stated as a rule rather than as a number: a single run of this shape cannot support a claim in either direction, including the brief's recorded 0,63×, which was one run. §5.4's ladder half therefore **passes as "no detectable regression"**, not as a comparison.
+
+**3. The deterministic columns — §5.4's verdict-worthy half.** `--multirowinsert`: **3.556-3.562 B/row, data file 2.320.000 B, overflow arena 0 B** — byte-identical to the recorded run, so the 09-22 layout changes are still in force (its rows/s cell read 70.619 against the recorded 84.263 and is not claimed, same code path and same allocation). `--pk`: fixed-width plaintext **UPDATE 318.799 / DELETE 416.411 / READ 114.004** vs SQLite 270.277 / 366.700 / 101.252 = **1,18× / 1,14× / 1,13× ahead**; at-rest 1,06× / 1,04× / 0,91×; legacy 0,50× / 0,59× / 0,69×; INSERT 0,79× / 0,78× / 0,77× (FW / legacy / at-rest). `--pk-default`: **0,70× INSERT, 0,57× READ, 0,48× UPDATE, 0,59× DELETE**, inside the recorded band.
+
+**4. Providers by EXE:** EFCore **116**, EFCore.Functional **3**, Dapper **3**, Linq2DB **24**, Sync **135** = **281 tests, 0 failed**; core suite **1926 / 0 / 16**; `SharpCoreDB.sln` builds with **0 errors**. That is the check the 09-22/23 core changes (inline default 16 → 24, §8c migration, `.scdb` growth knob) required, and it is green.
+
+**5. A provenance defect found and fixed on the way.** The documented invocation runs the harness from the repo root, where a `results/` folder exists **but is git-ignored** (`.gitignore: /results/`) while the tracked evidence lives in the project's `results/`. Every writer except the dual-mode arm resolved the path from the process CWD, so **all six §5.4 runs above initially landed in the ignored folder** — the same trap that made sessions 8-10 re-run the `--scdb` arm. One `ResultsDirectory()` helper now anchors every writer at the project directory; the `--scdb` arm got the same treatment in the previous commit, and the six runs were archived into the tracked folder so the numbers in this entry have files behind them.
+
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 

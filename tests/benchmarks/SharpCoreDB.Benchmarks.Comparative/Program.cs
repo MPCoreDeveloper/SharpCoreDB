@@ -243,8 +243,7 @@ class Program
         PrintComparison(results);
 
         // Save JSON
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -692,11 +691,9 @@ class Program
         // plan and the worklog, and sessions 8-10 had to be re-run to re-obtain them because this arm wrote no file.
         // Both caller shapes go in one document, together with the configuration that produced them (resolved inline
         // capacity, the growth setting and the row count), so a figure can be checked without re-reading stdout.
-        // Anchored at the PROJECT directory like the dual-mode arm, not the process CWD: the repo root has an ignored
-        // results/ folder, and only the project's one is the tracked evidence location.
-        string scdbProjectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-        string scdbResultsDir = Path.Combine(scdbProjectDir, ResultsDirName);
-        Directory.CreateDirectory(scdbResultsDir);
+        // Anchored at the PROJECT directory like every other writer (see ResultsDirectory()): the repo root has an
+        // ignored results/ folder, and only the project's one is the tracked evidence location.
+        string scdbResultsDir = ResultsDirectory();
         string scdbResultsPath = Path.Combine(
             scdbResultsDir,
             $"scdb_insert_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
@@ -891,6 +888,25 @@ class Program
         }
 
         return rowBatches;
+    }
+
+    /// <summary>
+    /// The results directory, anchored at the PROJECT directory instead of the process CWD.
+    /// <para>
+    /// Why it matters for evidence (2026-09-23): the documented invocation runs the harness from the repo root, where a
+    /// <c>results/</c> folder also exists — but that one is git-ignored (<c>.gitignore: /results/</c>), while the
+    /// tracked evidence lives in the project's own <c>results/</c>. CWD-relative writers therefore produced files
+    /// nobody could commit: six runs of §5.4 (three ladder runs, <c>--pk</c>, <c>--pk-default</c>, <c>--multirowinsert</c>)
+    /// landed in the ignored root folder. Every writer now goes through this helper, so "results saved to" names a path
+    /// that can be committed.
+    /// </para>
+    /// </summary>
+    static string ResultsDirectory()
+    {
+        string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        string dir = Path.Combine(projectDir, ResultsDirName);
+        Directory.CreateDirectory(dir);
+        return dir;
     }
 
     static DatabaseConfig BuildConfig(
@@ -1938,8 +1954,7 @@ class Program
             ["SQLite"] = sqlite,
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -1982,8 +1997,7 @@ class Program
             ["SQLite"] = sqlite,
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_default_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -2061,8 +2075,7 @@ class Program
             ["medianReadRatio_B_over_A"] = Ratio(listA, listB, static r => r.ReadOpsPerSec),
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_ab_{armA}_{armB}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -2250,12 +2263,10 @@ class Program
                 @default = deflt.Select(ToRecord).ToList(),
             };
 
-            // Anchor the archive at the PROJECT directory, not the process CWD: `dotnet run` may be
-            // invoked from the repo root, and the project's results/ folder is the tracked evidence
-            // location (the comparative_*.json runs live there).
-            string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
-            string resultsDir = Path.Combine(projectDir, ResultsDirName);
-            Directory.CreateDirectory(resultsDir);
+            // Anchored at the PROJECT directory, not the process CWD: `dotnet run` may be invoked from the
+            // repo root, and the project's results/ folder is the tracked evidence location (the
+            // comparative_*.json runs live there). One helper, so no writer can drift again.
+            string resultsDir = ResultsDirectory();
             string path = Path.Combine(resultsDir, $"dual-mode-{DateTime.Now:yyyyMMdd_HHmmss}.json");
             File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
             Console.WriteLine($"  JSON archived: {path}");
