@@ -2592,7 +2592,7 @@ One cause explains the pattern: **AEAD is per record**, so patching one field re
 
 ### 2026-09-24 (session 13, unattended continuation) — the review's decisions land: `.scdb` default growth 10 MiB → 1 MiB (14,7 MB → 6,4 MB), the INSERT ratio target closed, and the ladders get a median-of-3 protocol
 - Session: 13 of 2026-09-24 (continuation; implements every choice from the review, including 5B)
-- Command(s): `--scdb` at 100 / 200 / 2.000 / 20.000 / 200.000 / 1.000.000 rows with `SHARPCOREDB_SCDB_SHAPES=batched` and `SHARPCOREDB_SCDB_MIN_EXTENSION` 1048576 vs 10485760 (interleaved, order alternated) · the default ladder run with **`SHARPCOREDB_LADDER_REPS=3`** · unit: `SharpCoreDB.Tests.exe -class "SharpCoreDB.Tests.SingleFileFileGrowthTests"` · provider suites by EXE
+- Command(s): `--scdb` at 1 / 100 / 200 / 2.000 / 20.000 / 200.000 / 1.000.000 rows with `SHARPCOREDB_SCDB_SHAPES=batched` and `SHARPCOREDB_SCDB_MIN_EXTENSION` 1048576 vs 10485760 (interleaved, order alternated) · the default ladder run with **`SHARPCOREDB_LADDER_REPS=3`** · unit: `SharpCoreDB.Tests.exe -class "SharpCoreDB.Tests.SingleFileFileGrowthTests"` · provider suites by EXE
 - Regime: `REGIME: no SHARPCOREDB_* switches set` for the ladder and provider runs; `REGIME (overridden): SHARPCOREDB_SCDB_*` for the growth A/B (each printed by the harness, and the arm prints the minimum it used)
 - Result: **file 14.733.312 → 6.369.280 B (−56,8 %)** on every row count from 1 to 1.000.000 with **byte-identical allocation** (1.454 / 1.543 / 1.587 B/row) · growth tests **3/3** · ladder medians **SQL 0,56× / Direct 0,65× / StructRow 0,68× INSERT**, Direct READ 1,49×, StructRow READ 1,32×, with spreads 1,05–2,72×
 - Verdict: **KEPT** — decisions 9–15 are implemented/recorded, the growth tests pin all three ends, and the ladder protocol is executable rather than recommended
@@ -2603,9 +2603,10 @@ One cause explains the pattern: **AEAD is per record**, so patching one field re
 
 | rows | file @ 1 MiB (new default) | file @ 10 MiB | allocated/row |
 |---:|---:|---:|---|
-| 100 (both shapes) | **6.369.280 B** | 14.733.312 B | 2.236 / 82.696 B |
+| 1 (both shapes) | **6.369.280 B** | 14.733.312 B | 170.760 / 196.224 B |
+| 100 | **6.369.280 B** | 14.733.312 B | 50.025 / 3.205 B |
 | 200 | **6.369.280 B** | 14.733.312 B | 2.244 B |
-| 2.000 | **6.369.280 B** | 14.733.312 B | 1.443 B |
+| 2.000 | **6.369.280 B** | 14.733.312 B | 844.650 / 1.447 B |
 | 20.000 | **6.369.280 B** | 14.733.312 B | 1.454 B |
 | 200.000 | **6.369.280 B** | 14.733.312 B | 1.543 B |
 | 1.000.000 | **6.369.280 B** | 14.733.312 B | 1.587 B |
