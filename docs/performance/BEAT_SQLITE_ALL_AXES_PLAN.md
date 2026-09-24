@@ -390,19 +390,34 @@ UPDATE) is the index set: with five secondary indexes and no rowid predicate SQL
 every index, while our hash entries are cheap to remove. See **S7** — this run also showed that the
 per-rep variance is ours, not the machine's.
 
-**UPDATE resolved 2026-09-24 (session 25) — and it is a win.** With `SHARPCOREDB_WARMUP_REPS=3` (see §6
+> ⚠️ **SUPERSEDED FOR UPDATE (2026-09-24, session 29).** The UPDATE values in the table below were measured
+> on a SQLite arm that allocated a command and two parameters **per row**. Session 29 gave that arm one
+> prepared command with re-bound parameters — the same correction our own arm had just received, applied
+> symmetrically on purpose — and SQLite's UPDATE jumped **2,5×**, turning the cell from **1,78–1,87× ahead
+> into 0,80× (0,68–0,91×) behind**. **The UPDATE half of this table, and the sentence below it, is
+> withdrawn.** INSERT, READ and DELETE were reproduced on the corrected protocol (1,56× / 1,74× / 6,33×).
+> Full reasoning: worklog session 29; the rule it produced is §6 rule 12.
+
+**UPDATE resolved 2026-09-24 (session 25) — then reversed in session 29; read the warning above.** With `SHARPCOREDB_WARMUP_REPS=3` (see §6
 rule 10), two independent runs give **all four cells clear of 1,00×**:
 
 | run | INSERT | READ | UPDATE | DELETE |
 |---|---|---|---|---|
-| `WARMUP_REPS=3`, run 1 | **1,48× (1,47–1,50)** | **2,09× (1,92–2,16)** | **1,87× (1,66–2,02)** | **7,59× (3,13–7,79)** |
-| `WARMUP_REPS=3`, run 2 | **1,56× (1,52–1,57)** | **2,06× (1,43–2,08)** | **1,78× (1,43–1,81)** | **7,75× (3,00–7,96)** |
+| `WARMUP_REPS=3`, run 1 | **1,48× (1,47–1,50)** | **2,09× (1,92–2,16)** | ~~1,87× (1,66–2,02)~~ ⚠️ | **7,59× (3,13–7,79)** |
+| `WARMUP_REPS=3`, run 2 | **1,56× (1,52–1,57)** | **2,06× (1,43–2,08)** | ~~1,78× (1,43–1,81)~~ ⚠️ | **7,75× (3,00–7,96)** |
 
-**Four of four ahead**, against the default job's no-PK arm of 0,67 / 0,76 / 0,24 / 0,31 — the UPDATE cell
+**Three of four ahead** on the corrected protocol, against the default job's no-PK arm of 0,67 / 0,76 / 0,24 / 0,31. The UPDATE cell
 moved **~7×** with no engine optimisation at all. Both archives are committed (`Reps: 4`, pragma set
 recorded). **Residual wrinkle:** DELETE's range is wide because one rep per run is slow on DELETE
 (150.623 / 161.641 against 326k–401k) while SQLite stays flat — the cell stands regardless, and
 `SHARPCOREDB_WARMUP_REPS` is the dial if the *range* ever needs tightening.
+
+> **Correction (2026-09-24, session 29):** the sentence immediately above overstates the UPDATE cell — that
+> cell did **not** hold. A large part of the apparent gain was the SQLite arm's own **per-row command
+> allocation**; removing it symmetrically (one prepared command with re-bound parameters, on both arms) left
+> UPDATE at **0,80× (0,68–0,91×)** — behind, and the tightest cell in the table after DELETE. INSERT, READ
+> and DELETE reproduced on the corrected protocol. Same warning as at the top of this entry.
+
 
 ### S6 — Shape-matched runtime wins, only where the JIT's own conditions hold *(opportunistic)* — **timebox 1 session**
 
@@ -617,7 +632,7 @@ fails.
 |---|---|---:|---|---|---|
 | 1 | **S1** two-sided regime banner | 1 | no | ✅ `KEPT` (`b11903e3`) | every later number depends on it |
 | 2 | **S3** trap-3 control re-measured | 2 | no | ⛔ `REJECTED` (`5494b594`) | answered before any build, and the plan §2.2 note was corrected |
-| 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, `e686727d`); **UPDATE resolved 1,78–1,87× (session 25)** | turns arm C from an artefact into a comparison — and it did |
+| 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, `e686727d`); INSERT/READ/DELETE confirmed on the corrected protocol, **UPDATE withdrawn — 0,80× behind (session 29)** | turns arm C from an artefact into a comparison — and it did |
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
 | 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
 | 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ **`BLOCKED`** on the missing VS C++ workload (§9 row 6) | hypothesis **untested, not refuted** — see the entry |
@@ -626,10 +641,14 @@ fails.
 **All seven items are closed.** Final tally: **S1 ✅ · S3 ⛔ · S5 ✅ · S2 ⛔ · S7 ⚖️ · S4 ⛔ `BLOCKED` · S6 ⛔** —
 two `KEPT`, four `REJECTED`, one `BLOCKED`, and **not one of the four rejections was a failure**: each
 refuted its own hypothesis with a measurement, and three of them (S2, S5, S6) did so *before* a speculative
-change shipped. The campaign's result is **four of four operations ahead on the fair shape** (INSERT
-1,48–1,56× · READ 2,06–2,09× · UPDATE 1,78–1,87× · DELETE 7,59–7,75×) against the default job's no-PK arm
-of 0,67 / 0,76 / 0,24 / 0,31 — achieved with **no engine optimisation at all**, purely by fixing the
-comparison (S5) and the measurement (S7). What remains is the §9 owner review.
+change shipped. The campaign's result is **three of four operations ahead on the fair shape** — INSERT **1,56× (1,36–1,71)** ·
+READ **1,74× (1,18–2,05)** · DELETE **6,33× (4,99–6,77)** on the session-29 corrected protocol — against the
+default job's no-PK arm of 0,67 / 0,76 / 0,24 / 0,31. **UPDATE is behind at 0,80× (0,68–0,91×)**, because the
+1,78–1,87× reported in session 25 was substantially the SQLite arm's own client-side overhead. The three wins
+were still achieved with **no engine optimisation at all**, purely by fixing the comparison (S5) and the
+measurement (S7) — and the UPDATE finding is the campaign's most useful output, because it names a real
+engine target rather than a measurement artefact. What remains is the §9 owner review **plus the UPDATE
+deficit**.
 
 *Closing note on the timebox: **11 sessions were budgeted and ~10 were used** — one or two per item, plus
 the extra sessions that S7's two verdicts and the warm-up count required. **No item overran its own
