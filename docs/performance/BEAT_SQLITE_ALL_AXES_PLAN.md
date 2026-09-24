@@ -143,6 +143,13 @@ switched on. That does **not** license flipping the default — the rail is abso
 not propose breaking it. It means the control must be **re-measured at capacity 24**, and if the
 regression is gone, that is an **owner decision** backed by fresh evidence (item S3).
 
+> ⚠️ **This paragraph's hypothesis was tested by S3 and REFUTED — read S3's verdict with it.** Forcing
+> the constant-size layout at capacity 24 leaves `index-maint` at **20.000 calls per 10.000 updates
+> with identical 43 B/call**, and moves `row-locate-index` from a constant **279 B/call (~13 % of the
+> pass)** to **320–568 B/call (47–72 %)`. So the −24 % is at least partly a **row-location** cost that
+> capacity 24 does *not* remove — not the arena tax this paragraph guessed. **Trap 3's rail is
+> confirmed**, and the layout is not the lever for arm C. See `WORKLOG.md` session 15.
+
 ### 2.3 Cause 3 — the encryption tax is an API contract, so only the layout can pay it
 
 `WORKLOG.md` §5.3's profile (2026-09-23/24) measured the encrypted arm against its plaintext twin:
@@ -273,6 +280,21 @@ supported), `REJECTED` (rail confirmed with fresh evidence), or `BLOCKED`.
 **Acceptance.** Either outcome is a success, provided the attribution table is produced. **A reading
 inferred from a ratio without the profile will not be accepted** — this plan has paid for that five
 times.
+
+**Closed 2026-09-24 (worklog session 15) — `REJECTED`, with a new mechanism named.** The control needed
+no new code: `SHARPCOREDB_MAIN_FIXEDWIDTH=1` already forces the layout on the PK-less job (the
+harness's own comment says it exists to "separate the two candidate gates"), and
+`SHARPCOREDB_MAIN_PROFILE_UPDATE=1` supplies the attribution. Result: **`index-maint` is 20.000 calls
+per 10.000 updates in *both* arms at identical 43 B/call** — the layout buys nothing there — while
+**`row-locate-index` goes from a constant 279 B/call and ~13 % of the pass to 320–568 B/call and
+47–72 %**, i.e. the forced layout makes row *location* the dominant cost. §2.2's arena-tax hypothesis
+is therefore **refuted as the explanation**, trap 3's rail is **confirmed**, and §9 row 2 is answered
+by evidence. The ratio half of the control was **recorded and not used** (arm A's own reps spanned
+UPDATE 62.184–245.350, a 3,95× spread, on a machine that had just failed `--gate` twice at 2,92–2,99×).
+Consequence: **S2 is promoted to the plan's main lever** (§8 order unchanged, since S2 was already
+next). `row-locate-index`'s exact composition under a fixed-width decode is an open follow-up, not a
+guess.
+
 
 ### S4 — NativeAOT interface dispatch, measured *(build config + measurement)* — **timebox 1 session**
 

@@ -2739,5 +2739,60 @@ Overridden run (`SHARPCOREDB_SQLITE_PRAGMAS='journal_mode=DELETE;synchronous=FUL
 
 **8. What S1 leaves behind for the owner.** §9 row 1 is now a one-line experiment rather than a code change: `SHARPCOREDB_SQLITE_PRAGMAS='journal_mode=WAL;synchronous=FULL' --pk-default` measures the same reference under a second regime, and both runs print the set they used. The built-in default stays WAL + NORMAL, unchanged, so no recorded number in this repo is invalidated by this entry.
 
+---
+
+### 2026-09-24 (session 15, unattended continuation) — S3 closes **`REJECTED`**: the −24 % was **not** mainly the arena tax. The forced constant-size layout leaves index maintenance at **20,000 calls per 10,000 updates** and multiplies `row-locate-index` from a constant **279 B/call** to **320–568 B/call**, from ~13 % to **47–72 %** of the pass
+
+- Session: 1 of 2 for S3 (timebox 2 — one session used; item closes here with a verdict, so no second session is required)
+- Command(s): `--dual-mode` ×2 (arm A = shipped default, arm B = `SHARPCOREDB_MAIN_FIXEDWIDTH=1`, both reps=3) · `--dual-mode` + `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` + `SHARPCOREDB_BENCH_REPS=1` ×2 (arm A and arm B profiled, 6 UPDATE passes each) · `--gate` ×2 (S1's, recorded in the previous entry)
+- Regime: `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]`; arm A had no `SHARPCOREDB_*` set; arm B set `SHARPCOREDB_MAIN_FIXEDWIDTH=1`; the profiled runs added `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` and `SHARPCOREDB_BENCH_REPS=1`. All four were cleared afterwards (verified: no `SHARPCOREDB_*` variable left in the session).
+- Verdict: **REJECTED** — the plan's §2.2 hypothesis is refuted as the explanation, trap 3's rail is **confirmed**, and the real mechanism is now named and attributed
+- Commit: `test(bench)`: S3 records the trap-3 control's attribution and closes as REJECTED (plan §4 S3)
+- NEXT: **S2** — the HOT indexed-column gate on the UPDATE path (plan §4 S2, timebox 2). S3 promoted it from "second lever" to the plan's main lever: index maintenance is provably untouched by the layout, and it is the only measured cost that a code change can remove.
+
+**1. The experiment did not need building — the harness already encoded the hypothesis, in its own words.** `Program.cs:438-445` documents `SHARPCOREDB_MAIN_FIXEDWIDTH` as existing to "separate the two candidate gates — the layout and the PK-equality predicate — instead of leaving them entangled in one 5.4× spread", and `:449-454` documents `SHARPCOREDB_INLINE_BYTES` with the sentence that *is* my hypothesis: "a fixed-width record sends every variable-length value to the overflow arena unless its slot can hold the value inline, **which is why forcing the layout on the PK-less document-CRUD job measured *worse* there**." So S3 needed no new code, only the control to be run at the shipped capacity. Both runs confirmed the layout actually flipped, via the harness's own diagnostic: arm A `IsFixedWidthRecords=False (config FixedWidthRecordLayout=False, AutoFixedWidthRecords=True)`, arm B `IsFixedWidthRecords=True (config FixedWidthRecordLayout=True, AutoFixedWidthRecords=False)`.
+
+**2. The ratio half is unusable on this machine, and it is recorded rather than quoted.** Medians of three, `--dual-mode`, raw arm:
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| A shipped default (variable-length) | 134.125 | 116.332 | 117.335 | 218.347 |
+| B forced constant-size (capacity 24) | 151.843 | 97.191 | 83.017 | 113.416 |
+| B/A | 1,13× | 0,84× | 0,71× | 0,52× |
+
+**That reads like a clear regression, and it is not usable as one** — arm A's own three reps spanned UPDATE **62.184–245.350 (3,95×)** and DELETE **63.521–271.190 (4,27×)**, and arm B's spanned UPDATE 37.616–119.491. The two arms' ranges **overlap almost completely**, the arms ran in different windows, and this machine had just failed its own gate twice at 2,92–2,99× over a 2,50× limit. Session 12 of this campaign already established the rule for exactly this shape: a single run cannot support a claim in either direction. **No ratio verdict is claimed from this table.**
+
+**3. The load-independent half is decisive, because the counters are not wall-clock.** `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` reports stage **call counts and bytes allocated per call**, and `BENCH_REPS=1` runs six UPDATE passes per arm. Arm A (shipped default, variable-length), stage table of the first pass:
+
+| stage | calls | total ms | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| engine-write | 10.000 | 24,1 | 17,9 % | 2,9 | 302 |
+| row-locate-index | 10.000 | 17,7 | 13,1 % | 2,7 | **279** |
+| index-maint | **20.000** | 12,1 | 9,0 % | 0,8 | 43 |
+| in-place-patch | 10.000 | 8,4 | 6,2 % | 1,7 | 175 |
+| row-locate | **1** | 0,9 | 0,6 % | 0,0 | 32 |
+
+Arm B (forced constant-size layout, capacity 24), same shape:
+
+| stage | calls | total ms | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| row-locate-index | 10.000 | 96,9 | **47,2 %** | 5,4 | **568** |
+| engine-write | 10.000 | 21,4 | 10,5 % | 3,3 | 342 |
+| index-maint | **20.000** | 12,0 | 5,8 % | 0,8 | 43 |
+| in-place-patch | 10.000 | 5,3 | 2,6 % | 1,6 | 168 |
+| row-locate | **1** | 1,5 | 0,7 % | 0,2 | 240.168 |
+
+**4. Three facts survive every rep, and together they refute the hypothesis.** (a) **`index-maint` is 20.000 calls in both arms — two per update — and its bytes/call are identical (43).** The constant-size layout buys *nothing* on index maintenance. (b) **`row-locate-index` is ~13 % of the pass in A (279 B/call, constant across all of A's reps) and 47–72 % in B (320 / 354 / 512 / 568 B/call across B's reps)** — the forced layout makes row location **the** cost, multiplying its allocation per call by up to **2,0×**. (c) **`in-place-patch` is attempted 10.000 times in both arms at ~the same bytes/call (175 vs 168), and `engine-write` also runs 10.000 times in both** — so the variable-length arm was *already* attempting the patch; the layout is not what was blocking it.
+
+So the arena-tax explanation is **rejected as the whole story**: even with short TEXT inlined in its slot, forcing the constant-size layout on the PK-less shape **adds a row-location cost that dominates the pass**. My plan's §2.2 said "the −24 % is the arena tax, and decision 8 removed it"; the measurement says the −24 % is at least partly a **row-location** cost that capacity 24 does not touch. Trap 3's rail was right for a reason I had attributed to the wrong mechanism — which is precisely the class of error this plan's §6.5 exists to catch, and it was caught by the profiler rather than by the ratio.
+
+**5. Consequence for the plan, recorded as a plan change.** S3's `REJECTED` verdict moves S2 from "second lever" to **the plan's main lever**, because index maintenance is (i) provably untouched by the layout, (ii) 20.000 calls per 10.000 updates, and (iii) the only measured cost a code change can remove without touching the format. §9 row 2 (the −24 % rail) is **answered by this entry**: the rail stays, and the conditional-default question is closed with evidence rather than deferred. The arm C target (≥ 1,00× on all four) is **not** reachable by the layout route, so it must come from S2 and from S5's location/write separation — which is exactly the ordering the plan chose.
+
+**6. Honest limits on this entry.** The call counts and bytes/call are deterministic and repeat across all six reps of each arm; the *shares* and *total ms* are single-rep and load-sensitive, and are quoted only to show direction. The profiled runs used `BENCH_REPS=1` (timing is not the measurement here). `row-locate-index`'s exact composition — why a fixed-width decode allocates more in the index probe — is **not** diagnosed by this entry; that is a follow-up question for S2's work, and it is recorded as such rather than guessed at.
+
+**7. Cleanup and validation.** The four `--dual-mode` archives from these runs were deleted, for the same protocol reason as S1's: a `results/` file whose ratios this entry has just declared unusable is a misreading hazard, and the load-independent evidence (the two tables above) is quoted verbatim instead. `git status` is clean apart from the worklog and plan edits. No `src/` file was touched by S1 or S3. Core suite remains **1824 / 0 failed / 0 skipped**; the harness build is **0 errors**.
+
+
+
 
 
