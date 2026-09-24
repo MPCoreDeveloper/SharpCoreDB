@@ -393,6 +393,22 @@ does not replace it.
    Windows Search, SysMain and DiagTrack for the session.
    *What this machine is not:* it is a 6-core/12-thread `i7-10850H` — **no hybrid P/E cores**, so core
    pinning is not an available lever; the power plan is already High performance and it runs on AC.
+   **Verified 2026-09-24 (worklog session 17), and the emphasis corrected.** The check no longer reads
+   `MsMpEng` at idle (it read 1,5 % and nearly returned `QUIET` about a filter-bound machine); it times
+   real file opens — **buffered and write-through**, in the excluded dir and in an **unexcluded sibling
+   on the same volume**. Measured: **excluded 176,5 µs/open buffered vs unexcluded 257,5 µs — the
+   exclusion is confirmed at 1,46×**, i.e. the filter costs ~**81 µs per open**. But on the
+   **write-through** path the engine actually uses, both directories cost ~**350 µs** and the filter's
+   marginal share is only **1,08×**. So **flush (~350 µs) > filter (~81 µs)**: the durability floor is the
+   dominant per-open cost, and the filter is a *noise* source rather than the largest *cost*.
+9. **The benchmark's data must land on an excluded path, and `TEMP` is not a reliable carrier.**
+   The harness reads **`SHARPCOREDB_BENCH_TEMP`** (printed as `REGIME (data dir):`) for every data file,
+   falling back to the OS temp. Set the ambient `TEMP` instead and the exclusion can be **functionally
+   inert** — measured: with a Defender exclusion on `D:\scdb-bench-tmp`, every database still landed in
+   `C:\Users\<user>\AppData\Local\Temp`, because an agent's shell inherits VS Code's environment block
+   captured at VS Code start-up, not the shell's own `$env:TEMP`. `quiet-machine.ps1 -Apply
+   -BenchTempDir <dir>` sets the variable at **User** scope, which needs **one VS Code restart** to reach
+   an already-running shell.
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
 

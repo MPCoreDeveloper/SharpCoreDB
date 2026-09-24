@@ -2827,6 +2827,37 @@ Two things this deliberately does **not** propose: **disabling real-time protect
 
 **8. Honest limits.** (a) The candidate list the script checks is the one this machine's evidence supports; it is not a general-purpose profiler, and `Get-Counter` sampling is coarse (1 s × 3). (b) The Defender mechanism is **supported by** the measured `MsMpEng` correlation plus the known per-open cost, and it is **not yet proven by an A/B** — that requires the exclusions, which require elevation, so the proof is the owner's to run: measure, `-Apply`, re-measure, and compare `--gate`'s worst spread. (c) The script also cannot make the machine quiet while Cline runs: the agent lives inside VS Code, and the agent's own `pwsh` was the **single largest CPU consumer** measured on this box during the diagnostics. The most reproducible lever available every session is therefore **doing nothing else while a measurement runs** — which is a discipline, not a setting.
 
+---
+
+### 2026-09-24 (session 17, unattended continuation) — the exclusion **VERIFIES at 1,46×**, and the probe had to be wrong twice before it was right: the engine's own write-through flush (~350 µs/open) is **4× the antivirus cost**, so the earlier "Defender is the noise" reading was only half the story
+
+- Session: 1 of 1 (diagnostic continuation)
+- Command(s): `scripts/quiet-machine.ps1 -BenchTempDir 'D:\scdb-bench-tmp'` ×3 (one contaminated by my own concurrent build, two clean) · harness `--readtest` with `SHARPCOREDB_BENCH_TEMP` set · harness build ×2 · core suite ×1
+- Regime: `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `MaxFreq 100 %`, total CPU 10,4 %, disk queue 0 — a genuinely idle box
+- Verdict: **KEPT** — the exclusion is confirmed *by measurement*, the harness now writes to the excluded path deterministically, and the cost attribution is corrected
+- Commit: `chore(perf)`: the quiet check verifies the exclusion under load, and the harness honours SHARPCOREDB_BENCH_TEMP
+- NEXT: **S2** — the HOT indexed-column gate (plan §4 S2). The box is one `-StopServices` away from `QUIET`; after that the per-open floor (~350 µs, durability) is the remaining known variance driver, not the filter.
+
+**1. Two real defects were found by the owner running `-Apply` as admin — and neither was in `-Apply`.** (a) **The harness ignored the exclusion.** `Program.cs` called `Path.GetTempPath()` in **11 places**, so every database still landed in `C:\Users\Posse\AppData\Local\Temp` — *outside* the excluded `D:\scdb-bench-tmp`. The owner's `$env:TEMP = 'D:\scdb-bench-tmp'` does not fix this either: it was set in the *interactive* shell, while the harness is launched by whatever shell runs it, and an agent's shell inherits VS Code's environment block captured at VS Code start-up. The exclusion was therefore **cosmetically applied and functionally inert**. Fixed with `BenchTempDirectory()` reading **`SHARPCOREDB_BENCH_TEMP`**, applied to all 11 call sites, printed in a third banner line. Verified: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]`. (b) **`-Apply` did not tell the harness to *use* the directory**; it now also sets `SHARPCOREDB_BENCH_TEMP` at **User** scope and says plainly that one **VS Code restart** is needed for an already-running shell to see it.
+
+**2. The probe was wrong twice, and the second error was the interesting one.** Version 1 read `MsMpEng` **at idle** — which cannot work, because Defender is quiet when nothing happens, and the owner's own run proved it: idle `MsMpEng` read **1,5 %** and the verdict came within one finding (WSearch) of saying `QUIET` about a machine whose actual problem is the filter. Replaced with a timed burst of real write-through opens. Version 2 then measured **350 µs/open** — and a 512-byte write on a healthy NVMe with 376 GB free has no business costing 350 µs, which is the tell: the probe was mostly timing the **`FileOptions.WriteThrough` flush**, i.e. the engine's *deliberate* durability floor (decision 7: ~1 ms/row write-through vs ~30 µs/row buffered), not the antivirus. **A probe that cannot separate the two cannot attribute either.**
+
+**3. The corrected probe — buffered and write-through, excluded and unexcluded, same volume.** The control is an **unexcluded sibling** on the same volume, deliberately named with no shared prefix (`D:\qm-control-scdb-bench-tmp`) so a prefix-matching exclusion policy cannot silently cover it and flatten the ratio. Min of two passes each:
+
+| | buffered | write-through |
+|---|---:|---:|
+| data dir (**excluded**) | **176,5 µs/open** | 347,4 µs/open |
+| control dir (**not** excluded) | **257,5 µs/open** | 375,4 µs/open |
+| factor (control ÷ data) | **1,46×** | 1,08× |
+
+**4. What that actually says, and it sharpens the earlier entry rather than only confirming it.** The exclusion **works** — **1,46×** on buffered opens, i.e. the filter costs roughly **81 µs per open** in the unexcluded directory. But on the **write-through** path the engine really uses, both directories cost ~350 µs and the filter's marginal share collapses to **1,08×**. The ordering is now explicit: **flush ~350 µs > filter ~81 µs**, and the durability floor — a deliberate product decision, not a defect — is the **dominant** per-open cost. The previous entry's "the load is Defender" stays true as a *noise* finding (the filter's cost varies with scanner state, which is what produces the spread) but it is **not** the largest per-open cost, and this entry corrects the emphasis.
+
+**5. One number is left unexplained, and it is recorded rather than rounded off.** **176 µs/open for a *buffered*, 512-byte file create on an excluded path** is still far above what an idle NVMe should show (single-digit to low-tens of µs). The exclusion demonstrably helps, so part of that number is the filter — but not all of it, and the remainder is **not diagnosed**. Candidates for later: NTFS create/delete metadata cost at this file-churn rate, the `qm-burst-*.tmp` naming pattern reusing one directory entry, and page-cache writeback interference. Nothing is blocked by it, so it is logged as an open question instead of guessed at.
+
+**6. Validation, and one run thrown away on purpose.** Harness build **0 errors**; core suite **1824 / 0 failed / 0 skipped** (62,1 s); `quiet-machine.ps1` parses with **0 errors** (316 lines). One script run was discarded as contaminated: it reported `Total CPU 45,5 %` and `Build servers alive: 2` **because I ran a `dotnet build` alongside it** — exactly the self-inflicted-noise failure the script exists to catch, so it was not reported as a result. The clean re-run on the same box read CPU 10,4 %, disk queue 0, `MaxFreq` 100 %.
+
+
+
 
 
 

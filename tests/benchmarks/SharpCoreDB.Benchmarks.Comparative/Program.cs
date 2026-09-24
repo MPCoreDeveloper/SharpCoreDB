@@ -86,6 +86,32 @@ class Program
     /// <summary>The resolved pragma set as one printable string, for the banner.</summary>
     static string SqlitePragmaBanner() => string.Join(", ", SqlitePragmas());
 
+    /// <summary>
+    /// Where this harness puts its data files. Defaults to the OS temp path, but
+    /// <c>SHARPCOREDB_BENCH_TEMP</c> overrides it — and that override is what makes a Defender path
+    /// exclusion actually <em>effective</em>.
+    /// <para>
+    /// The ambient <c>TEMP</c> cannot be relied on for this. The harness is launched by whatever shell
+    /// runs it, and that shell's environment block may predate the exclusion — an agent's shell, for
+    /// instance, inherits VS Code's block (which is read at VS Code start-up) rather than the current
+    /// user environment. Measured on the campaign dev box: with a Defender exclusion on
+    /// <c>D:\scdb-bench-tmp</c>, the harness still wrote every database into
+    /// <c>C:\Users\&lt;user&gt;\AppData\Local\Temp</c> — i.e. outside the exclusion — because that is
+    /// what <c>Path.GetTempPath()</c> returned. An explicit, per-process setting removes the guesswork.
+    /// </para>
+    /// </summary>
+    static string BenchTempDirectory()
+    {
+        var configured = Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_TEMP");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            Directory.CreateDirectory(configured);
+            return configured;
+        }
+
+        return Path.GetTempPath();
+    }
+
     static async Task Main(string[] args)
     {
         // §2 rule 6: the regime travels with every number. These switches are environment variables and the shell that
@@ -109,6 +135,14 @@ class Program
             + (Environment.GetEnvironmentVariable(SqlitePragmaEnvVar) is null
                 ? "  [built-in reference set]"
                 : $"  [from {SqlitePragmaEnvVar}]"));
+
+        // Where the data files will land. Printed because a measurement is only reproducible if the
+        // I/O path is known — and because a Defender exclusion that does not cover THIS directory is
+        // an exclusion that does nothing (plan §6.7).
+        Console.WriteLine($"REGIME (data dir): {BenchTempDirectory()}"
+            + (Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_TEMP") is null
+                ? "  [OS temp - set SHARPCOREDB_BENCH_TEMP to move it onto an excluded path]"
+                : "  [from SHARPCOREDB_BENCH_TEMP]"));
 
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
         if (args.Any(a => a.Equals("--readtest", StringComparison.OrdinalIgnoreCase)))
@@ -339,7 +373,7 @@ class Program
         var sp = services.BuildServiceProvider();
         var factory = sp.GetRequiredService<DatabaseFactory>();
         var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
-        var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-readtest-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"scdb-readtest-{Guid.NewGuid()}");
 
         using var db = (SharpCoreDB.Database)factory.Create(
             dbPath: dbPath,
@@ -569,7 +603,7 @@ class Program
 
         double RunPass()
         {
-            var path = Path.Combine(Path.GetTempPath(), $"scdb-multirow-{Guid.NewGuid()}");
+            var path = Path.Combine(BenchTempDirectory(), $"scdb-multirow-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(path, "pw", isReadOnly: false, config: config))
             {
                 var before = TableFileSizes(db);
@@ -678,7 +712,7 @@ class Program
         (long AllocPerRow, int Gen0, long FileBytes) RunPass(bool batched, out double elapsed)
         {
             elapsed = 0;
-            var path = Path.Combine(Path.GetTempPath(), $"scdb-scdbinsert-{Guid.NewGuid()}.scdb");
+            var path = Path.Combine(BenchTempDirectory(), $"scdb-scdbinsert-{Guid.NewGuid()}.scdb");
             var options = DatabaseOptions.CreateSingleFileDefault();
             options.DatabaseConfig = BuildConfig(engineType, fixedWidth: true);
 
@@ -871,7 +905,7 @@ class Program
 
         for (int r = 0; r < reps; r++)
         {
-            var sqlPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-sql-{Guid.NewGuid()}");
+            var sqlPath = Path.Combine(BenchTempDirectory(), $"scdb-insert-sql-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(sqlPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
@@ -893,7 +927,7 @@ class Program
 
             try { Directory.Delete(sqlPath, true); } catch { /* best-effort temp-dir cleanup */ }
 
-            var directPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-direct-{Guid.NewGuid()}");
+            var directPath = Path.Combine(BenchTempDirectory(), $"scdb-insert-direct-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(directPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
@@ -1231,7 +1265,7 @@ class Program
     static BenchmarkResult RunSharpCoreDbMode(
         SharpCoreDB.Interfaces.StorageEngineType engineType, bool noEncrypt, bool? atRestRecords)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -1398,7 +1432,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSharpCoreDBDirectApi(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -1517,7 +1551,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSharpCoreDBStruct(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -1621,7 +1655,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSQLite()
     {
-        var dbFile = Path.Combine(Path.GetTempPath(), $"bench-sqlite-{Guid.NewGuid()}.db");
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-sqlite-{Guid.NewGuid()}.db");
         var result = new BenchmarkResult();
 
         try
@@ -1772,7 +1806,7 @@ class Program
         bool profileDeleteArm = false,
         bool profileInsertArm = false)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -2286,7 +2320,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunLiteDB()
     {
-        var dbFile = Path.Combine(Path.GetTempPath(), $"bench-litedb-{Guid.NewGuid()}.db");
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-litedb-{Guid.NewGuid()}.db");
         var result = new BenchmarkResult();
 
         try

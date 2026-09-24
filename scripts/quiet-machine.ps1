@@ -53,6 +53,53 @@ function Get-CounterSafe {
     } catch { return $null }
 }
 
+# The directory the benchmark's data lands in: -BenchTempDir wins, else the same variable the harness
+# reads (SHARPCOREDB_BENCH_TEMP), else the OS temp path. Printed, because an exclusion that does not
+# cover THIS directory is an exclusion that does nothing.
+$script:benchTempDir = if ($BenchTempDir) { $BenchTempDir }
+    elseif ($env:SHARPCOREDB_BENCH_TEMP) { $env:SHARPCOREDB_BENCH_TEMP }
+    else { $env:TEMP }
+
+<#
+.SYNOPSIS
+  Times a burst of tiny write-through file opens - the shape this engine's write path actually uses.
+
+.DESCRIPTION
+  A plain MsMpEng reading is not evidence: Defender is quiet when nothing is happening. The engine
+  writes with one `FileOptions.WriteThrough` open per row, so the honest probe is to do that N times and
+  time it. Two directories are compared (the one an exclusion should cover, and an unexcluded sibling on
+  the same volume), so the check *verifies* the exclusion instead of inferring it.
+
+  Call it TWICE per directory: once buffered and once with -WriteThrough. That split matters, because
+  the two costs have different owners. Write-through forces a device flush per open, which is the
+  durability floor the engine deliberately pays (decision 7: ~1 ms/row); if it dominates, the number says
+  nothing about the antivirus. The BUFFERED probe is the one that isolates the filter: with no flush in
+  the way, what is left is filesystem and filter-driver overhead. Returns microseconds per open.
+#>
+function Measure-IoBurst {
+    param([string]$Directory, [int]$Files = 800, [switch]$WriteThrough)
+
+    if (-not (Test-Path $Directory)) { New-Item -ItemType Directory -Force -Path $Directory | Out-Null }
+
+    $options = if ($WriteThrough) { [IO.FileOptions]::WriteThrough } else { [IO.FileOptions]::None }
+    $payload = [byte[]]::new(512)
+    $sw = [Diagnostics.Stopwatch]::StartNew()
+    for ($i = 0; $i -lt $Files; $i++) {
+        $path = Join-Path $Directory ("qm-burst-{0}.tmp" -f $i)
+        # FileStream, not File.Open: the FileOptions overload of File.Open takes six arguments
+        # (string, FileMode, FileAccess, FileShare, int, FileOptions) - there is no five-argument form.
+        $fs = [IO.FileStream]::new($path, [IO.FileMode]::Create, [IO.FileAccess]::Write,
+            [IO.FileShare]::None, 4096, $options)
+        $fs.Write($payload, 0, $payload.Length)
+        $fs.Dispose()
+    }
+    $sw.Stop()
+    Get-ChildItem -LiteralPath $Directory -Filter 'qm-burst-*.tmp' -ErrorAction SilentlyContinue |
+        Remove-Item -Force -ErrorAction SilentlyContinue
+
+    return [math]::Round($sw.Elapsed.TotalMilliseconds * 1000.0 / $Files, 1)   # microseconds per open
+}
+
 Write-Host "SharpCoreDB - measurement environment check" -ForegroundColor Cyan
 Write-Host ""
 
@@ -80,18 +127,61 @@ if ($null -ne $procPct -and $procPct -gt 25) {
     Add-Finding 'CPU busy' "Total CPU at $procPct % before the benchmark starts."
 }
 
-# ---- 4. THE main suspect: Defender's real-time filter ----------------------
+# ---- 4. THE main suspect: Defender's real-time filter, verified UNDER LOAD ----
+# The idle reading below is context only. Defender is quiet when nothing is happening, so a low idle
+# value does NOT mean the filter is out of the way — this machine read MsMpEng at 1,5 % while idle and
+# at 0-17 % during a run. The finding comes from timing the actual I/O shape instead.
 $mp = Get-CounterSafe -Path '\Process(MsMpEng)\% Processor Time' -Match 'MsMpEng'
-Write-Host ("MsMpEng        : {0} %   (Defender real-time; the #1 per-I/O noise source here)" -f $mp)
-if ($null -ne $mp -and $mp -gt 2) {
-    # Threshold is 2 %, not 5 %: an idle Defender should be near zero, and this machine measured
-    # MsMpEng at 0-17 % *during* a run while the box was otherwise idle. An idle reading above ~2 %
-    # means a background scan is in flight, which is exactly when a measurement is least trustworthy.
-    Add-Finding 'Defender real-time active' "MsMpEng at $mp % while idle - a background scan is in flight; each tiny write-through open is a filter callback."
-}
+Write-Host ("MsMpEng idle   : {0} %   (context only; low idle does not mean the filter is out of the way)" -f $mp)
+
 foreach ($svc in 'NisSrv', 'SearchIndexer') {
     $v = Get-CounterSafe -Path "\Process($svc)\% Processor Time" -Match $svc
     if ($null -ne $v -and $v -gt 5) { Add-Finding "$svc busy" "$svc at $v %." }
+}
+
+# The A/B is same-volume on purpose: the excluded data dir against an unexcluded SIBLING. Comparing the
+# data dir against the OS temp would confound the exclusion with "a different drive". The sibling's name
+# deliberately shares no prefix with the excluded path, so a prefix-matching exclusion policy cannot
+# accidentally cover the control and quietly turn the ratio into 1,0x.
+$controlDir = Join-Path (Split-Path -Parent $script:benchTempDir) ("qm-control-" + (Split-Path -Leaf $script:benchTempDir))
+Write-Host ("Data dir       : {0}" -f $script:benchTempDir)
+Write-Host ("Control dir    : {0}   (same volume, deliberately NOT excluded)" -f $controlDir)
+Write-Host  "I/O probe      : 800 buffered + 300 write-through opens per directory, twice each, min reported..."
+
+# Buffered isolates the filter (nothing to hide behind); write-through reproduces the engine's own
+# durability floor. Both, in both directories, so the two costs are attributed instead of blurred.
+$probeDataBuffered = (1..2 | ForEach-Object { Measure-IoBurst -Directory $script:benchTempDir -Files 800 } |
+    Measure-Object -Minimum).Minimum
+$probeCtrlBuffered = (1..2 | ForEach-Object { Measure-IoBurst -Directory $controlDir -Files 800 } |
+    Measure-Object -Minimum).Minimum
+$probeDataWt = (1..2 | ForEach-Object { Measure-IoBurst -Directory $script:benchTempDir -Files 300 -WriteThrough } |
+    Measure-Object -Minimum).Minimum
+$probeCtrlWt = (1..2 | ForEach-Object { Measure-IoBurst -Directory $controlDir -Files 300 -WriteThrough } |
+    Measure-Object -Minimum).Minimum
+
+Write-Host  "                 probe           buffered   write-through"
+Write-Host ("                 data dir       {0,8:N1}      {1,8:N1}   us/open" -f $probeDataBuffered, $probeDataWt)
+Write-Host ("                 control dir    {0,8:N1}      {1,8:N1}   us/open" -f $probeCtrlBuffered, $probeCtrlWt)
+$ratio = if ($probeDataBuffered -gt 0) { [math]::Round($probeCtrlBuffered / $probeDataBuffered, 2) } else { 0 }
+Write-Host ("                 filter factor (control/data, buffered): {0}x" -f $ratio)
+
+if ($ratio -ge 1.3) {
+    Write-Host ("                 -> exclusion confirmed: unexcluded sibling opens cost {0}x more" -f $ratio) -ForegroundColor Green
+} elseif ($probeDataBuffered -ge 100) {
+    Add-Finding 'Defender exclusion not effective' (
+        ("buffered opens cost {0:N1} us/open in the data dir vs {1:N1} us/open in the unexcluded sibling ({2}x) - " +
+         "the exclusion is not separating them. Check that {3} is in the Defender exclusion list.") -f
+        $probeDataBuffered, $probeCtrlBuffered, $ratio, $script:benchTempDir)
+} else {
+    Write-Host ("                 -> both directories are fast ({0:N0} / {1:N0} us/open buffered): nothing to separate" -f
+        $probeDataBuffered, $probeCtrlBuffered) -ForegroundColor Green
+}
+
+# The durability floor is reported separately so it can never be mistaken for antivirus overhead.
+if ($probeDataWt -gt 200) {
+    Write-Host ("                 note: write-through costs {0:N0} us/open in BOTH dirs ({1:N0} vs {2:N0}) -" -f
+        $probeDataWt, $probeDataWt, $probeCtrlWt) -ForegroundColor DarkGray
+    Write-Host  "                       that is the deliberate durability floor (decision 7), not the filter." -ForegroundColor DarkGray
 }
 
 # ---- 5. Disk saturation ----------------------------------------------------
@@ -189,6 +279,23 @@ if ($isAdmin) {
             Add-MpPreference -ExclusionProcess 'SharpCoreDB.Benchmarks.Comparative.exe' -ErrorAction SilentlyContinue
             Write-Host "  [ok] Defender process exclusion: SharpCoreDB.Benchmarks.Comparative.exe" -ForegroundColor Green
         }
+    }
+
+    # Make the harness actually USE the excluded directory. Setting $env:TEMP does not travel far enough:
+    # the harness inherits whatever environment its launching shell has, and an agent's shell inherits
+    # VS Code's block, which Windows captured at VS Code start-up. A USER-scope variable the harness
+    # reads directly is the reliable carrier — and it needs one VS Code restart to reach a shell that is
+    # already running.
+    if ($BenchTempDir) {
+        if ($PSCmdlet.ShouldProcess($BenchTempDir, 'set user env SHARPCOREDB_BENCH_TEMP')) {
+            New-Item -ItemType Directory -Force -Path $BenchTempDir | Out-Null
+            [Environment]::SetEnvironmentVariable('SHARPCOREDB_BENCH_TEMP', $BenchTempDir, 'User')
+            Write-Host "  [ok] SHARPCOREDB_BENCH_TEMP (user scope) = $BenchTempDir" -ForegroundColor Green
+            Write-Host "       restart VS Code once: a shell that is already running will not see it" -ForegroundColor DarkGray
+        }
+    } elseif ($env:TEMP -eq [IO.Path]::GetTempPath().TrimEnd('\')) {
+        Write-Host "  [!!] no -BenchTempDir given, so the harness will keep writing into the OS temp dir and" -ForegroundColor Yellow
+        Write-Host "       the path exclusion will not cover its data. Re-run with -BenchTempDir <dir>." -ForegroundColor Yellow
     }
 
     if ($StopServices) {
