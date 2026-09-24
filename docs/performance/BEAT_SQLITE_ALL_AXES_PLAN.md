@@ -379,6 +379,22 @@ does not replace it.
    response to the five recorded instances of acting on an inferred reading.
 6. **Re-record the gate baseline only on a quiet machine, and say why in the commit message.** Existing
    rule, unchanged.
+7. **Check the machine before you measure, and never record a baseline on a `NOISY` verdict.**
+   `pwsh scripts/quiet-machine.ps1` reports the environment and exits `0` (QUIET) or `1` (NOISY) so it
+   can gate a session. Measured on this project's own dev laptop, a `--dual-mode` run showed a **3,9×**
+   within-run UPDATE spread while the box was **not** thermally throttled (`% of Maximum Frequency` held
+   at 100 %), **not** CPU-bound (total CPU 2–22 %) and **not** disk-bound (physical-disk queue 0,00,
+   ~1 MB/s). The load was **Defender's real-time filter**: `MsMpEng` measured **0–17 % during the run**,
+   tracking the benchmark's own phases, and an *idle* reading of 4,6 % rose to 9,3 % merely as files were
+   written — on a workload that does thousands of tiny `FileOptions.WriteThrough` opens, every one of
+   which is a filter-driver callback. **So "quiet" here means low per-I/O interference, not low CPU.**
+   `-Apply` fixes what it can (Defender path/process exclusions for the repo and the benchmark exe, plus
+   `dotnet build-server shutdown`) and **requires an elevated shell**; `-StopServices` additionally stops
+   Windows Search, SysMain and DiagTrack for the session.
+   *What this machine is not:* it is a 6-core/12-thread `i7-10850H` — **no hybrid P/E cores**, so core
+   pinning is not an available lever; the power plan is already High performance and it runs on AC.
+8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
+   3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
 
 ---
 

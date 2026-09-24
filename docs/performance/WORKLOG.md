@@ -2792,6 +2792,43 @@ So the arena-tax explanation is **rejected as the whole story**: even with short
 
 **7. Cleanup and validation.** The four `--dual-mode` archives from these runs were deleted, for the same protocol reason as S1's: a `results/` file whose ratios this entry has just declared unusable is a misreading hazard, and the load-independent evidence (the two tables above) is quoted verbatim instead. `git status` is clean apart from the worklog and plan edits. No `src/` file was touched by S1 or S3. Core suite remains **1824 / 0 failed / 0 skipped**; the harness build is **0 errors**.
 
+---
+
+### 2026-09-24 (session 16, unattended continuation) — "how do we make the box quieter?" measured rather than guessed: **thermal throttling, CPU saturation and disk saturation are all REFUTED**, and the load is **Defender's real-time filter** on a latency-bound write path. `scripts/quiet-machine.ps1` makes the check enforceable
+
+- Session: 1 of 1 (a diagnostic session; not a plan item)
+- Command(s): 4 counter sweeps (idle · under a live `--dual-mode` · under a live `--dual-mode` with MsMpEng/NisSrv/SearchIndexer/disk-queue tracked · an idle re-read after file activity) · `scripts/quiet-machine.ps1` ×3 (plain, and `-Apply` twice)
+- Regime: `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]`; no `SHARPCOREDB_*` set during any diagnostic
+- Verdict: **KEPT (new script + plan §6 rules 7–8; no `src/` change)** — the machine is quiet by *every conventional measure* and still produced a 3,9× spread, and the cause is now named with evidence
+- Commit: `chore(perf)`: `scripts/quiet-machine.ps1` + the measurement-environment rules (plan §6.7–6.8)
+- NEXT: **S2** — the HOT indexed-column gate (plan §4 S2, timebox 2), now the plan's main lever per S3. **Run `scripts/quiet-machine.ps1` first; only measure on `QUIET`.**
+
+**1. The question was "how do we make this laptop quieter", and the honest first answer was: measure what is actually noisy.** The box is an **`i7-10850H`, 6 cores / 12 threads, 32 GB, NVMe**, already on the **High performance** power plan, already on **AC** with `PROCTHROTTLEMAX = 100 %` on both AC and DC. Two of the usual suspects were therefore dead on arrival, and one more was dead on inspection: a 10th-generation H-series part is **not hybrid**, so **there are no P/E cores to pin the benchmark to** — a lever that is genuinely useful on 12th-gen and later, and useless here.
+
+**2. Four hypotheses, three refuted by measurement.** (a) **Thermal throttling — REFUTED.** `% of Maximum Frequency` held at **100,0 %** through every sample of a live `--dual-mode` run (18 samples over ~54 s). (b) **CPU saturation — REFUTED.** Total CPU under the live run stayed between **1,9 % and 22,1 %**, alternating burst/quiet with the benchmark's own phases. (c) **Disk saturation — REFUTED.** `PhysicalDisk(_Total)\Avg. Disk Queue Length` read **0,00** throughout and throughput peaked at **1.749 KB/s** — this workload is **latency-bound, not bandwidth-bound**. (d) **The I/O pipeline itself — SUPPORTED.** `MsMpEng` (Defender real-time) measured **0–17 % CPU during the run, tracking the benchmark's phases**, while `NisSrv` stayed at 0,0 % and `SearchIndexer` at 0–1,5 %.
+
+**3. Why Defender is the answer, and it is a mechanism not a correlation.** The engine writes with **one `FileOptions.WriteThrough` open per row** (this campaign already priced that at 63,3 ms per 20.000 rows, plan §9). Every one of those opens is a **filter-driver callback**, so the antivirus adds per-open *latency* to a workload where latency is the whole cost and the disk queue is empty. That is the signature of a **bimodal, multi-×, run-to-run spread** — not a slow machine, a machine whose per-I/O cost varies with scanner state. Independent confirmation came for free: an **idle** `MsMpEng` reading of **4,6 %** rose to **9,3 %** in the very next measurement, purely because the previous session wrote files (this script, the plan, the worklog, git objects). Defender's load tracks file activity; the benchmark is nothing but file activity.
+
+**4. The script — `scripts/quiet-machine.ps1`.** Diagnostic by default and **read-only** (no admin needed): it reports power plan, AC state, `MaxFreq %`, total CPU, `MsMpEng`/`NisSrv`/`SearchIndexer`, disk queue, per-volume free space, which of `WSearch`/`SysMain`/`DiagTrack` are running, the build-server process count, and whether a harness run is already in flight — then prints **`VERDICT: QUIET` or `NOISY`** with the reasons, and **exits 0/1 so it can gate a session**. `-Apply` performs the fixes it can (Defender **path** exclusion for the repo and an optional `-BenchTempDir`, a Defender **process** exclusion for the benchmark exe, and `dotnet build-server shutdown`) and **refuses gracefully when not elevated**, printing the exact command to run from an elevated shell. `-StopServices` additionally stops Windows Search, SysMain and DiagTrack for the session — opt-in, because silently killing a user's indexer is not a tool's call. Verified live: plain run → **`NOISY`, 2 findings, exit 1** (Defender at 4,6 %, WSearch indexing); `-Apply` unelevated → correct elevated instruction plus the build-server shutdown, exit 1 pending verification.
+
+**5. Two deliberate threshold choices, both justified by the data rather than by taste.** The `MsMpEng` threshold is **2 %, not 5 %**, because an *idle* Defender should read near zero and this machine reads 4,6–9,3 % while doing nothing — the reading itself is the finding. `WSearch` is a **finding** (it indexes the repo and `%TEMP%`, the exact paths the benchmark hammers) while `SysMain` and `DiagTrack` are **informational only**: SysMain is pointless on an NVMe and DiagTrack is small, and a checker that flags everything is a checker nobody reads.
+
+**6. One correction worth recording, because it was mine.** While diagnosing, I read the drive free space off a **truncated console column** and recorded "C: 6,1 GB, D: 7,0 GB free", and used it as an argument that a nearly-full NVMe was contributing write-latency variance. The script's proper formatting showed the truth: **C: 375,4 GB free, D: 147 GB free**. There is no free-space problem on this box, and the hypothesis is withdrawn. This is the same failure mode the plan's §6.5 exists to catch — acting on a reading taken from a mangled rendering rather than from a value — and it is recorded rather than quietly dropped, because the misreading is instructive: it came from *my own* tool output, not from the benchmark.
+
+**7. What only the owner can do, stated plainly.** The decisive fix needs an **elevated** shell, and this session was **not** elevated (`IsAdmin: False`), so the Defender exclusions could not be applied and were not. The commands are:
+```
+pwsh scripts/quiet-machine.ps1 -Apply -BenchTempDir <a dedicated dir>
+```
+plus, to narrow the blast radius, point the harness's temp I/O at that dedicated directory rather than excluding all of `%TEMP%`:
+```
+$env:TEMP = '<a dedicated dir>'
+```
+Two things this deliberately does **not** propose: **disabling real-time protection wholesale** (a real security downgrade for a bounded problem — a path/process exclusion for the benchmark is the proportionate fix), and **changing anything about encryption or durability** to buy headroom (plan §3's non-goals, unchanged).
+
+**8. Honest limits.** (a) The candidate list the script checks is the one this machine's evidence supports; it is not a general-purpose profiler, and `Get-Counter` sampling is coarse (1 s × 3). (b) The Defender mechanism is **supported by** the measured `MsMpEng` correlation plus the known per-open cost, and it is **not yet proven by an A/B** — that requires the exclusions, which require elevation, so the proof is the owner's to run: measure, `-Apply`, re-measure, and compare `--gate`'s worst spread. (c) The script also cannot make the machine quiet while Cline runs: the agent lives inside VS Code, and the agent's own `pwsh` was the **single largest CPU consumer** measured on this box during the diagnostics. The most reproducible lever available every session is therefore **doing nothing else while a measurement runs** — which is a discipline, not a setting.
+
+
+
 
 
 
