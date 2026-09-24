@@ -407,6 +407,19 @@ is a success** — a refuted cause still removes it from the list, and the varia
 permanent asset for reading every later result. No `src/` change beyond a diagnostic switch may ship
 without an owner decision.
 
+**Closed 2026-09-24 (worklog session 22) — split: compaction `REJECTED`, JIT tiering `KEPT`.** New
+counters `Table.AutoCompactionLaunches` / `AutoCompactionCompletions` (pure instrumentation, incremented
+at launch and in a `finally` around `CompactStorage`) read **`launches=0 completions=0` in every phase of
+every rep of both runs**, so compaction cannot be the cause — and it *correctly* cannot: on an in-place
+workload the counters `NeedsCompaction()` reads stay at 0, because `_updatedRowCount` only counts
+*appended* versions and `_deletedRowCount` has no increment site at all. That second fact is logged as a
+separate latent finding (`ColumnarAutoCompactionThreshold` is documented as a "sum of UPDATEs and
+DELETEs" but behaves as a stale-version counter). The real cause is **managed warm-up**: with
+`DOTNET_TieredCompilation=0` the per-rep spreads collapse — INSERT **1,70× → 1,10×**, DELETE
+**3,20× → 1,54×** — and the verdicts move with them: READ goes from straddling (**0,93–2,04×**) to
+standing (**1,64×, 1,30–1,77×**) and UPDATE's median goes from 0,84× to **1,79×** (its range still
+straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the item's real output.
+
 ---
 
 ## 5. Acceptance targets
@@ -473,6 +486,19 @@ does not replace it.
    captured at VS Code start-up, not the shell's own `$env:TEMP`. `quiet-machine.ps1 -Apply
    -BenchTempDir <dir>` sets the variable at **User** scope, which needs **one VS Code restart** to reach
    an already-running shell.
+10. **Run a discarded warm-up rep before the measured ones — the first rep is cold and only we pay for
+   it.** Measured (worklog session 22): our per-rep numbers improve **monotonically** from rep 1 to rep 5
+   while SQLite's stay flat, in two independent 5-rep runs — and since every rep builds a fresh database,
+   only *process* state can carry across them. The cause is JIT tiering on a 100 %-managed hot path:
+   `DOTNET_TieredCompilation=0` collapses INSERT's spread **1,70× → 1,10×** and DELETE's **3,20× → 1,54×**
+   and moves READ out of "straddling" into "standing" (1,50× [0,93–2,04] → **1,64× [1,30–1,77]**).
+   **The published setting stays the shipped configuration** — a discarded warm-up rep measures the
+   *shipped* engine, whereas `DOTNET_TieredCompilation=0` measures a configuration no user runs, so that
+   switch is a **diagnostic for attributing variance only**. Consequence: any ratio this campaign
+   published from a cold single rep is re-read with that in mind, and re-taken if a cold rep decided it.
+   **Still open:** with tiering off, rep 1 stays slow on UPDATE specifically (0,63× at its worst), so a
+   warm-up rep alone does not close that cell.
+
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
 

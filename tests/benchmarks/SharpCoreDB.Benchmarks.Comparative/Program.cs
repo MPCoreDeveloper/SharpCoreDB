@@ -514,6 +514,29 @@ class Program
     }
 
     /// <summary>
+    /// Overrides the auto-compaction threshold from <c>SHARPCOREDB_COMPACTION_THRESHOLD</c> (S7, plan §4).
+    /// Unset returns <see langword="null"/>, so the product default applies.
+    /// <para>
+    /// Applied through <see cref="SharpCoreDB.DataStructures.Table.SetCompactionThreshold"/>, <b>not</b>
+    /// through the config — and that is a finding, not a preference. Setting
+    /// <see cref="DatabaseConfig.ColumnarAutoCompactionThreshold"/> to 0 does <b>not</b> disable compaction:
+    /// <c>Table.cs:64</c> guards that assignment with <c>&gt; 0</c>, so 0 silently leaves the previous
+    /// threshold (1000) in force, while the property's own documentation says the opposite — "When the sum of
+    /// UPDATEs and DELETEs … reaches this threshold, a background compaction is triggered. Default: 1000.
+    /// Set to 0 to disable auto-compaction." <c>SetCompactionThreshold</c> maps anything <c>&lt;= 0</c> to
+    /// <c>long.MaxValue</c>, which <em>is</em> off. Anyone who follows the config's documented advice gets
+    /// compaction they did not ask for.
+    /// </para>
+    /// </summary>
+    static long? CompactionThresholdOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_COMPACTION_THRESHOLD");
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
     /// Overrides <see cref="DatabaseConfig.SingleFileMinExtensionBytes"/> from <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c>
     /// (plan §9's file-growth item, 2026-09-23). Unset keeps the product default, which is <c>0</c> = the historical
     /// 10 MiB minimum extension: the single-file file starts at 1.037 pages and the first extension that does not fit
@@ -2125,6 +2148,35 @@ class Program
             // No PRIMARY KEY — matching SQLite's side, where none is declared either.
             db.ExecuteSQL($"CREATE INDEX {FairNiNameIndex} ON {FairNiTable}(name)");
 
+            // S7 (plan §4): the auto-compaction threshold is the variable under test and these counters are
+            // the instrument. TryAutoCompact launches a fire-and-forget Task.Run(CompactStorage), so a
+            // full-file rewrite can land inside a measured phase; a completion lagging a launch is that
+            // interference made visible, where before this instrumentation it was unanswerable from any
+            // report. See CompactionThresholdOverride for why the override goes through
+            // SetCompactionThreshold rather than through the config.
+            SharpCoreDB.DataStructures.Table? fairNiTable = null;
+            if (db.TryGetTable(FairNiTable, out var fairNiProbe) && fairNiProbe is SharpCoreDB.DataStructures.Table probedTable)
+            {
+                fairNiTable = probedTable;
+                if (CompactionThresholdOverride() is { } thresholdOverride)
+                {
+                    probedTable.SetCompactionThreshold(thresholdOverride);
+                    Console.WriteLine("    [diag] " + FairNiTable + " compaction threshold overridden to "
+                        + (thresholdOverride <= 0 ? "off (long.MaxValue)" : thresholdOverride.ToString(CultureInfo.InvariantCulture)));
+                }
+            }
+
+            void ReportCompactions(string phase)
+            {
+                if (fairNiTable is null)
+                {
+                    return;
+                }
+
+                Console.WriteLine($"    [diag] {phase} compactions: launches={fairNiTable.AutoCompactionLaunches}"
+                    + $" completions={fairNiTable.AutoCompactionCompletions}");
+            }
+
             // INSERT (batched, same batch size as every other arm)
             var sw = Stopwatch.StartNew();
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
@@ -2149,6 +2201,7 @@ class Program
             result.InsertTime = sw.Elapsed.TotalSeconds;
             result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after INSERT");
 
             // READ by the secondary-indexed predicate column — the same statement shape as SQLite's side
             sw.Restart();
@@ -2161,6 +2214,7 @@ class Program
             result.ReadTime = sw.Elapsed.TotalSeconds;
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after READ");
 
             // UPDATE through the secondary index, setting the same score column SQLite's side sets
             sw.Restart();
@@ -2176,6 +2230,7 @@ class Program
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after UPDATE");
 
             // DELETE through the secondary index
             sw.Restart();
@@ -2190,6 +2245,7 @@ class Program
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after DELETE");
         }
         finally
         {

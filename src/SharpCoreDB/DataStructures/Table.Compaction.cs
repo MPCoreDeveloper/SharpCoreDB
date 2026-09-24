@@ -37,6 +37,7 @@ public partial class Table
     {
         if (NeedsCompaction() && this.StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar)
         {
+            Interlocked.Increment(ref _autoCompactionLaunches);
             _ = Task.Run(() =>
             {
                 try
@@ -47,9 +48,37 @@ public partial class Table
                 {
                     // Silently ignore compaction errors (non-critical background task)
                 }
+                finally
+                {
+                    Interlocked.Increment(ref _autoCompactionCompletions);
+                }
             });
         }
     }
+
+    /// <summary>
+    /// How many times <see cref="TryAutoCompact"/> has actually launched a compaction for this table.
+    /// <para>
+    /// S7 (plan §4) added this because the campaign's per-rep variance turned out to be engine-side: in one
+    /// process, on one machine, with the arms alternating (worklog session 21), this engine's UPDATE moved
+    /// <b>3,72×</b> across five reps while SQLite's moved <b>1,02×</b>. The prime suspect is the
+    /// fire-and-forget <c>Task.Run(CompactStorage)</c> above — a full-file rewrite that can land inside a
+    /// measured phase and compete for the same I/O — and until this counter existed, "did a compaction
+    /// overlap this phase?" could not be answered from any report.
+    /// </para>
+    /// </summary>
+    public long AutoCompactionLaunches => Interlocked.Read(ref _autoCompactionLaunches);
+
+    /// <summary>
+    /// How many launched compactions have finished. Read together with
+    /// <see cref="AutoCompactionLaunches"/>: a completion lagging a launch means a compaction was
+    /// <em>in flight</em> across the boundary, which is the interference this instrumentation exists to
+    /// expose. The two can legitimately differ at any instant because compaction runs on the thread pool.
+    /// </summary>
+    public long AutoCompactionCompletions => Interlocked.Read(ref _autoCompactionCompletions);
+
+    private long _autoCompactionLaunches;
+    private long _autoCompactionCompletions;
 
     /// <summary>
     /// Makes TRANSACTIONAL deletes durable (Columnar tables with a primary key). Deletes issued

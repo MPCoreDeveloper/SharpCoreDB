@@ -2995,6 +2995,43 @@ SQLite is very nearly **deterministic** (UPDATE ±1 % across five reps); ours is
 
 **5. Process note on the archive.** The `fair_ni_*.json` from this run was **not committed**, under a rule now stated mechanically so the decision stops being a judgement call: **an archive is committed only if the headline cells' ranges do not straddle 1,00×.** Here UPDATE straddles, so the run is not publishable as a whole; all five per-rep rows and the medians are quoted in this entry instead, and the JSON holds only the aggregates anyway.
 
+---
+
+### 2026-09-24 (session 22) — S7: **compaction `REJECTED` by its own instrument** (`launches=0` in every phase of every rep — and *correctly* so), and **JIT tiering `KEPT` as the dominant cause of the variance** — turning it off collapses INSERT's spread 1,70× → 1,10× and moves READ and UPDATE from "straddling" to "standing"
+
+- Session: 1 of 2 for S7 (timebox 2 — one used; the item closes with a verdict)
+- Command(s): harness build ×1 · `--fair-ni` ×2 at `SHARPCOREDB_BENCH_REPS=5` — once as shipped, once with `DOTNET_TieredCompilation=0`
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `quiet-machine.ps1`: the first run was `NOISY` (Windows Search), the tiering run read CPU 2,6 % / `MaxFreq` 100 % / disk queue 0
+- Verdict: **split — compaction `REJECTED`, JIT tiering `KEPT`.** The prime suspect was wrong and a different one is now measured
+- Commit: `perf(diag)`: compaction launch/completion counters, a threshold override, and the measurement variance explained (plan §4 S7)
+- NEXT: **a discarded warm-up rep in the harness** — the direct consequence, and it re-reads every ratio this campaign has published.
+
+**1. The instrument that refuted the hypothesis, and why it was needed.** S7 reasoned from `DatabaseConfig.ColumnarAutoCompactionThreshold = 1000` and ~20.000 changes per arm to "a fire-and-forget `Task.Run(CompactStorage)` lands inside a measured phase". Nothing counted it, so step one was making the question answerable: `Table.AutoCompactionLaunches` / `AutoCompactionCompletions` (pure counters, incremented at launch and in a `finally` around `CompactStorage`), printed after every phase of the fair arm. **Every phase of every rep of both runs read `launches=0 completions=0`.** The variance is real and unchanged, so compaction is not its cause.
+
+**2. Why it reads 0 — and the code is right, the naming is not.** `NeedsCompaction()` (`Table.Compaction.cs:29`) sums `_deletedRowCount + _updatedRowCount` against the threshold. Tracing both fields: `_updatedRowCount` is incremented **only where a new version is appended** (`Table.CRUD.cs:2020` on the append fallback, `:2799` as `appendedInBatch`) plus five sites in `Table.BatchUpdate.cs` — and `appendedInBatch` stays **0** when every update lands in place. `_deletedRowCount` has **no increment site at all**: it is read at `:29`, reset at `:230`, and never added to. So on an in-place workload the sum stays 0 and auto-compaction **cannot** fire — *correct* behaviour, because in-place writes leave no stale versions to reclaim, but documented as "the sum of UPDATEs and DELETEs reaches this threshold", i.e. as a change counter rather than a stale-version counter. `_deletedRowCount` being dead is recorded as a separate latent finding rather than fixed here: it is not this campaign's problem and not mine to change without a decision.
+
+**3. The real cause, and the experiment that shows it: managed warm-up.** Two independent 5-rep runs both showed SharpCoreDB **improving monotonically from rep 1 to rep 5** while SQLite stayed flat — and since **every rep builds a fresh database**, nothing data-shaped carries across reps. Only *process* state does, which points at JIT tiering: our hot path is 100 % managed and pays tier-0 → tier-1 promotion, while SQLite's hot path is native C inside `e_sqlite3` and pays none. Tested directly with `DOTNET_TieredCompilation=0`:
+
+| phase | SharpCoreDB spread (as shipped) | SharpCoreDB spread (tiering off) | SQLite spread |
+|---|---|---|---|
+| INSERT | **1,70×** | **1,10×** | 1,02× |
+| READ | **2,20×** | 1,36× | 1,16× |
+| UPDATE | 2,83× | 2,98× | **1,02×** |
+| DELETE | **3,20×** | **1,54×** | **1,01×** |
+
+**4. And the medians move with it, which is the part that matters.** Turning tiering off did not merely tighten the ranges, it **changed verdicts**:
+
+| cell | as shipped | with tiering off |
+|---|---|---|
+| INSERT | 1,53× (1,17–1,57) | **1,59× (1,51–1,68)** — tight, entirely above 1,00× |
+| READ | 1,50× (**0,93–2,04**) | **1,64× (1,30–1,77)** — **stops straddling, now stands** |
+| UPDATE | 0,84× (0,49–1,50) | **1,79× (0,63–1,89)** — median well above 1,00×, rep 1 still an outlier |
+| DELETE | 6,28× (2,39–8,20) | 6,03× (4,11–6,37) — tight and solid |
+
+**5. The consequence, which is larger than S7 itself: cold-rep measurements have been understating this engine, and every published ratio inherits that.** A median of three that includes a cold rep charges us for warm-up SQLite never pays — and the fair arm is the first place both engines were measured in one window closely enough for the asymmetry to be visible. **Recommendation, stated as a protocol change rather than a code change:** (a) the harness should run one **discarded warm-up rep** before the measured ones, because that measures the *shipped* configuration — unlike `DOTNET_TieredCompilation=0`, which measures a configuration no user runs; (b) the tiering switch is kept as a documented **diagnostic** for attributing variance, never as the published setting; (c) **ratios recorded before this entry are re-read with a warm-up in mind**, and any decided by a single cold rep should be re-taken. The UPDATE cell still spanning 0,63×–1,89× with tiering off says one warm-up rep will not fix everything — rep 1 stays slow on UPDATE specifically — so the warm-up rep is the next experiment, not the conclusion.
+
+
+
 
 
 
