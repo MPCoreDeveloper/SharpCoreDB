@@ -2886,6 +2886,49 @@ Two things this deliberately does **not** propose: **disabling real-time protect
 
 **4. The environment gate is green.** With `-StopServices` having stopped WSearch/SysMain/DiagTrack and no build servers alive: **`VERDICT: QUIET — no known noise source is active. A gate/baseline run is defensible.`**, **exit 0** — the first `QUIET` this box has returned. The write-through floor is stable across every run (**316–350 µs/open in both directories**), which continues to corroborate decision 7 and to show that the filter is *not* the largest per-open cost.
 
+---
+
+### 2026-09-24 (session 19, unattended continuation) — S2 closes **`REJECTED` as specified**: HOT's precondition is **structurally unreachable** on a Columnar table because every column gets an auto-created hash index, so the measured index maintenance is **correct work, not waste**. The verdict was earned by two wrong turns, both recorded
+
+- Session: 1 of 2 for S2 (timebox 2 — one used; the item closes with a verdict, so no second is needed)
+- Command(s): harness build ×1 · `--dual-mode` + `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` ×2 (Columnar and `--engine=pagebased`) · canaries ×1 · core suite ×1
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` — the User-scope variable now reaches the agent shell after the VS Code restart, and **`quiet-machine.ps1` returned `QUIET` (exit 0)** before the measurements
+- Verdict: **REJECTED as specified** — the gate is correct and kept, but it cannot deliver the target, and the reason is now named and empirically confirmed
+- Commit: `perf(update)`: the HOT indexed-column gate, and why it cannot fire on a Columnar table (plan §4 S2)
+- NEXT: **S5** — the fair non-PK indexed arm (plan §4 S5, timebox 1), which the S2 verdict makes more valuable: arm C's gap must now be attributed to location vs write, and §9 row 5 (auto hash index per column) is the owner decision S2 surfaced.
+
+**1. First wrong turn: the gate was added to a path the benchmark does not use, and the profile said so.** `UpdateTouchesAnyLoadedIndex` was wired into `UpdateSingleRow` → `UpdateColumnarRow` / `UpdatePageBasedRow`. The profiled `docs` UPDATE came back **byte-identical to the pre-change baseline** — `index-maint 20.000 / 43 B/call`, `row-locate-index 10.000 / 279`, `in-place-patch 10.000 / 175`, `engine-write 10.000 / 302`. Identical counts are not a null result to shrug at; they are **evidence the code path did not change**, which sent me to the routing.
+
+**2. The `docs` job routes through `UpdateMultiple` (`Table.CRUD.cs:2287`), not the single-row path.** That batch path already carries the HOT idea — line 2546 guards the fast-patch index work with `if (touchesHashIndexedColumn)`, with the comment *"Non-indexed updates skip this entirely."* So the engine was **already** doing what S2 proposed, seven months of sessions before this plan. The interesting question stopped being "can we skip it" and became "why is it firing".
+
+**3. The answer, and it inverts the item: `SqlParser.DDL.cs:430-436` gives every column of a Columnar table its own hash index.**
+
+```csharp
+for (int i = 0; i < columns.Count; i++)
+    if (i != primaryKeyIndex) table.CreateHashIndex(columns[i]);
+```
+
+So the benchmark's own statement — `UPDATE docs SET score = … WHERE name = …` — sets a column that **is** indexed. The `score` index genuinely must be updated, and the 20.000 calls are **10.000 removes + 10.000 adds of a real key change**: correct work, not waste. HOT's precondition (a) ("the update does not modify any columns referenced by the table's indexes") is therefore **unreachable by construction** on this schema, and no amount of gating can help.
+
+**4. Confirmed empirically, not just by reading — the plan's own rule.** Same workload, same profiler, only the engine differs:
+
+| | Columnar (`--dual-mode`) | PageBased (`--dual-mode --engine=pagebased`) |
+|---|---:|---:|
+| `index-maint` | **20.000 / 43 B/call** | **absent** |
+| `row-locate-index` | 10.000 / 279 B/call | 10.000 / **1.007 B/call** |
+| `in-place-patch` | 10.000 / 175 | absent |
+| `encode` | — | 10.000 / 183 |
+| `encode-layout` | — | 10.000 / 0 |
+
+PageBased reports **no `index-maint` at all**, because the auto-`CreateHashIndex` loop sits inside `if (storageMode == StorageMode.Columnar)`. That is the mechanism, demonstrated by the profiler rather than inferred from the parser. (Bonus arm-D finding: PageBased's `row-locate-index` costs **1.007 B/call against Columnar's 279 — 3,6×** — recorded against arm D's 0,17×, not pursued.)
+
+**5. The gate is kept, deliberately, and the reason is stated rather than assumed.** It is provably equivalent wherever it fires: when no SET column is the PK column or a hash-indexed column, every index entry still holds the same key at the same position, and `RepointPrimaryKeyIfChanged` was in any case equivalent to its own early-out. On the no-hash-index shape (PageBased, and any Columnar table with none registered) it removes a real (if small) empty-loop-plus-stamp per row. Keeping a correct, inert-on-this-arm change is honest **provided the item is not reported as delivered** — hence `REJECTED`, not `KEPT`.
+
+**6. What S2 actually produced: a promoted owner decision.** §9 gains **row 5**: should a Columnar table still auto-create a hash index on *every* column? The `docs` table carries **5** (name, email, age, score, data) while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). That is the real UPDATE-cost lever on arm C, and it is a default change affecting every equality query on a non-PK column, so it belongs to the owner with a measured READ-vs-UPDATE comparison — not to an autonomous edit.
+
+**7. Validation.** Harness build **0 errors**; canaries **29 / 0 failed** (`FixedWidthInlineValueTests`, `FixedWidthPatchTests`, `ReopenRoundTripMatrixTests`, `FormatCompatPolicyTests`, `FixedWidthBulkUpdateTests`, `WritePathProfilerTests`); core suite **1824 / 0 failed / 0 skipped** (61,8 s). Both profiler runs were preceded by `dotnet build-server shutdown`, and `quiet-machine.ps1` reported **`QUIET`** first.
+
+
 
 
 

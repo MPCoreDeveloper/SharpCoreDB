@@ -256,9 +256,24 @@ no hash index needs the row — but the UPDATE side has no equivalent gate: `Upd
 item **skips** work that is provably unnecessary for that statement — no deferred state, no reconcile,
 no freshness window. The distinction must be stated in the commit message so the two are not conflated.
 
-**Acceptance.** Measured on the `docs`/default shape and on `--pk`; the no-indexed-column case must
-show fewer index-maintenance calls in the `--pk-profile` report (a counter, not a ratio), and no
-regression on the indexed-column case. All canaries green.
+**Closed 2026-09-24 (worklog session 19) — `REJECTED` as specified, cause named and empirically
+confirmed.** PostgreSQL's HOT precondition (a) is **structurally unreachable on a Columnar table**
+here: `SqlParser.DDL.cs:430-436` auto-creates a hash index on **every** column
+(`for (int i = 0; i < columns.Count; i++) … CreateHashIndex(columns[i])`), so the benchmark's own
+`UPDATE docs SET score = …` names an **indexed** column — the index on `score` genuinely must be
+updated. The measured **20.000 `index-maint` calls per 10.000 updates are therefore correct work, not
+waste** (10.000 removes + 10.000 adds on the `score` index). Proof, same workload and same profiler:
+the Columnar arm reports `index-maint 20.000 / 43 B/call`, while the **PageBased arm reports no
+`index-maint` at all** — because the hash-index block sits inside
+`if (storageMode == StorageMode.Columnar)` and PageBased gets none. The first attempt also proved a
+process point: the gate was initially added to `UpdateColumnarRow`, and the profile showed **byte-identical
+counts** (20.000 / 43 / 279 / 175), which is what exposed that the `docs` job routes through
+`UpdateMultiple` (`Table.CRUD.cs:2287`) instead. The gate is **kept** because it is provably equivalent
+where it fires and it removes genuinely dead work on the no-hash-index shape; it simply does not deliver
+S2's target. **Promoted to an owner decision: see §9 row 5.** Bonus finding for arm D: PageBased's
+`row-locate-index` costs **1.007 B/call against the Columnar arm's 279** — 3,6× — which is recorded
+against arm D's 0,17×, not pursued here.
+
 
 ### S3 — Re-measure the trap-3 control at capacity 24, then decide *(measurement first)* — **timebox 2 sessions**
 
@@ -469,6 +484,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 2 | **The −24 % rail, if S3 reproduces it in the other direction.** If forcing the constant-size layout on the PK-less shape is ≤ 1,0× cost at capacity 24, may it be enabled for new tables (not migrated) as a *conditional* default? | S3's table + `[2][3][4][5]` | Keep the rail; report and wait |
 | 3 | **A numeric floor for arm B.** Decision 10 lists this as its one open sub-decision. | §1.2's recorded band | Keep the no-regression-against-its-own-values rule until a floor is chosen |
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
+| 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit |
 
 ---
 

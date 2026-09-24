@@ -1800,14 +1800,21 @@ public partial class Table
 
     private void UpdateSingleRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, long rowPos)
     {
+        // S2 (plan §4): HOT's precondition (a) — see UpdateTouchesAnyLoadedIndex. Computed from the
+        // STATEMENT's column set, before the row is mutated, so it means "this statement could invalidate
+        // an index entry", not the weaker "the value happened not to change".
+        bool touchesIndex = UpdateTouchesAnyLoadedIndex(updates.Keys);
+
         // WP13: capture only what index maintenance needs instead of copying the
         // whole row (CASCADE is not wired in this path).
         string? oldPkValue = this.PrimaryKeyIndex >= 0
             ? row[this.Columns[this.PrimaryKeyIndex]]?.ToString()
             : null;
 
-        // Snapshot old values of hash-indexed columns for key-only removal.
-        Dictionary<string, object>? oldHashKeys = this.hashIndexes.Count == 0
+        // Snapshot old values of hash-indexed columns for key-only removal. S2: when the statement cannot
+        // touch any index this snapshot is never read, and building it was a per-row Dictionary allocation
+        // for nothing (it shows up in the profiled `row-locate-index` stage).
+        Dictionary<string, object>? oldHashKeys = (!touchesIndex || this.hashIndexes.Count == 0)
             ? null
             : this.hashIndexes.Keys
                 .Where(row.ContainsKey)
@@ -1823,12 +1830,56 @@ public partial class Table
 
         if (StorageMode == StorageMode.Columnar)
         {
-            UpdateColumnarRow(row, engine, updates, oldPkValue, oldHashKeys, rowPos);
+            UpdateColumnarRow(row, engine, updates, oldPkValue, oldHashKeys, rowPos, touchesIndex);
         }
         else
         {
-            UpdatePageBasedRow(row, engine, updates, oldPkValue, oldHashKeys);
+            UpdatePageBasedRow(row, engine, updates, oldPkValue, oldHashKeys, touchesIndex);
         }
+    }
+
+    /// <summary>
+    /// HOT's precondition (a) for this engine: <c>true</c> when any column named in
+    /// <paramref name="updatedColumns"/> participates in a loaded index — the primary-key B-tree or a
+    /// registered hash index.
+    /// <para>
+    /// PostgreSQL qualifies its heap-only-tuple optimisation on exactly this test ("the update does not
+    /// modify any columns referenced by the table's indexes") and, when it qualifies, writes <em>no</em>
+    /// new index entries. This engine already applies the same idea on the DELETE side, where
+    /// <see cref="DeleteByPrimaryKey"/> is key-only and skips row reads when no hash index needs the row;
+    /// the UPDATE side had no equivalent gate, so every update walked every hash index and re-encoded the
+    /// primary key. The benchmark's own document job is the textbook case — <c>UPDATE docs SET score = …
+    /// WHERE name = …</c> filters on the indexed <c>name</c> while setting the unindexed <c>score</c>.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT decision 13, which rejected <em>deferring</em> index maintenance to
+    /// <c>Flush()</c>: the O(n) reconcile there took random-key DELETE from 294.185 to 70.248 ops/s. This
+    /// skips work that is provably unnecessary <em>for this statement</em> — no deferred state, no
+    /// reconcile, no freshness window, and the index contents are identical afterwards.
+    /// </para>
+    /// </summary>
+    /// <param name="updatedColumns">The statement's SET column names.</param>
+    private bool UpdateTouchesAnyLoadedIndex(ICollection<string> updatedColumns)
+    {
+        if (this.PrimaryKeyIndex >= 0 && updatedColumns.Contains(this.Columns[this.PrimaryKeyIndex]))
+        {
+            return true;
+        }
+
+        if (this.hashIndexes.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var column in updatedColumns)
+        {
+            if (this.hashIndexes.ContainsKey(column))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ValidateUpdatedRow(Dictionary<string, object> row)
@@ -1886,7 +1937,7 @@ public partial class Table
         return SerializeRowExact(row);
     }
 
-    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos)
+    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos, bool touchesIndex)
     {
         // Fixed-width layout step: when the row's existing bytes can be located, patch
         // only the updated fields at their actual offsets (avoiding a full serialize
@@ -1922,13 +1973,21 @@ public partial class Table
 
         if (updatedInPlace)
         {
-            long indexStart = Diagnostics.WritePathProfiler.Stamp();
+            if (touchesIndex)
+            {
+                long indexStart = Diagnostics.WritePathProfiler.Stamp();
 
-            // Position unchanged: move hash entries in place (values may have changed).
-            MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
-            RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
+                // Position unchanged: move hash entries in place (values may have changed).
+                MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
+                RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
 
-            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+            }
+
+            // S2 (plan §4): otherwise the statement named no indexed column, so every entry in this
+            // table's indexes still holds the same key at the same position and is already correct —
+            // skipping is not an optimisation of the work, it is the removal of work that had no effect.
+            // (RepointPrimaryKeyIfChanged was in any case equivalent to its own early-out here.)
         }
         else
         {
@@ -1962,7 +2021,7 @@ public partial class Table
         }
     }
 
-    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys)
+    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, bool touchesIndex)
     {
         // Page-based: In-place update (or relocation when the record grows).
         // WP11: overwrite only the updated fields at their cached fixed column
@@ -2032,9 +2091,10 @@ public partial class Table
             RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
         }
-        else
+        else if (touchesIndex)
         {
-            // In-place update keeps the position; move hash entries in place.
+            // In-place update keeps the position; move hash entries in place. S2 (plan §4): skipped
+            // entirely when the statement named no indexed column — the entries are already correct.
             long hashStart = Diagnostics.WritePathProfiler.Stamp();
             MoveHashIndexesInPlace(row, oldHashKeys, position);
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
