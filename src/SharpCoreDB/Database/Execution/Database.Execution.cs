@@ -236,19 +236,15 @@ public partial class Database
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-24): the DML plan-cache warming was still here, and it is the same block that was
+        // removed from `ExecuteSQL(string)` on 2026-09-15 as measured pure waste — see the full note in that
+        // method. The 2026-09-15 sweep missed this overload and the parameterized async one below because it
+        // only touched the single-argument entry point. The return value is discarded, nothing reads a DML plan
+        // entry (`TryGetCachedPlan` has no callers at all; `CachedPlan` is consumed only on the two SELECT
+        // paths), and the key includes literal values, so a caller using distinct literals missed every time.
+        // Every such statement paid a normalised copy, a cache key, a `Split` of the whole statement, a
+        // `CachedQueryPlan`, a cache insert and `DateTime.UtcNow` for a plan nothing reads — measured at ~21 µs
+        // of a warm ~60 µs statement on the sibling path.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
@@ -288,19 +284,10 @@ public partial class Database
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-24): same block, same verdict — see the note in `ExecuteSQL(string)`. This is the
+        // parameterized *async* entry point, which is what ADO.NET-style callers reach, so the waste was not
+        // only on an unused corner: it sat directly on a user-facing path. Nothing reads a DML plan entry, and
+        // the cache key includes parameter names *and* the literal-bearing SQL, so distinct calls still missed.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
