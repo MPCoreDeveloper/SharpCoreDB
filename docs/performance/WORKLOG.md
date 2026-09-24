@@ -3661,6 +3661,40 @@ Ours is monotone through measured rep 5 — **pass 8 overall** — and only then
 **5. One more honest note on method.** This session's refutation came from a *measurement* enabled by a *bug fix* — the experiment was impossible before because the flag was inert. That is an argument for fixing dead configuration as its own class of work: an inert flag is not neutral, it silently removes the ability to test hypotheses. Two are now found; the sweep for the rest is owed.
 - NEXT: **the dead-config sweep** (`EnableHashIndexes`, `ColumnarAutoCompactionThreshold` — two flags that silently do not do what they document, which removes the ability to test hypotheses and is nobody's feature work), then **the dispatcher's per-statement classification** as the last attributed UPDATE cost — targeting the ~1,5 µs of scanner + `SqlParser.ParseValue` per statement, which needs measurement of its own split before any code is written, because this campaign has now been corrected six times by exactly that assumption. Arm B's UPDATE/DELETE (0,41×/0,35× with the lever refuted) is where the campaign's evidence points, and the plan's second limb — a documented, evidence-backed reason a cell cannot reach 1,00× — is now a live outcome rather than a formality.
 
+---
+
+### 2026-09-24 (session 43) — the dead-config sweep: **49 properties, 7 with zero readers**, three of them set by the presets — and the harness has been claiming buffered I/O on every arm
+
+- Session: 1 of 1 (the sweep the session-42 method note asked for)
+- Command(s): a scripted sweep of `DatabaseConfig.cs` against all of `src/` · core suite ×1 after the doc change
+- Regime: n/a — a static sweep, no measurement
+- Verdict: **KEPT (finding + honest documentation; no behaviour changed)** — and one item on the list turns out to touch the measurement surface itself
+- Commit: `docs(core)`: the seven not-honoured `DatabaseConfig` properties, named at the class and at each preset-assigned declaration
+
+**1. The sweep, and it is mechanical rather than impressionistic.** Every `public … { get; }` property in `DatabaseConfig.cs` was extracted automatically and counted against every `.cs` in `src/` **excluding that file**. **49 properties, 7 with zero references.** The exclusion matters: a property read *inside* the config file by a computed property is not dead, so the count had to be taken outside it — and for all seven, every occurrence in the file is a declaration or an assignment, with no read anywhere.
+
+| property | preset assignments | default | readers |
+|---|---|---|---|
+| `CollectGCAfterBatches` | **6** (`true` ×4, `false` ×2 — one carrying the comment "Clean up after each batch") | `false` | **0** |
+| `UseBufferedIO` | **6 — every preset — plus the benchmark harness** | `false` | **0** |
+| `WalBatchMultiplier` | 4 (`128`, and `512` marked "✅ EXTREME") | `128` | **0** |
+| `EnableBTreeSelection` | — (never even assigned) | `true` | **0** |
+| `EnableSimdAndProjectionPushdown` | — | `true` | **0** |
+| `EncryptionBufferSizeKB` | — | `32` | **0** |
+| `ToggleEncryptionDuringBulk` | — | `false` | **0** |
+
+**Two kinds of dead.** Three are *actively promised*: a user who selects a preset is told `UseBufferedIO = true`, `CollectGCAfterBatches = true` or `WalBatchMultiplier = 512`, and none of it happens. Four are inert surface that nothing even sets. Both are the same trap in the end — a flag that reads as a capability and is not one.
+
+**2. And one of them is on the measurement surface, which is why this sweep was worth a session.** `UseBufferedIO = true` is set by **every preset** *and* by the comparative benchmark's `BuildConfig` (`Program.cs:1266`), alongside `EnablePageCache`, `UseMemoryMapping` and `EnableHashIndexes`. The other three read; **`UseBufferedIO` does not.** So **no benchmark arm in this campaign has ever run with buffered I/O, while every arm's configuration says it has.** That does not invalidate a ratio — both arms are equally without it — but it does mean the config printed next to every published number describes a posture the engine never entered, and anyone comparing our `BuildConfig` against SQLite's `journal_mode`/`synchronous` pragmas has been comparing one real setting against a partly fictional one. **Logged as a measurement-surface fact, not corrected**: changing it would change the I/O path under every cell at once.
+
+**3. The fix is documentation, and saying so plainly is the point.** The class now carries a `<remarks>` block naming all seven, the method that found them, the two flags this class has *already* burned the campaign on (`ColumnarAutoCompactionThreshold = 0` before `Table.cs:64`'s `> 0` guard was understood; `EnableHashIndexes` until session 42), and the decision owed. The three preset-assigned declarations carry an inline `⚠️ NOT HONOURED — 0 readers in src/` marker so a reader sees it at the declaration and not only at the class. **No behaviour changed** — the core suite is **1824 tests, 0 errors, 0 failed, 0 skipped**, exactly as before. This is a stop-gap, and it is labelled as one.
+
+**4. The decision owed, per property: implement, or remove from the surface and the presets.** Both are real work and neither is a drive-by. Implementing `CollectGCAfterBatches` or `WalBatchMultiplier` is a contained change to a batch loop; implementing `UseBufferedIO` is not — it would change the I/O path under every measured cell and invalidate every number the campaign has published, so it is an **owner decision with a measurement consequence attached**, which is exactly the category the plan already reserves for `src/` defaults. Removing them instead is cheaper and equally honest, and it would leave a config surface that means what it says.
+
+**5. Why this class of work earns its place in a performance campaign.** The `EnableHashIndexes` cost was not the flag's own redundancy — it was that **a session had already built the `SHARPCOREDB_HASH_INDEXES` dial to test a hypothesis, and the dial was inert**, so the hypothesis could not be tested and the session recorded a refutation it could not have made. An inert flag is not neutral; it removes the ability to ask a question. That is also why the sweep was worth running *before* the dispatcher work rather than after: the next hypothesis is about the dispatcher and the row locate, and if either has a dead dial attached, the same trap is waiting.
+- NEXT: **the dispatcher's per-statement classification** — the last attributed UPDATE cost, ~1,5 µs of the ~1,6 µs per statement in `TryScanCanonicalDml` + `SqlParser.ParseValue` (`Database.Batch.cs:526`, `Database.Batch.cs:885`). Read the two functions before instrumenting them, because sub-stages inside a 10.000-statement loop perturb the phase they describe (§6 rule 11) and this campaign has been corrected six times by assuming a mechanism. And **four owner items are now open**: the dead-config decision (implement or remove, ×7 — `UseBufferedIO` carries a measurement consequence), the UPDATE default question (probably moot now that the auto-index lever is refuted), elevation for `--gate`, and S4's VS C++ workload.
+
+
 
 
 

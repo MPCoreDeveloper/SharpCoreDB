@@ -11,6 +11,37 @@ using SharpCoreDB.Interfaces;
 /// Configuration options for database performance and behavior.
 /// Uses C# 9.0+ init-only properties for immutable configuration.
 /// </summary>
+/// <remarks>
+/// ⚠️ <b>Seven properties on this class are declared — three of them also assigned by the presets below — and
+/// read by nobody.</b> They are listed here because an inert flag is not neutral: it silently removes the
+/// ability to test a hypothesis, and a caller who follows the documentation gets no effect and no warning.
+/// <para>
+/// <b>How this was found</b> (worklog session 43): every <c>public … { get; }</c> property in this file was
+/// extracted automatically and counted against every <c>.cs</c> in <c>src/</c> <i>excluding this file</i>.
+/// 49 properties, <b>7 with zero references</b>. Two of this class's flags had already been found the hard way:
+/// <c>ColumnarAutoCompactionThreshold = 0</c> does not disable compaction (<c>Table.cs:64</c> guards the
+/// assignment with <c>&gt; 0</c>), and <c>EnableHashIndexes</c> was inert until 2026-09-24, when it was given a
+/// reader in <c>SqlParser.DDL.cs</c>'s CREATE TABLE path.
+/// </para>
+/// <list type="bullet">
+/// <item><c>CollectGCAfterBatches</c> — set by <b>6 presets</b> (<c>true</c> ×4, <c>false</c> ×2, one carrying the
+/// comment "Clean up after each batch"); no reader anywhere.</item>
+/// <item><c>UseBufferedIO</c> — set <c>true</c> by <b>all 6 presets</b> <i>and</i> by the comparative benchmark's
+/// <c>BuildConfig</c>, so every benchmark arm has been claiming buffered I/O it never received; no reader
+/// anywhere.</item>
+/// <item><c>WalBatchMultiplier</c> — set by 4 presets (<c>128</c>, and <c>512</c> marked "✅ EXTREME"); no reader
+/// anywhere.</item>
+/// <item><c>EnableBTreeSelection</c>, <c>EnableSimdAndProjectionPushdown</c>, <c>EncryptionBufferSizeKB</c>,
+/// <c>ToggleEncryptionDuringBulk</c> — declared and never even assigned; no reader anywhere.</item>
+/// </list>
+/// <para>
+/// <b>Decision owed, and deliberately not taken here:</b> each of the seven is either <b>implemented</b> or
+/// <b>removed</b> from the surface and the presets. Both are real changes — implementing <c>UseBufferedIO</c>
+/// would change the I/O path under every measured cell and invalidate the campaign's numbers — so this is an
+/// owner call, not a drive-by fix. <b>No behaviour was changed by adding this note</b>; it exists so that nobody
+/// sets one of these expecting an effect, which is exactly how <c>EnableHashIndexes</c> cost a session.
+/// </para>
+/// </remarks>
 public class DatabaseConfig
 {
     /// <summary>
@@ -339,6 +370,8 @@ public class DatabaseConfig
     /// <summary>
     /// Gets a value indicating whether gets whether to use buffered I/O for high-performance mode.
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set to `true` by ALL 6 presets and by the
+    // comparative benchmark's BuildConfig, so every arm has claimed buffered I/O it never received.
     public bool UseBufferedIO { get; init; } = false;
 
     /// <summary>
@@ -351,6 +384,8 @@ public class DatabaseConfig
     /// <summary>
     /// Gets a value indicating whether gets whether to perform GC.Collect after batch operations for memory cleanup.
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set by 6 presets, one of them with the
+    // comment "Clean up after each batch". Setting it changes nothing.
     public bool CollectGCAfterBatches { get; init; } = false;
 
     /// <summary>
@@ -439,6 +474,8 @@ public class DatabaseConfig
     /// Default: 128 (e.g., 8 cores * 128 = 1024 operations).
     /// Use higher values (256, 512) for extreme concurrency (64+ threads).
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set by 4 presets, one of them to 512 and
+    // marked "✅ EXTREME". Setting it changes nothing.
     public int WalBatchMultiplier { get; init; } = 128;
 
     /// <summary>
