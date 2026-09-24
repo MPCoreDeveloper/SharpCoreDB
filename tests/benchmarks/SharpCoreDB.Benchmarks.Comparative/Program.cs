@@ -1895,20 +1895,21 @@ class Program
         + $" alloc+{(to.Alloc - from.Alloc) / 1048576.0:F1}MB";
 
     /// <summary>
-    /// Turns the write-path profiler on for the fair arm's UPDATE phase only, from
-    /// <c>SHARPCOREDB_FAIR_PROFILE_UPDATE=1</c>. Diagnostic only, and the same shape the document job
-    /// already uses (<c>SHARPCOREDB_MAIN_PROFILE_UPDATE</c>): <c>Reset</c> before the phase so the report
-    /// describes the UPDATE batch alone, <c>Disable</c> after so the remaining phases are not stamped.
+    /// Turns the write-path profiler on for <b>one phase</b> of the fair arm, from
+    /// <c>SHARPCOREDB_FAIR_PROFILE_&lt;PHASE&gt;=1</c> — e.g. <c>SHARPCOREDB_FAIR_PROFILE_UPDATE</c>,
+    /// <c>SHARPCOREDB_FAIR_PROFILE_DELETE</c>. Diagnostic only, and the same shape the document job already
+    /// uses (<c>SHARPCOREDB_MAIN_PROFILE_*</c>): <c>Reset</c> before the phase so the report describes that
+    /// batch alone, <c>Disable</c> after so the other phases are not stamped.
     /// <para>
-    /// It exists because the fair arm's UPDATE cell is the campaign's last unresolved measurement — it
-    /// varies 2,07× per rep while SQLite's varies 1,04× — and the two probes run so far have only produced
-    /// <em>negatives</em>: allocation is constant across reps (+31,8–31,9 MB) and the compaction counters
-    /// read 0. A stage table per rep is what converts "something in this pass varies" into "this stage
-    /// varies", which is the difference between a story and an attribution.
+    /// It exists because the fair arm's cells were the campaign's unresolved measurements — UPDATE varied
+    /// 2,07× per rep (since resolved by the warm-up count), and DELETE stalls in exactly one rep per run,
+    /// seen four times across two arms while SQLite never stalls. A stage table per rep is what converts
+    /// "something in this pass varies" into "this stage varies", which is the difference between a story and
+    /// an attribution.
     /// </para>
     /// </summary>
-    static bool FairProfileUpdate() =>
-        Environment.GetEnvironmentVariable("SHARPCOREDB_FAIR_PROFILE_UPDATE") == "1";
+    static bool FairProfile(string phase) =>
+        Environment.GetEnvironmentVariable($"SHARPCOREDB_FAIR_PROFILE_{phase.ToUpperInvariant()}") == "1";
 
     // ══════════════════════════════════════
     // Shared paired-rep protocol (§6 rules 4, 7 and 10)
@@ -2460,7 +2461,7 @@ class Program
 
             // UPDATE through the secondary index, setting the same score column SQLite's side sets
             var gcBeforeUpdate = GcCheckpoint();
-            if (FairProfileUpdate())
+            if (FairProfile("UPDATE"))
             {
                 SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
                 SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
@@ -2481,26 +2482,57 @@ class Program
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
             ReportCompactions("after UPDATE");
             Console.WriteLine($"    [diag] UPDATE GC: {GcDelta(gcBeforeUpdate, GcCheckpoint())}");
-            if (FairProfileUpdate())
+            if (FairProfile("UPDATE"))
             {
                 SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
                 Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
             }
 
-            // DELETE through the secondary index
+            // DELETE through the secondary index.
+            //
+            // The phase is SPLIT into statement-build, ExecuteBatchSQL and Flush (S7 follow-up). The reason is
+            // measured: our DELETE stalls in exactly one rep per run — 156.666 against 340.875–462.592 in arm B,
+            // and 150.623/161.641 against 326k–401k in this arm, four sightings across two arms — while
+            // SQLite's DELETE never stalls (~400k in arm B, ~50k here, both tight). An engine-stage table
+            // alone cannot place a stall that sits in the batch dispatch or the flush, so those are timed
+            // separately first and the stage profiler runs underneath them.
+            var gcBeforeDelete = GcCheckpoint();
+            if (FairProfile("DELETE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             sw.Restart();
             var deleteStmts = new List<string>(DeleteCount);
             for (int i = 0; i < DeleteCount; i++)
             {
                 deleteStmts.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
             }
+            sw.Stop();
+            double deleteBuildMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
             db.ExecuteBatchSQL(deleteStmts);
+            sw.Stop();
+            double deleteExecMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
             db.Flush();
             sw.Stop();
-            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            double deleteFlushMs = sw.Elapsed.TotalMilliseconds;
+
+            result.DeleteTime = (deleteBuildMs + deleteExecMs + deleteFlushMs) / 1000.0;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+            Console.WriteLine($"    [diag] DELETE split: build={deleteBuildMs:F0}ms exec={deleteExecMs:F0}ms flush={deleteFlushMs:F0}ms");
+            Console.WriteLine($"    [diag] DELETE GC: {GcDelta(gcBeforeDelete, GcCheckpoint())}");
             ReportCompactions("after DELETE");
+            if (FairProfile("DELETE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
         }
         finally
         {

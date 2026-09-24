@@ -561,6 +561,15 @@ does not replace it.
    with **all four cells' ranges clearing 1,00× in both** (UPDATE **1,87× [1,66–2,02]** and **1,78×
    [1,43–1,81]**). One warm-up rep was simply under-provisioned. If a range ever straddles again, this
    count is the dial — it has now demonstrably moved exactly that.
+11. **Do not time the harness's own work inside a measured phase, and print the split when you do.**
+   Measured (worklog session 28): the fair arm's DELETE phase spent **0–17 ms of its 21–65 ms window
+   building 10.000 interpolated SQL strings** — harness work, variable per rep, and about a quarter of the
+   phase — while `flush` was **0 ms in every rep**. The phase is now split into `build` / `exec` / `flush`
+   and all three are printed, so the engine's share is isolable; the same split is owed to the UPDATE
+   phase, which has the identical shape. Also from that run: **cold JIT costs ~9× on `exec` here**
+   (269 ms on the first warm-up against 21–48 ms warm), which is the largest cold penalty this campaign
+   has measured on any single stage and a mechanical explanation for how bad the pre-warm-up DELETE numbers
+   looked.
 
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.

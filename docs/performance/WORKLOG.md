@@ -3208,6 +3208,37 @@ case DataType.Long:
 
 **5. A new cross-arm finding, which no single arm could have shown: our DELETE stalls in one rep per run.** In arm B rep 2, DELETE reads **156.666** against 340.875–462.592 in the other three; in the fair arm (session 25) exactly one rep per run also stalled on DELETE (150.623 and 161.641 against 326k–401k). **Both arms, both runs, one stalled rep each, while SQLite's DELETE sits tight at ~400k in arm B and ~50k in the fair arm.** A recurring single-rep stall in one operation, in two independent arms, against a comparator that does not stall, is not machine noise — it is a behaviour in our DELETE path that has now been seen four times. It is named here and not diagnosed: the next instrument is the per-phase stage table for DELETE (the fair arm's machinery made `SHARPCOREDB_MAIN_PROFILE_DELETE`-style attribution possible for UPDATE, and DELETE needs the same).
 
+---
+
+### 2026-09-24 (session 28) — the DELETE stall is **placed, and it is not durability**: `flush` is **0 ms in every rep**, the stall is in the `ExecuteBatchSQL` dispatch, and a quarter of the phase's variance is the **harness building its own 10.000 statement strings**
+
+- Session: 1 of 1 (the DELETE-stall follow-up)
+- Command(s): harness build ×1 · `--fair-ni` ×1 at `SHARPCOREDB_BENCH_REPS=5` with 3 discarded warm-ups and the DELETE phase split
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · CPU 5,8 %, `MsMpEng idle` 0,5 %, disk queue 0 in the preceding check; Windows Search still `NOISY`
+- Verdict: **KEPT** — the stall is localised to one of three sub-phases, and the instrument itself exposed a harness-side variance source
+- Commit: `test(bench)`: the DELETE phase split — the stall is not the flush, and the harness half of the phase is named
+
+**1. The DELETE phase was split into its three real components, because a stage table alone cannot place a stall that lives in the dispatch.** `build` (formatting 10.000 DELETE statements), `exec` (`ExecuteBatchSQL` — parse + table-side delete) and `flush` (`db.Flush()`) are now timed separately and printed per rep, with the stage profiler available underneath via `SHARPCOREDB_FAIR_PROFILE_DELETE=1` (the gating helper was generalised from `FairProfileUpdate()` to `FairProfile(phase)`). Five measured reps after three discarded warm-ups:
+
+| rep | build | **exec** | **flush** | DELETE ops/s |
+|---|---:|---:|---:|---:|
+| warm-up 1 | 3 ms | **269 ms** | 1 ms | 36.632 |
+| warm-up 3 | 11 ms | 28 ms | 0 ms | 258.177 |
+| **rep 1 — the stall** | **17 ms** | **48 ms** | **0 ms** | **153.564** |
+| rep 2 | 4 ms | 30 ms | 0 ms | 293.291 |
+| rep 3 | 9 ms | 21 ms | 0 ms | 328.360 |
+| rep 4 | 9 ms | 22 ms | 0 ms | 322.230 |
+| rep 5 | 0 ms | 32 ms | 0 ms | 305.523 |
+
+**2. `flush` is 0 ms in every rep, so the stall has nothing to do with durability.** That is worth stating plainly because durability was the obvious suspect — a per-row flush would explain a 2× stall, and decision 7's ~1 ms/row write-through cliff is the campaign's known expensive path. It is not what happens: the deletes are buffered inside the batch transaction and the flush is free. **The stall is in `exec`**, at **2,1–4,8 µs/delete across reps — a 2,29× spread** after the build time is set aside.
+
+**3. And the instrument immediately indicted the harness, not the engine, for about a quarter of the phase.** `build` — ten thousand interpolated `DELETE FROM fni WHERE name = 'User{i}'` strings, **in the timed window** — costs **0–17 ms** and is itself variable. In rep 1 it is 17 ms of a 65 ms phase; in rep 5 it is 0 ms. So part of what the arm reports as "our DELETE" is the test harness formatting SQL, and it varies per rep. That is a **methodology defect in the arm**, now visible; the fix is to build the statement list **once outside** the timed window and reuse it (the statements are identical across reps), and it applies equally to the UPDATE phase, which has the same shape. It is recorded rather than fixed here because changing a timed phase invalidates the DELETE and UPDATE cell values committed in sessions 25 and 27, and that re-run belongs in the same change.
+
+**4. Cold JIT on DELETE is dramatic, which retroactively explains the warm-up protocol's effect here.** Warm-up 1's `exec` is **269 ms** against 21–48 ms warm — a **~9× cold penalty** on this phase alone, far larger than anything measured on INSERT or READ. Anyone who measured DELETE on a cold process measured something like 7–9× too slow, which is a concrete, mechanical explanation for why the pre-warm-up DELETE ratios in this campaign looked as bad as they did.
+
+**5. This run's cells, for the record.** Medians of the paired ratios: INSERT **1,52×**, READ **1,86×**, UPDATE **1,71×**, DELETE **6,16× (3,63–6,65×)** — all four clear of 1,00× again, consistent with session 25. One caveat that the interleaving earned its keep on: **SQLite's own rep 1 was slow on all four operations** (INSERT 79.865 against 89–99k, READ 61.781 against 88–90k, UPDATE 66.205 against 121–130k), i.e. a genuinely slow window — and because the arms alternate, that window hit both arms of the pair, which is exactly why the per-rep ratios stay usable where a sequential-block protocol would have blamed one engine for it.
+
+
 
 
 
