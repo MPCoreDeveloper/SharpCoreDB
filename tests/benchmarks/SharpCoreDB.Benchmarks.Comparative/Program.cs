@@ -230,6 +230,17 @@ class Program
             return;
         }
 
+        // Optional: --fair-ni (S5, plan §4) → the fair non-PK arm. Neither side declares a primary key,
+        // both resolve the same predicate through a secondary index, and both carry an index on every
+        // column, so the default job's two asymmetries (SQLite's rowid shortcut, and the updated column
+        // being unindexed on SQLite's side while ours is auto-indexed) are both removed. What is left is
+        // the row write path, which is the quantity the default job's no-PK arm could not isolate.
+        if (args.Any(a => a.Equals("--fair-ni", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunFairNoPkIndexed(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk-ab → same-window interleaved A/B: runs arm A and arm B as alternating
         // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
         // machine drift affects both arms of each pair equally. Arms are config variants named by
@@ -1676,30 +1687,7 @@ class Program
                 cmd.ExecuteNonQuery();
             }
 
-            // S1 (plan §4): pragmas are applied from ONE resolved list and then READ BACK, so the
-            // archive records the values SQLite actually took rather than the ones the harness asked
-            // for — a pragma can be silently refused (SQLite documents that page_size is immutable once
-            // a database is in WAL mode, and unknown pragmas are ignored without error). Requested and
-            // effective are printed together when they differ.
-            var plannedPragmas = SqlitePragmas();
-            foreach (var pragma in plannedPragmas)
-            {
-                using var pragmaCmd = conn.CreateCommand();
-                pragmaCmd.CommandText = $"PRAGMA {pragma}";
-                pragmaCmd.ExecuteNonQuery();
-            }
-
-            var effectivePragmas = new List<string>(plannedPragmas.Length);
-            foreach (var pragma in plannedPragmas)
-            {
-                var name = pragma.Split('=', 2)[0].Trim();
-                using var readCmd = conn.CreateCommand();
-                readCmd.CommandText = $"PRAGMA {name}";
-                effectivePragmas.Add($"{name}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
-            }
-
-            result.SqlitePragmas = string.Join(", ", effectivePragmas);
-            Console.WriteLine($"  SQLite reference pragmas (effective): {result.SqlitePragmas}");
+            ConfigureSqliteReference(conn, result);
 
             // INSERT (batched in transactions)
             var sw = Stopwatch.StartNew();
@@ -1780,6 +1768,354 @@ class Program
         finally
         {
             try { if (File.Exists(dbFile)) File.Delete(dbFile); } catch { /* temp */ }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Opens a SQLite reference connection onto the resolved reference regime (S1): applies
+    /// <see cref="SqlitePragmas"/> and READS THEM BACK, so the archive records the values SQLite
+    /// actually took rather than the ones the harness asked for — a pragma can be silently refused
+    /// (SQLite documents that <c>page_size</c> is immutable once a database is in WAL mode, and unknown
+    /// pragmas are ignored without error). One helper, so every SQLite arm uses the same reference and
+    /// no arm can drift.
+    /// </summary>
+    static void ConfigureSqliteReference(SqliteConnection conn, BenchmarkResult result)
+    {
+        var plannedPragmas = SqlitePragmas();
+        foreach (var pragma in plannedPragmas)
+        {
+            using var pragmaCmd = conn.CreateCommand();
+            pragmaCmd.CommandText = $"PRAGMA {pragma}";
+            pragmaCmd.ExecuteNonQuery();
+        }
+
+        var effectivePragmas = new List<string>(plannedPragmas.Length);
+        foreach (var pragma in plannedPragmas)
+        {
+            var name = pragma.Split('=', 2)[0].Trim();
+            using var readCmd = conn.CreateCommand();
+            readCmd.CommandText = $"PRAGMA {name}";
+            effectivePragmas.Add($"{name}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
+        }
+
+        result.SqlitePragmas = string.Join(", ", effectivePragmas);
+        Console.WriteLine($"  SQLite reference pragmas (effective): {result.SqlitePragmas}");
+    }
+
+    // ══════════════════════════════════════
+    // S5 (plan §4): the FAIR non-PK, indexed-predicate comparison
+    // ══════════════════════════════════════
+
+    /// <summary>Table name for the S5 fair arm. Both engines use the same one.</summary>
+    const string FairNiTable = "fni";
+
+    /// <summary>Name of the secondary index on the predicate column, on both engines.</summary>
+    const string FairNiNameIndex = "idx_fni_name";
+
+    /// <summary>
+    /// The columns the fair arm indexes on the SQLite side. SharpCoreDB's Columnar <c>CREATE TABLE</c>
+    /// already registers a hash index per column (<c>SqlParser.DDL.cs:430-436</c>), so listing the same
+    /// columns here is what MATCHES the index sets instead of assuming they match.
+    /// </summary>
+    static readonly string[] FairNiAllColumns = ["name", "email", "age", "score", "data"];
+
+    /// <summary>
+    /// The fair comparison the default job cannot provide.
+    /// <para>
+    /// The default job compares a SharpCoreDB table with <b>no primary key</b> and a predicate on an
+    /// <em>indexed</em> <c>name</c> against a SQLite table with <c>id INTEGER PRIMARY KEY</c> and the
+    /// predicate on that <em>rowid</em> — so SQLite resolves in one B-tree descent to a row it edits in
+    /// place, while ours probes a secondary hash index. On top of that, SQLite's <c>score</c> is
+    /// unindexed while ours is not, because every column of a Columnar table gets an auto-created hash
+    /// index (<c>SqlParser.DDL.cs:430-436</c>). The brief's §8 trap 4 names the first half of that
+    /// asymmetry; S2's verdict (worklog session 19) named the second.
+    /// </para>
+    /// <para>
+    /// This arm removes both: <b>neither</b> side declares a primary key, <b>both</b> resolve the same
+    /// predicate through a secondary index on <c>name</c>, and <b>both</b> carry an index on every
+    /// column — SharpCoreDB implicitly, SQLite explicitly — so the SET column is indexed on both sides
+    /// and neither engine gets the "unindexed column" shortcut. What is left is the row write path,
+    /// which is precisely the quantity arm C's 0,24× could not isolate.
+    /// </para>
+    /// </summary>
+    static void RunFairNoPkIndexed(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║  S5 fair arm: NO primary key on EITHER side         ║");
+        Console.WriteLine("║  same predicate, same secondary index, same columns ║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("(median of 3 per phase)");
+        Console.WriteLine("Both sides carry an index on EVERY column — SharpCoreDB implicitly for a Columnar table,");
+        Console.WriteLine("SQLite explicitly — so the SET column is indexed on both sides. No rowid shortcut either way.");
+        Console.WriteLine();
+
+        Console.WriteLine("━━━ SharpCoreDB (SQL, no PK, hash-indexed predicate) ━━━");
+        var scdb = RunPkMedian(() => RunFairNoPkSharp(engineType));
+        Console.WriteLine();
+
+        Console.WriteLine("━━━ SQLite (reference, no PK, secondary-indexed predicate) ━━━");
+        var sqlite = RunPkMedian(() => RunFairNoPkSqlite());
+        Console.WriteLine();
+
+        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine();
+        Console.WriteLine("  SharpCoreDB / SQLite   (reuses the harness's Ratio helper: it prints n/a when a phase failed)");
+        Console.WriteLine($"    INSERT: {Ratio(scdb.InsertOpsPerSec, sqlite.InsertOpsPerSec)}"
+            + $"   READ: {Ratio(scdb.ReadOpsPerSec, sqlite.ReadOpsPerSec)}"
+            + $"   UPDATE: {Ratio(scdb.UpdateOpsPerSec, sqlite.UpdateOpsPerSec)}"
+            + $"   DELETE: {Ratio(scdb.DeleteOpsPerSec, sqlite.DeleteOpsPerSec)}");
+        Console.WriteLine("  (> 1,00x means SharpCoreDB is ahead.) Compare against the default job's no-PK arm: if the");
+        Console.WriteLine("   gap shrinks HERE, the default job's gap was row LOCATION, not the row write path — that");
+        Console.WriteLine("   separation is the whole point of this arm.");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL, no PK, indexed predicate)"] = scdb,
+            ["SQLite (reference, no PK, indexed predicate)"] = sqlite,
+        };
+        var path = Path.Combine(ResultsDirectory(), $"fair_ni_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// SQLite side of the S5 fair arm. Two things are deliberately withdrawn from the default job's
+    /// SQLite arm: the <c>id INTEGER PRIMARY KEY</c> (which made every access a rowid descent) and the
+    /// absent secondary index (which left the updated column unindexed). What remains is the shape
+    /// SharpCoreDB is measured on, so the ratio measures the engine rather than the schema difference.
+    /// </summary>
+    static BenchmarkResult RunFairNoPkSqlite()
+    {
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-fairni-sqlite-{Guid.NewGuid()}.db");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            using var conn = new SqliteConnection($"Data Source={dbFile}");
+            conn.Open();
+
+            // No PRIMARY KEY declared: the rowid shortcut is out, and the predicate has to go through the
+            // secondary index below, exactly as ours does.
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $@"CREATE TABLE {FairNiTable} (
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    age INTEGER,
+                    score REAL,
+                    data TEXT
+                )";
+                cmd.ExecuteNonQuery();
+            }
+
+            // Match the index set. SharpCoreDB's Columnar CREATE TABLE auto-registers a hash index per
+            // column, so SQLite gets one index per column here. Without this the SET column would be
+            // indexed on our side and unindexed on SQLite's — the asymmetry S2's verdict identified.
+            foreach (var column in FairNiAllColumns)
+            {
+                using var idxCmd = conn.CreateCommand();
+                idxCmd.CommandText = $"CREATE INDEX idx_fni_{column} ON {FairNiTable}({column})";
+                idxCmd.ExecuteNonQuery();
+            }
+
+            ConfigureSqliteReference(conn, result);
+
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                using var tx = conn.BeginTransaction();
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                for (int i = batch; i < end; i++)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"INSERT INTO {FairNiTable} (name, email, age, score, data) VALUES (@name, @email, @age, @score, @payload)";
+                    var pName = cmd.CreateParameter(); pName.ParameterName = NameParam; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
+                    var pEmail = cmd.CreateParameter(); pEmail.ParameterName = "@email"; pEmail.Value = $"user{i}@test.com"; cmd.Parameters.Add(pEmail);
+                    var pAge = cmd.CreateParameter(); pAge.ParameterName = "@age"; pAge.Value = 20 + i % 60; cmd.Parameters.Add(pAge);
+                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 0.1; cmd.Parameters.Add(pScore);
+                    var pPayload = cmd.CreateParameter(); pPayload.ParameterName = "@payload"; pPayload.Value = $"payload-{i}"; cmd.Parameters.Add(pPayload);
+                    cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ by the secondary-indexed predicate column
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"SELECT * FROM {FairNiTable} WHERE name = @name";
+                var p = cmd.CreateParameter(); p.ParameterName = NameParam; p.Value = $"User{i}"; cmd.Parameters.Add(p);
+                using var reader = cmd.ExecuteReader();
+                reader.Read();
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE through the secondary index, setting the same score column our arm sets
+            sw.Restart();
+            using (var tx = conn.BeginTransaction())
+            {
+                for (int i = 0; i < UpdateCount; i++)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"UPDATE {FairNiTable} SET score = @score WHERE name = @name";
+                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 99.9; cmd.Parameters.Add(pScore);
+                    var pName = cmd.CreateParameter(); pName.ParameterName = NameParam; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
+                    cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            // DELETE through the secondary index
+            sw.Restart();
+            using (var tx = conn.BeginTransaction())
+            {
+                for (int i = 0; i < DeleteCount; i++)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"DELETE FROM {FairNiTable} WHERE name = @name";
+                    var p = cmd.CreateParameter(); p.ParameterName = NameParam; p.Value = $"User{i}"; cmd.Parameters.Add(p);
+                    cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try { if (File.Exists(dbFile)) File.Delete(dbFile); } catch { /* temp */ }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// SharpCoreDB side of the S5 fair arm: the same no-PK schema, the same secondary index on the
+    /// predicate column and the same CRUD shapes as <see cref="RunFairNoPkSqlite"/>, so the only
+    /// variables left are the engines. Plaintext and the product configuration are held constant here
+    /// on purpose — this arm measures the index/predicate shape, not the encryption posture.
+    /// </summary>
+    static BenchmarkResult RunFairNoPkSharp(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-fairni-{Guid.NewGuid()}");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var sp = services.BuildServiceProvider();
+
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = BuildConfig(engineType, fixedWidth: MainFixedWidthOverride(), noEncrypt: true, atRestRecords: null);
+
+            using var db = (SharpCoreDB.Database)factory.Create(
+                dbPath: dbPath,
+                masterPassword: BenchDbPassword,
+                isReadOnly: false,
+                config: config);
+
+            db.ExecuteSQL($@"CREATE TABLE {FairNiTable} (
+                name TEXT NOT NULL,
+                email TEXT,
+                age INTEGER,
+                score REAL,
+                data TEXT
+            )");
+
+            // No PRIMARY KEY — matching SQLite's side, where none is declared either.
+            db.ExecuteSQL($"CREATE INDEX {FairNiNameIndex} ON {FairNiTable}(name)");
+
+            // INSERT (batched, same batch size as every other arm)
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                var rows = new List<Dictionary<string, object>>(end - batch);
+                for (int i = batch; i < end; i++)
+                {
+                    rows.Add(new Dictionary<string, object>
+                    {
+                        ["name"] = $"User{i}",
+                        [EmailColumn] = $"user{i}@test.com",
+                        ["age"] = 20 + i % 60,
+                        [ScoreColumn] = i * 0.1,
+                        ["data"] = $"payload-{i}"
+                    });
+                }
+                db.InsertBatch(FairNiTable, rows);
+            }
+            db.Flush();
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ by the secondary-indexed predicate column — the same statement shape as SQLite's side
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                    new Dictionary<string, object?> { [NameParam] = $"User{i}" });
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE through the secondary index, setting the same score column SQLite's side sets
+            sw.Restart();
+            var updateStmts = new List<string>(UpdateCount);
+            for (int i = 0; i < UpdateCount; i++)
+            {
+                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
+                    "UPDATE {0} SET score = {1:F1} WHERE name = 'User{2}'", FairNiTable, i * 99.9, i));
+            }
+            db.ExecuteBatchSQL(updateStmts);
+            db.Flush();
+            sw.Stop();
+            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            // DELETE through the secondary index
+            sw.Restart();
+            var deleteStmts = new List<string>(DeleteCount);
+            for (int i = 0; i < DeleteCount; i++)
+            {
+                deleteStmts.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
+            }
+            db.ExecuteBatchSQL(deleteStmts);
+            db.Flush();
+            sw.Stop();
+            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
         }
 
         return result;

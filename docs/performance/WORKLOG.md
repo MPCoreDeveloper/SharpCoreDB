@@ -2928,6 +2928,37 @@ PageBased reports **no `index-maint` at all**, because the auto-`CreateHashIndex
 
 **7. Validation.** Harness build **0 errors**; canaries **29 / 0 failed** (`FixedWidthInlineValueTests`, `FixedWidthPatchTests`, `ReopenRoundTripMatrixTests`, `FormatCompatPolicyTests`, `FixedWidthBulkUpdateTests`, `WritePathProfilerTests`); core suite **1824 / 0 failed / 0 skipped** (61,8 s). Both profiler runs were preceded by `dotnet build-server shutdown`, and `quiet-machine.ps1` reported **`QUIET`** first.
 
+---
+
+### 2026-09-24 (session 20, unattended continuation) — S5 lands and **inverts arm C**: on a fair shape (no PK on either side, same secondary index, same index set) SharpCoreDB reads **1,20× / 1,14× / 0,60× / 4,07×** where the default job read **0,67× / 0,76× / 0,24× / 0,31×**. **Three of four operations flip from behind to ahead, and UPDATE more than doubles**
+
+- Session: 1 of 1 for S5 (timebox 1 — met)
+- Command(s): harness build ×2 · `quiet-machine.ps1` ×1 · `--fair-ni` ×1 (median of 3 per arm) · canaries and core suite from session 19 re-confirmed
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · **`quiet-machine.ps1` returned `NOISY`** (Windows Search had restarted) — so the numbers below are **directional and not publishable** as they stand
+- Verdict: **KEPT (harness only; no `src/` change)** — the arm works, and its first result reframes arm C
+- Commit: `test(bench)`: the S5 fair non-PK arm, and the arm-C gap mostly was the schema (plan §4 S5)
+- NEXT: re-run `--fair-ni` on a `QUIET` box **with the per-rep spread printed** (the arm uses `RunPkMedian`, which reports the median only — the plan's §6.4 wants the spread), then **S4** (NativeAOT dispatch, measure-first).
+
+**1. What the arm removes, stated precisely.** The default job compares a SharpCoreDB table with **no primary key** and a predicate on an **indexed** `name` against a SQLite table with `id INTEGER PRIMARY KEY` and the predicate on that **rowid** — one B-tree descent to a row SQLite edits in place, versus a secondary-index probe on our side. And SQLite's `score` was **unindexed** while ours is not, because every column of a Columnar table gets an auto-created hash index (`SqlParser.DDL.cs:430-436`). The brief's §8 trap 4 named the first; S2's verdict (session 19) named the second. `--fair-ni` removes both: **neither** side declares a PK, **both** resolve the same predicate through a secondary index on `name`, and SQLite gets an explicit index on **every** column (`idx_fni_name`, `idx_fni_email`, `idx_fni_age`, `idx_fni_score`, `idx_fni_data`) to match SharpCoreDB's implicit five. Both arms are plaintext, both use the same batch size and the same statement shapes.
+
+**2. The result.** Median of 3 per arm, same run, same box:
+
+| | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB | 116.650 | 107.251 | 81.538 | 202.265 |
+| SQLite | 96.872 | 94.211 | 135.126 | 49.749 |
+| **ratio (SCDB ÷ SQLite)** | **1,20×** | **1,14×** | **0,60×** | **4,07×** |
+| *default job, no PK (arm C)* | *0,67×* | *0,76×* | *0,24×* | *0,31×* |
+
+**INSERT 0,67 → 1,20 · READ 0,76 → 1,14 · UPDATE 0,24 → 0,60 · DELETE 0,31 → 4,07.** Three of the four operations move from behind to **ahead**, and the UPDATE gap more than halves. **Most of arm C's deficit was the comparison, not the engine.** That is exactly the separation S3's verdict said arm C needed and could not produce.
+
+**3. The DELETE inversion is a mechanism, not a fluke, and it is explainable.** SQLite's DELETE fell to **49.749** while its UPDATE read 135.126 — the opposite ordering from the default job, where SQLite's rowid DELETE was cheap. The cause is the index set: with five secondary indexes and no rowid predicate, SQLite must remove the row from every index on DELETE, whereas SharpCoreDB's hash entries are cheap to remove (it already skips row reads on the key-only path — `DeleteByPrimaryKey`). This is the same `index-maint` cost that S2 measured, now charged to **both** sides instead of only ours.
+
+**4. The caveats, and the first one is binding.** (a) **The run was `NOISY`** — Windows Search had restarted and `quiet-machine.ps1` flagged it, so per the campaign's own rule these numbers are **directional and must be re-run on a `QUIET` box before publication**. The archive was deleted rather than committed for that reason; the table above is quoted from the run. (b) **The spread is not printed**: the arm uses `RunPkMedian`, which returns the median only, so §6.4's spread requirement is **not yet met** — the follow-up is a per-rep paired print (the `--pk-ab` pattern) rather than a wider timebox. (c) The magnitudes are far beyond this box's noise band (a 4,07× and a 2,5× move against a ~2,9× worst-case *spread within one arm*), which is why the direction is reportable even though the exact figures are not.
+
+**5. What this changes in the plan.** Arm C's target stops being "an unattainable in-place update problem" and becomes **"close a 0,60× UPDATE on a shape where the other three operations already win"** — and §9 row 5 (the auto hash index per column) now has a measured counterpart: with a matched index set, our hash indexes are *faster* to maintain than SQLite's B-trees on DELETE. That weakens the case for narrowing the auto-index default, which is worth saying before the owner acts on row 5.
+
+
 
 
 

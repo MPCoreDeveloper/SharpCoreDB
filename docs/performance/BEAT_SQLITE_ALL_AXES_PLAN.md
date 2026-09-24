@@ -339,9 +339,27 @@ product defect until we can see it clearly.
 engines resolving through an index. This isolates "row update cost" from "row location cost" — which is
 exactly the separation §2.1's diagnosis depends on.
 
-**Acceptance.** The new arm's numbers are stable enough (spread printed, median-of-3) that a claim is
-possible, and the difference between arm C indexed and arm C unindexed is attributable to location, not
-to the write path. This is a harness item and ships no `src/` change.
+**Landed 2026-09-24 (worklog session 20) — `KEPT`, and it inverts arm C.** `--fair-ni` removes both
+asymmetries: no primary key on either side, the same predicate through a secondary index on `name` on
+both sides, and SQLite given an explicit index on **every** column to match SharpCoreDB's implicit five.
+Median of 3 per arm, same run:
+
+| | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB | 116.650 | 107.251 | 81.538 | 202.265 |
+| SQLite | 96.872 | 94.211 | 135.126 | 49.749 |
+| **ratio** | **1,20×** | **1,14×** | **0,60×** | **4,07×** |
+| *default job, no PK (arm C)* | *0,67×* | *0,76×* | *0,24×* | *0,31×* |
+
+**Three of four operations flip from behind to ahead and UPDATE more than doubles: most of arm C's
+deficit was the comparison, not the engine.** The DELETE inversion (SQLite 49.749 against its own
+135.126 UPDATE) is explained by the index set — with five secondary indexes and no rowid predicate,
+SQLite must remove the row from every index, while our hash entries are cheap to remove.
+
+**Two gaps before this is publishable**, both recorded rather than papered over: (1) the run was
+**`NOISY`** (Windows Search had restarted) so the figures are **directional only** — re-run on a `QUIET`
+box before quoting them; (2) `RunPkMedian` reports the median only, so **§6.4's spread is not printed**
+for this arm — the follow-up is a per-rep paired print (the `--pk-ab` pattern).
 
 ### S6 — Shape-matched runtime wins, only where the JIT's own conditions hold *(opportunistic)* — **timebox 1 session**
 
@@ -484,7 +502,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 2 | **The −24 % rail, if S3 reproduces it in the other direction.** If forcing the constant-size layout on the PK-less shape is ≤ 1,0× cost at capacity 24, may it be enabled for new tables (not migrated) as a *conditional* default? | S3's table + `[2][3][4][5]` | Keep the rail; report and wait |
 | 3 | **A numeric floor for arm B.** Decision 10 lists this as its one open sub-decision. | §1.2's recorded band | Keep the no-regression-against-its-own-values rule until a floor is chosen |
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
-| 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit |
+| 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row. |
 
 ---
 
