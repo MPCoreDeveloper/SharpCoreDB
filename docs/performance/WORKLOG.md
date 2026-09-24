@@ -3694,6 +3694,35 @@ Ours is monotone through measured rep 5 — **pass 8 overall** — and only then
 **5. Why this class of work earns its place in a performance campaign.** The `EnableHashIndexes` cost was not the flag's own redundancy — it was that **a session had already built the `SHARPCOREDB_HASH_INDEXES` dial to test a hypothesis, and the dial was inert**, so the hypothesis could not be tested and the session recorded a refutation it could not have made. An inert flag is not neutral; it removes the ability to ask a question. That is also why the sweep was worth running *before* the dispatcher work rather than after: the next hypothesis is about the dispatcher and the row locate, and if either has a dead dial attached, the same trap is waiting.
 - NEXT: **the dispatcher's per-statement classification** — the last attributed UPDATE cost, ~1,5 µs of the ~1,6 µs per statement in `TryScanCanonicalDml` + `SqlParser.ParseValue` (`Database.Batch.cs:526`, `Database.Batch.cs:885`). Read the two functions before instrumenting them, because sub-stages inside a 10.000-statement loop perturb the phase they describe (§6 rule 11) and this campaign has been corrected six times by assuming a mechanism. And **four owner items are now open**: the dead-config decision (implement or remove, ×7 — `UseBufferedIO` carries a measurement consequence), the UPDATE default question (probably moot now that the auto-index lever is refuted), elevation for `--gate`, and S4's VS C++ workload.
 
+---
+
+### 2026-09-24 (session 44) — the `parse` stage's observer cost is now **measured** (75 ns/statement ≈ 4,6 %), the residue is the scanner + `ParseValue`, and the evidenced fix is the one with a precedent: give UPDATE and DELETE the SQL-free batch path INSERT already has
+
+- Session: 1 of 1 (the dispatcher item's required measurement)
+- Command(s): `--update-parse-cost` ×1 (extended with the profiler's own cost, shapes C and D)
+- Regime: n/a — an in-process micro-measurement, no file I/O beyond the harness's usual setup
+- Verdict: **KEPT** — the last attributed UPDATE cost is now bounded from both ends, and the fix it points at is not the one I would have guessed
+- Commit: `test(bench)`: the profiler's own per-statement cost, measured
+
+**1. The stage table's share is partly the instrument measuring itself, and that is now a number rather than a worry.** The batch dispatcher stamps and adds **per statement** inside the region it reports (`Database.Batch.cs:1028` / `:1073`), so `parse`'s share — sampled with the profiler ON, the only state in which stage tables exist at all — necessarily includes the observer.
+
+| shape | ns/op | B/op |
+|---|---:|---:|
+| A — `Dictionary<string,object>(1)` + one entry | 100,4 | 240 |
+| B — WHERE rebuild, runtime | 13,1 | 40 |
+| **C — profiler `Stamp()`+`Add()`, ENABLED** | **75,0** | 0 |
+| D — profiler `Stamp()`+`Add()`, disabled | 5,9 | 0 |
+
+**75 ns of the ~1.630 ns/statement** that session 31's `parse` stage costs is the profiler, i.e. **≈ 4,6 %**. So the 11–33 % share is an **upper bound whose error is now quantified** — usable, and worth quoting with that caveat rather than being quietly discarded. (For completeness: at 5,9 ns disabled, the profiler is genuinely free in the timed arms, so no published ratio is affected — this is a statement about the *attribution* only.)
+
+**2. And the residue — ~1.440 ns per statement — is where the cost actually is.** With the observer (75 ns), the `Dictionary` (100 ns) and the WHERE rebuild (13 ns) set aside, what remains sits in `TryScanCanonicalDml` and `SqlParser.ParseValue`. The scanner is already a careful allocation-conscious span scan, but its **out-parameter interface costs five `ToString()` allocations per statement** (`table = tableSpan.ToString()`, `setCol`, `setValRaw`, `whereCol`, `whereValRaw` — `Database.Batch.cs:534-538, 582, 597`), and `ParseValue` then converts the literal's text to a typed value. **1,44 µs for a span scan, five short substrings and one literal conversion is high**, and I am *not* going to guess which of the two dominates: sub-stages inside a 10.000-statement loop perturb the phase they describe (plan §6 rule 11), and this campaign has now been corrected **six times** by exactly that kind of inference. That split is the next measurement, and it needs a method that does not stamp inside the loop.
+
+**3. The fix the evidence points at is the one with a precedent, and it is not micro-tuning the scanner.** This campaign can already name the difference between its best and worst PK cells: **INSERT — our best (0,80–0,83×) — has a dedicated SQL-free batch path** (`InsertBatch(object[] rows, prepared.Columns)`, explicitly dictionary-free), while **UPDATE and DELETE hand the engine SQL text and pay a per-statement classification** (0,39–0,41× and 0,35–0,38×). Shaving the scanner would attack ~1,4 µs of a ~5 µs update; removing the per-statement text classification *entirely* — the API shape INSERT already has — attacks the whole layer at once, and it is the change `PERFORMANCE_DEEP_DIVE.md:79` already names ("Add `PreparedCommand` with bound parameters that reuse serialization buffers"). **The campaign's own history is the argument: the phase with the SQL-free path is the phase that competes, and the two phases without one are the two that do not.**
+
+**4. And it is real feature work, which is why the honest recommendation is to scope it rather than start it.** A SQL-free `UpdateBatch(table, keys, values)` / `DeleteBatch(table, keys)` pair mirroring `InsertBatch` is a public API addition (optional, and the plan's rule is that new features stay optional), plus a benchmark arm that uses it so the comparison stays like-for-like, plus tests. Against that: the campaign has now spent **sixteen commits and two `src/` changes on measurement**, and the one engine change that touched performance behaviour was a refutation. **The measurement work is finished — every cell is now either resolved or carries a quantified caveat — and what remains is the first genuine optimisation attempt of the entire campaign.** That is the right thing to hand over rather than to start at the end of a session.
+- NEXT: **the first genuine optimisation attempt of the campaign** — a SQL-free `UpdateBatch(table, keys, values)` / `DeleteBatch(table, keys)` pair mirroring the `InsertBatch` that already makes INSERT the best PK cell, plus a benchmark arm that uses it so the comparison stays like-for-like, plus tests. It is new public API, so per the plan it is optional, and it is the only change in this campaign's evidence that attacks the whole dispatcher layer rather than 1,4 µs of a 5 µs update. Before it, the **scanner-vs-`ParseValue` split** of that residue is owed by a method that does not stamp inside the loop. Four owner items remain: the dead-config decision (×7, `UseBufferedIO` carrying a measurement consequence), elevation for `--gate`, the VS C++ workload, and whether to retire the now-refuted auto-index question.
+
+
 
 
 
