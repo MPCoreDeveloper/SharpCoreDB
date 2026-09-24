@@ -168,28 +168,35 @@ public class DatabaseConfig
 
     /// <summary>
     /// Gets the minimum number of bytes a single-file (<c>.scdb</c>) database adds when it has to grow its file.
-    /// <b>Default 0, which keeps the historical 10 MiB minimum</b>
+    /// <b>Default 0, which means the product default — 1 MiB since the owner decision of 2026-09-24</b>
     /// (<c>FreeSpaceManager.MinExtensionBytesDefault</c>). Applies to the next open, never to an already-open file.
     /// <para>
-    /// ⚠️ <b>Why this exists: the 10 MiB minimum is why a 100-row <c>.scdb</c> is 14,7 MB.</b> The single-file file
+    /// ⚠️ <b>Why this exists: the 10 MiB minimum was why any small `.scdb` database was 14,7 MB.</b> The single-file file
     /// starts at <b>1.037 pages</b> (4.247.552 B at a 4 KiB page size: header, block registry, FSM, table directory and
     /// the first data/overflow blocks), and the first allocation that does not fit adds
     /// <c>max(requiredPages, currentSize / 2, minExtensionPages)</c> where <c>minExtensionPages = thisValue / pageSize</c>.
-    /// For a small database both of the first two terms are far below 2.560 pages, so <b>the minimum decides</b>:
-    /// 1.037 + 2.560 = <b>3.597 pages = 14.733.312 B</b>, and that size is then <b>independent of the row count</b> —
-    /// measured 2026-09-23 with the harness's <c>--scdb</c> arm at <b>100, 500 and 2.000 rows, both caller shapes and
-    /// both inline capacities: 14.733.312 B in all four cells</b>.
+    /// At the historical 10 MiB the minimum won for every file below 20 MB, so the first extension landed on
+    /// 1.037 + 2.560 = <b>3.597 pages = 14.733.312 B</b> — measured 2026-09-23 at <b>1, 100, 500 and 2.000 rows, both
+    /// caller shapes and both inline capacities: identical in all four cells</b>, which is what proved it was a floor
+    /// rather than growth. At the 1 MiB default the minimum stops binding on a fresh file (256 pages against the halving
+    /// term's 518), so the same database lands on <b>1.555 pages = 6.369.280 B</b>.
     /// </para>
     /// <para>
-    /// Lowering it trades <b>file size</b> for <b>more extension calls</b> (each extension re-writes the block registry
-    /// and the FSM), so it is a policy choice rather than a free win: the doubling term still grows the file
-    /// exponentially once the database is larger than twice this value, which means a large database's growth pattern
-    /// is unchanged. It has <b>no effect on the on-disk format</b> — the file is a whole number of pages either way, and
-    /// a database grown under one setting is read and extended under another without conversion — so this is safe to
-    /// change on an existing file.
+    /// <b>Anything at or below ~2 MiB lands in the same place</b>, because the halving term decides it — so lowering this
+    /// further buys nothing on a small file, and raising it above ~2 MiB starts to bind again (10 MiB reproduces the old
+    /// 14,7 MB floor exactly, which is one line of configuration if you want the historical behaviour back).
     /// </para>
-    /// <para>Covered by <c>SingleFileFileGrowthTests</c>: the default keeps the historical floor, a small configured
-    /// value shrinks the file, and every row is still readable after both.</para>
+    /// <para>
+    /// Lowering it trades <b>file size</b> for <b>more, smaller extension steps</b> (each extension re-writes the block
+    /// registry and the FSM), and that trade is measured rather than assumed: the extension path is A/B-tested through the
+    /// harness's <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c> switch on both a small database and a multi-extension one. It has
+    /// <b>no effect on the on-disk format</b> — the file is a whole number of pages either way, and a database grown
+    /// under one setting is read and extended under another without conversion — so it is safe to change on an existing
+    /// file.
+    /// </para>
+    /// <para>Covered by <c>SingleFileFileGrowthTests</c>: the default lands on the halving-term floor, an explicit 10 MiB
+    /// still reproduces the historical floor exactly, a value below the halving term changes nothing, and every row is
+    /// readable after each variant (including after a reopen with a different value).</para>
     /// </summary>
     public long SingleFileMinExtensionBytes { get; init; } = 0;
 

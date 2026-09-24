@@ -69,12 +69,25 @@ internal sealed class FreeSpaceManager : IDisposable
     // The minimum file extension is defined in bytes and stays around 10 MB regardless of page size;
     // a fixed page count would grow linearly with page size (see issue #345).
     /// <summary>
-    /// The historical minimum file extension: 10 MiB. It is the reason a small <c>.scdb</c> database is ~14,7 MB
-    /// (1.037 initial pages + 2.560 extension pages at a 4 KiB page size = 3.597 pages = 14.733.312 B), and it is now
-    /// overridable through <see cref="SharpCoreDB.DatabaseConfig.SingleFileMinExtensionBytes"/> without changing the
-    /// default for anyone who does not ask. Exposed as a constant so the config documents one number, not two.
+    /// The default minimum file extension: <b>1 MiB</b>. It was <b>10 MiB</b> until the owner decision of 2026-09-24.
+    /// <para>
+    /// The 10 MiB value is why a small <c>.scdb</c> database used to be <b>14,7 MB whatever it held</b>: a fresh file is
+    /// 1.037 pages and <see cref="AllocatePages"/> extends by
+    /// <c>max(requiredPages, currentSize / 2, minExtensionPages)</c>, where 10 MiB is 2.560 pages at a 4 KiB page size —
+    /// so the first extension that did not fit landed on 1.037 + 2.560 = 3.597 pages = <b>14.733.312 B</b>. At 1 MiB the
+    /// minimum no longer binds on a fresh file (256 pages against the halving term's 518), so the halving term decides
+    /// and the file lands on 1.555 pages = <b>6.369.280 B</b>.
+    /// </para>
+    /// <para>
+    /// Any value at or below ~2 MiB produces that same small-file floor, because the halving term decides it; and a
+    /// database larger than 20 MB was already governed by the halving term (it exceeds 10 MiB there), so this change
+    /// trades <em>file size</em> for <em>more, smaller extension steps</em> below that size only. The historical value is
+    /// one configuration line away (<c>DatabaseConfig.SingleFileMinExtensionBytes = 10 * 1024 * 1024</c>) and both ends
+    /// are pinned by <c>SingleFileFileGrowthTests</c>. Exposed as a constant so the config documents one number, not
+    /// two, and it is <b>not</b> part of the on-disk format: it is read per open and never changes how a file is read.
+    /// </para>
     /// </summary>
-    internal const long MinExtensionBytesDefault = 10L * 1024 * 1024;
+    internal const long MinExtensionBytesDefault = 1L * 1024 * 1024;
     private const int EXTENSION_GROWTH_FACTOR = 2;     // Double size each time (exponential growth)
     private readonly long _minExtensionBytes;
     private ulong _preallocatedPages = 0;

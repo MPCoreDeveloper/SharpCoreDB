@@ -2590,6 +2590,37 @@ One cause explains the pattern: **AEAD is per record**, so patching one field re
 **5. A provenance defect found and fixed on the way.** The documented invocation runs the harness from the repo root, where a `results/` folder exists **but is git-ignored** (`.gitignore: /results/`) while the tracked evidence lives in the project's `results/`. Every writer except the dual-mode arm resolved the path from the process CWD, so **all six §5.4 runs above initially landed in the ignored folder** — the same trap that made sessions 8-10 re-run the `--scdb` arm. One `ResultsDirectory()` helper now anchors every writer at the project directory; the `--scdb` arm got the same treatment in the previous commit, and the six runs were archived into the tracked folder so the numbers in this entry have files behind them.
 
 
+### 2026-09-24 (session 13, unattended continuation) — the review's decisions land: `.scdb` default growth 10 MiB → 1 MiB (14,7 MB → 6,4 MB), the INSERT ratio target closed, and the ladders get a median-of-3 protocol
+- Session: 13 of 2026-09-24 (continuation; implements every choice from the review, including 5B)
+- Command(s): `--scdb` at 100 / 200 / 2.000 / 20.000 / 200.000 / 1.000.000 rows with `SHARPCOREDB_SCDB_SHAPES=batched` and `SHARPCOREDB_SCDB_MIN_EXTENSION` 1048576 vs 10485760 (interleaved, order alternated) · the default ladder run with **`SHARPCOREDB_LADDER_REPS=3`** · unit: `SharpCoreDB.Tests.exe -class "SharpCoreDB.Tests.SingleFileFileGrowthTests"` · provider suites by EXE
+- Regime: `REGIME: no SHARPCOREDB_* switches set` for the ladder and provider runs; `REGIME (overridden): SHARPCOREDB_SCDB_*` for the growth A/B (each printed by the harness, and the arm prints the minimum it used)
+- Result: **file 14.733.312 → 6.369.280 B (−56,8 %)** on every row count from 1 to 1.000.000 with **byte-identical allocation** (1.454 / 1.543 / 1.587 B/row) · growth tests **3/3** · ladder medians **SQL 0,56× / Direct 0,65× / StructRow 0,68× INSERT**, Direct READ 1,49×, StructRow READ 1,32×, with spreads 1,05–2,72×
+- Verdict: **KEPT** — decisions 9–15 are implemented/recorded, the growth tests pin all three ends, and the ladder protocol is executable rather than recommended
+- Commit: `feat(scdb)`: growth default 10 MiB → 1 MiB + tests + harness `SCDB_SHAPES` · `test(bench)`: ladder median-of-N · `docs`: §0.1 rows 9–15, §8e/§8f, §9, brief, CHANGELOG, this entry
+- NEXT: nothing open that is a code decision (see §0.1 rows 9–15); the gate baseline needs a quiet runner and the initial-layout probe is the remaining scoped item
+
+**1. Decision 9 (5B) — the default flip, and the measurement that made it safe.** `FreeSpaceManager.MinExtensionBytesDefault` 10 MiB → **1 MiB**; `DatabaseConfig.SingleFileMinExtensionBytes` keeps `0 = product default`, so the historical 14,7 MB floor is one configuration line away. Measured batched-shape, capacity 24:
+
+| rows | file @ 1 MiB (new default) | file @ 10 MiB | allocated/row |
+|---:|---:|---:|---|
+| 100 (both shapes) | **6.369.280 B** | 14.733.312 B | 2.236 / 82.696 B |
+| 200 | **6.369.280 B** | 14.733.312 B | 2.244 B |
+| 2.000 | **6.369.280 B** | 14.733.312 B | 1.443 B |
+| 20.000 | **6.369.280 B** | 14.733.312 B | 1.454 B |
+| 200.000 | **6.369.280 B** | 14.733.312 B | 1.543 B |
+| 1.000.000 | **6.369.280 B** | 14.733.312 B | 1.587 B |
+
+Two things that table decided. (a) **The saving is −56,8 % at every size**, including a million rows, because the single-file blocks are **compressed** — so the minimum still owns the file size and the "more extensions" cost a smaller minimum could carry is not reachable with this schema. Saying that is better than claiming a test that the row counts did not perform. (b) **Allocation per row is byte-identical** between the settings at every count, and it is the load-independent column — the rows/s cells were **not** usable: in the 3 ordered pairs at 20.000 rows the *second* run read higher every time, and in the 3 order-alternating pairs at 200.000 rows the *first* run read higher every time, so the differences follow position, not the setting.
+
+**2. Decision 9's tests.** `SingleFileFileGrowthTests` now has three: the default lands on the halving-term floor (**exact 6.369.280 B**), an explicit 10 MiB reproduces the historical floor (**exact 14.733.312 B** — the decision is reversible and pinned), and a value below the halving term (64 KiB) changes nothing (also exact). All three read their rows back, and the default test reopens under a *different* value. 3/3 pass; suite **1927 / 0 failed / 16 skipped**.
+
+**3. Decision 8 (harness protocol) — the ladders are now a measurement.** Added `SHARPCOREDB_LADDER_REPS` (default 1, protocol 3): each SQL/Direct/StructRow/SQLite arm runs N times, the table shows per-metric medians, each cell prints its **min–max and spread**, and `Reps` is written into `comparative_*.json` so a median is distinguishable from a single shot in the archive. The first median-of-3 run: **SQL INSERT 102.349 (spread 1,53×) / Direct 120.014 (1,05×) / StructRow 125.857 (1,15×) against SQLite 184.257 (1,48×) → 0,56× / 0,65× / 0,68×**; READ 0,91× / **1,49×** / **1,32×**; UPDATE 0,26× / 0,54×; DELETE 0,58× / 0,89×. SQL DELETE's spread was **2,63×** and Direct DELETE's **2,72×**, which is exactly why the spread is printed: two of twelve cells were still unstable enough that only their spread carries information.
+
+**4. Decisions 10–15 (recorded, no code).** §0.1 rows 10–15 now carry: the INSERT ratio target closed as *not claimed* (absolute floor met, publication + encrypted-arm no-regression rule in its place); arena appends staying write-through; the encrypted commit's `commit-overwrites` half and `index-maint` left alone (durability boundary, index freshness); `.scdb` solo-statement coalescing rejected (batching is 524× faster and documented); and the unsafe hash-index backend handed to its owner (0,07×, 75,6 µs/key, cost in the caller).
+
+**5. Validation.** Core suite **1927 / 0 failed / 16 skipped**; provider suites EFCore 116, EFCore.Functional 3, Dapper 3, Linq2DB 24, Sync 135 = **281 / 0 failed**; `SharpCoreDB.sln` builds with **0 errors**. Every run above archived in the project's tracked `results/`.
+
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 

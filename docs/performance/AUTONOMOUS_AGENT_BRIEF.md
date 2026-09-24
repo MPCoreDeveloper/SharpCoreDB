@@ -113,11 +113,19 @@ inline-capacity run self-describing.
 Harness-only env switches (used by the §9 experiments; set them explicitly and never let them leak
 between runs): `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`, `SHARPCOREDB_HASH_INDEXES`,
 `SHARPCOREDB_MAIN_PROFILE_UPDATE`, `SHARPCOREDB_WAL_DURABILITY`, `SHARPCOREDB_BUFFERED_APPENDS`,
-`SHARPCOREDB_MULTIROW_ROWS`, `SHARPCOREDB_SCDB_ROWS`, `SHARPCOREDB_SCDB_MIN_EXTENSION` (the `.scdb` file-size floor,
-2026-09-23 — see §9's growth item).
+`SHARPCOREDB_MULTIROW_ROWS`, `SHARPCOREDB_SCDB_ROWS`, `SHARPCOREDB_SCDB_SHAPES` (`both` default / `batched` — the
+latter makes a 1.000.000-row `.scdb` run feasible because the statementwise shape is quadratic by construction),
+`SHARPCOREDB_SCDB_MIN_EXTENSION` (the `.scdb` file-size floor, 2026-09-23/24 — see §9's growth item), and
+`SHARPCOREDB_LADDER_REPS` (**1** default, **3 is the §5.4 protocol**: each SQL/Direct/StructRow/SQLite ladder arm is
+then the median of N runs and prints its min–max spread, which is what keeps a single-shot reading out of the record).
 
 ## 3. Measurement protocol (non-negotiable)
 
+0. **Ratios need their reference in the same run, and a single ladder run is not a reading (2026-09-24).** Four runs of
+   the identical binary put the SQL ladder's INSERT ratio anywhere between 0,31× and 0,69× (our arm moved 35K → 84K ops/s
+   while the same-run SQLite moved 9 %), so **the ladders are measured with `SHARPCOREDB_LADDER_REPS=3` and reported as
+   medians**, with the printed min–max spread quoted beside them. Only the `--pk`/`--pk-default`/`--multirowinsert` arms
+   already carry their own median-of-3/5 and their own same-run SQLite reference; §5.4's ladders now match that.
 1. Clean shell with **no** `SHARPCOREDB_*` vars set, unless a specific experiment requires one —
    then record it in the worklog. The harness prints a `REGIME:` banner; check it on every run.
 2. Release config only. Median-of-3 (median-of-5 for `--multirowinsert`).
@@ -230,6 +238,22 @@ That is now a **knob** (`DatabaseConfig.SingleFileMinExtensionBytes`, default 0 
 same process is what made the shape distinction visible; plan §9 and the session-9/session-10 worklog entries carry the
 tables.
 
+**The 2026-09-24 review closed the rest of the list; the decisions are rows 9–15 of the plan's §0.1.** In one line each:
+(9) the `.scdb` growth minimum's **default went 10 MiB → 1 MiB**, taking every small single-file database from **14,7 MB
+to 6,4 MB** (−56,8 %) at byte-identical allocation per row and no measurable throughput change, with the historical floor
+one configuration line away and pinned by a test; (10) the **INSERT ≥ 1,0× ratio target is closed as *not claimed*** (the
+absolute floor stays met) and is replaced by *publication* plus a no-regression rule on the **encrypted default arm**;
+(11) overflow-arena appends **stay write-through**; (12)+(13) the encrypted commit's `commit-overwrites` half and
+`index-maint` are **left as-is** (durability boundary and index freshness); (14) `.scdb` solo-statement coalescing is
+**rejected** — batching is the answer and is documented; (15) the **unsafe hash-index backend is handed to its owner**
+(0,07×, 75,6 µs per key, cost in the caller).
+**Two items remain open and neither is a code decision:** the **gate baseline** is still dated 2026-09-15 and
+`--write-baseline` still refuses on this machine (spread floor 2,76 / 2,91 / 3,31× against a 2,50× limit), so it needs a
+quieter or self-hosted runner; and the **§5.4 ladders** now have a protocol instead of a caveat —
+**`SHARPCOREDB_LADDER_REPS=3`**, median-of-3 with the per-cell spread printed, measured 2026-09-24 as **SQL 0,56× /
+Direct 0,65× / StructRow 0,68× INSERT** against the same-run SQLite at 184.257 ops/s, with spreads of 1,05–2,72× quoted
+beside them so nobody mistakes a median for a guarantee.
+
 
 ## 5. Work items, in priority order
 
@@ -341,18 +365,20 @@ fallback was already measured worse.
 
 ### 5.4 Providers re-validation — *after every core change*
 
-**STATUS 2026-09-23/24 (session 12): DONE for this build — with one honest caveat about the SQL ladder.** The three
+**STATUS 2026-09-24: DONE for this build — and the ladder half now has a protocol instead of a caveat.** The three
 harness arms and the five provider suites were re-run on the current build (results archived in the project's
-`results/`), the worklog's session-12 entry carries the tables, and **no provider re-introduced row-by-row overhead**:
-EFCore 116, EFCore.Functional 3, Dapper 3, Linq2DB 24, Sync 135 = **281 tests, 0 failures** (YesSql/`Data.Provider` have
-no separate suite; they are exercised inside the core and functional projects). The caveat: **the SQL/Direct/StructRow
-ladder run is single-shot per invocation, and on this machine its own SQL cell varies 0,31–0,69× across four runs of the
-identical binary** (our arm moved 35K → 84K ops/s while the same-run SQLite moved 9 %), so §5.4's ladder half is reported
-as **"no detectable regression"** rather than as a comparison — Direct (0,83 vs the 0,88 recorded) and StructRow
-(0,94 vs 0,96) reproduce the recorded picture, and the deterministic columns (`--multirowinsert` 3.556 B/row, data file
-2.320.000 B, arena 0 B; `--pk` fixed-width UPDATE/DELETE/READ 1,18× / 1,14× / 1,13× ahead of SQLite) are unchanged. **A
-future §5.4 should run the ladder arm three times and report medians, or treat the ladders as tracked arms in their own
-right** — running it once and quoting the ratio is what the recorded 0,63× did.
+`results/`), the worklog's session-12 and session-13 entries carry the tables, and **no provider re-introduced row-by-row
+overhead**: EFCore 116, EFCore.Functional 3, Dapper 3, Linq2DB 24, Sync 135 = **281 tests, 0 failures** (YesSql/
+`Data.Provider` have no separate suite; they are exercised inside the core and functional projects). The ladder arm was
+single-shot per invocation, and four runs of the identical binary put its SQL INSERT ratio anywhere between **0,31× and
+0,69×** while our own SQL arm moved 35K → 84K ops/s and the same-run SQLite moved 9 % — so the harness now supports
+**`SHARPCOREDB_LADDER_REPS=3`** (median per arm, with each cell's min–max spread printed, and `Reps` written into the
+`comparative_*.json` archive). The median-of-3 run reads **SQL 0,56× / Direct 0,65× / StructRow 0,68× INSERT**, **Direct
+1,49× and StructRow 1,32× READ**, SQL UPDATE/DELETE 0,26× / 0,58×, **with spreads of 1,05–2,72× quoted beside every
+cell** — which is the honest form of the §5.4 answer: Direct and StructRow reproduce the recorded picture, the SQL ladder
+is the noisy arm, and no cell can be compared without its spread. The deterministic columns are unchanged
+(`--multirowinsert` 3.556 B/row, data file 2.320.000 B, arena 0 B; `--pk` fixed-width UPDATE/DELETE/READ 1,18× / 1,14× /
+1,13× ahead of SQLite).
 
 Re-run the comparative harness (`--pk`, `--pk-default`, `--multirowinsert`) plus the provider test
 projects (EF Core, Dapper, Linq2DB, ADO.NET/`Data.Provider`, YesSql, Sync) and report the

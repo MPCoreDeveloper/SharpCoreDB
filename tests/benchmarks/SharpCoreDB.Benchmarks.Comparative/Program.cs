@@ -201,24 +201,32 @@ class Program
 
         var results = new Dictionary<string, BenchmarkResult>();
 
+        int ladderReps = LadderReps();
+        if (ladderReps > 1)
+        {
+            Console.WriteLine($"LADDER PROTOCOL: every ladder arm below is the median of {ladderReps} runs (SHARPCOREDB_LADDER_REPS),");
+            Console.WriteLine("                 each with its own same-run reference, per plan §5.4 (2026-09-24).");
+            Console.WriteLine();
+        }
+
         // ── SharpCoreDB ──
         Console.WriteLine("━━━ SharpCoreDB (SQL) ━━━");
-        results["SharpCoreDB (SQL)"] = RunSharpCoreDB(engineType);
+        results["SharpCoreDB (SQL)"] = RunLadderMedianOf("SharpCoreDB (SQL)", ladderReps, () => RunSharpCoreDB(engineType));
         Console.WriteLine();
 
         // ── SharpCoreDB Direct API ──
         Console.WriteLine("━━━ SharpCoreDB (Direct API) ━━━");
-        results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi(engineType);
+        results["SharpCoreDB (Direct)"] = RunLadderMedianOf("SharpCoreDB (Direct)", ladderReps, () => RunSharpCoreDBDirectApi(engineType));
         Console.WriteLine();
 
         // ── SharpCoreDB StructRow (zero-alloc read path) ──
         Console.WriteLine("━━━ SharpCoreDB (StructRow) ━━━");
-        results["SharpCoreDB (StructRow)"] = RunSharpCoreDBStruct(engineType);
+        results["SharpCoreDB (StructRow)"] = RunLadderMedianOf("SharpCoreDB (StructRow)", ladderReps, () => RunSharpCoreDBStruct(engineType));
         Console.WriteLine();
 
         // ── SQLite ──
         Console.WriteLine("━━━ SQLite ━━━");
-        results["SQLite"] = RunSQLite();
+        results["SQLite"] = RunLadderMedianOf("SQLite", ladderReps, RunSQLite);
         Console.WriteLine();
 
         // ── LiteDB ──
@@ -604,6 +612,14 @@ class Program
         services.AddSharpCoreDB();
         var factory = services.BuildServiceProvider().GetRequiredService<DatabaseFactory>();
 
+        // SHARPCOREDB_SCDB_SHAPES: "both" (default) measures the statementwise and the batched caller shape; "batched"
+        // measures only the batched one. That is what makes a 20.000-row run feasible here: the statementwise shape is
+        // quadratic by construction (703 rows/s at 2.000 rows) and did not finish inside five minutes at 20.000, while
+        // the batched shape does 20.000 rows in well under a second — so the large-database file-growth A/B of the
+        // 2026-09-24 minimum-extension decision needs exactly the batched half.
+        var shapesEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_SHAPES");
+        bool runStatementwise = !string.Equals(shapesEnv, "batched", StringComparison.OrdinalIgnoreCase);
+
         var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
         double[] statementTimes = new double[reps];
         double[] batchTimes = new double[reps];
@@ -664,9 +680,12 @@ class Program
             return (allocBytes / inserts, gen0, fileBytes);
         }
 
-        for (int r = 0; r < reps; r++)
+        if (runStatementwise)
         {
-            statementShape = RunPass(batched: false, out statementTimes[r]);
+            for (int r = 0; r < reps; r++)
+            {
+                statementShape = RunPass(batched: false, out statementTimes[r]);
+            }
         }
 
         for (int r = 0; r < reps; r++)
@@ -676,16 +695,28 @@ class Program
 
         Array.Sort(statementTimes);
         Array.Sort(batchTimes);
-        double statementMedian = statementTimes[reps / 2];
+        double statementMedian = runStatementwise ? statementTimes[reps / 2] : 0;
         double batchMedian = batchTimes[reps / 2];
 
         Console.WriteLine();
         Console.WriteLine($"═══ Single-file (.scdb) INSERT … VALUES benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, median of {reps}) ═══");
         Console.WriteLine("  shape                        rows/s      µs/row   allocated/row     .scdb file");
-        Console.WriteLine($"  ExecuteSQL per statement   {inserts / statementMedian,8:N0}  {statementMedian * 1_000_000 / inserts,10:F2}   {statementShape.AllocPerRow,12:N0} B   {statementShape.FileBytes,11:N0} B");
+        if (runStatementwise)
+        {
+            Console.WriteLine($"  ExecuteSQL per statement   {inserts / statementMedian,8:N0}  {statementMedian * 1_000_000 / inserts,10:F2}   {statementShape.AllocPerRow,12:N0} B   {statementShape.FileBytes,11:N0} B");
+        }
+        else
+        {
+            Console.WriteLine("  ExecuteSQL per statement   skipped (SHARPCOREDB_SCDB_SHAPES=batched: quadratic by construction)");
+        }
+
         Console.WriteLine($"  ExecuteBatchSQL (one call) {inserts / batchMedian,8:N0}  {batchMedian * 1_000_000 / inserts,10:F2}   {batchShape.AllocPerRow,12:N0} B   {batchShape.FileBytes,11:N0} B");
-        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {statementShape.Gen0} / {batchShape.Gen0} (statementwise / batched)");
-        Console.WriteLine($"    [diag] minimum file extension {SingleFileMinExtensionOverride()} B (0 = the product default 10 MiB, SHARPCOREDB_SCDB_MIN_EXTENSION) — the knob behind the .scdb file size above");
+        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {(runStatementwise ? statementShape.Gen0.ToString(CultureInfo.InvariantCulture) : "skipped")} / {batchShape.Gen0} (statementwise / batched)");
+        Console.WriteLine($"    [diag] minimum file extension {SingleFileMinExtensionOverride()} B (0 = the product default 1 MiB, SHARPCOREDB_SCDB_MIN_EXTENSION) — the knob behind the .scdb file size above");
+        if (!runStatementwise)
+        {
+            Console.WriteLine("    [diag] SHARPCOREDB_SCDB_SHAPES=batched: the statementwise shape was skipped by request");
+        }
 
         // Persist the arm as tracked evidence, like the pk/dual-mode arms do: the .scdb numbers above are quoted in the
         // plan and the worklog, and sessions 8-10 had to be re-run to re-obtain them because this arm wrote no file.
@@ -693,10 +724,36 @@ class Program
         // capacity, the growth setting and the row count), so a figure can be checked without re-reading stdout.
         // Anchored at the PROJECT directory like every other writer (see ResultsDirectory()): the repo root has an
         // ignored results/ folder, and only the project's one is the tracked evidence location.
+        // A skipped shape is omitted rather than written as a zero: a zero would read as "instant" in the archive.
         string scdbResultsDir = ResultsDirectory();
         string scdbResultsPath = Path.Combine(
             scdbResultsDir,
             $"scdb_insert_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+
+        List<object> scdbShapeRecords = new(2);
+        if (runStatementwise)
+        {
+            scdbShapeRecords.Add(new
+            {
+                shape = "ExecuteSQL per statement",
+                rowsPerSecond = inserts / statementMedian,
+                microSecondsPerRow = statementMedian * 1_000_000 / inserts,
+                allocatedBytesPerRow = statementShape.AllocPerRow,
+                fileBytes = statementShape.FileBytes,
+                gen0Collections = statementShape.Gen0,
+            });
+        }
+
+        scdbShapeRecords.Add(new
+        {
+            shape = "ExecuteBatchSQL (one call)",
+            rowsPerSecond = inserts / batchMedian,
+            microSecondsPerRow = batchMedian * 1_000_000 / inserts,
+            allocatedBytesPerRow = batchShape.AllocPerRow,
+            fileBytes = batchShape.FileBytes,
+            gen0Collections = batchShape.Gen0,
+        });
+
         File.WriteAllText(scdbResultsPath, JsonSerializer.Serialize(new
         {
             rows = inserts,
@@ -704,27 +761,8 @@ class Program
             reps,
             resolvedInlineCapacityBytes = resolvedCapacity,
             minExtensionBytes = SingleFileMinExtensionOverride(),
-            shapes = new[]
-            {
-                new
-                {
-                    shape = "ExecuteSQL per statement",
-                    rowsPerSecond = inserts / statementMedian,
-                    microSecondsPerRow = statementMedian * 1_000_000 / inserts,
-                    allocatedBytesPerRow = statementShape.AllocPerRow,
-                    fileBytes = statementShape.FileBytes,
-                    gen0Collections = statementShape.Gen0,
-                },
-                new
-                {
-                    shape = "ExecuteBatchSQL (one call)",
-                    rowsPerSecond = inserts / batchMedian,
-                    microSecondsPerRow = batchMedian * 1_000_000 / inserts,
-                    allocatedBytesPerRow = batchShape.AllocPerRow,
-                    fileBytes = batchShape.FileBytes,
-                    gen0Collections = batchShape.Gen0,
-                },
-            },
+            skippedShapes = runStatementwise ? Array.Empty<string>() : new[] { "ExecuteSQL per statement" },
+            shapes = scdbShapeRecords,
         }, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {scdbResultsPath}");
     }
@@ -888,6 +926,96 @@ class Program
         }
 
         return rowBatches;
+    }
+
+    /// <summary>
+    /// How many runs each ladder arm is measured over, from <c>SHARPCOREDB_LADDER_REPS</c> (default 1, clamped to 1-9).
+    /// The §5.4 protocol asks for 3.
+    /// </summary>
+    static int LadderReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_LADDER_REPS");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, 1, 9)
+            : 1;
+    }
+
+    /// <summary>
+    /// Median-of-N wrapper for the SQL / Direct / StructRow / SQLite ladder arms — plan §5.4's protocol since
+    /// 2026-09-24.
+    /// <para>
+    /// A single ladder run on this machine is not verdict-worthy: <b>four runs of the identical binary put the SQL arm's
+    /// INSERT ratio anywhere between 0,31× and 0,69×</b>, because the arms are measured one after another inside one
+    /// process and our SQL arm's own absolute reading moved 35K → 84K ops/s while the same-run SQLite reference moved
+    /// 9 %. A ratio only means something next to the reference it was measured with, so the arms and the reference are
+    /// measured the same number of times and reported as medians. The default stays 1, which keeps existing invocations
+    /// byte-identical in output and runtime; <c>SHARPCOREDB_LADDER_REPS=3</c> is the protocol value and prints the
+    /// per-metric min–max spread as well, so a reader can see whether a cell was stable.
+    /// </para>
+    /// </summary>
+    static BenchmarkResult RunLadderMedianOf(string label, int reps, Func<BenchmarkResult> run)
+    {
+        var samples = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            samples.Add(run());
+        }
+
+        if (reps == 1)
+        {
+            return samples[0];
+        }
+
+        var median = MedianOf(samples);
+        Console.WriteLine();
+        Console.WriteLine($"  [ladder] {label}: median of {reps} runs, with each cell's min–max so stability is visible");
+        PrintLadderMetric("INSERT", samples, static s => s.InsertOpsPerSec, median.InsertOpsPerSec);
+        PrintLadderMetric("READ", samples, static s => s.ReadOpsPerSec, median.ReadOpsPerSec);
+        PrintLadderMetric("UPDATE", samples, static s => s.UpdateOpsPerSec, median.UpdateOpsPerSec);
+        PrintLadderMetric("DELETE", samples, static s => s.DeleteOpsPerSec, median.DeleteOpsPerSec);
+        return median;
+    }
+
+    /// <summary>Prints one ladder cell's median and spread (see <see cref="RunLadderMedianOf"/>).</summary>
+    static void PrintLadderMetric(
+        string metric,
+        List<BenchmarkResult> samples,
+        Func<BenchmarkResult, int> read,
+        int median)
+    {
+        int min = samples.Min(read);
+        int max = samples.Max(read);
+        double spread = min > 0 ? max / (double)min : 0;
+        Console.WriteLine($"           {metric,-7} median {median,10:N0}   min–max {min,10:N0}–{max,10:N0}   spread {spread:F2}×");
+    }
+
+    /// <summary>Per-metric median of N ladder samples; <c>Reps</c> records how many.</summary>
+    static BenchmarkResult MedianOf(List<BenchmarkResult> samples)
+    {
+        static int MedianInt(List<int> values)
+        {
+            values.Sort();
+            return values[values.Count / 2];
+        }
+
+        static double MedianDouble(List<double> values)
+        {
+            values.Sort();
+            return values[values.Count / 2];
+        }
+
+        return new BenchmarkResult
+        {
+            Reps = samples.Count,
+            InsertOpsPerSec = MedianInt([.. samples.Select(s => s.InsertOpsPerSec)]),
+            ReadOpsPerSec = MedianInt([.. samples.Select(s => s.ReadOpsPerSec)]),
+            UpdateOpsPerSec = MedianInt([.. samples.Select(s => s.UpdateOpsPerSec)]),
+            DeleteOpsPerSec = MedianInt([.. samples.Select(s => s.DeleteOpsPerSec)]),
+            InsertTime = MedianDouble([.. samples.Select(s => s.InsertTime)]),
+            ReadTime = MedianDouble([.. samples.Select(s => s.ReadTime)]),
+            UpdateTime = MedianDouble([.. samples.Select(s => s.UpdateTime)]),
+            DeleteTime = MedianDouble([.. samples.Select(s => s.DeleteTime)]),
+        };
     }
 
     /// <summary>
@@ -2690,6 +2818,12 @@ class LiteDoc
 
 class BenchmarkResult
 {
+    /// <summary>
+    /// How many runs each cell is the median of (<c>SHARPCOREDB_LADDER_REPS</c>, default 1). Additive and
+    /// additive-only: the field is written to <c>comparative_*.json</c> so a reader can tell a median from a
+    /// single-shot reading without the console log, and it default-deserializes to 0 on older archives.
+    /// </summary>
+    public int Reps { get; set; } = 1;
     public double InsertTime { get; set; }
     public int InsertOpsPerSec { get; set; }
     public double ReadTime { get; set; }
