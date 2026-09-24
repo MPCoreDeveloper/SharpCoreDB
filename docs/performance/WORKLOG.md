@@ -3075,6 +3075,40 @@ So, measured on a fair shape with a warm-up and a printed spread: **SharpCoreDB 
 
 **4. The archive was not committed, per the mechanical rule set in session 21** — an archive is committed only if its headline cells' ranges do not straddle 1,00×, and UPDATE does. All twenty per-rep values are quoted above, which makes this run's remaining gap the most precisely stated thing in the campaign: **resolve UPDATE and the fair arm becomes publishable.** Note also what did *not* need a decision: `SHARPCOREDB_WARMUP_REPS` defaults to 1 rather than requiring a flag, because the measured evidence is that a cold rep understates the shipped engine, and every earlier ratio in this campaign inherits that error unless it is re-read.
 
+---
+
+### 2026-09-24 (session 24) — S4 closes **`BLOCKED`**, with the blocker verified rather than guessed: NativeAOT needs the Visual Studio **C++ workload**, and this machine has the MSVC *binaries* but not the *libraries*
+
+- Session: 1 of 1 for S4 (timebox 1 — met)
+- Command(s): `dotnet publish -r win-x64 -p:PublishAot=true` ×2 (plain, then with a hand-built VC environment) · `vswhere` ×3 · toolchain and library probes ×4
+- Regime: no benchmark was run; `quiet-machine.ps1` not applicable. All probing was read-only against the installed toolchain (`$env:USERPROFILE\.nuget\packages`, `C:\Program Files\Microsoft Visual Studio\18\Community`, `C:\Program Files (x86)\Windows Kits\10`)
+- Verdict: **BLOCKED** — not refuted, not delivered: the mechanism is untestable on this build machine
+- Commit: `docs(perf)`: S4 blocked on the missing VS C++ workload, with the exact toolchain evidence and remedy (plan §4 S4)
+- NEXT: **S6** (shape-matched JIT/SIMD wins, the last item in §8), and the **UPDATE cell** on the fair arm remains the one unresolved measurement. Unblocking AOT is a one-checkbox owner action, recorded in §9.
+
+**1. The toolchain was probed before any conclusion was drawn, and the first probe said "looks fine".** The AOT prerequisites are the ILCompiler package (present: `microsoft.dotnet.ilcompiler` and `runtime.win-x64.microsoft.dotnet.ilcompiler` in the NuGet cache, so no network is needed), the .NET 11 RC SDK (present) and the MSVC toolchain. `link.exe` **exists** at `...\18\Community\VC\Tools\MSVC\14.51.36231\bin\Hostx64\x64\link.exe`, and Windows SDK 10.0.22621 supplies `ucrt.lib` and `kernel32.lib`. On that evidence AOT looked available, which is exactly why the publish was attempted rather than the answer assumed.
+
+**2. The publish failed, and the error pointed at the wrong thing on purpose.** `Microsoft.NETCore.Native.Windows.targets:152` reported `vswhere.exe failed to locate Visual Studio with Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. That message is *correct but indirect*: `vswhere -all -products *` finds `C:\Program Files\Microsoft Visual Studio\18\Community`, yet the same query with `-requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64` returns **nothing** — the component is not registered, even though its binaries are on disk.
+
+**3. Reading the targets file produced the supported override, and the override produced the real diagnosis.** All of the vswhere discovery is gated on `'$(IlcUseEnvironmentalTools)' != 'true'`, so setting `-p:IlcUseEnvironmentalTools=true` skips it and uses whatever VC environment is already present — the same effect as a Developer Command Prompt. Building that environment by hand meant running `vcvars64.bat`, which failed too, and reading *it* gave the answer: it is a one-liner calling `%~dp0vcvarsall.bat`, and **`vcvarsall.bat` does not exist**. Listing the toolset finally settled it:
+
+```
+...\VC\Tools\MSVC\14.51.36231\
+    Auxiliary
+    bin
+    lib\onecore          (<- no lib\x64)
+    (no include\         -> Test-Path ...\include\vector = False)
+```
+
+**Binaries only.** No headers, no x64 runtime or import libraries — `msvcrt.lib` is absent, and `link.exe` cannot link a native executable without it. This is a *partial* C++ toolset, consistent with the missing component ID: something installed the compiler and linker without the workload.
+
+**4. So the honest verdict is `BLOCKED`, and the distinction matters.** This is **not** a refutation of S4's hypothesis — the vendor's "shared dispatch helper improves throughput for interface-heavy workloads" claim is neither confirmed nor denied; it is **untestable on this build machine**. Saying `REJECTED` would be a lie about the evidence, and Saying `KEPT` would be a lie about the result. `BLOCKED` with the exact missing component is the only accurate label.
+
+**5. The remedy is one checkbox, and it is recorded as an owner action rather than worked around.** In the Visual Studio Installer: **Modify → Desktop development for C++** (component `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`), after which plain `dotnet publish -r win-x64 -p:PublishAot=true` needs no override at all. Deliberately **not** committed: a helper script that hand-builds the VC environment from `link.exe` + the SDK libs. It cannot work without the MSVC libraries (proved above), and if the workload is ever installed the script is dead code — committing an environment workaround that papers over a broken toolchain is how a repo accumulates rot.
+
+**6. One finding is deliverable anyway, and it is the deployment caveat S4 was told to watch for.** AOT being unavailable is a *build-machine* fact, not a product fact — but the reason it is unavailable here is worth recording for the product story: **NativeAOT requires the Visual Studio C++ workload on the build machine**, which sits alongside `net11`'s raised minimum hardware requirements (research finding `[9]`) as a real, non-obvious cost of "just publish AOT". Anyone who later writes that recommendation into the docs must state both.
+
+
 
 
 

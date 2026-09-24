@@ -322,10 +322,22 @@ and the only lever that is not arm-specific.
 **Measure-first:** the vendor statement is about dispatch throughput in the abstract; the magnitude on
 our workload is unknown and must not be assumed.
 
-**Acceptance.** A before/after on the arms that matter (B and C), with allocation and ops/s, *or* a
-`REJECTED` verdict with the reason (e.g. AOT incompatible with a reflection path we need). Either is a
-complete result. Note the deployment caveat: `net11` raised minimum hardware requirements `[9]`, and
-any AOT recommendation must say so.
+**Closed 2026-09-24 (worklog session 24) — `BLOCKED`, because the mechanism is untestable on this build
+machine.** `dotnet publish -r win-x64 -p:PublishAot=true` fails at
+`Microsoft.NETCore.Native.Windows.targets:152` with `vswhere.exe failed to locate Visual Studio with
+Microsoft.VisualStudio.Component.VC.Tools.x86.x64`. That message is correct but indirect: vswhere *does*
+find `...\18\Community`, but the query `-requires …VC.Tools.x86.x64` returns nothing — the component is not
+registered. Reading the targets file gives the supported override (`IlcUseEnvironmentalTools=true` gates
+all vswhere discovery on `!= 'true'`), which then exposed the real cause: `vcvarsall.bat` is **absent**, and
+`...\VC\Tools\MSVC\14.51.36231\` contains only `Auxiliary`, `bin` and `lib\onecore` — **no `include`, no
+`lib\x64`, no `msvcrt.lib`**. Compiler and linker *binaries* without the *libraries*: a partial C++
+toolset, so `link.exe` cannot link. **This is not a refutation** — the vendor's dispatch claim is neither
+confirmed nor denied, only untestable here — so the honest label is `BLOCKED`, not `REJECTED`. The remedy
+is one checkbox (VS Installer → Modify → **Desktop development for C++**), recorded as §9 row 6 rather
+than worked around: a helper that hand-builds the VC environment cannot work without those libraries and
+would be dead code the moment the workload is installed. **The deliverable caveat survives and is the
+point:** NativeAOT requires the VS C++ workload on the build machine, which belongs beside `net11`'s
+raised minimum hardware requirements in any future AOT recommendation.
 
 ### S5 — A fair non-PK shape, so arm C is a comparison and not an artefact — **timebox 1 session**
 
@@ -544,8 +556,8 @@ fails.
 | 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, spread in session 21) | turns arm C from an artefact into a comparison |
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
 | 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
-| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | **← next** | helps every arm at once, and is finally readable now that the warm-up rep removed the ramp |
-| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | after S4 | opportunistic; must never delay the items above |
+| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ **`BLOCKED`** on the missing VS C++ workload (§9 row 6) | hypothesis **untested, not refuted** — see the entry |
+| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | **← next** | the last item on the list; opportunistic by design |
 
 **Total timebox: 10 sessions** (8 as originally scoped, +2 for S7, which the S5 spread run added).
 S3, S5 and S7 all sit before a *build* deliberately: each is a measurement that decides whether the build
@@ -570,6 +582,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 3 | **A numeric floor for arm B.** Decision 10 lists this as its one open sub-decision. | §1.2's recorded band | Keep the no-regression-against-its-own-values rule until a floor is chosen |
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
 | 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row. |
+| 6 | **Install the Visual Studio C++ workload to unblock NativeAOT (S4).** `...\VC\Tools\MSVC\14.51.36231\` has `bin` and `lib\onecore` only — no `include`, no `lib\x64`, no `msvcrt.lib` — and `vcvarsall.bat` is absent, so `link.exe` cannot link. | S4's verdict (worklog session 24), with the directory listing and the `vswhere -requires` result | **VS Installer → Modify → Desktop development for C++** (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`). After that, plain `dotnet publish -r win-x64 -p:PublishAot=true` needs no override. Until then S4 stays `BLOCKED` and its hypothesis is *untested*, not refuted. |
 
 ---
 
