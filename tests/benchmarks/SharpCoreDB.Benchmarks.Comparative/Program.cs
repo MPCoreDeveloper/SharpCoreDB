@@ -3317,6 +3317,37 @@ class Program
         var raw = new List<BenchmarkResult>();
         var deflt = new List<BenchmarkResult>();
 
+        // Warm-up, the same idiom every other arm uses (ResolveWarmupReps, default 3; plan §6 rule 10).
+        // This runner had none until 2026-09-24 (session 33), and it showed: the first block of rep 1 read
+        // 92.651 INSERT / 66.972 UPDATE against 147.715 / 130.262 later, and because 'default' runs first on
+        // even reps it was the configuration that paid the cold cost — which is how the table came to report
+        // UPDATE at 0,75x, i.e. *faster* with encryption on. No configuration is faster encrypted; that
+        // number was always a cold rep and not a property of the engine.
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            if (w % 2 == 0)
+            {
+                _ = RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed);
+                _ = RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed);
+            }
+            else
+            {
+                _ = RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed);
+                _ = RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed);
+            }
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
         for (int rep = 0; rep < reps; rep++)
         {
             // Alternate the order per rep: machine drift then affects both arms, not just one.

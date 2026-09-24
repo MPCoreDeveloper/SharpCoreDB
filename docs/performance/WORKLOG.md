@@ -3336,6 +3336,37 @@ case DataType.Long:
 **6. What this does to the plan.** Arm B's target of "≥ 1,00× on all four" is now a **three-cell** problem (INSERT, UPDATE, DELETE) with UPDATE and DELETE at ~0,4×, not the one-cell problem the old numbers suggested. The §5 ladder row reading `B pure default encrypted 0,57× 0,48× 0,59× 0,70×` is already stale in both directions and is annotated below. Nothing here is optimised yet — this is the first honest statement of the gap, and it is much larger than the campaign believed.
 - NEXT: **arm B is now the campaign's main work item**: INSERT 0,83×, UPDATE 0,39×, DELETE 0,41× on the symmetric protocol, with READ straddling at 1,10×. Arm D (`--dual-mode`) and PageBased (`--engine=pagebased`) still sit on the pre-`Prepare()` harness and are next. The engine-side targets are named and independent: the batch dispatcher's per-statement classification (session 31: 531 B and one call per statement, ~11–33 % of UPDATE), and the missing SQL-free UPDATE/DELETE batch path that INSERT already has (`InsertBatch` — the code's own claim is "40 % faster than ExecuteBatchSQL").
 
+---
+
+### 2026-09-24 (session 33) — arm D had **no warm-up at all**; that is fixed, and the table still reads an impossible 0,85× on READ, so it is measured but **not yet trustworthy**
+
+- Session: 1 of 1 (the arm D / dual-mode re-measure the plan owed)
+- Command(s): `--dual-mode` ×2 (before and after the warm-up fix), 3 measured reps each
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): n/a for this arm` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,22–1,38× (5/5 rounds). Build servers shut down before the measured run; WSearch still **NOISY**. **CPU 11,4 %** during the pre-run check — recorded, and it matters for the conclusion below
+- Verdict: **KEPT (defect found and fixed) + `INCONCLUSIVE` on the values.** The protocol is corrected; the numbers are not to be quoted yet
+- Commit: `test(bench)`: arm D gets the warm-up every other arm already had
+
+**1. `RunDualModeComparison` was the last runner with no discarded warm-up reps** — every other arm has had three since session 23. The contamination is visible without any statistics: rep 1's first block read **92.651 INSERT / 66.972 UPDATE** against 147.715 / 130.262 later in the same run, and because `default` runs first on even reps it was the **encrypted** configuration that paid the cold cost. That is how the table came to publish **UPDATE 0,75×** — i.e. *faster with encryption on*. **No configuration is faster encrypted.** A cell that reads below 1,00× on a raw/default comparison is not a finding, it is a broken measurement, and this one had a one-line cause.
+
+**2. The fix is the idiom every other arm uses** (`ResolveWarmupReps`, default 3, `SHARPCOREDB_WARMUP_REPS=0` disables), applied with the same alternation inside the warm-up so the discarded reps do not themselves favour one configuration.
+
+**3. With the warm-up in, the table moved — and it is still not quotable.**
+
+| operation | before warm-up (rep-1 cold) | with warm-up | readable? |
+|---|---|---|---|
+| INSERT | 1,11× | **1,09×** | yes, plausible tax |
+| READ | 2,12× | **0,85×** | **no — below 1,00× is impossible** |
+| UPDATE | 0,75× | **1,41×** | yes, plausible tax |
+| DELETE | 1,94× | **2,19×** | yes, plausible tax |
+
+Three of four cells now sit where an encryption tax belongs. **READ inverted instead of settling**: 2,12× cold → 0,85× warm, with raw 116.121 against default 136.742. A cell that swings that far in *either* direction at three reps is noise, not a tax. So the honest state is: **the protocol defect is fixed, the values are not yet a result, and the residual cause is now narrowed to rep count** (3 measured reps for a ratio-of-two-configurations table, on a box reading 11–14 % CPU from VS Code's own processes) rather than to anything about encryption.
+
+**4. What is *not* the cause, checked rather than assumed.** Unlike the fair arm and arm B, this runner's harness overhead is **symmetric** — both columns run the identical workload shape through the identical `RunSharpCoreDbMode`, so per-statement formatting inside the window depresses *both* columns and largely cancels in a raw/default ratio. That is why no statement cache was added here: it would be a change with no effect on the number this table publishes, and adding it would have obscured the one defect that did matter. The `StmtBuild`-in-window question for `RunSharpCoreDbMode` remains open as a separate, *absolute-numbers* issue, and is logged as such rather than silently folded into this fix.
+
+**5. Consequence for the plan.** Arm D is now correctly instrumented but **under-powered**, so its row cannot be closed on this evidence. Raising `--dual-mode`'s rep count (or driving it through the same `RunInterleavedPairedReps` + `ReportPaired` machinery the other arms use, which would also print the paired range the protocol requires) is the next step, and it is a harness change, not an engine one.
+- NEXT: **arm D needs rep count, not a code change** — either raise `--dual-mode`'s reps or route it through `RunInterleavedPairedReps`/`ReportPaired` so it prints the paired ranges the protocol requires; READ's 0,85× cannot be published until it settles. Then **PageBased (`--engine=pagebased`)** is the last arm still on an unverified protocol. And arm B remains the campaign's main work item: INSERT 0,83×, UPDATE 0,39×, DELETE 0,41×, with the two named engine targets from sessions 31 and 32.
+
+
 
 
 
