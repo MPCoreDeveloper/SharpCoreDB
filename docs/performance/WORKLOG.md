@@ -3141,6 +3141,44 @@ Against the default job's no-PK arm of **0,67 / 0,76 / 0,24 / 0,31**. The UPDATE
 
 **5. One wrinkle left open, recorded rather than smoothed over.** DELETE's range is wide in both runs (**3,00–3,13×** at its worst) because **one rep per run** shows a slow DELETE (150.623 and 161.641 against 326k–401k in the others) while SQLite stays flat at ~50k. The cell stands either way — even the slow reps are 3× ahead — so this is second-order, but it is the next thing to look at if DELETE's *range* rather than its *direction* ever needs tightening, and `SHARPCOREDB_WARMUP_REPS` is the dial that just proved it can move this.
 
+---
+
+### 2026-09-24 (session 26) — S6 closes **`REJECTED` on attribution**, before a line was written: the codec shape it targets is **already taken** and is worth **0,3%** of the INSERT pass, while **index maintenance is 31,1%**
+
+- Session: 1 of 1 for S6 (timebox 1 — met)
+- Command(s): `--pk-profile-insert` ×1 (the existing INSERT stage profiler) · code audit of `Table.Serialization.cs` (`WriteTypedValueToSpan`, both type switches at `:168` and `:1114`)
+- Regime: no `SHARPCOREDB_*` switch set; the arm is the fixed-width plaintext `--pk` parity arm. Stage counters and call counts are deterministic and do not depend on machine load
+- Verdict: **REJECTED** — the premise is refuted by attribution, so the change is not made
+- Commit: `docs(perf)`: S6 rejected on attribution, with the INSERT budget named (plan §4 S6)
+- NEXT: **all seven items are now closed.** S6 was the last.* Closing the campaign is the §9 owner review — the two promoted decisions (rows 5 and 6) and the re-read of pre-warm-up ratios are what is left.
+
+**1. The audit came first, and it found the JIT's shape already present.** S6's premise was that our codec indexes spans in a form where the JIT cannot eliminate bounds checks, and that restructuring it into the switch-target-assertion shape the .NET 10 benchmark demonstrates would pay. Reading the hot writer settles it: `WriteTypedValueToSpan` (`Table.Serialization.cs:1114`) writes each fixed-size type behind an explicit guard —
+
+```csharp
+case DataType.Long:
+    if (buffer.Length < 9) // 1 byte null flag + 8 bytes long
+        throw new InvalidOperationException(...);
+    BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(bytesWritten), (long)value);
+```
+
+— and that guard **is** the JIT-friendly shape: it hands the optimizer exactly the fact (`buffer.Length >= 9`) that lets it discharge the bounds check inside `WriteInt64LittleEndian`. There is nothing to restructure here; the win S6 was looking for is already banked.
+
+**2. Then the attribution, which is what actually closes the item.** `--pk-profile-insert`, 100.000 rows, fixed-width plaintext:
+
+| stage | total ms | calls | share | B/call |
+|---|---:|---:|---:|---:|
+| `index-maint` | 297,8 | 10 | **31,1 %** | 9.638.568 |
+| `hash-index` | 246,6 | 10 | **25,7 %** | 8.824.648 |
+| `encode` | 118,1 | 10 | 12,3 % | 1.440.255 |
+| **`encode-layout`** | **2,5** | **100.000** | **0,3 %** | **0** |
+
+`encode-layout` is the per-column, per-row fixed-width write path — **precisely the code S6 would have touched** — and it is **0,3 % of the pass across 100.000 calls, allocating 0 bytes per call**. (The two index stages both report 10 calls, so `hash-index` most likely nests inside `index-maint`; the conservative reading is that index work is **at least 31,1 %**, not 56,8 %.) `encode` at 12,3 % is the batch-level variable-length payload encoder, not the per-field write, and is not the shape the JIT win applies to.
+
+**3. So the decision is not "the change is too big" but "the change is unmeasurable", and those are different things.** Even a *perfect* elimination of the fixed-width write path buys **0,3 %**, against a per-rep spread of 2–3 % that this campaign has spent three sessions reducing. A change that cannot be distinguished from noise cannot satisfy S6's own acceptance rule ("each change is measured on the harness **or reverted**") — so the honest action is to not make it, and to say why with a number rather than an opinion. This is the same discipline that made S3 and S2 into `REJECTED` verdicts instead of speculative patches.
+
+**4. What S6 hands over instead, which is worth more than the micro-optimisation would have been.** The INSERT budget is **index maintenance (≥ 31,1 %) first, then payload encoding (12,3 %), and per-field writing last (0,3 %)** — so any future INSERT work belongs in the index path, not the codec. That is the **second independent measurement pointing at the same place as §9 row 5**: S2 found `index-maint` at 20.000 calls per 10.000 updates on the Columnar no-PK shape (and it was *correct* work), and this finds index work at 31,1 % of the `--pk` INSERT. Row 5 therefore now has evidence on two sides — a measured cost (indexes are where the time goes) and a measured benefit (S5: on a matched index set our hash indexes beat SQLite's B-trees 4,07× on DELETE) — which is exactly the READ-vs-UPDATE(-vs-INSERT) comparison that row asks the owner to make before touching the default.
+
+
 
 
 

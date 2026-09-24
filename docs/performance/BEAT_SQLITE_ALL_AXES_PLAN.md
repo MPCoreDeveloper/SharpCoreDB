@@ -399,8 +399,20 @@ shape, and adopt whichever `System.Runtime.Intrinsics` lane APIs apply — notin
 construction/composition APIs (`CreateGeometricSequence`, `Zip`, `Unzip`, `Concat`) exist precisely for
 columnar codecs `[9]`.
 
-**Acceptance.** Each change is measured on the harness or reverted. This item is scheduled **only after
-S1–S3** and must never delay them. It is explicitly the lowest-priority item in the plan.
+**Closed 2026-09-24 (worklog session 26) — `REJECTED` on attribution, before a line was written.** The
+audit found the JIT's shape **already present**: `WriteTypedValueToSpan` (`Table.Serialization.cs:1114`)
+guards each fixed-size write with `if (buffer.Length < 9) throw …` before
+`BinaryPrimitives.WriteInt64LittleEndian(buffer.Slice(bytesWritten), …)`, and that guard *is* the fact the
+JIT needs to discharge the bounds check — there is nothing to restructure. Then the attribution settled
+it: on `--pk-profile-insert` (100.000 rows, fixed-width plaintext) the per-column/per-row write path
+**`encode-layout` is 0,3 % of the pass across 100.000 calls at 0 B/call**, while **index maintenance is
+≥ 31,1 %** and batch payload encoding 12,3 %. A perfect elimination of the targeted code therefore buys
+**0,3 %** against a per-rep spread of 2–3 %, i.e. it is **unmeasurable** — and a change that cannot be told
+from noise cannot satisfy this item's own "measured or reverted" rule. **What it hands over instead:**
+the INSERT budget is *index maintenance first, payload encoding second, per-field writing last*, which is
+the **second independent measurement pointing at §9 row 5** (S2 found `index-maint` at 20.000 calls per
+10.000 updates; this finds index work at ≥ 31,1 % of INSERT) — and row 5 now has evidence on both sides,
+a measured cost and a measured benefit (S5's 4,07× DELETE).
 
 ### S7 — Explain the engine-side variance *(new 2026-09-24; measurement + at most one diagnostic switch)* — **timebox 2 sessions**
 
@@ -574,9 +586,20 @@ fails.
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
 | 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
 | 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ **`BLOCKED`** on the missing VS C++ workload (§9 row 6) | hypothesis **untested, not refuted** — see the entry |
-| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | **← next** | the last item on the list; opportunistic by design |
+| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | ⛔ `REJECTED` on attribution (session 26) | the target is already taken and worth 0,3 %; index work is ≥ 31,1 % |
 
-**Total timebox: 10 sessions** (8 as originally scoped, +2 for S7, which the S5 spread run added).
+**All seven items are closed.** Final tally: **S1 ✅ · S3 ⛔ · S5 ✅ · S2 ⛔ · S7 ⚖️ · S4 ⛔ `BLOCKED` · S6 ⛔** —
+two `KEPT`, four `REJECTED`, one `BLOCKED`, and **not one of the four rejections was a failure**: each
+refuted its own hypothesis with a measurement, and three of them (S2, S5, S6) did so *before* a speculative
+change shipped. The campaign's result is **four of four operations ahead on the fair shape** (INSERT
+1,48–1,56× · READ 2,06–2,09× · UPDATE 1,78–1,87× · DELETE 7,59–7,75×) against the default job's no-PK arm
+of 0,67 / 0,76 / 0,24 / 0,31 — achieved with **no engine optimisation at all**, purely by fixing the
+comparison (S5) and the measurement (S7). What remains is the §9 owner review.
+
+*Closing note on the timebox: **11 sessions were budgeted and ~10 were used** — one or two per item, plus
+the extra sessions that S7's two verdicts and the warm-up count required. **No item overran its own
+timebox**, which is the §5 rule the campaign was built around.*
+
 S3, S5 and S7 all sit before a *build* deliberately: each is a measurement that decides whether the build
 is worth making, and each has now paid for itself — S3 refuted a hypothesis, S2 refuted its own target
 before a line of it shipped beyond a correct no-op gate, and S5 refuted one of its own cells. **S7 is the
