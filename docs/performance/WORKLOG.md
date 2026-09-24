@@ -3402,9 +3402,73 @@ None of the first two is a fact about encryption, and the third says so out loud
 **4. Why DELETE and not the others, read against the engine rather than inferred.** DELETE is the one phase whose default-arm cost is dominated by per-row work that encryption touches — a tombstone write and index maintenance on an encrypted row — while its INSERT counterpart has the dedicated SQL-free fast path and its READ counterpart is a point lookup that was already measured at 1,74× SQLite. This is the same pattern the campaign keeps finding: **the cells that are behind are the cells where our engine's structure, not the crypto, is doing the work** — and it is consistent with session 31's `parse`/dispatch attribution and with arm B's UPDATE/DELETE deficits. It also means the encryption tax is *not* the campaign's main problem, which is worth knowing before anyone optimises AES.
 - NEXT: **PageBased (`--engine=pagebased`) on the corrected protocol** — the last arm still unverified — then the engine work, in the order the evidence puts it: the SQL-free UPDATE/DELETE batch path that INSERT already has (`InsertBatch`), and the batch dispatcher's per-statement classification (session 31).
 
+---
+
+### 2026-09-24 (session 35) — PageBased on the corrected protocol: it **trades READ for INSERT** on the fair shape, **fixes both** on the PK shape — and **UPDATE/DELETE are behind in both engines**, which is the campaign's most useful sentence so far
+
+- Session: 1 of 1 (the last unverified arm, both shapes)
+- Command(s): `--fair-ni --engine=pagebased` ×1 and `--pk-default --engine=pagebased` ×1, both at `SHARPCOREDB_BENCH_REPS=5` with 3 discarded warm-ups, paired interleaved with arm order alternated
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,37–1,44×. Build servers shut down; WSearch still **NOISY**; CPU 10,9 %
+- Verdict: **KEPT** — the engine comparison is now complete on both shapes, and it changes what the campaign should work on next
+- Commit: `docs(perf)`: PageBased measured on both shapes
+
+**1. PageBased, both shapes, against AppendOnly on the identical harness.**
+
+| cell | AppendOnly | **PageBased** |
+|---|---|---|
+| fair · INSERT | 1,56× (1,36–1,71) | **2,30× (2,08–2,66)** |
+| fair · READ | 1,74× (1,18–2,05) | **0,82× (0,74–0,85)** |
+| fair · UPDATE | 0,80× (0,68–0,91) | 0,88× (0,58–1,03) |
+| fair · DELETE | 6,33× (4,99–6,77) | **8,61× (5,98–12,04)** |
+| PK (arm B) · INSERT | **0,83× (0,79–0,88)** | **1,72× (1,68–1,75)** |
+| PK (arm B) · READ | 1,10× (0,88–1,20) | **4,58× (4,11–4,81)** |
+| PK (arm B) · UPDATE | 0,39× (0,38–0,43) | 0,47× (0,46–0,53) |
+| PK (arm B) · DELETE | **0,41× (0,33–0,42)** | **0,31× (0,31–0,33)** |
+
+**The two engines do not agree on a single axis, and the disagreements are large.** Absolute medians, PK shape: PageBased INSERT **349.112** against AppendOnly's 168.788 (**+107 %**), PageBased READ **605.697** against 145.626 (**+316 %**), UPDATE 405.610 vs 358.932, DELETE **370.910 vs 468.386** (PageBased *worse*). On the fair shape it inverts on READ: PageBased **77.108** against AppendOnly's 173.740 (**− 56 %**), while INSERT goes 230.921 vs 159.495 (**+45 %**).
+
+**2. So PageBased "trades READ for INSERT" on the fair shape and "fixes both" on the PK shape — and the reason is the same in both cases.** A page-based engine's strength is the PK point access: on arm B, `id` is the rowid, so a lookup is a direct page hit (605.697 ops/s) and an insert is an in-page write (349.112) — both far ahead of an append-only engine that must locate by index. On the fair shape the predicate is a **secondary-index** lookup, which is exactly the access PageBased is not built for: READ collapses to 0,82× while AppendOnly holds 1,74×. **The engine choice is therefore a schema-shaped decision, not a global one**, and the two arms we ship test opposite sides of it.
+
+**3. The decisive sentence, and it is not about either engine: UPDATE and DELETE are behind in *both*.** Fair-shape UPDATE 0,80× and 0,88×; PK UPDATE 0,39× and 0,47×; PK DELETE 0,41× and 0,31×. Two engines with radically different storage strategies — one append-only with a WAL, one page-based with in-place updates — land within a few points of each other on the same four cells, including the two that are behind. **A deficit that survives a complete engine swap is not an engine deficit.** It lives in the layer both engines share: the batch dispatcher's per-statement classification (session 31: one call and 531 B per statement, ~11–33 % of UPDATE) and the table-CRUD path's index maintenance (`row-locate-index` + `index-maint`, ~32–40 %). That is where the next engine work belongs, and this result is what rules out the alternative hypothesis — that the *storage engine* was the problem — before anyone spends a session on it.
+
+**4. A product-level recommendation with measured backing.** For **the posture the product actually ships** (arm B), PageBased is the better engine on **two of four axes and by wide margins** — INSERT 0,83× → **1,72×** and READ 1,10× → **4,58×** — and worse on DELETE (0,41× → 0,31×). Since arm B's acceptance target is "≥ 1,00× on all four", PageBased *closes two cells outright* and moves UPDATE in the right direction, while opening DELETE further. That is a real, evidence-backed product decision the campaign can now make, and it is the first one this work has produced rather than a measurement correction.
+
+**5. The caveat that must be attached before either PageBased number is published.** The READ arm counts **executed reads**, not verified row values. A 316 % jump from 145.626 to 605.697 is large enough that the campaign's own rules say to check the code — and this plan has paid five times for a ratio that was not read against what produced it. **A correctness check that PageBased's READ arm actually returns the row it asked for is owed before 4,58× appears anywhere outside this log.** The same applies, more weakly, to the fair-shape READ at 0,82×: a *slow* result is not flattered by a missing row, but a fast one can be.
 
 
 
+
+
+
+
+---
+
+### 2026-09-24 (session 36) — UPDATE is the **only one of the three batch phases left unstructured**: INSERT and DELETE both got a dictionary/string-free form, and UPDATE is the phase that is behind in *both* engines
+
+- Session: 1 of 1 (item 3, design step: name the site and the precedent before touching code)
+- Command(s): none — source reads only. No measurement, no harness change
+- Regime: n/a (nothing here depends on machine state)
+- Verdict: **KEPT (attribution complete; the change itself is scoped, not made)** — and the decision not to make it in this session is recorded below
+- Commit: `docs(perf)`: UPDATE is the last unstructured batch phase, and the fix has a precedent
+
+**1. The three batch phases, side by side, exactly as `Database.Batch.cs` builds them.**
+
+| phase | what the dispatcher hands the table layer | per-statement allocation |
+|---|---|---|
+| INSERT | `InsertBatch(object[] rows, prepared.Columns)` — "no dictionaries" | **none** (explicit fast path, column-ordered) |
+| DELETE | `DeleteMultipleKeys(List<(string Column, string Literal)>)` — "Where stays empty … (B3: no per-statement string allocation)" | **no WHERE string**, by design |
+| **UPDATE** | `UpdateMultiple(List<(string where, Dictionary<string, object> updates)>)` | **a rebuilt WHERE string + a `Dictionary` per statement** |
+
+**INSERT was given an `object[]` fast path that explicitly avoids dictionaries. DELETE was given the B3 `(Column, Literal)` key form that explicitly avoids rebuilding the WHERE string — there is even a counter, `_canonicalDeleteStatements`, to observe the fast path firing. UPDATE was given neither.** It is the only one of the three still paying a per-statement structured-SQL cost, and it takes the predicate as **text**: `where = whereCol + " = " + whereValRaw` (line 888), plus `updates = []` (line 868), for each of the 10.000 statements.
+
+**2. That is the 531 B/statement session 31 measured, and it closes the loop between three sessions.** A concatenated WHERE string, a `Dictionary<string, object>` and the extracted substrings are exactly the right order of magnitude for 531 B, and the `parse` stage's 10.000 calls with 531 B/call was where session 31 left the question open. Session 32 then showed the deficit survives nothing — arm B is 0,39× on UPDATE. Session 35 showed it survives a **complete engine swap**: PageBased gives 0,47× where AppendOnly gives 0,39×, so this is not a storage-engine property. **All three independent lines of evidence converge on one code site**, which is the strongest position the campaign has been in on any item so far.
+
+**3. The fix is named by the codebase's own precedent, and that is why it is low-risk.** UPDATE needs the same treatment DELETE already received in B3: hand the table layer a **structured predicate** — `(Column, Literal)` as separate strings rather than a reconstructed WHERE — instead of text it must re-handle. The pattern is already implemented, already validated by 1824 green tests, and already instrumented; this is a **second application of an existing change**, not a new design. It also stays internal: no new public API, no new configuration, nothing for a user to opt into — so it does not engage the "new features stay optional" rule at all.
+
+**4. Decision: the site is named and the change is *not* made in this session.** Reason, recorded rather than assumed: it adds an internal table-layer entry point and changes the shape of an existing one, so it owes the full core suite (1824 tests, ~62 s) plus the `--gate`, and `--gate` is currently **not reachable** from this shell because Windows Search needs elevation to stop. That is not a reason never to make the change — it is a reason not to make it *at the end of a session that has already produced a source change, ten harness changes, nine commits and six measurements*, with no quiet gate available to validate it. The alternative — shipping it and calling the gate "documented inconclusive" twice in one session — would spend the campaign's credibility on a change that costs nothing to sequence correctly. **Next session opens with this edit and the suite.**
+
+**5. One thing that is *not* the fix, so the next session does not chase it.** Arm B's DELETE (0,41× AppendOnly, 0,31× PageBased) is *worse* than its UPDATE, and DELETE already has the B3 structured path. So the DELETE deficit is not an allocation problem and B3 did not solve it — on the PK shape the cost is the row operation itself against SQLite's `INTEGER PRIMARY KEY`-is-rowid in-place edit, which session 32 identified. **UPDATE is the phase with an unattributed, now-located, structural cost; DELETE's is attributed and is a different kind of problem.** Keeping those separate is the whole reason the stage table was built.
+- NEXT: **give UPDATE the B3 structured predicate** (`Database.Batch.cs:888` — stop rebuilding `where` per statement; mirror `DeleteMultipleKeys`' `(Column, Literal)` form and the dictionary-free INSERT fast path), then the full core suite and `--gate`. Internal only, precedent-backed, and it targets the one phase that is behind in *both* engines (arm B UPDATE 0,39× AppendOnly / 0,47× PageBased). DELETE's deficit is a different problem and is already attributed.
 
 
 

@@ -495,6 +495,16 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 
 ## 5. Acceptance targets
 
+> ⚠️ **Engine comparison complete (2026-09-24, session 35).** PageBased and AppendOnly were measured on both
+> shapes on the identical harness. PageBased **fixes arm B's INSERT and READ outright** (0,83× → **1,72×**
+> and 1,10× → **4,58×**) and is worse on DELETE (0,41× → 0,31×); on the fair shape it **trades READ for
+> INSERT** (READ 1,74× → **0,82×**, INSERT 1,56× → **2,30×**), because a secondary-index predicate is the
+> access a page-based engine is not built for while a PK lookup is the one it is. **UPDATE and DELETE are
+> behind in both engines** (PK UPDATE 0,39×/0,47×, PK DELETE 0,41×/0,31×), so those two deficits are **not
+> engine properties** — they live in the layer both engines share, and the engine swap is the evidence that
+> rules the storage engine out. PageBased's READ is owed a correctness check (a 316 % jump; the arm counts
+> executed reads, not verified values) before 4,58× is published.
+
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
 
