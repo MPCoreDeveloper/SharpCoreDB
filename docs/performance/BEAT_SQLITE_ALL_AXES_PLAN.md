@@ -515,8 +515,15 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > column (~7,6–20 %)**, which exists because *every Columnar column auto-creates a hash index*
 > (`SqlParser.DDL.cs:430-436`) — so `SET score = …` pays a remove + add per row for a column nothing filters on,
 > work that is **correct and therefore not removable by an optimisation** (S2 removed only the branch that had
-> no effect). Three answers: narrow the auto-index default, exempt non-filtered columns, or accept the cost and
-> document it. **A `src/` default is load-bearing — this is a deliberate product decision, not a bug.**
+> no effect). ~~Three answers: narrow the auto-index default, exempt non-filtered columns, or accept the cost and
+> document it.~~ **⚠️ REFUTED (session 42):** `EnableHashIndexes` was a **dead property** (fixed — it now gates
+> auto-creation, `src/` change, suite green), and with auto-indexes actually off, arm B's UPDATE reads
+> **0,41×** and DELETE **0,35×** against 0,39× and 0,38× — **both inside the cell's noise**, while READ moves
+> (0,10×), so the gate fired. **The auto-index default is not the lever**, and neither is index maintenance in
+> general: a stage's *share* of a phase is not a prediction of what deleting the work is worth. What remains is
+> the dispatcher's per-statement classification (~11–33 %, ~1,5 µs of it in the scanner + `SqlParser.ParseValue`)
+> and the row locate (~16–24 %). Closing 0,39× → 1,00× needs the phase to shrink **~62 %**, which those two
+> parts roughly cover — **reachable at the edge, not demonstrated.**
 > The "give UPDATE the B3 structured predicate" item (session 36) is **cancelled by measurement**; do not
 > re-open it.
 

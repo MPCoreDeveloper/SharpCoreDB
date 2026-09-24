@@ -419,7 +419,19 @@ public partial class SqlParser
         wal?.Log(sql);
         
         // ✅ NEW: Only create indexes for columnar mode (page-based uses B-trees)
-        if (storageMode == StorageMode.Columnar)
+        // ⚠️ GATED (2026-09-24, session 42). This block ran UNCONDITIONALLY, which made
+        // DatabaseConfig.EnableHashIndexes a **dead property**: declared at DatabaseConfig.cs:337, set to
+        // `true` in six presets, in four test files, and by the benchmark harness's own
+        // `SHARPCOREDB_HASH_INDEXES` override (Program.cs:1267) — and **read by nobody**. Setting it to
+        // `false` changed nothing, so a session had already built the dial and the dial was inert.
+        //
+        // Why it matters beyond tidiness: auto-creating a hash index on EVERY column is what makes a
+        // `SET <any column> = …` pay a hash-index remove + add per row (Table.CRUD.cs:2546-2574) and what
+        // makes a row DELETE maintain an index per column — on a Columnar table where SQLite has no such
+        // indexes at all. That is the one lever the measurements point at for the UPDATE and DELETE
+        // deficits, and until this gate existed there was no way to measure it. `null`/`true` is the
+        // product default, so no existing caller changes behaviour.
+        if (storageMode == StorageMode.Columnar && (this.config?.EnableHashIndexes ?? true))
         {
             // Auto-create hash indexes (will be built lazily on first query)
             if (primaryKeyIndex >= 0)

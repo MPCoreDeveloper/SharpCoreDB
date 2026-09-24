@@ -3631,6 +3631,37 @@ Ours is monotone through measured rep 5 — **pass 8 overall** — and only then
 **4. What is now on the record for the campaign's encrypted posture.** The fair shape (arm C) and arm B are plaintext-vs-SQLite comparisons; this table is our-encrypted-vs-our-plaintext. Together they mean: **encryption's cost is real but bounded (≈ +10 % to +150 % by operation), and it is not what puts UPDATE at 0,39× against SQLite** — arm B's plaintext posture is already there, which is the point sessions 31–38 established. Anyone optimising AES this campaign has finished reading the wrong file.
 - NEXT: **the robust statistic is now the blocker on arm D's UPDATE cell**, not more reps — 0,59–1,98× at five reps and 1,00–1,40× at three, on a ≈ 45–55 ms phase, means per-rep variance swamps the tax under any warm-up count tried. A trimmed mean or MAD would absorb it; a min/max range cannot. That change re-derives every range in this worklog at once, so it is a deliberate piece of work rather than a patch. Everything else measured is resolved: fair shape 3/4 ahead, arm B 3/4 behind, PageBased both shapes with READ verified, encryption tax 3/4 cells standing.
 
+---
+
+### 2026-09-24 (session 42) — `EnableHashIndexes` was a **dead property** (now fixed, `src/`), and the lever it enabled is **refuted**: auto-indexes off moves UPDATE 0,39 → 0,41× and DELETE 0,38 → 0,35×
+
+- Session: 1 of 1 (the achievability question, answered by the one experiment that had been impossible to run)
+- Command(s): core suite ×1 (after the `src/` fix) · `--pk-default` ×1 at `SHARPCOREDB_HASH_INDEXES=0` and ×1 at the default, both `SHARPCOREDB_BENCH_REPS=5` with warm-up 8
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,25–1,42× (5/5). Build servers shut down before the run; WSearch still **NOISY**; CPU 11,4 %
+- Verdict: **KEPT — a dead flag confirmed, fixed and validated; and a refutation that removes the cheapest hypothesis from the UPDATE/DELETE work**
+- Commit: `perf(core)`: `EnableHashIndexes` now gates auto-creation — and the lever it enables is refuted
+
+**1. `DatabaseConfig.EnableHashIndexes` did nothing.** Declared at `DatabaseConfig.cs:337` (default `true`), assigned `true` in six presets, in four test files, and by the benchmark harness's own `SHARPCOREDB_HASH_INDEXES` override (`Program.cs:1267`) — and **read by nobody**: a search across `src/` and `tests/` finds **zero** consumers as a condition. `SqlParser.DDL.cs`'s CREATE TABLE path called `table.CreateHashIndex(...)` for the PK **and for every other column** unconditionally, and neither `Table.CreateHashIndex` (`Table.Indexing.cs:49`) nor `SqlParser.CreateHashIndex` ever consulted the flag. **A session had already built the dial — `HashIndexesOverride()`, wired to `SHARPCOREDB_HASH_INDEXES=0` — and the dial was inert.** This is the second documented flag in this codebase that does not do what its documentation says (the first was `ColumnarAutoCompactionThreshold = 0`, `Table.cs:64`), and it is the same class of trap.
+
+**2. Fixed, and it is the one change in this session.** The auto-creation block is now gated on `this.config?.EnableHashIndexes ?? true`. `null`/`true` is the product default, so **no existing caller changes behaviour** — only `false` does anything, and nothing in the repository currently sets `false` except the harness override. Core suite **1824 tests, 0 errors, 0 failed, 0 skipped** with the change, including every hash-index test (`HashIndexIntegrationTests`, `HashIndexPerformanceTests` both set the flag explicitly to `true`).
+
+**3. And then the experiment that the fix makes possible says the hypothesis was wrong.** I had named "every Columnar column auto-creates a hash index" as *the* lever for UPDATE and DELETE — it is what makes `SET <any column> = …` pay a remove + add per row, and what makes a row DELETE maintain an index per column, on a Columnar table where SQLite has no such indexes at all. Turning it off:
+
+| arm B cell | hash indexes **on** (default) | hash indexes **off** |
+|---|---|---|
+| INSERT | 0,82× (0,74–0,88) | 0,80× (0,76–0,82) |
+| READ | 1,10× (0,70–1,23) | **1,00× (0,69–1,07)** |
+| **UPDATE** | 0,39× (0,36–0,41) | **0,41× (0,34–0,43)** |
+| **DELETE** | 0,38× (0,33–0,52) | **0,35× (0,32–0,42)** |
+
+**UPDATE moved +5 % and DELETE moved −8 % — both inside the noise of the cell.** READ moved, which is the proof the gate took effect (PK lookups fall back to the B-tree without the hash index), so this is not a dead-flag-didn't-fire artefact: **the hash-index maintenance is simply not the cost.** Session 38 measured `index-maint` at 7,6–20 % of the UPDATE phase and this run says removing all of it buys ~5 % of the *ratio*, so the stage's share and its leverage are not the same number — a share is a fraction of a phase that also got faster, and it is not a prediction of what deleting the work is worth.
+
+**4. What that leaves, stated plainly, because it is the answer to "is the goal achievable".** The lever I identified is refuted. The attributed parts of UPDATE on the PK shape are the dispatcher's per-statement classification (~11–33 %, of which the scanner + `SqlParser.ParseValue` are ~1,5 µs of the ~1,6 µs per statement) and the row locate (~16–24 %); index maintenance is now measured as small. To take arm B's UPDATE from 0,39× to 1,00× the phase must shrink by **~62 %**, and the two attributed parts together are roughly the same order — so it is **plausibly reachable but at the edge, and not demonstrated**. That is exactly why the plan's second limb exists: *"or when each behind-cell has a documented, evidence-backed reason it cannot."* Nobody has yet attempted an optimisation in this campaign — every session so far has bought knowledge — so **"unattempted" is still the accurate word, not "unachievable"**, but the cheap paths are now closed and what remains is real engine work with an uncertain payoff.
+
+**5. One more honest note on method.** This session's refutation came from a *measurement* enabled by a *bug fix* — the experiment was impossible before because the flag was inert. That is an argument for fixing dead configuration as its own class of work: an inert flag is not neutral, it silently removes the ability to test hypotheses. Two are now found; the sweep for the rest is owed.
+- NEXT: **the dead-config sweep** (`EnableHashIndexes`, `ColumnarAutoCompactionThreshold` — two flags that silently do not do what they document, which removes the ability to test hypotheses and is nobody's feature work), then **the dispatcher's per-statement classification** as the last attributed UPDATE cost — targeting the ~1,5 µs of scanner + `SqlParser.ParseValue` per statement, which needs measurement of its own split before any code is written, because this campaign has now been corrected six times by exactly that assumption. Arm B's UPDATE/DELETE (0,41×/0,35× with the lever refuted) is where the campaign's evidence points, and the plan's second limb — a documented, evidence-backed reason a cell cannot reach 1,00× — is now a live outcome rather than a formality.
+
+
 
 
 
