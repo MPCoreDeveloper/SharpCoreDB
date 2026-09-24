@@ -564,7 +564,27 @@ class Program
     /// straddled 1,00× (0,86–1,71×), so it could not be resolved. Raising it to 3 (session 25) collapsed
     /// UPDATE's per-rep spread to <b>1,18×</b>, and a second independent run reproduced it at 1,26× — with
     /// every one of the four cells' ranges clearing 1,00× in both runs (UPDATE 1,66–2,02× and 1,43–1,81×).
-    /// One warm-up rep was therefore <b>under-provisioned</b>, and the number that matters is this one.
+    /// One warm-up rep was therefore <b>under-provisioned</b>.
+    /// </para>
+    /// <para>
+    /// <b>Why 8 and not 3 (session 40).</b> Three was validated on the <em>fair</em> arm's five measured reps.
+    /// Running arm B at <b>eight</b> measured reps revealed that three is not enough there: our per-rep numbers
+    /// came out as a continuing ramp across the measured set — UPDATE 92.338 → 182.719 → 254.114 → 150.922 →
+    /// 350.654 → 355.664 → 347.374 → 351.514, monotone through the fifth measured rep (i.e. pass 8) and only
+    /// then flat — while SQLite sat at 842k–970k from pass 1. **So adding reps had not added noise; it had
+    /// exposed an insufficient warm-up**, and the five measured reps of session 32 had looked flat only because
+    /// they sampled passes 4–8, a segment of the ramp. Re-run with eight warm-ups, the ramp is gone: measured
+    /// reps 1–3 read UPDATE 353.713 / 350.089 / 357.393 and DELETE 409.871 / 430.411 / 439.916 — flat from the
+    /// first measured rep, which is what "warm" has to mean for the measured set to describe the engine rather
+    /// than the CLI's startup curve. The cost is runtime; the alternative is publishing a range whose low end
+    /// is a pass number.
+    /// </para>
+    /// <para>
+    /// Known residual, recorded rather than papered over: single <em>anomalous</em> reps still occur with the
+    /// ramp removed (session 40, one rep of five read UPDATE 137.659 and DELETE 631.528 while its siblings sat
+    /// at ~355k and ~420k), so a range's extremes can still be single-rep artefacts. The <b>median</b> is
+    /// robust to them — arm B's UPDATE median moved only 0,39 → 0,37 → 0,36 across three protocols — which is
+    /// why the median is the published cell and the range is the gate on whether it may be quoted at all.
     /// </para>
     /// </summary>
     static int ResolveWarmupReps()
@@ -572,7 +592,7 @@ class Program
         var value = Environment.GetEnvironmentVariable("SHARPCOREDB_WARMUP_REPS");
         if (string.IsNullOrWhiteSpace(value))
         {
-            return 3;
+            return 8;
         }
 
         return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)

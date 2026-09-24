@@ -3557,6 +3557,53 @@ None of the first two is a fact about encryption, and the third says so out loud
 **5. This closes the last of the campaign's unverified published numbers.** Every cell now in the worklog is either measured on the shared paired protocol with a printed range, or carries an explicit recorded caveat (arm D's UPDATE at 1,00–1,40×, arm C's UPDATE withdrawn, arm B's READ straddling). The remaining open items are the three that need an **owner**, not a session of mine: the UPDATE default decision (narrow the auto-index, exempt columns, or accept — session 38), the `--gate` that needs elevation to run (Windows Search), and S4's VS C++ workload.
 - NEXT: **nothing measured is left unverified.** Every cell is either on the shared paired protocol with a printed range or carries an explicit recorded caveat. The three open items need an **owner**: (1) the UPDATE default decision — narrow the auto-index, exempt non-filtered columns, or accept and document (session 38); (2) elevation so `--gate` can run at all, twice attempted and both times `INCONCLUSIVE` for a reason outside this shell; (3) the VS C++ workload that unblocks S4. A session of mine cannot move any of the three.
 
+---
+
+### 2026-09-24 (session 40) — more reps **exposed an insufficient warm-up**, not noise: the default goes from 3 to 8, arm B's UPDATE range tightens 0,15–0,41 → **0,36–0,41**, and the fair arm's medians carry ±0,2× run-to-run
+
+- Session: 1 of 1 (closing the cells that still carried caveats, plus the protocol defect that surfaced)
+- Command(s): `--pk-default` ×2 (8 measured reps at the old default; 5 measured at 8 warm-ups; 5 measured at the new default) · `--fair-ni` ×1 at the new default, all with `SHARPCOREDB_BENCH_REPS=5`
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,25–1,39× (5/5 rounds). Build servers shut down before each run; WSearch still **NOISY**; CPU 2,5 % then 11,1 %
+- Verdict: **KEPT — a protocol defect found, diagnosed and fixed**, and the fix validated on both arms
+- Commit: `test(bench)`: the warm-up default is 8, and why more reps made the range worse
+
+**1. I set out to resolve two cells and found a protocol defect instead.** The plan was eight measured reps on arm B to tighten its straddling READ. The result was the opposite of tightening:
+
+| arm B, 8 measured reps, **3** warm-ups (the old default) | value | range |
+|---|---:|---|
+| INSERT | 0,86× | 0,65–1,06 (straddles) |
+| READ | 1,05× | 0,48–1,27 |
+| UPDATE | 0,37× | **0,11–0,43** |
+| DELETE | 0,42× | **0,15–0,47** |
+
+A 0,11× low end is a **nine-fold slowdown within one rep against the median** — not a ratio, a symptom. And the per-rep table said what it was: **our arm climbed monotonically across the measured reps while SQLite was flat from the first one.**
+
+| rep | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| **our UPDATE** | 92.338 | 182.719 | 254.114 | 150.922 | 350.654 | **355.664** | 347.374 | 351.514 |
+| SQLite UPDATE | 842.779 | 861.393 | 848.860 | 939.346 | 953.625 | 970.092 | 920.742 | 814.279 |
+
+Ours is monotone through measured rep 5 — **pass 8 overall** — and only then flat. **Eight reps had not added noise; they had revealed that three warm-ups were never enough for arm B**, and session 32's five reps had *looked* flat only because they sampled passes 4–8, a segment of the ramp. A protocol validated on a segment of a curve is not validated.
+
+**2. The diagnosis was tested rather than assumed, and it held.** Re-run with `SHARPCOREDB_WARMUP_REPS=8` at five measured reps, the ramp is gone: measured reps 1–3 read UPDATE **353.713 / 350.089 / 357.393** and DELETE **409.871 / 430.411 / 439.916** — flat from the first measured rep. So the fix is warm-up count, and the mechanism is the one S7 already named (JIT tiering on a 100 %-managed hot path); what session 40 adds is that the required count is **a property of the arm**, not of the campaign: three sufficed for the fair arm and does not for arm B.
+
+**3. The default is now 8, and it is validated on both arms.**
+
+| | arm B, new default | fair arm, new default |
+|---|---|---|
+| INSERT | **0,82× (0,74–0,88)** | 1,54× (1,45–1,57) |
+| READ | 1,10× (0,70–1,23) | 2,07× (1,32–2,18) |
+| UPDATE | **0,39× (0,36–0,41)** | **0,90× (0,68–0,97)** |
+| DELETE | **0,38× (0,33–0,52)** | **5,10× (4,62–7,14)** |
+
+**Arm B's UPDATE range went from 0,11–0,43 to 0,36–0,41 and DELETE from 0,15–0,47 to 0,33–0,52** — the collapse is gone and both medians sit where three protocols now agree they sit (UPDATE 0,39 / 0,37 / 0,36). The qualitative verdicts are unchanged: INSERT, UPDATE and DELETE behind on the PK shape; UPDATE behind and READ/DELETE ahead on the fair shape.
+
+**4. The fair arm's medians carry ±0,2× run-to-run, and that is now on the record rather than a surprise.** Against the 3-warm-up runs: UPDATE 0,80 → **0,90**, DELETE 6,33 → **5,10**, READ 1,74 → **2,07**, INSERT 1,56 → 1,54. The directions and the sign of every cell are the same, and UPDATE's range still clears 1,00× (0,68–0,97), so the headline holds — but a reader is entitled to know that the fair-shape medians move by up to 0,2× between protocols, and DELETE's fair cell in particular has now read 5,10 / 6,16 / 6,33 / 7,59 / 7,75 across five runs. **Quote those as "roughly 5–8×", not as a number.**
+
+**5. Recorded residual, not papered over: single anomalous reps survive the fix.** In the verified 8-warm-up run one rep of five read UPDATE 137.659 and DELETE 631.528 while its siblings sat at ~355k and ~420k — so a range's extremes can still be single-rep artefacts. The **median is robust to them** (arm B UPDATE 0,39 / 0,37 / 0,36 across three protocols), which is exactly why the median is the published cell and the range only gates whether it may be quoted. **The honest next instrument would be a robust statistic (trimmed mean or median absolute deviation) rather than more reps**, and it is logged as the improvement rather than silently adopted — changing the statistic would invalidate every range in this worklog at once, and that is not a change to make at the end of a session.
+- NEXT: **a robust statistic, when someone is ready to re-derive every range in this worklog at once.** Single anomalous reps survive the warm-up fix, and a trimmed mean or median absolute deviation would absorb them where the raw min/max does not; the medians are already stable across three protocols, so this is about the *range* columns and nothing else. The three owner items are unchanged (the UPDATE default decision, elevation for `--gate`, the VS C++ workload), and the arm D UPDATE cell at 1,00–1,40× is now the only remaining straddle worth a re-run — at the new default.
+
+
 
 
 

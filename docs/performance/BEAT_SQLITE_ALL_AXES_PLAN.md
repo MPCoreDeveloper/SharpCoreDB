@@ -607,12 +607,20 @@ does not replace it.
    and discards it. It reproduces the diagnostic switch's effect **without changing the configuration**:
    INSERT's spread fell **1,70× → 1,16×** (tiering off: 1,10×) and DELETE's **3,20× → 1,54×** (tiering off:
    1,54×); rep 1 stopped being the outlier and the variability became scattered instead of ordered.
-   **The default is 3, not 1 (session 25).** One warm-up rep removed the *monotone* ramp but not the
+   **Three warm-ups, not one (session 25).** One warm-up rep removed the *monotone* ramp but not the
    spread — the measured UPDATE cell still moved 2,05× and its range straddled 1,00× (0,86–1,71×). Three
    warm-up reps collapsed that spread to **1,18×**, reproduced at **1,26×** in a second independent run,
    with **all four cells' ranges clearing 1,00× in both** (UPDATE **1,87× [1,66–2,02]** and **1,78×
-   [1,43–1,81]**). One warm-up rep was simply under-provisioned. If a range ever straddles again, this
-   count is the dial — it has now demonstrably moved exactly that.
+   [1,43–1,81]**).
+   **⚠️ The default is 8, not 3 (session 40).** Three was validated on the *fair* arm. Arm B still ramps
+   across **five** measured reps at three warm-ups — UPDATE **92.338 → 182.719 → 254.114 → 150.922 →
+   350.654 → 355.664**, monotone through measured rep 5 (= **pass 8**), while SQLite was flat from pass 1 —
+   which is what put a **0,11×** low end on its UPDATE range. At eight warm-ups the ramp is gone (measured
+   reps 1–3 read **353.713 / 350.089 / 357.393**) and arm B's UPDATE range tightens **0,11–0,43 →
+   0,36–0,41**. Three had *looked* sufficient only because five measured reps sample passes 4–8, a segment
+   of the ramp: **a protocol validated on a segment of a curve is not validated.** If a range ever
+   straddles, raise this count before adding reps — and note that single anomalous reps survive the fix, so
+   read the **median**, not the extremes.
 11. **Do not time the harness's own work inside a measured phase, and print the split when you do.**
    Measured (worklog session 28): the fair arm's DELETE phase spent **0–17 ms of its 21–65 ms window
    building 10.000 interpolated SQL strings** — harness work, variable per rep, and about a quarter of the
