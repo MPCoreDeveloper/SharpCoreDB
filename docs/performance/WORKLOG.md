@@ -3603,6 +3603,35 @@ Ours is monotone through measured rep 5 — **pass 8 overall** — and only then
 **5. Recorded residual, not papered over: single anomalous reps survive the fix.** In the verified 8-warm-up run one rep of five read UPDATE 137.659 and DELETE 631.528 while its siblings sat at ~355k and ~420k — so a range's extremes can still be single-rep artefacts. The **median is robust to them** (arm B UPDATE 0,39 / 0,37 / 0,36 across three protocols), which is exactly why the median is the published cell and the range only gates whether it may be quoted. **The honest next instrument would be a robust statistic (trimmed mean or median absolute deviation) rather than more reps**, and it is logged as the improvement rather than silently adopted — changing the statistic would invalidate every range in this worklog at once, and that is not a change to make at the end of a session.
 - NEXT: **a robust statistic, when someone is ready to re-derive every range in this worklog at once.** Single anomalous reps survive the warm-up fix, and a trimmed mean or median absolute deviation would absorb them where the raw min/max does not; the medians are already stable across three protocols, so this is about the *range* columns and nothing else. The three owner items are unchanged (the UPDATE default decision, elevation for `--gate`, the VS C++ workload), and the arm D UPDATE cell at 1,00–1,40× is now the only remaining straddle worth a re-run — at the new default.
 
+---
+
+### 2026-09-24 (session 41) — the encryption tax, resolved at the new default: **three of four cells now stand** — INSERT ~10 %, READ ~44 %, DELETE ~148 % — and UPDATE needs a statistic, not more reps
+
+- Session: 1 of 1 (arm D re-run at the new 8-warm-up default — the last straddle the NEXT line named)
+- Command(s): `--dual-mode` ×1 at `SHARPCOREDB_BENCH_REPS=5`, warm-up 8 (default), paired interleaved
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): n/a for this arm` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,25–1,39× (5/5). WSearch still **NOISY**
+- Verdict: **KEPT — two straddles resolved, one confirmed, one newly characterised as a statistics problem rather than a warm-up problem**
+- Commit: `docs(perf)`: the encryption tax at the new warm-up default
+
+**1. The table, at 8 warm-ups, against the same table at 3.**
+
+| operation | 3 warm-ups | **8 warm-ups** | outcome |
+|---|---|---|---|
+| INSERT | 1,06× (0,96–1,18) straddled | **1,10× (1,04–1,14)** | **resolved — stands** |
+| READ | 1,27× (0,96–1,34) straddled | **1,44× (1,19–2,07)** | **resolved — stands** |
+| UPDATE | 1,10× (1,00–1,40) borderline | **1,24× (0,59–1,98)** | **worse — see below** |
+| DELETE | 2,21× (2,14–2,90) stood | **2,48× (2,24–3,25)** | **confirmed** |
+
+**In plain terms, encrypting at rest costs roughly +10 % INSERT, +44 % READ and +148 % DELETE**, and the honest headline is now three cells rather than one. The two INSERT and READ cells were *straddling* at three warm-ups and are *standing* at eight, which is a second, independent vindication of the warm-up change from session 40 — the same fix that removed arm B's ramp also converted two of this table's cells from "no conclusion" into published numbers.
+
+**2. And UPDATE moved the *other* way, which is informative rather than disappointing.** More warm-up made arm D's UPDATE worse (1,00–1,40 → **0,59–1,98**), the opposite of what it did for arm B. A 0,59× low end means encryption appeared to make UPDATE *faster* in that rep, and 1,98× means nearly twice slower — both cannot be properties of AES. So **arm D's UPDATE is not a warm-up problem**, and the earlier "1,00–1,40 borderline" was not a partially-warmed cell either: it is a phase of ~10.000 updates (≈ 45–55 ms per rep) whose per-rep variance is large enough to swamp the tax, at five reps, under *any* warm-up count tried so far. **More reps alone will not fix it** — the fix is the robust statistic already logged as NEXT (a trimmed mean or MAD absorbs a single wild rep; a min/max range cannot), and this run is the evidence that promotes it from "nice to have" to "the blocker on this cell".
+
+**3. DELETE's confirmation is the most trustworthy number in the table.** It has now stood at **2,21× (2,14–2,90)** and **2,48× (2,24–3,25)** under two different protocols, with the tightest ranges of any cell here. At-rest encryption costs roughly **2,4×** on DELETE, reproducibly — the only axis where protection is genuinely expensive, and consistent with session 34's reading that DELETE is the phase where per-row encrypted work dominates what our engine does.
+
+**4. What is now on the record for the campaign's encrypted posture.** The fair shape (arm C) and arm B are plaintext-vs-SQLite comparisons; this table is our-encrypted-vs-our-plaintext. Together they mean: **encryption's cost is real but bounded (≈ +10 % to +150 % by operation), and it is not what puts UPDATE at 0,39× against SQLite** — arm B's plaintext posture is already there, which is the point sessions 31–38 established. Anyone optimising AES this campaign has finished reading the wrong file.
+- NEXT: **the robust statistic is now the blocker on arm D's UPDATE cell**, not more reps — 0,59–1,98× at five reps and 1,00–1,40× at three, on a ≈ 45–55 ms phase, means per-rep variance swamps the tax under any warm-up count tried. A trimmed mean or MAD would absorb it; a min/max range cannot. That change re-derives every range in this worklog at once, so it is a deliberate piece of work rather than a patch. Everything else measured is resolved: fair shape 3/4 ahead, arm B 3/4 behind, PageBased both shapes with READ verified, encryption tax 3/4 cells standing.
+
+
 
 
 
