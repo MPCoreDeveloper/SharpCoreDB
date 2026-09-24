@@ -2624,6 +2624,34 @@ Two things that table decided. (a) **The saving is −56,8 % at every size**, in
 
 <!-- APPEND-ENTRIES-BELOW -->
 
+### 2026-09-24 (review pass, human-directed) — the "beat SQLite on every axis" deep scan lands: the gap is a record-layout gap, and trap 3's −24 % is a measurement of a layout that no longer ships
+
+- Session: 1 of the review (a research + planning pass, **not** an unattended performance session)
+- Command(s): bmad-deep-recon `technical` run — 17 external sources, 2 rounds, 8 digests, a 12-claim ledger (10 verified) · citation check · Release build of `SharpCoreDB.Tests` (**0 errors**, 299 warnings)
+- Regime: `REGIME: no SHARPCOREDB_* switches set — documentation only, no src/ change in this entry`
+- Verdict: **KEPT (docs only, no `src/` change)** — the campaign's scope is extended from INSERT/UPDATE to **all four operations across five arms**, and one rail's *evidence* is found to be stale
+- Commit: *(this entry's commit — `docs(perf)`: the beat-SQLite-on-every-axis plan + its research artifact)*
+- NEXT: run the new plan's §8 order — **S1** (two-sided regime banner), then **S3** (re-measure the §8 trap-3 control at capacity 24) **before any build**, then S5, S2, S4, S6
+
+**1. Why a new plan rather than a new §5 item.** The INSERT/UPDATE campaign is closed: §5.1 CLOSED (decision 10), §5.2 followed up five times, §5.3 `REJECTED (documented)` on its own timebox, §5.4 re-validated, decisions 9–15 landed. The last `NEXT:` said "nothing open that is a code decision". The owner's new goal — *beat SQLite on all points* — is a different and larger scope, so it gets its own document: `docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`. That plan **extends** `INSERT_UPDATE_PERFORMANCE_PLAN.md` and the brief; it changes neither, and its work items inherit the brief's §0 rules, §11 rails and §10 protocol unchanged.
+
+**2. The measuring stick changed shape.** "All points" is now an explicit **5 arms × 4 operations** matrix, because a ratio without its arm is not a claim:
+
+| arm | READ | UPDATE | DELETE | INSERT |
+|---|---:|---:|---:|---:|
+| A fair-PK tuned plaintext | 1,26× | 1,29× | 1,62× | 0,87× |
+| **B pure default encrypted** | **0,57×** | **0,48×** | **0,59×** | **0,70×** |
+| **C default document-CRUD (no PK)** | 0,76× | **0,24×** | **0,31×** | 0,67× |
+| D PageBased (opt-in) | 2,00× | 0,17× | ~0,80× | ~1,00× |
+| E ladder (median-of-3) | 0,91/1,49/1,32 | 0,26/0,54 | 0,58/0,89 | 0,56/0,65/0,68 |
+
+A is the control and is won. **B and C are the mission**, and B is the row decision 10 already made an obligation.
+
+**3. The research run's central finding, and it is good news.** The remaining gap is a **record-layout** gap, not an engine-speed gap — and the layout it calls for **already ships**. `DataStructures/FixedWidthCodec.cs`'s own header describes a constant-size record with per-column slots and a 5-byte `[null-flag(1)][arena-offset(4)]` slot for String/Blob, and decision 8's inline capacity (24) keeps short TEXT in the record rather than in the arena. That is exactly what an independent reading of PostgreSQL's item-identifier indirection, TOAST's out-of-line values and `AesGcm`'s whole-buffer-only API derives — two lenses, one artefact. What the plan adds is that `SqlParser.DDL.cs:399-407` grants that layout **only** to tables with an explicit PRIMARY KEY and no `_rowid`, so arm C never gets it.
+
+**4. The finding to act on: trap 3's −24 % is the arena tax, and decision 8 removed it.** The brief's §8 trap 3 (and `AGENTS.md`) forbid flipping the fixed-width default on the strength of a measured **−24 % UPDATE and INSERT** on the PK-less shape. The plan's own §4b records why it measured that way — *"every variable-length value, however short, goes to the arena … `arena-write` 2.26 + `arena-append` 1.79 = ~4.05 µs/row, ~24 % of the pass"* — which is **pre-inline-capacity behaviour**. So the prohibition currently rests on a measurement of a layout that is no longer the layout being switched on. **No default is flipped here**, and the rail stays in force: the plan makes this **item S3, a measurement with no `src/` change**, whose deliverable is an attribution table and a `KEPT`/`REJECTED`/`BLOCKED` verdict. If it reproduces, the rail is confirmed with fresh evidence; if it does not, that is an owner decision (§9 row 2) backed by data rather than by a stale number.
+
+**5. The other three causes, each with a named lever.** (a) The encryption tax is an API contract — `AesGcm` has no incremental update, so patching one field re-encrypts the whole record, which is the §5.3 profile's 8,3 ms vs 1,2 ms `in-place-patch` at *identical* 175 B/call; only a constant-size record makes that cost constant, the same lever as §3. (b) The UPDATE path has no HOT-style gate: PostgreSQL skips index maintenance entirely when no indexed column changed, and our `DeleteByPrimaryKey` already does the key-only analogue while `UpdateColumnarRow:1923-1931` walks the index unconditionally — **item S2**, explicitly *not* decision 13 re-opened (that rejected *deferring*, and the O(n) `Flush()` reconcile is why). (c) Per-row `IStorageEngine`→`IStorage` dispatch costs every arm on every operation, and .NET 11's NativeAOT shared dispatch helper is documented for exactly "interface-heavy workloads" — **item S4**, measure-first.
 
 
 
@@ -2667,4 +2695,19 @@ Two things that table decided. (a) **The saving is −56,8 % at every size**, in
 
 
 
+
+
+
+
+**6. Two comparison defects are upstream of any claim, so they are work items, not footnotes.** SQLite's documented tuning surface can swing its write throughput >2× and it publishes **no** CRUD benchmark, so every number here is *our* measurement of *their* engine — **S1** adds a two-sided `REGIME:` banner (our switches **and** SQLite's pragma set). And arm C's 0,24× is partly trap 4: our arm uses a non-key predicate while SQLite resolves through its rowid, so the two engines are not doing the same work — **S5** adds an indexed-non-PK arm, which also isolates "row update cost" from "row location cost" for S3's attribution.
+
+**7. Order, and why it is that order.** S1 → S3 → S5 → S2 → S4 → S6, **8 sessions total**. S3 and S5 run before S2 deliberately: if arm C's gap is location-dominated, S2's value is smaller than it looks, and that ordering costs nothing while inverting it could waste two sessions. S6 is explicitly lowest-priority and must never delay S1–S3.
+
+**8. Non-goals are constraints here, not afterthoughts.** Encryption-by-default stays real, durability is untouchable, the `StorageEngineType.Auto` PageBased guard stays, the −24 % rail stays until an owner decision replaces it with fresh evidence, the "different league" wins (columnar/SIMD aggregates, vector search, GraphRAG, encrypted-at-rest, no P/Invoke) are protected rather than spent, and no version/`global.json`/packaging metadata is touched.
+
+**9. Honourably contrary evidence, recorded rather than hidden.** RocksDB — a production engine of this family — deliberately does *not* do in-place edits for updates and instead ships `Merge`/`Single Delete`/`DeleteRange`/`Compaction Filter` with deferred compaction; InnoDB documents concrete costs for the off-page layout (767 vs 3072-byte index key prefixes, source/replica DDL mismatch, table-rebuilding format changes); and the .NET 11 runtime-async numbers *lose* 1,30× on a single-`Yield` path, so `net11.0` is not a free multiplier on our shallow async surfaces. All three are quoted in the research report's **Contrary evidence** section. Red team was `off`, so these are the sources' own counter-arguments, not a manufactured adversarial pass.
+
+**10. What was NOT done, deliberately.** No `src/` change; no default flipped; no worklog entry rewritten; no rail touched. The research report's citations were mechanically checked (`recon_kit.py citations` → `ok: true`, no dangling markers, no orphaned rows) and the memlog carries the 12-claim ledger with honest confidence (2 claims `unverified`, including the single-source runtime-async numbers).
+
+**11. Evidence locations.** Plan: `docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`. Research: `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/` (report, 8 digests, 31-entry memlog, empty `imports/` — a native run).
 
