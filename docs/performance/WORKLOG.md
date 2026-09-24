@@ -3527,6 +3527,37 @@ None of the first two is a fact about encryption, and the third says so out loud
 
 
 
+---
+
+### 2026-09-24 (session 39) — PageBased's READ is **verified correct**: the 4,58× debt is discharged, and the two things the check had to establish first both came from reading the code
+
+- Session: 1 of 1 (the correctness check session 35 recorded as owed before 4,58× could be published)
+- Command(s): harness build ×1 · four configurations at `SHARPCOREDB_BENCH_REPS=1`, `SHARPCOREDB_WARMUP_REPS=0` (the check is protocol-independent — it asserts values, not timing)
+- Regime: n/a for the verdict. The runs used `REGIME (data dir): D:\scdb-bench-tmp` but nothing in this session depends on machine state, by design: a correctness gate that only passes on a quiet machine would be worthless
+- Verdict: **`KEPT` — and the 4,58× may now be published.** The gate also found that the *harness asymmetry runs against us*, which is a second, independent reason to believe the number
+- Commit: `test(bench)`: a READ correctness gate, and PageBased's READ passes it
+
+**1. Two facts had to be established by reading before the check was worth writing, and both changed what the check needed to be.** (1) `ExecuteQuery` returns `List<Dictionary<string, object>>` (`IDatabase.cs:125`, `Database.Execution.cs:339`) — it is **eager, not a lazy enumerable** — so the arms' habit of discarding the return value does **not** skip the read; the work happens inside the call, and a "the benchmark isn't actually reading" hypothesis is **refuted**. (2) There *is* a real asymmetry, and it is **against us**: our arm materialises a `Dictionary` per returned row while SQLite's arm only calls `reader.Read()`, so the READ cell is if anything made to look *worse* than SQLite's. That makes a flattering ratio *less* likely, not more. **Neither fact makes the number correct — what they leave open is whether the row that comes back is the row that was asked for, which is exactly what a page-based engine can get wrong while staying fast.**
+
+**2. The gate, and it is placed so it cannot perturb what it validates.** `VerifyReadSamples` runs **after** the timed loop, on a 200-key sample, and keeps the three failure modes apart — no row, unexpected row count, wrong value — because "empty" and "wrong" are different bugs with different causes. For the PK shape the expected value is derivable rather than assumed: rows are inserted as `id = i + 1` with `name = $"User{i}"`, the READ loop walks `id = 1..ReadCount`, so sample index `i` **must** come back as `name = $"User{i}"`. Numeric comparison goes through `NormalizeForCompare` because a PK read can legitimately return an `int` where the insert supplied a `long` — that is a type-widening question, not a correctness one, and folding it into the failure count would have produced false alarms that hide real ones.
+
+**3. All four configurations pass.**
+
+| configuration | result |
+|---|---|
+| `--pk-default --engine=pagebased` (the 4,58× cell) | **PASS** — 200 sampled · 0 empty · 0 unexpected row count · 0 wrong value |
+| `--pk-default` (AppendOnly) | **PASS** — same |
+| `--fair-ni --engine=pagebased` | **PASS** — same |
+| `--fair-ni` (AppendOnly) | **PASS** — same |
+
+**So PageBased's PK READ returns the correct row for every sampled key, and its 4,58× is a real engine result rather than a read that returned nothing.** The session-35 caution is discharged and the number is publishable. Both engines are covered, so the fair shock's 0,82× is likewise a real result and not a failed read being timed as a fast one.
+
+**4. What the gate does *not* prove, stated rather than glossed.** It samples **200 of 10.000** keys — it proves the **path**, not every row — and it covers the **SharpCoreDB** arms only: SQLite's side reads through `Microsoft.Data.Sqlite`'s reader, a reference implementation this campaign is not in the business of validating, and adding a check there would have expanded the change past its purpose. Both limits are the honest ones: the failure mode this gate exists to catch (an engine that answers a point read with the wrong or no row) is a path-level bug, and it finds that. **It would not catch a data-dependent error that appears only outside the sampled keys, and nothing in this session claims otherwise.**
+
+**5. This closes the last of the campaign's unverified published numbers.** Every cell now in the worklog is either measured on the shared paired protocol with a printed range, or carries an explicit recorded caveat (arm D's UPDATE at 1,00–1,40×, arm C's UPDATE withdrawn, arm B's READ straddling). The remaining open items are the three that need an **owner**, not a session of mine: the UPDATE default decision (narrow the auto-index, exempt columns, or accept — session 38), the `--gate` that needs elevation to run (Windows Search), and S4's VS C++ workload.
+- NEXT: **nothing measured is left unverified.** Every cell is either on the shared paired protocol with a printed range or carries an explicit recorded caveat. The three open items need an **owner**: (1) the UPDATE default decision — narrow the auto-index, exempt non-filtered columns, or accept and document (session 38); (2) elevation so `--gate` can run at all, twice attempted and both times `INCONCLUSIVE` for a reason outside this shell; (3) the VS C++ workload that unblocks S4. A session of mine cannot move any of the three.
+
+
 
 
 

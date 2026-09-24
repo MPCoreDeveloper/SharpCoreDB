@@ -502,8 +502,12 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > access a page-based engine is not built for while a PK lookup is the one it is. **UPDATE and DELETE are
 > behind in both engines** (PK UPDATE 0,39×/0,47×, PK DELETE 0,41×/0,31×), so those two deficits are **not
 > engine properties** — they live in the layer both engines share, and the engine swap is the evidence that
-> rules the storage engine out. PageBased's READ is owed a correctness check (a 316 % jump; the arm counts
-> executed reads, not verified values) before 4,58× is published.
+> rules the storage engine out. **PageBased's READ passed its correctness check (session 39)** — a 200-key
+> sample on both shapes and both engines, 0 empty · 0 unexpected row count · 0 wrong value, run after the timed
+> loop so the cell is untouched — so the 4,58× is a real engine result and is publishable. The check also
+> established that the harness asymmetry runs *against* us (our arm materialises a dictionary per row, SQLite's
+> only calls `reader.Read()`), which is a second, independent reason to believe the number. It proves the
+> **path**, not every row, and covers the SharpCoreDB arms only.
 
 > ⚠️ **UPDATE's deficit is attributed and needs an owner decision (worklog session 38).** Its three parts are
 > the batch dispatcher's per-statement classification (~11–33 % of the phase, and **time** — the 531 B is worth

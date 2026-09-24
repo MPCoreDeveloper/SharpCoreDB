@@ -2575,6 +2575,17 @@ class Program
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
             ReportCompactions("after READ");
 
+            // Correctness gate (plan §6: no ratio without reading what produced it), placed AFTER the timed loop
+            // so the measured cell is untouched.
+            VerifyReadSamples(
+                db,
+                "fair",
+                i => ($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                      new Dictionary<string, object?> { [NameParam] = $"User{i}" }),
+                "name",
+                i => $"User{i}",
+                Math.Min(ReadCount, 200));
+
             // UPDATE through the secondary index, setting the same score column SQLite's side sets.
             // The statement list comes from the cache — see FairNiUpdateStatements for why harness work does
             // not belong in this window — and the phase is split like DELETE's (plan §6 rule 11), so the
@@ -2801,6 +2812,16 @@ class Program
             result.ReadTime = sw.Elapsed.TotalSeconds;
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // Correctness gate, AFTER the timed loop. Rows were inserted as id = i + 1 with name = $"User{i}", and
+            // the READ loop walks id = 1..ReadCount, so sample index i must come back as name = $"User{i}".
+            VerifyReadSamples(
+                db,
+                "pk",
+                i => ("SELECT * FROM docs WHERE id = @id", new Dictionary<string, object?> { ["@id"] = i + 1 }),
+                "name",
+                i => $"User{i}",
+                Math.Min(ReadCount, 200));
 
             // UPDATE by PK (single ExecuteBatchSQL transaction, like SQLite's single tx)
             // --pk-profile turns the profiler on for THIS arm only: Reset clears whatever the INSERT/READ
@@ -3326,6 +3347,81 @@ class Program
     /// scanner (<c>TryScanCanonicalDml</c>) and <c>SqlParser.ParseValue</c> are left with.
     /// </para>
     /// </summary>
+    /// <summary>
+    /// Correctness gate for the READ arms — the debt session 35 recorded when PageBased's PK READ came in at
+    /// 4,58×, a 316 % jump nobody had checked the code behind.
+    /// <para>
+    /// Two facts were established by reading rather than assumed, and both are recorded here because they decide
+    /// what is left to verify. (1) <c>ExecuteQuery</c> returns <c>List&lt;Dictionary&lt;string, object&gt;&gt;</c>
+    /// — it is <b>eager</b>, not a lazy enumerable — so discarding the return value in the arms does <i>not</i>
+    /// skip the read: the work happens inside the call. (2) The asymmetry that does exist is against us: our arm
+    /// materialises a dictionary per returned row while SQLite's arm only calls <c>reader.Read()</c>, so if
+    /// anything our READ cell is made to look worse than SQLite's. Neither fact makes the number *right* —
+    /// what they leave open is whether the row that comes back is the row that was asked for, which a page-based
+    /// engine can get wrong while staying fast.
+    /// </para>
+    /// <para>
+    /// Runs <b>after</b> the timed loop, on a sample, so the measured cell is untouched. Prints a single line
+    /// with the three failure modes kept apart: no row, wrong row count, wrong value.
+    /// </para>
+    /// </summary>
+    static void VerifyReadSamples(
+        SharpCoreDB.Interfaces.IDatabase db,
+        string label,
+        Func<int, (string Sql, Dictionary<string, object?> Parameters)> request,
+        string expectColumn,
+        Func<int, object?> expected,
+        int keys)
+    {
+        int sampled = 0;
+        int empty = 0;
+        int wrongCount = 0;
+        int wrongValue = 0;
+
+        for (int i = 0; i < keys; i++)
+        {
+            var (sql, parameters) = request(i);
+            var rows = db.ExecuteQuery(sql, parameters);
+            sampled++;
+
+            if (rows.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
+            if (rows.Count != 1)
+            {
+                wrongCount++;
+            }
+
+            if (!rows[0].TryGetValue(expectColumn, out var actual) ||
+                !Equals(NormalizeForCompare(actual), NormalizeForCompare(expected(i))))
+            {
+                wrongValue++;
+            }
+        }
+
+        string verdict = empty == 0 && wrongCount == 0 && wrongValue == 0 ? "PASS" : "FAIL";
+        Console.WriteLine($"    [verify] {label} READ: {verdict} — {sampled:N0} sampled · "
+            + $"{empty} empty · {wrongCount} unexpected row count · {wrongValue} wrong value");
+    }
+
+    /// <summary>
+    /// Makes <c>EqualityComparer</c> usable across the numeric types the engines hand back for one column
+    /// (a PK read can come back as <see cref="int"/> where the insert supplied a <see cref="long"/>, and that
+    /// is not a correctness problem). Strings compare as strings; booleans and nulls compare as themselves.
+    /// </summary>
+    static object? NormalizeForCompare(object? value) => value switch
+    {
+        null => null,
+        string s => s,
+        bool b => b,
+        char c => c.ToString(),
+        IConvertible => Convert.ToDecimal((IConvertible)value, CultureInfo.InvariantCulture),
+        _ => value.ToString(),
+    };
+
     static void RunUpdateParseCostDiagnostic()
     {
         const int N = 500_000;
