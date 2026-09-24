@@ -505,6 +505,17 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > rules the storage engine out. PageBased's READ is owed a correctness check (a 316 % jump; the arm counts
 > executed reads, not verified values) before 4,58× is published.
 
+> ⚠️ **UPDATE's deficit is attributed and needs an owner decision (worklog session 38).** Its three parts are
+> the batch dispatcher's per-statement classification (~11–33 % of the phase, and **time** — the 531 B is worth
+> only ~1,6 %, measured in session 37), the row locate (~16–24 %), and **hash-index maintenance on the written
+> column (~7,6–20 %)**, which exists because *every Columnar column auto-creates a hash index*
+> (`SqlParser.DDL.cs:430-436`) — so `SET score = …` pays a remove + add per row for a column nothing filters on,
+> work that is **correct and therefore not removable by an optimisation** (S2 removed only the branch that had
+> no effect). Three answers: narrow the auto-index default, exempt non-filtered columns, or accept the cost and
+> document it. **A `src/` default is load-bearing — this is a deliberate product decision, not a bug.**
+> The "give UPDATE the B3 structured predicate" item (session 36) is **cancelled by measurement**; do not
+> re-open it.
+
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
 
