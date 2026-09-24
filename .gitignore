@@ -442,3 +442,9 @@ dist/
 Examples/**/*.scdb
 Examples/**/*.scdb/
 src/SharpCoreDB.Server/data/
+
+# BMAD agent tooling
+# _bmad/ and .cline/skills/ are committed so the whole team shares one setup.
+# Only the personal install answers are ignored (the installer rewrites them per machine):
+_bmad/config.user.toml
+# (_bmad/custom/config.user.toml is already covered by _bmad/custom/.gitignore)
