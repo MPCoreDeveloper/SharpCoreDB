@@ -1,17 +1,16 @@
-# SharpCoreDB C# 14 / .NET 10 Coding Standards
+# SharpCoreDB Coding Standards (.NET 11 / C# 15 preview)
 
-**Version:** 1.0  
-**Target Framework:** .NET 10  
-**Language Version:** C# 14  
-**Effective Date:** 2025-01-28
+**Version:** 1.1
+**Target Framework:** .NET 11 (`net11.0` on the v2.1 line; `master` keeps the .NET 10 / C# 14 stable packages)
+**Language Version:** C# 15 preview
 
-> **Mandatory:** All new code and refactorings MUST use modern C# 14 features and patterns where applicable.
+> **Mandatory:** All new code and refactorings MUST use modern C# 15 preview features and patterns where applicable.
 
 ---
 
 ## 🎯 Core Principles
 
-1. **Modern First**: Always prefer C# 14 features over legacy patterns
+1. **Modern First**: Always prefer current-language (C# 15 preview) features over legacy patterns
 2. **Performance**: Zero-allocation where possible, use `Span<T>`, `Memory<T>`, and pooling
 3. **Safety**: Leverage null-safety, exhaustive pattern matching, and compile-time checks
 4. **Readability**: Use expressive syntax but avoid over-engineering
@@ -19,7 +18,7 @@
 
 ---
 
-## 🆕 C# 14 Required Features
+## 🆕 Required Features (C# 15 preview)
 
 ### 1. Primary Constructors (Classes & Structs)
 
@@ -845,7 +844,7 @@ public async Task LongRunningOperationAsync(CancellationToken ct)
 
 Before submitting a PR, verify:
 
-- [ ] All code uses C# 14 features where applicable
+- [ ] All code uses current-language (C# 15 preview) features where applicable
 - [ ] No `object` locks (use `Lock` class)
 - [ ] No collection initializers (use collection expressions `[]`)
 - [ ] Async methods have `Async` suffix
@@ -864,8 +863,8 @@ Before submitting a PR, verify:
 ## 📖 References
 
 ### Official Documentation
-- [C# 14 What's New](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14)
-- [.NET 10 Performance Improvements](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-10/)
+- [C# 15 What's New](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-15)
+- [.NET 11 Performance Improvements](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-11/)
 - [Span<T> and Memory<T>](https://learn.microsoft.com/en-us/dotnet/standard/memory-and-spans/)
 - [Channel<T> Guide](https://learn.microsoft.com/en-us/dotnet/core/extensions/channels)
 
@@ -883,4 +882,5 @@ Before submitting a PR, verify:
 ---
 
 **Version History:**
+- v1.1 (2026-09-24): Retargeted to .NET 11 / C# 15 preview for the v2.1 line; title, language-version and reference claims corrected (the feature catalogue itself is unchanged).
 - v1.0 (2025-01-28): Initial release for C# 14 / .NET 10

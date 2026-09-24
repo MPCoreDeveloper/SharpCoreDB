@@ -323,7 +323,7 @@ Have a feature idea? Found a bug? Want to work on a roadmap item?
 - 💡 [Propose a feature](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/new)
 - 🔀 [Submit a PR](https://github.com/MPCoreDeveloper/SharpCoreDB/pulls)
 
-All contributions follow the standards in `.github/CODING_STANDARDS_CSHARP14.md`.
+All contributions follow the standards in `.github/CODING_STANDARDS.md`.
 
 ---
 

@@ -145,11 +145,14 @@ Test project: `tests/SharpCoreDB.Provider.Sync.Tests`
 ## Running Tests
 
 ```bash
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj -c Release -f net11.0
+
 # Full provider test suite
-dotnet test tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj
+tests/SharpCoreDB.Provider.Sync.Tests/bin/Release/net11.0/SharpCoreDB.Provider.Sync.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # Integration only
-dotnet test tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj --filter "Integration"
+tests/SharpCoreDB.Provider.Sync.Tests/bin/Release/net11.0/SharpCoreDB.Provider.Sync.Tests.exe -filterVSTest "Integration"
 ```
 
 ## Final Notes (Phase 4)

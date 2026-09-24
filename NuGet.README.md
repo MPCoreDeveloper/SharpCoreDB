@@ -288,7 +288,9 @@ var embeddings = await embeddingProvider.GenerateEmbeddingsBatchAsync(content);
 Comprehensive test suite included:
 
 ```bash
-dotnet test tests/SharpCoreDB.Graph.Advanced.Tests
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Graph.Advanced.Tests/SharpCoreDB.Graph.Advanced.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Graph.Advanced.Tests/bin/Release/net11.0/SharpCoreDB.Graph.Advanced.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 ```
 
 Test categories:
@@ -319,7 +321,9 @@ We welcome contributions! Please see our [Contributing Guide](CONTRIBUTING.md) f
 git clone https://github.com/MPCoreDeveloper/SharpCoreDB.git
 cd SharpCoreDB
 dotnet build
-dotnet test
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform):
+dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 ```
 
 ---

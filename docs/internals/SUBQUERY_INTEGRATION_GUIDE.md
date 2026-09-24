@@ -351,7 +351,9 @@ HAVING AVG(salary) > (SELECT AVG(salary) FROM employees);
 Run the included tests:
 
 ```bash
-dotnet test --filter "FullyQualifiedName~SubqueryTests"
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "FullyQualifiedName~SubqueryTests"
 ```
 
 Expected results:

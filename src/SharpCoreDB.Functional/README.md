@@ -82,7 +82,9 @@ var users = await fdb.ExecuteFunctionalSqlAsync<UserDto>(
 ### Verification tests
 
 ```bash
-dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~FunctionalSqlSyntaxTests"
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Functional.Tests/bin/Release/net11.0/SharpCoreDB.Functional.Tests.exe -filterVSTest "FullyQualifiedName~FunctionalSqlSyntaxTests"
 ```
 
 Source: `tests/SharpCoreDB.Functional.Tests/FunctionalSqlSyntaxTests.cs`

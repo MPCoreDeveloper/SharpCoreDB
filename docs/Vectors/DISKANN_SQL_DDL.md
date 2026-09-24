@@ -74,7 +74,9 @@ New tests in `tests/SharpCoreDB.VectorSearch.Tests/DiskAnnIndexTests.cs`:
 
 Run with:
 ```bash
-dotnet test tests/SharpCoreDB.VectorSearch.Tests/ --framework net11.0 --filter "FullyQualifiedName~DiskAnnIndexTests"
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net11.0/SharpCoreDB.VectorSearch.Tests.exe -filterVSTest "FullyQualifiedName~DiskAnnIndexTests"
 ```
 
 All tests pass on .NET 11 RC.
@@ -104,7 +106,9 @@ See also:
 
 Je kunt ze draaien met:
 ```bash
-dotnet test tests/SharpCoreDB.VectorSearch.Tests/ --framework net11.0 --filter "FullyQualifiedName~DiskAnnIndexTests"
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net11.0/SharpCoreDB.VectorSearch.Tests.exe -filterVSTest "FullyQualifiedName~DiskAnnIndexTests"
 ```
 
 De nieuwe **`docs/Vectors/DISKANN_SQL_DDL.md`** bevat volledige documentatie voor de DDL, voorbeelden, parameters, C# equivalent en testbeschrijving.

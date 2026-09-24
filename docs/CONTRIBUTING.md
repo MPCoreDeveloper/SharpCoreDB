@@ -30,7 +30,7 @@ Feature suggestions are welcome! Please create an issue with:
 2. **Make your changes** following our coding standards
 3. **Add tests** for new functionality
 4. **Update documentation** if needed
-5. **Ensure all tests pass** by running `dotnet test`
+5. **Ensure all tests pass** — build and run the MTP test host (see Development Setup; `dotnet test` is not supported in this repo)
 6. **Submit a pull request** with a clear description
 
 #### Branch Naming Convention
@@ -61,13 +61,19 @@ dotnet restore
 # Build the solution
 dotnet build
 
-# Run tests
-dotnet test
+# Run tests (dotnet test is NOT supported in this repo -- see the note below)
+dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # Run benchmarks (optional)
 cd tests/SharpCoreDB.Benchmarks
 dotnet run -c Release
 ```
+
+> **Why not `dotnet test`?** xUnit v3 runs on Microsoft.Testing.Platform, which rejects the VSTest
+> target on .NET 10 SDK and later, so `dotnet test` fails with a *"Testing with VSTest target is no
+> longer supported"* error. Build the test project, then run its MTP host executable directly — it
+> accepts the same VSTest filter expression (`-filterVSTest`) and can write TRX with `-result-trx`.
 
 ## Project Structure
 

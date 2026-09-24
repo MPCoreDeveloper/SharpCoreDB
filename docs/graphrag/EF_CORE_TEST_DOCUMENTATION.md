@@ -4,7 +4,7 @@
 
 Unit and integration tests for GraphRAG EF Core integration. Tests cover LINQ extensions, SQL translation, error handling, and parameter validation.
 
-**Status:** Tests exist (run `dotnet test` to verify)  
+**Status:** Tests exist (run the MTP test host to verify — `dotnet test` is not supported in this repo)  
 **Test Framework:** xUnit  
 **Last Updated:** 2025-02-15
 
@@ -63,4 +63,10 @@ Coverage includes:
 
 ## Running Tests
 
-Use `dotnet test` from the repo root to validate status in your environment.
+`dotnet test` is not supported in this repo: xUnit v3 runs on Microsoft.Testing.Platform, which rejects
+the VSTest target. From the repo root, build the EF Core test project and run its test host directly:
+
+```bash
+dotnet build tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net11.0/SharpCoreDB.EntityFrameworkCore.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
+```

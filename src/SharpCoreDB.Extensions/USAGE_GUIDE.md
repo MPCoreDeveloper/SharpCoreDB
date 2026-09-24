@@ -516,4 +516,4 @@ public class CustomersModel(IDatabase database) : PageModel
 ---
 
 *For full API documentation, see the [README](README.md).*
-*For coding standards, see `.github/CODING_STANDARDS_CSHARP14.md`.*
+*For coding standards, see `.github/CODING_STANDARDS.md`.*

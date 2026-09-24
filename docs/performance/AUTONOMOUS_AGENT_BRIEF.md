@@ -88,8 +88,10 @@ dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net1
 tests\SharpCoreDB.Tests\bin\Release\net11.0\SharpCoreDB.Tests.exe
 
 # Benchmarks — use this direct form.
-# WARNING: tools/clean-benchmark.ps1 line 25 has a WRONG project path (it omits the
-# `benchmarks\` folder). Do not rely on that script; call `dotnet run` directly:
+# NOTE: an earlier revision of this brief warned that tools/clean-benchmark.ps1 line 25 had a
+# wrong project path. That is retired: re-verified 2026-09-24, line 25 resolves correctly to
+# tests\benchmarks\SharpCoreDB.Benchmarks.Comparative (the script was fixed). The direct form is
+# kept below because it is what the recorded measurements were taken with.
 dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -- --pk
 dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -- --pk-default
 dotnet run -c Release --project tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -- --pk --engine=pagebased

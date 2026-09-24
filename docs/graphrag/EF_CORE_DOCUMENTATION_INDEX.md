@@ -2,7 +2,7 @@
 
 **Status:** ✅ Phase 2 complete (Phase 3 prototype)  
 **Last Updated:** 2025-02-15  
-**Test Status:** Run `dotnet test` to validate locally
+**Test Status:** Run the MTP test host to validate locally — `dotnet test` is not supported in this repo (see `docs/CONTRIBUTING.md`)
 
 ---
 

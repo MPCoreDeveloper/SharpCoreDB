@@ -6,7 +6,7 @@
   </Configurations>
   <Folder Name="/.github/">
     <File Path=".github/CI_STATUS.md" />
-    <File Path=".github/CODING_STANDARDS_CSHARP14.md" />
+    <File Path=".github/CODING_STANDARDS.md" />
     <File Path=".github/copilot-instructions.md" />
     <File Path=".github/dependabot.yml" />
     <File Path=".github/FUNDING.yml" />

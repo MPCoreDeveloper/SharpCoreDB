@@ -185,7 +185,7 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 11. Developer Standards
 
-- `../.github/CODING_STANDARDS_CSHARP14.md`
+- `../.github/CODING_STANDARDS.md`
 - `../.github/SIMD_STANDARDS.md`
 
 ## Documentation Governance
