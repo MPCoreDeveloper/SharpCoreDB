@@ -537,6 +537,33 @@ class Program
     }
 
     /// <summary>
+    /// How many <b>discarded</b> warm-up reps to run before the measured ones (plan §6 rule 10, from S7's
+    /// verdict). Default 1; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables it, which is what makes this a
+    /// protocol change rather than a hidden behaviour.
+    /// <para>
+    /// The reason is measured, not assumed: in two independent 5-rep runs our per-rep numbers improved
+    /// <em>monotonically</em> from rep 1 to rep 5 while SQLite's stayed flat, and because every rep builds a
+    /// fresh database only <em>process</em> state can carry across them. The cost is JIT tiering on a
+    /// 100 %-managed hot path — and <c>DOTNET_TieredCompilation=0</c> collapses the spreads (INSERT
+    /// 1,70× → 1,10×, DELETE 3,20× → 1,54×), which confirms it. Warm-up is used rather than that switch
+    /// because a warm-up rep measures the <b>shipped</b> configuration, while the switch measures one no
+    /// user runs; the switch stays a diagnostic for attributing variance.
+    /// </para>
+    /// </summary>
+    static int ResolveWarmupReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_WARMUP_REPS");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 1;
+        }
+
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : 1;
+    }
+
+    /// <summary>
     /// Overrides <see cref="DatabaseConfig.SingleFileMinExtensionBytes"/> from <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c>
     /// (plan §9's file-growth item, 2026-09-23). Unset keeps the product default, which is <c>0</c> = the historical
     /// 10 MiB minimum extension: the single-file file starts at 1.037 pages and the first extension that does not fit
@@ -1876,6 +1903,28 @@ class Program
         Console.WriteLine("Both sides carry an index on EVERY column — SharpCoreDB implicitly for a Columnar table,");
         Console.WriteLine("SQLite explicitly — so the SET column is indexed on both sides. No rowid shortcut either way.");
         Console.WriteLine();
+
+        // Plan §6 rule 10 (S7's verdict): one DISCARDED warm-up rep, because our per-rep numbers improved
+        // monotonically from rep 1 to rep 5 in two independent runs while SQLite's stayed flat — and since
+        // every rep builds a fresh database, only process state can carry across them. It runs the real arms
+        // so the warm-up exercises the same paths the measurement does, and it is counted out loud so a
+        // reader can never mistake it for a measured rep.
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = RunFairNoPkSharp(engineType);
+            _ = RunFairNoPkSqlite();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
 
         // S5 (plan §6.4): the arms are INTERLEAVED and the SPREAD is printed. Two reasons, both required by
         // the measurement protocol. (1) The first version ran every SharpCoreDB rep and then every SQLite

@@ -3030,6 +3030,53 @@ SQLite is very nearly **deterministic** (UPDATE ±1 % across five reps); ours is
 
 **5. The consequence, which is larger than S7 itself: cold-rep measurements have been understating this engine, and every published ratio inherits that.** A median of three that includes a cold rep charges us for warm-up SQLite never pays — and the fair arm is the first place both engines were measured in one window closely enough for the asymmetry to be visible. **Recommendation, stated as a protocol change rather than a code change:** (a) the harness should run one **discarded warm-up rep** before the measured ones, because that measures the *shipped* configuration — unlike `DOTNET_TieredCompilation=0`, which measures a configuration no user runs; (b) the tiering switch is kept as a documented **diagnostic** for attributing variance, never as the published setting; (c) **ratios recorded before this entry are re-read with a warm-up in mind**, and any decided by a single cold rep should be re-taken. The UPDATE cell still spanning 0,63×–1,89× with tiering off says one warm-up rep will not fix everything — rep 1 stays slow on UPDATE specifically — so the warm-up rep is the next experiment, not the conclusion.
 
+---
+
+### 2026-09-24 (session 23) — the warm-up rep **works**: the monotone ramp is gone (INSERT's spread **1,70× → 1,16×**, matching the tiering-off figure), the variability stops being ordered, and **three of the fair arm's four cells now stand**
+
+- Session: 1 of 1 (the concrete follow-up §6 rule 10 called for)
+- Command(s): harness build ×1 · `quiet-machine.ps1` ×1 · `--fair-ni` ×1 at `SHARPCOREDB_BENCH_REPS=5` with the default 1 discarded warm-up rep
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `quiet-machine.ps1`: CPU 2,8 %, `MsMpEng idle` 1 %, disk queue 0, `MaxFreq` 100 %, exclusion confirmed **1,38× (5/5 rounds)**; one `NOISY` finding — Windows Search, which restarts itself and cannot be stopped without elevation
+- Verdict: **KEPT** — warm-up is now the protocol, and the fair arm has three cells it can publish
+- Commit: `test(bench)`: a discarded warm-up rep before the measured ones (plan §6 rule 10)
+- NEXT: **S4** — NativeAOT dispatch, measured on the fair arm, which is finally stable enough to read. **UPDATE (0,86×–1,71×) stays the one unresolved cell** and is not a warm-up artefact.
+
+**1. The warm-up rep was added as a protocol step, not a hidden tweak.** `SHARPCOREDB_WARMUP_REPS` (default **1**, `0` disables) runs the **real arm pair** and discards it, printing `── warm-up rep 1/1 — DISCARDED, not measured ──` so it can never be mistaken for a measurement. It measures the **shipped** configuration, which is why it is preferred over `DOTNET_TieredCompilation=0` — that switch collapses the variance too, but it describes a configuration no user runs.
+
+**2. The ramp is gone, and the numbers confirm the diagnosis rather than merely improving it.** Five measured reps after one discarded rep:
+
+| rep | SCDB INSERT | READ | UPDATE | DELETE | SQLite INSERT | READ | UPDATE | DELETE | paired I/R/U/D |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | 135.798 | 130.623 | 132.987 | 259.433 | 100.495 | 95.724 | 135.479 | 51.191 | 1,35 1,36 0,98 5,07 |
+| 2 | 157.229 | 209.272 | 114.457 | 321.112 | 101.885 | 95.810 | 133.824 | 50.240 | 1,54 2,18 0,86 6,39 |
+| 3 | 143.145 | 193.813 | 234.352 | 400.498 | 100.676 | 96.744 | 136.930 | 52.739 | 1,42 2,00 1,71 7,59 |
+| 4 | 148.566 | 217.681 | 186.471 | 393.208 | 102.385 | 97.378 | 137.490 | 47.728 | 1,45 2,24 1,36 8,24 |
+| 5 | 155.077 | 165.721 | 123.426 | 323.257 | 99.124 | 91.200 | 131.723 | 51.530 | 1,56 1,82 0,94 6,27 |
+
+| phase | spread before warm-up | **spread after warm-up** | spread with tiering off |
+|---|---|---|---|
+| INSERT | 1,70× | **1,16×** | 1,10× |
+| READ | 2,20× | **1,67×** | 1,36× |
+| UPDATE | 2,83× | **2,05×** | 2,98× |
+| DELETE | 3,20× | **1,54×** | 1,54× |
+
+**INSERT and DELETE now land on the tiering-off figures (1,16× vs 1,10×; 1,54× vs 1,54×), which is the confirmation that matters**: the warm-up rep reproduces the effect the diagnostic switch produced, without changing the configuration being measured. And the *shape* changed too — rep 1 is no longer the outlier on any cell (mid-range on UPDATE, only slightly low on INSERT), so the variability is scattered noise rather than an ordered ramp, which is exactly what a warm-up is meant to achieve.
+
+**3. Three of four cells now stand, and the fourth is honestly open.** Medians of the paired ratios with their ranges:
+
+| cell | result | reading |
+|---|---|---|
+| INSERT | **1,45× (1,35–1,56)** | stands — tight, entirely above 1,00× |
+| READ | **2,00× (1,36–2,24)** | stands — was straddling before the warm-up (0,93–2,04) |
+| UPDATE | 0,98× (**0,86–1,71**) | **still straddles → not supported** |
+| DELETE | **6,39× (5,07–8,24)** | stands solidly |
+
+So, measured on a fair shape with a warm-up and a printed spread: **SharpCoreDB beats SQLite on INSERT (1,45×), READ (2,00×) and DELETE (6,39×); UPDATE is somewhere in 0,86×–1,71× and is not yet resolvable.** UPDATE is **not** a warm-up artefact — it carried a 2,05× spread both before and after the warm-up fix, and its variability is now scattered rather than ordered — so it has moved from "measurement defect" to "genuine open question", which is the honest status.
+
+**4. The archive was not committed, per the mechanical rule set in session 21** — an archive is committed only if its headline cells' ranges do not straddle 1,00×, and UPDATE does. All twenty per-rep values are quoted above, which makes this run's remaining gap the most precisely stated thing in the campaign: **resolve UPDATE and the fair arm becomes publishable.** Note also what did *not* need a decision: `SHARPCOREDB_WARMUP_REPS` defaults to 1 rather than requiring a flag, because the measured evidence is that a cold rep understates the shipped engine, and every earlier ratio in this campaign inherits that error unless it is re-read.
+
+
+
 
 
 

@@ -496,8 +496,13 @@ does not replace it.
    *shipped* engine, whereas `DOTNET_TieredCompilation=0` measures a configuration no user runs, so that
    switch is a **diagnostic for attributing variance only**. Consequence: any ratio this campaign
    published from a cold single rep is re-read with that in mind, and re-taken if a cold rep decided it.
-   **Still open:** with tiering off, rep 1 stays slow on UPDATE specifically (0,63× at its worst), so a
-   warm-up rep alone does not close that cell.
+   **Implemented and confirmed 2026-09-24 (session 23):** `SHARPCOREDB_WARMUP_REPS` (default **1**, `0`
+   disables) runs the real arm pair and discards it. It reproduces the diagnostic switch's effect **without
+   changing the configuration**: INSERT's spread fell **1,70× → 1,16×** (tiering off: 1,10×) and DELETE's
+   **3,20× → 1,54×** (tiering off: 1,54×); rep 1 stopped being the outlier and the variability became
+   scattered instead of ordered. **Still open:** UPDATE keeps a 2,05× spread and a range that straddles
+   1,00× (**0,86×–1,71×**) *after* the warm-up, so it is now a genuine open question rather than a
+   measurement defect.
 
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
@@ -538,14 +543,17 @@ fails.
 | 2 | **S3** trap-3 control re-measured | 2 | no | ⛔ `REJECTED` (`5494b594`) | answered before any build, and the plan §2.2 note was corrected |
 | 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, spread in session 21) | turns arm C from an artefact into a comparison |
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
-| 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | **← next** | **must precede S4**: a measure-first item cannot be measured on a 3,7× noise floor |
-| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | blocked on S7 | helps every arm at once, but only readable once S7 explains the variance |
-| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | after S7 | opportunistic; must never delay the items above |
+| 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
+| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | **← next** | helps every arm at once, and is finally readable now that the warm-up rep removed the ramp |
+| 7 | **S6** shape-matched JIT/SIMD | 1 | yes | after S4 | opportunistic; must never delay the items above |
 
 **Total timebox: 10 sessions** (8 as originally scoped, +2 for S7, which the S5 spread run added).
 S3, S5 and S7 all sit before a *build* deliberately: each is a measurement that decides whether the build
 is worth making, and each has now paid for itself — S3 refuted a hypothesis, S2 refuted its own target
-before a line of it shipped beyond a correct no-op gate, and S5 refuted one of its own cells.
+before a line of it shipped beyond a correct no-op gate, and S5 refuted one of its own cells. **S7 is the
+clearest case: it refuted its own hypothesis (compaction, by a counter that read 0), found the real cause
+(JIT warm-up), and that finding invalidated the measurement basis of every ratio the campaign had
+published — including S5's own first result.**
 
 **Decision points.** If S3 returns `REJECTED` (the −24 % reproduces at capacity 24), arm C's target
 moves to a §9 owner decision rather than a build, and S2 becomes the plan's main lever. If S3 returns
