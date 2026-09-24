@@ -308,6 +308,13 @@ failure.
   per-operation work (not time-based). Use `SHARPCOREDB_MAIN_FIXEDWIDTH`, `SHARPCOREDB_INLINE_BYTES`,
   `SHARPCOREDB_HASH_INDEXES`, `SHARPCOREDB_MAIN_PROFILE_UPDATE`; compare **call counts and allocation**
   across arms, not times.
+- **The table now exists for the two `--dual-mode` arms (2026-09-23, session 11) and it re-prices the item:**
+  the 12,6 MB whole-file snapshot that dominated the discussion is **one call, 12,6 MB, 5,7 % of the pass**;
+  the sorted stages are `commit-overwrites` 16,4 %, `parse` 14,2 % (**shape-inherent**: 10.000 distinct
+  literal statements, so no product fix), `row-locate-index` 13,9 %, `engine-write` 13,1 %, `index-maint`
+  7,6 %, `in-place-patch` 7,0 %, `row-snapshot` 5,7 % — so the snapshot is **REJECTED as a lever** and the
+  next candidates are `commit-overwrites` (a durability-boundary call, 1,5 MB) and `index-maint`. Plan §9
+  carries the full table; the worklog entry is session 11.
 - The eventual fix is a **new capability** (not a gate relax): extend in-place patching to
   non-PK-located updates — locate via the hash index, overwrite when the changed field's encoded width
   is unchanged, using `IStorageEngine.TryUpdateInPlaceSameLength` (already exists).

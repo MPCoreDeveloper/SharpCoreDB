@@ -687,6 +687,49 @@ class Program
         Console.WriteLine($"  ExecuteBatchSQL (one call) {inserts / batchMedian,8:N0}  {batchMedian * 1_000_000 / inserts,10:F2}   {batchShape.AllocPerRow,12:N0} B   {batchShape.FileBytes,11:N0} B");
         Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {statementShape.Gen0} / {batchShape.Gen0} (statementwise / batched)");
         Console.WriteLine($"    [diag] minimum file extension {SingleFileMinExtensionOverride()} B (0 = the product default 10 MiB, SHARPCOREDB_SCDB_MIN_EXTENSION) — the knob behind the .scdb file size above");
+
+        // Persist the arm as tracked evidence, like the pk/dual-mode arms do: the .scdb numbers above are quoted in the
+        // plan and the worklog, and sessions 8-10 had to be re-run to re-obtain them because this arm wrote no file.
+        // Both caller shapes go in one document, together with the configuration that produced them (resolved inline
+        // capacity, the growth setting and the row count), so a figure can be checked without re-reading stdout.
+        // Anchored at the PROJECT directory like the dual-mode arm, not the process CWD: the repo root has an ignored
+        // results/ folder, and only the project's one is the tracked evidence location.
+        string scdbProjectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        string scdbResultsDir = Path.Combine(scdbProjectDir, ResultsDirName);
+        Directory.CreateDirectory(scdbResultsDir);
+        string scdbResultsPath = Path.Combine(
+            scdbResultsDir,
+            $"scdb_insert_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(scdbResultsPath, JsonSerializer.Serialize(new
+        {
+            rows = inserts,
+            rowsPerStatement,
+            reps,
+            resolvedInlineCapacityBytes = resolvedCapacity,
+            minExtensionBytes = SingleFileMinExtensionOverride(),
+            shapes = new[]
+            {
+                new
+                {
+                    shape = "ExecuteSQL per statement",
+                    rowsPerSecond = inserts / statementMedian,
+                    microSecondsPerRow = statementMedian * 1_000_000 / inserts,
+                    allocatedBytesPerRow = statementShape.AllocPerRow,
+                    fileBytes = statementShape.FileBytes,
+                    gen0Collections = statementShape.Gen0,
+                },
+                new
+                {
+                    shape = "ExecuteBatchSQL (one call)",
+                    rowsPerSecond = inserts / batchMedian,
+                    microSecondsPerRow = batchMedian * 1_000_000 / inserts,
+                    allocatedBytesPerRow = batchShape.AllocPerRow,
+                    fileBytes = batchShape.FileBytes,
+                    gen0Collections = batchShape.Gen0,
+                },
+            },
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {scdbResultsPath}");
     }
 
     /// <summary>

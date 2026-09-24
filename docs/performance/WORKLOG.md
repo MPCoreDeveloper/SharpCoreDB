@@ -2521,6 +2521,34 @@ The `resolved inline capacity 24` line is the proof that the previous session's 
 **4. Tests and harness.** `SingleFileFileGrowthTests` (new, 2 tests): the default test pins the **exact** 14.733.312 B for 400 rows and then reopens with a *different* setting to prove the rows survive it; the configured test asserts the file is under half the floor, page-aligned, and that all 400 rows read back. The harness gained `SHARPCOREDB_SCDB_MIN_EXTENSION` (same shape as `SHARPCOREDB_INLINE_BYTES`: unset = product default) and prints the value it used, and a stale comment that still said the inline default was "16 since §4b shipped" was corrected to 24 in the same commit.
 
 
+### 2026-09-23 (session 11, unattended continuation) — §5.3's "12,6 MB snapshot" is 5,7 % of the UPDATE pass, and the pass-level table says where the rest is
+- Session: 11 of 2026-09-22/23 (continuation; this is the count-based attribution §5.3's DoD asks for, not a fix)
+- Command(s): `--dual-mode` with `SHARPCOREDB_MAIN_PROFILE_UPDATE=1` (one process, 100.000 inserts then 10.000 updates per arm)
+- Regime: `REGIME (overridden): SHARPCOREDB_MAIN_PROFILE_UPDATE=1` (nothing else set); the arm printed `[diag] docs layout: IsFixedWidthRecords=False`, so the snapshot route was live rather than shadowed by the fixed-width contiguous path
+- Result: `row-snapshot` = **1 call, 12,6 MB (13.166.800 B), 6,8 ms = 5,7 %** of a 170 ms pass (5,7-11,4 % across runs); the larger stages are `commit-overwrites` 16,4 %, `parse` **14,2 % (10.000 × 531 B)**, `row-locate-index` 13,9 % (10.000 × 279 B), `engine-write` 13,1 %; 119,1 ms of 170 ms attributed
+- Verdict: **REJECTED as a lever** (priced, not rewritten) — the snapshot replaces 10.000 per-record reads with one and the fallback it would fall back to was already measured worse; §5.3's next candidates are `commit-overwrites` and `index-maint`, and this entry is the table the item's DoD asked for
+- Commit: docs-only: plan §9's §5.3 block · this entry
+- NEXT: §5.3's remaining candidates (`commit-overwrites`, `index-maint`), or the unsafe-backend item for its owner
+
+**1. Why this ran at all.** §5.3 has carried "the 12,6 MB whole-file snapshot remains the coarser, unmeasured knob" since the encrypted-locate fix, and a number that large invites a redesign. Measuring it first cost one command.
+
+**2. What the profile actually shows** (default = encrypted arm; `raw` differs only in `row-snapshot` 4,0 ms and `row-locate-index` 10,3 ms):
+
+| stage | total ms | calls | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| `commit` / `commit-overwrites` | 19,5 / 19,5 | 1 / 1 | 16,4 % | 1,5 | 1.600.800 |
+| `parse` | 16,9 | 10.000 | 14,2 % | 5,1 | 531 |
+| `row-locate-index` | 16,6 | 10.000 | 13,9 % | 2,7 | 279 |
+| `engine-write` | 15,6 | 10.000 | 13,1 % | 2,9 | 302 |
+| `index-maint` | 9,1 | 20.000 | 7,6 % | 0,8 | 43 |
+| `in-place-patch` | 8,3 | 10.000 | 7,0 % | 1,7 | 175 |
+| **`row-snapshot`** | **6,8** | **1** | **5,7 %** | **12,6** | **13.166.800** |
+
+**3. The three conclusions.** (a) The snapshot is **one allocation per batch** (12,6 MB = the data file) and 5,7-11,4 % of the pass: loud in the allocation column, modest in the time column — so the honest label is "a 12,6 MB allocation per UPDATE batch", not "the UPDATE bottleneck". (b) **It is the right design**: one read of the file replaces 10.000 per-record reads, and the per-record route that `WholeFileDeleteResolutionLimitBytes` (32 MiB) already falls back to was measured *worse* while the AEAD frame had to be copied (431 vs 279 B/call); removing the snapshot would also have to beat `row-locate-index`'s per-call 279 B before it has a case. (c) **`parse` is shape-inherent here, not a defect**: 10.000 calls × 531 B for 10.000 *distinct* literal statements (`UPDATE docs SET score = … WHERE name = 'User{i}'`), which the query cache cannot serve — a parameterized/batched caller removes it, no product change does.
+
+**4. What this changes.** §5.3's next candidates, in the order the table implies: `commit-overwrites` (16,4 %, one 1,5 MB call — the durability boundary, so any change there is a durability decision), then `index-maint` (7,6 %, 43 B × 20.000), then the locate (13,9 %, already reduced twice). Nothing was changed in `src/`.
+
+
 <!-- APPEND-ENTRIES-BELOW -->
 
 

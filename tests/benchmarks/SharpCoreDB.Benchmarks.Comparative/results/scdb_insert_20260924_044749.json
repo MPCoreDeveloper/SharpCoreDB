@@ -1,0 +1,25 @@
+{
+  "rows": 200,
+  "rowsPerStatement": 100,
+  "reps": 5,
+  "resolvedInlineCapacityBytes": 24,
+  "minExtensionBytes": 65536,
+  "shapes": [
+    {
+      "shape": "ExecuteSQL per statement",
+      "rowsPerSecond": 1773.9255997864193,
+      "microSecondsPerRow": 563.7215,
+      "allocatedBytesPerRow": 82696,
+      "fileBytes": 6369280,
+      "gen0Collections": 3
+    },
+    {
+      "shape": "ExecuteBatchSQL (one call)",
+      "rowsPerSecond": 13712.154453707766,
+      "microSecondsPerRow": 72.928,
+      "allocatedBytesPerRow": 2236,
+      "fileBytes": 6369280,
+      "gen0Collections": 0
+    }
+  ]
+}

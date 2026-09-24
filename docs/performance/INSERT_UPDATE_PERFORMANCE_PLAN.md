@@ -2403,6 +2403,23 @@ of the evidence.
 
 ⚠️ The per-statement rows differ from session 8's (703 vs 994 at 24; 545 vs 819 at 0 — same shape, same box), which is why this entry rests on the **ratio between the two shapes measured in the same process** rather than on an absolute rows/s figure.
 
+🔬 **§5.3's encrypted-UPDATE snapshot, measured 2026-09-23 (session 11): it is 5,7 % of the pass, not the gap — and the pass-level stage table names the rest.** `--dual-mode` + `SHARPCOREDB_MAIN_PROFILE_UPDATE=1`, one process, 100.000 inserts then 10.000 updates, the `docs` table **variable-length** in both configurations (`[diag] docs layout: IsFixedWidthRecords=False (config FixedWidthRecordLayout=False, AutoFixedWidthRecords=True)`), so the snapshot path is live and not shadowed by the fixed-width contiguous route:
+
+| stage (default = encrypted arm) | total ms | calls | share | alloc MB | B/call |
+|---|---:|---:|---:|---:|---:|
+| `commit` / `commit-overwrites` | 19,5 / 19,5 | 1 / 1 | 16,4 % | 1,5 | 1.600.800 |
+| `parse` | 16,9 | 10.000 | 14,2 % | 5,1 | 531 |
+| `row-locate-index` | 16,6 | 10.000 | 13,9 % | 2,7 | 279 |
+| `engine-write` | 15,6 | 10.000 | 13,1 % | 2,9 | 302 |
+| `index-maint` | 9,1 | 20.000 | 7,6 % | 0,8 | 43 |
+| `in-place-patch` | 8,3 | 10.000 | 7,0 % | 1,7 | 175 |
+| **`row-snapshot`** | **6,8** | **1** | **5,7 %** | **12,6** | **13.166.800** |
+
+(119,1 ms attributed of a 170 ms pass, so ~70 % of the pass is instrumented; the same table on the `raw` arm reads 10,3/4,0/0,0 for `row-locate-index`/`row-snapshot`/`row-locate`.)
+
+**Three things this settles.** (1) **The snapshot is ONE call per batch, not per row** — 12,6 MB allocated once for the whole data file, and 5,7–11,4 % of a 50–170 ms pass across the runs, so it is the **allocation** column that is loud (a 12,6 MB single allocation) and the **time** column that is modest. (2) **It is still the right design**, which is why this item is priced rather than rewritten: it replaces 10.000 per-record reads with one, and the per-record fallback that the size limit (`WholeFileDeleteResolutionLimitBytes`, 32 MiB) already implements was measured *worse* while the frame had to be copied (279 → 431 B/call before the span-decrypt addition), so a redesign that removes the 12,6 MB has to beat the stage below it — `row-locate-index`'s 279 B/call × 10.000 — before it has a case. (3) **The larger stages are elsewhere, and one of them is shape-inherent:** `parse` is 10.000 calls at 531 B because this arm issues 10.000 *distinct* literal statements (`UPDATE docs SET score = {0:F1} WHERE name = 'User{1}'`), so the query cache cannot serve them and no product fix removes that — a parameterized or batched caller does (the same lesson as the single-file item above, and the reason §9's guidance entry is worth having even though it changes no code). The candidates a next session should price are therefore **`commit-overwrites`** (16,4 %, 1,5 MB in one call — the durability boundary) and **`index-maint`** (7,6 %, 43 B × 20.000 calls), not the snapshot.
+
+
 ⚠️ **Priority 2's "defer the index build" item is also mis-scoped, and that part of the previous revision stands.**
 `InsertBatchCriticalSection` (`Table.CRUD.cs:772`) calls `UpdatePrimaryKeyIndex` (:810) and `UpdateHashIndexes` (:814)
 **once for the whole call**, and `BulkIndexRowsInBTree` (:822) is already bulk — the "per row" figures came from the
