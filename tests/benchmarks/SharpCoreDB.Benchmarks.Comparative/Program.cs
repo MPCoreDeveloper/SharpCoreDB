@@ -1879,6 +1879,57 @@ class Program
     static readonly string[] FairNiAllColumns = ["name", "email", "age", "score", "data"];
 
     /// <summary>
+    /// The fair arm's statement lists, built <b>once</b> and reused. Plain harness work must not sit inside a
+    /// timed phase: measured (worklog session 28), formatting 10.000 interpolated DELETE statements cost
+    /// **0–17 ms of a 21–65 ms phase** and varied per rep — about a quarter of what the arm reported as
+    /// "our DELETE" was the harness rather than the engine. The statements are identical on every rep, so
+    /// rebuilding them per rep was pure waste as well as a variance source.
+    /// <para>
+    /// A shallow copy is handed to the engine (pointer copies, no formatting) so that one phase cannot observe
+    /// a list another phase is enumerating. The SQLite side gets the symmetric treatment — one prepared
+    /// command with re-bound parameters instead of a fresh command and parameter objects per row — because
+    /// removing only our client-side work would bias the comparison in our favour rather than correct it.
+    /// </para>
+    /// </summary>
+    static readonly Lazy<List<string>> FairNiUpdateStatements = new(() =>
+    {
+        var list = new List<string>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE {0} SET score = {1:F1} WHERE name = 'User{2}'", FairNiTable, i * 99.9, i));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="FairNiUpdateStatements"/>
+    static readonly Lazy<List<string>> FairNiDeleteStatements = new(() =>
+    {
+        var list = new List<string>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// The <c>User{i}</c> literals, built once. Every phase needs 10.000 of them and neither arm should
+    /// allocate them inside a timed window: this is the SQLite-side analogue of caching the statement lists,
+    /// and without it the symmetry fix would have removed our per-row allocation while leaving theirs.
+    /// </summary>
+    static readonly Lazy<string[]> FairNiNames = new(() =>
+    {
+        int count = Math.Max(InsertCount, Math.Max(UpdateCount, DeleteCount));
+        var names = new string[count];
+        for (int i = 0; i < count; i++)
+        {
+            names[i] = $"User{i}";
+        }
+        return names;
+    });
+
+    /// <summary>
     /// A GC checkpoint for the fair arm (S7 follow-up). The UPDATE cell is the last unresolved one: our
     /// per-rep UPDATE moves 2,05× while SQLite's moves 1,04×, and compaction, CPU, disk and thermal are all
     /// ruled out by measurement. The remaining asymmetry is allocation — this engine allocates roughly
@@ -2309,17 +2360,24 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE through the secondary index, setting the same score column our arm sets
+            // UPDATE through the secondary index, setting the same score column our arm sets. ONE prepared
+            // command with re-bound parameter VALUES, not a fresh command and fresh parameter objects per row:
+            // our arm's statements come from a cache built outside the window, so leaving this side to allocate
+            // per row would have biased the comparison in our favour rather than corrected it.
+            var fairNames = FairNiNames.Value;
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var updCmd = conn.CreateCommand();
+                updCmd.CommandText = $"UPDATE {FairNiTable} SET score = @score WHERE name = @name";
+                var pScore = updCmd.CreateParameter(); pScore.ParameterName = "@score"; updCmd.Parameters.Add(pScore);
+                var pName = updCmd.CreateParameter(); pName.ParameterName = NameParam; updCmd.Parameters.Add(pName);
+                updCmd.Prepare();
                 for (int i = 0; i < UpdateCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = $"UPDATE {FairNiTable} SET score = @score WHERE name = @name";
-                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 99.9; cmd.Parameters.Add(pScore);
-                    var pName = cmd.CreateParameter(); pName.ParameterName = NameParam; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
-                    cmd.ExecuteNonQuery();
+                    pScore.Value = i * 99.9;
+                    pName.Value = fairNames[i];
+                    updCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -2328,16 +2386,20 @@ class Program
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
 
-            // DELETE through the secondary index
+            // DELETE through the secondary index. Same correction as UPDATE above: one prepared command with a
+            // re-bound parameter, so this side is not paying a command allocation per row while our side reads
+            // its statements from a cache.
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var delCmd = conn.CreateCommand();
+                delCmd.CommandText = $"DELETE FROM {FairNiTable} WHERE name = @name";
+                var pDel = delCmd.CreateParameter(); pDel.ParameterName = NameParam; delCmd.Parameters.Add(pDel);
+                delCmd.Prepare();
                 for (int i = 0; i < DeleteCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = $"DELETE FROM {FairNiTable} WHERE name = @name";
-                    var p = cmd.CreateParameter(); p.ParameterName = NameParam; p.Value = $"User{i}"; cmd.Parameters.Add(p);
-                    cmd.ExecuteNonQuery();
+                    pDel.Value = fairNames[i];
+                    delCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -2459,7 +2521,11 @@ class Program
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
             ReportCompactions("after READ");
 
-            // UPDATE through the secondary index, setting the same score column SQLite's side sets
+            // UPDATE through the secondary index, setting the same score column SQLite's side sets.
+            // The statement list comes from the cache — see FairNiUpdateStatements for why harness work does
+            // not belong in this window — and the phase is split like DELETE's (plan §6 rule 11), so the
+            // engine's share is separable from the flush.
+            var updateStmts = new List<string>(FairNiUpdateStatements.Value);
             var gcBeforeUpdate = GcCheckpoint();
             if (FairProfile("UPDATE"))
             {
@@ -2468,18 +2534,19 @@ class Program
             }
 
             sw.Restart();
-            var updateStmts = new List<string>(UpdateCount);
-            for (int i = 0; i < UpdateCount; i++)
-            {
-                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE {0} SET score = {1:F1} WHERE name = 'User{2}'", FairNiTable, i * 99.9, i));
-            }
             db.ExecuteBatchSQL(updateStmts);
+            sw.Stop();
+            double updateExecMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
             db.Flush();
             sw.Stop();
-            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            double updateFlushMs = sw.Elapsed.TotalMilliseconds;
+
+            result.UpdateTime = (updateExecMs + updateFlushMs) / 1000.0;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+            Console.WriteLine($"    [diag] UPDATE split: exec={updateExecMs:F0}ms flush={updateFlushMs:F0}ms");
             ReportCompactions("after UPDATE");
             Console.WriteLine($"    [diag] UPDATE GC: {GcDelta(gcBeforeUpdate, GcCheckpoint())}");
             if (FairProfile("UPDATE"))
@@ -2503,15 +2570,7 @@ class Program
                 SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
 
-            sw.Restart();
-            var deleteStmts = new List<string>(DeleteCount);
-            for (int i = 0; i < DeleteCount; i++)
-            {
-                deleteStmts.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
-            }
-            sw.Stop();
-            double deleteBuildMs = sw.Elapsed.TotalMilliseconds;
-
+            var deleteStmts = new List<string>(FairNiDeleteStatements.Value);
             sw.Restart();
             db.ExecuteBatchSQL(deleteStmts);
             sw.Stop();
@@ -2522,10 +2581,10 @@ class Program
             sw.Stop();
             double deleteFlushMs = sw.Elapsed.TotalMilliseconds;
 
-            result.DeleteTime = (deleteBuildMs + deleteExecMs + deleteFlushMs) / 1000.0;
+            result.DeleteTime = (deleteExecMs + deleteFlushMs) / 1000.0;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
-            Console.WriteLine($"    [diag] DELETE split: build={deleteBuildMs:F0}ms exec={deleteExecMs:F0}ms flush={deleteFlushMs:F0}ms");
+            Console.WriteLine($"    [diag] DELETE split: exec={deleteExecMs:F0}ms flush={deleteFlushMs:F0}ms (statements cached, not timed)");
             Console.WriteLine($"    [diag] DELETE GC: {GcDelta(gcBeforeDelete, GcCheckpoint())}");
             ReportCompactions("after DELETE");
             if (FairProfile("DELETE"))

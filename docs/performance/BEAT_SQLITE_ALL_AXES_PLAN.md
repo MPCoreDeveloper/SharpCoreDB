@@ -571,6 +571,15 @@ does not replace it.
    has measured on any single stage and a mechanical explanation for how bad the pre-warm-up DELETE numbers
    looked.
 
+12. **Give the statement cache to both arms, or to neither.** Measured (worklog session 29): removing our
+   in-window statement building fixed the DELETE stall *and*, done symmetrically, **reversed UPDATE from
+   1,71× ahead to 0,80× behind** — because the old SQLite arm allocated a command and two parameters per row
+   while our new one reads a cache. A one-sided correction is not a correction, it is a bias, and this one
+   would have been invisible in the ratio it produced. **Any change to timing boundaries or per-rep
+   allocations must be applied to both arms in the same commit, and both arms' cells re-measured.**
+   Corollary: the pre-`Prepare()` fair-arm UPDATE, arm B and the PageBased/dual-mode columns are all
+   provisional until re-run on session 29's harness.
+
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
 
