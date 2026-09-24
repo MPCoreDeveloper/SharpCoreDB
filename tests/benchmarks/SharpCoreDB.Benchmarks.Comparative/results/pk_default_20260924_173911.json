@@ -1,0 +1,26 @@
+{
+  "SharpCoreDB (SQL, PK, default config)": {
+    "Reps": 5,
+    "SqlitePragmas": null,
+    "InsertTime": 0,
+    "InsertOpsPerSec": 168788,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 145571,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 358932,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 468386
+  },
+  "SQLite": {
+    "Reps": 5,
+    "SqlitePragmas": "journal_mode=wal, synchronous=1",
+    "InsertTime": 0,
+    "InsertOpsPerSec": 203648,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 128757,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 878557,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 1172704
+  }
+}

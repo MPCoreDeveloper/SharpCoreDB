@@ -498,10 +498,21 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
 
+> ⚠️ **Arm B re-measured on the symmetric protocol (2026-09-24, session 32): INSERT 0,83× (0,79–0,88) ·
+> READ 1,10× (0,88–1,20) · UPDATE 0,39× (0,38–0,43) · DELETE 0,41× (0,33–0,42).** Arm B was still running
+> the old harness shape — statements formatted inside the timed window, no `StmtBuild` stamp on DELETE —
+> while its SQLite comparator allocated a command and its parameters per row. Correcting **both** sides
+> tripled SQLite's PK UPDATE and DELETE (288.108 → 878.557 and 385.116 → 1.172.704) and left arm B a
+> **three-cell** gap, not the one-cell gap the old numbers implied. The INSERT cell is untouched code on
+> both sides and reproduced at 0,82× → 0,83×, which is the control that makes the 3× shift on the other two
+> credible. Where the engine work has to land: the batch dispatcher's per-statement classification
+> (session 31) and the SQL-free UPDATE/DELETE batch path that INSERT already has. Arm C's fair-shape
+> numbers are also superseded for UPDATE — see the warning in §4.
+
 | Arm | READ | UPDATE | DELETE | INSERT | Baseline → target |
 |---|---:|---:|---:|---:|---|
 | **A** fair-PK tuned plaintext | 1,26× | 1,29× | 1,62× | 0,87× | **hold ≥ 1,00×** where already met; A's INSERT ratio is closed as *not claimed* (decision 10) and is **not** re-opened by this plan |
-| **B** pure default encrypted | 0,57× | 0,48× | 0,59× | 0,70× | **→ ≥ 1,00× on all four** |
+| **B** pure default encrypted | ~~0,57×~~ | ~~0,48×~~ | ~~0,59×~~ | ~~0,70×~~ | **→ ≥ 1,00× on all four; as of session 32 it reads 0,83 / 1,10 / 0,39 / 0,41** |
 | **C** default document-CRUD (no PK) | 0,76× | 0,24× | 0,31× | 0,67× | **→ ≥ 1,00× on all four** |
 | **D** PageBased | 2,00× | 0,17× | ~0,80× | ~1,00× | → UPDATE ≥ 1,00× (decision 1's "parity", restated as a ratio floor) |
 | **E** ladder (SQL/Direct/StructRow) | — | — | — | — | **no cell may regress**, and SQL's spread must be printed so a claim is possible |

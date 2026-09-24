@@ -3281,6 +3281,60 @@ case DataType.Long:
 - NEXT: **apply the 2026-09-15 plan-cache-waste removal to the two surviving overloads** (`Database.Execution.cs:239–251` and `291–303`) in one commit, then the core suite and `--gate`; it is precedent-backed and user-facing, but it needs a `src/` cycle this session could not open on top of a harness-wide change. Then **capture the UPDATE stage table** (`SHARPCOREDB_FAIR_PROFILE_UPDATE`) to place the 0,80× deficit in the table-layer structured update path — the batch arm is already parse-free, so the cost is in the update and its index maintenance, not the statement machinery.
 
 
+---
+
+### 2026-09-24 (session 31) — the UPDATE deficit, attributed: the top of the bill is our own batch dispatcher re-classifying 10.000 statements (531 B each), and **SQLite does that once**
+
+- Session: 1 of 1 (the UPDATE stage table, then the gate, on the fix from session 30)
+- Command(s): `--fair-ni` ×1 at `SHARPCOREDB_BENCH_REPS=5` with `SHARPCOREDB_FAIR_PROFILE_UPDATE=1` · `--gate` ×2 · core suite ×1
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL` · CPU 3,5 %, `MsMpEng idle` 0,5 %, disk queue 0, I/O exclusion ratio 1,20–1,39× (5/5 rounds), MaxFreq 100 %. WSearch still **NOISY** (elevation required); build servers shut down before the measurement run
+- Verdict: **KEPT** — the sequence built for UPDATE and DELETE is now closed end-to-end: stall named, stall removed, next-largest cost attributed
+- Commit: `perf(core)` (session 30's plan-cache fix) · `docs(perf)` (this attribution)
+
+**1. The stage table, on a warm rep — the shares are stable across eight reps, so this is not one rep's story.** `parse` is the largest stage on our UPDATE and it is **identical every time: 10.000 calls, 531 B/call, 5.1 MB allocated.** Its share ran 33,2 % → 10,8 % (median ≈ 25 %), while the per-call footprint never moved. The field next to it: **`row-locate-index` 10.000 calls / 279 B / 2,7 MB + `index-maint` 20.000 calls / 43 B / 0,8 MB — about 32–40 % combined** — and the actual row patch (`in-place-patch` 175 B + `engine-write` ~94 B) is only **≈ 11–14 %**.
+
+**2. Exactly one `parse` call per statement is the proof of *where* it is, and the count is what makes it a proof.** If the table layer also parsed the WHERE per row, `parse` would read 20.000 calls. It reads **10.000** — so the single call per statement is the **batch dispatcher's own classification loop** (`Database.Batch.cs:1022–1074`), which for every statement runs `IsInsertStatement` and then `TryParseUpdateForBatch`, extracting the SET list and the WHERE **as a string**, at 531 B of allocation each. **SQLite prepares its statement once and re-binds parameters, so its equivalent of this stage is zero per row** — which is precisely the 2,5× that session 29's symmetric fix exposed, and precisely why the `PreparedCommand` idea in `PERFORMANCE_DEEP_DIVE.md:79` is worth what it is worth.
+
+**3. So session 30's conclusion was right in its mechanism and wrong in its placement, and the correction is worth stating plainly.** Session 30 said the batch arm is parse-free "*so the cost is in the table-layer structured update plus its index maintenance*". The first half is confirmed and the second half is not: the table layer indeed does no per-statement parse, but the largest single line item is **the dispatcher's classification, not the table's update**. The index half does hold up — `row-locate-index` + `index-maint` at ~32–40 % independently corroborates the plan's earlier note that index work is ≥ 31,1 %. **Two claims, one confirmed, one corrected, from one table — which is the argument for building the instrument before arguing about the mechanism.**
+
+**4. And the cold/warm split from session 28 shows up again, in the same table.** On the first (cold) rep the three commit stages carry **14,9 % + 14,9 % + 4,4 % ≈ 34 %**; on warm reps they collapse to roughly **5–9 % combined**. Cold JIT inflates the *write* path, not `parse` — `parse`'s per-call footprint is constant and only its share moves as the other stages deflate. That is a different shape from the ~9× cold penalty measured on DELETE's `exec` in session 28, and it means "warm the process" and "warm the file cache" are not interchangeable fixes.
+
+**5. Gate: not concluded, twice, and neither attempt was a silent retry.** Run 1 exited 2 with a **3,07×** rep spread over the 2,50× limit — immediately after two builds of my own had left MSBuild/VBCSCompiler awake, which is my error and is recorded as such. Run 2, build servers shut down, exited 2 again: the **raw** arm came inside the limit (**worst 1,91×**; I 1,11 R 1,56 U 1,91 D 1,69) but the **encrypted default** arm read **3,31×** (I 1,62 R 2,20 U 3,31 D 1,84). The blocking factor is Windows Search, which indexes the repo and `%TEMP%` and needs elevation to stop — `quiet-machine.ps1` prints `NOT ELEVATED` for exactly that step — so a green gate is **not reachable from this shell** and a third run would be spinning. **`INCONCLUSIVE` is not a regression**: nothing here is shown to be worse than baseline. It joins the VS C++ workload as an §9 owner action.
+
+
+
+
+---
+
+### 2026-09-24 (session 32) — arm B on the symmetric protocol: the old numbers were **SQLite being handicapped**, and the default posture is behind on UPDATE **0,39×** and DELETE **0,41×**
+
+- Session: 1 of 1 (the arm B re-measure the plan owed)
+- Command(s): `--pk-default` ×2 at `SHARPCOREDB_BENCH_REPS=5`, 3 discarded warm-ups, paired interleaved with arm order alternated
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL` · MaxFreq 100 %, `MsMpEng idle` 0,5–1 %, disk queue 0, I/O exclusion ratio 1,19–1,61× (5/5 rounds). Build servers shut down before each measured run; WSearch still **NOISY** (elevation required). CPU 13,3 % during the pre-run check — VS Code's own processes, recorded
+- Verdict: **KEPT — and it corrects arm B's headline in the hardest direction yet.** DELETE's stall is confirmed gone
+- Commit: `test(bench)`: arm B gets the statement cache and SQLite gets `Prepare()` — and the deficit is real
+
+**1. Arm B still had the exact defect session 29 removed from the fair arm, because it is a different function.** `RunSharpCoreDBPk` opened the UPDATE timer and then formatted 10.000 statements inside it, and its DELETE did the same — with **no `StmtBuild` stamp at all** on DELETE, so the harness's own formatting was charged to the engine *unmeasured*, which is precisely why that cell's collapsed rep had no stage that could explain it. The re-run before the fix showed it plainly: **rep 5 DELETE 124.714 ops/s against 380.212–460.197 in its four siblings**, putting the **0,32×** low end on the cell and straddling 1,00×. Both sides are corrected in the same commit — ours caches the lists (`PkUpdateStatements` / `PkDeleteStatements`), SQLite's gets **one prepared command with re-bound parameter values** per phase — because correcting one side is a bias, not a correction (plan §6 rule 12).
+
+**2. The fix worked exactly as predicted, on the thing it was aimed at.** Arm B's DELETE now reads **468.386 / 477.372 / 395.798 / 491.320 / 393.431** — five reps, **no collapsed rep**, and a range of 0,33–0,42× that is as tight as any cell in this campaign. The session-29 diagnosis generalised: the stall was never an engine behaviour, it was `Program.cs`, in both arms, and it is now removed from both.
+
+**3. And then the ratio got *worse*, because removing our client-side overhead also removed SQLite's.**
+
+| arm B cell | old protocol | symmetric protocol | SQLite's own change |
+|---|---|---|---|
+| INSERT | 0,82× (0,78–0,85) | **0,83× (0,79–0,88)** | 207.011 → 203.648 (unchanged) |
+| READ | 1,19× (0,90–1,30) | 1,10× (0,88–1,20) | 120.910 → 128.757 |
+| UPDATE | 1,02× (0,83–1,15) | **0,39× (0,38–0,43)** | **288.108 → 878.557 (3,05×)** |
+| DELETE | 1,09× (0,32–1,21) | **0,41× (0,33–0,42)** | **385.116 → 1.172.704 (3,05×)** |
+
+**SQLite's PK UPDATE and DELETE tripled** the moment it was allowed to prepare one command instead of allocating a command and its parameters 10.000 times, while ours moved +19 % and +11 % over the same change. So the old arm B cells were not measuring our engine against SQLite's — they were measuring our engine against **SQLite running with one hand tied behind its back by the benchmark**. **The default posture the product ships is behind on INSERT (0,83×), on UPDATE (0,39× — SQLite 2,4× faster) and on DELETE (0,41× — SQLite 2,4× faster)**, with READ straddling at 1,10×.
+
+**4. The control that makes this credible: INSERT is untouched code on both sides, and it reproduced.** 0,82× → **0,83×**, ranges 0,78–0,85 → 0,79–0,88, ours 165.309 → 168.788, SQLite 207.011 → 203.648. An unmodified cell on an unmodified comparator, across two full runs, landing within 1 %. That is the evidence that the two cells that *did* move moved because of the change and not because the machine, the harness or the protocol drifted — and it is the reason to trust a 3× shift in the opposite direction on the other two.
+
+**5. The PK shape inverts DELETE, and that inversion is the most interesting thing here.** On the fair non-PK shape we are **6,33× ahead** on DELETE; on the PK shape we are **0,41× behind**. The mechanism is not mysterious: SQLite's `INTEGER PRIMARY KEY` *is* the rowid, so a PK delete is an in-page tombstone with no secondary index to maintain, while our per-statement dispatcher cost is fixed regardless of how cheap the row operation is. It also explains why arm B's INSERT deficit (0,83×) is the *smallest* of the three: INSERT has a dedicated SQL-free fast path in our engine, and UPDATE/DELETE do not. That is the same conclusion session 31 reached from the stage table — the dispatcher's classification is 531 B and one call per statement — arriving from a completely different direction, which is worth more than either result alone.
+
+**6. What this does to the plan.** Arm B's target of "≥ 1,00× on all four" is now a **three-cell** problem (INSERT, UPDATE, DELETE) with UPDATE and DELETE at ~0,4×, not the one-cell problem the old numbers suggested. The §5 ladder row reading `B pure default encrypted 0,57× 0,48× 0,59× 0,70×` is already stale in both directions and is annotated below. Nothing here is optimised yet — this is the first honest statement of the gap, and it is much larger than the campaign believed.
+- NEXT: **arm B is now the campaign's main work item**: INSERT 0,83×, UPDATE 0,39×, DELETE 0,41× on the symmetric protocol, with READ straddling at 1,10×. Arm D (`--dual-mode`) and PageBased (`--engine=pagebased`) still sit on the pre-`Prepare()` harness and are next. The engine-side targets are named and independent: the batch dispatcher's per-statement classification (session 31: 531 B and one call per statement, ~11–33 % of UPDATE), and the missing SQL-free UPDATE/DELETE batch path that INSERT already has (`InsertBatch` — the code's own claim is "40 % faster than ExecuteBatchSQL").
 
 
 

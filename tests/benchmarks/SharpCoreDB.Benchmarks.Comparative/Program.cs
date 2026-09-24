@@ -1785,17 +1785,23 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE
+            // UPDATE. ONE prepared command with re-bound parameter VALUES, not a fresh command and fresh
+            // parameter objects per row: our arm's statements now come from a cache built outside the window, so
+            // leaving this side to allocate per row would have biased the comparison in our favour rather than
+            // corrected it (session 31 — the same rule the fair arm's fix followed in session 29).
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var updCmd = conn.CreateCommand();
+                updCmd.CommandText = "UPDATE docs SET score = @score WHERE id = @id";
+                var pScore = updCmd.CreateParameter(); pScore.ParameterName = "@score"; updCmd.Parameters.Add(pScore);
+                var pId = updCmd.CreateParameter(); pId.ParameterName = "@id"; updCmd.Parameters.Add(pId);
+                updCmd.Prepare();
                 for (int i = 1; i <= UpdateCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = "UPDATE docs SET score = @score WHERE id = @id";
-                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 99.9; cmd.Parameters.Add(pScore);
-                    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = i; cmd.Parameters.Add(pId);
-                    cmd.ExecuteNonQuery();
+                    pScore.Value = i * 99.9;
+                    pId.Value = i;
+                    updCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -1804,16 +1810,19 @@ class Program
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
 
-            // DELETE
+            // DELETE. Same correction as UPDATE above: one prepared command with a re-bound parameter, so this
+            // side is not paying a command allocation per row while our side reads its statements from a cache.
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var delCmd = conn.CreateCommand();
+                delCmd.CommandText = "DELETE FROM docs WHERE id = @id";
+                var pDel = delCmd.CreateParameter(); pDel.ParameterName = "@id"; delCmd.Parameters.Add(pDel);
+                delCmd.Prepare();
                 for (int i = 1; i <= DeleteCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = "DELETE FROM docs WHERE id = @id";
-                    var p = cmd.CreateParameter(); p.ParameterName = "@id"; p.Value = i; cmd.Parameters.Add(p);
-                    cmd.ExecuteNonQuery();
+                    pDel.Value = i;
+                    delCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -1909,6 +1918,41 @@ class Program
         for (int i = 0; i < DeleteCount; i++)
         {
             list.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// Arm B's statement lists, built once and reused — the same correction the fair arm received in session
+    /// 29, which arm B never got. Measured on the fair arm: building 10.000 statements inside the timed window
+    /// cost 0–17 ms of a 21–65 ms phase and drove one collapsed rep per run. Arm B kept the old shape and kept
+    /// collapsing: session 31 caught its DELETE at **124.714 ops/s** against 380k–460k in its four sibling reps,
+    /// which is what put the 0,32× low end on that cell. The DELETE build here also had no `StmtBuild` stamp
+    /// (UPDATE's did), so the harness's own formatting was charged to the engine **unmeasured**.
+    /// <para>
+    /// The SQLite side of arm B gets the symmetric treatment — one prepared command with re-bound parameter
+    /// values instead of a fresh command and fresh parameter objects per row — because removing only our
+    /// client-side work would bias the comparison in our favour rather than correct it (plan §6 rule 12).
+    /// </para>
+    /// </summary>
+    static readonly Lazy<List<string>> PkUpdateStatements = new(() =>
+    {
+        var list = new List<string>(UpdateCount);
+        for (int i = 1; i <= UpdateCount; i++)
+        {
+            list.Add(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="PkUpdateStatements"/>
+    static readonly Lazy<List<string>> PkDeleteStatements = new(() =>
+    {
+        var list = new List<string>(DeleteCount);
+        for (int i = 1; i <= DeleteCount; i++)
+        {
+            list.Add($"DELETE FROM docs WHERE id = {i}");
         }
         return list;
     });
@@ -2758,20 +2802,17 @@ class Program
                 SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
 
-            sw.Restart();
-            // §9 priority 3 instrumentation (2026-09-21): the statement-text loop and the Flush run INSIDE the
+            // §9 priority 3 instrumentation (2026-09-21): the statement-text loop and the Flush ran INSIDE the
             // profiled and timed window, so leaving them unstamped charged harness text formatting and the page
-            // flush to the engine. WalFlush had no writer at all before this (plan §9 item 5).
+            // flush to the engine. The list now comes from a cache built outside the window (session 31), so the
+            // stamp measures a shallow copy; it is kept so the stage table stays comparable across sessions and
+            // so a future regression that puts formatting back here shows up as a jump in this field.
             long stmtBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
-            var updateStmts = new List<string>(UpdateCount);
-            for (int i = 1; i <= UpdateCount; i++)
-            {
-                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
-            }
+            var updateStmts = new List<string>(PkUpdateStatements.Value);
             SharpCoreDB.Diagnostics.WritePathProfiler.Add(
                 SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtBuild, stmtBuildStart);
 
+            sw.Restart();
             db.ExecuteBatchSQL(updateStmts);
 
             long flushStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
@@ -2806,13 +2847,16 @@ class Program
                 SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
 
-            sw.Restart();
-            var deleteStmts = new List<string>(DeleteCount);
-            for (int i = 1; i <= DeleteCount; i++)
-            {
-                deleteStmts.Add($"DELETE FROM docs WHERE id = {i}");
-            }
+            // The DELETE build had no stamp at all before session 31: the harness's own formatting was charged to
+            // the engine unmeasured, which is why this cell's collapsed rep (124.714 against 380k–460k in its
+            // siblings) never had a stage that could explain it. Cached like UPDATE's, and stamped for the same
+            // reason.
+            long deleteBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+            var deleteStmts = new List<string>(PkDeleteStatements.Value);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtBuild, deleteBuildStart);
 
+            sw.Restart();
             db.ExecuteBatchSQL(deleteStmts);
             db.Flush();
             sw.Stop();
