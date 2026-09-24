@@ -399,7 +399,8 @@ per-rep variance is ours, not the machine's.
 > Full reasoning: worklog session 29; the rule it produced is §6 rule 12.
 
 **UPDATE resolved 2026-09-24 (session 25) — then reversed in session 29; read the warning above.** With `SHARPCOREDB_WARMUP_REPS=3` (see §6
-rule 10), two independent runs give **all four cells clear of 1,00×**:
+rule 10), two independent runs gave all four cells clear of 1,00× — **but the UPDATE column does not survive
+the corrected protocol; see both warnings in this entry**:
 
 | run | INSERT | READ | UPDATE | DELETE |
 |---|---|---|---|---|
