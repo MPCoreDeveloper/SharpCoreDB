@@ -3301,9 +3301,17 @@ class Program
     /// arm — the §3-1c audit table stays as the historical record. Publish the columns together or not
     /// at all.
     /// </remarks>
-    static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 3)
+    static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)
     {
         const int Failed = -1;
+        // reps <= 0 means "take it from the environment", so this table is driven by the same
+        // SHARPCOREDB_BENCH_REPS dial as every other arm. It was hard-coded at 3, which is too few for a
+        // ratio-of-two-configurations table: on the unpaired version READ swung 2,12x -> 0,85x between two
+        // runs at three reps (session 33).
+        if (reps <= 0)
+        {
+            reps = ResolveReps();
+        }
         Console.WriteLine();
         Console.WriteLine(BannerTop);
         Console.WriteLine("║ Encryption-mode comparison — one workload, two configurations          ║");
@@ -3314,56 +3322,19 @@ class Program
         Console.WriteLine($"  engine={engineType} · inserts={InsertCount:N0} · reads/updates/deletes={ReadCount:N0} each · reps={reps}");
         Console.WriteLine();
 
-        var raw = new List<BenchmarkResult>();
-        var deflt = new List<BenchmarkResult>();
-
-        // Warm-up, the same idiom every other arm uses (ResolveWarmupReps, default 3; plan §6 rule 10).
-        // This runner had none until 2026-09-24 (session 33), and it showed: the first block of rep 1 read
-        // 92.651 INSERT / 66.972 UPDATE against 147.715 / 130.262 later, and because 'default' runs first on
-        // even reps it was the configuration that paid the cold cost — which is how the table came to report
-        // UPDATE at 0,75x, i.e. *faster* with encryption on. No configuration is faster encrypted; that
-        // number was always a cold rep and not a property of the engine.
-        int warmupReps = ResolveWarmupReps();
-        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
-        Console.WriteLine();
-        for (int w = 0; w < warmupReps; w++)
-        {
-            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
-            if (w % 2 == 0)
-            {
-                _ = RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed);
-                _ = RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed);
-            }
-            else
-            {
-                _ = RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed);
-                _ = RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed);
-            }
-        }
-
-        if (warmupReps > 0)
-        {
-            Console.WriteLine();
-            Console.WriteLine("  warm-up complete; the measured reps follow.");
-            Console.WriteLine();
-        }
-
-        for (int rep = 0; rep < reps; rep++)
-        {
-            // Alternate the order per rep: machine drift then affects both arms, not just one.
-            if (rep % 2 == 0)
-            {
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed));
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed));
-            }
-            else
-            {
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed));
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed));
-            }
-
-            Console.WriteLine($"     rep {rep + 1}/{reps} complete");
-        }
+        // The warm-up, the alternating arm order and the paired ranges now come from the SAME machinery every
+        // other arm uses (RunInterleavedPairedReps + ReportPaired) rather than a hand-rolled loop. Two reasons,
+        // both measured. (1) This runner had no warm-up at all until session 33, and it published UPDATE at
+        // 0,75x — *faster with encryption on*, which no configuration can be; rep 1's first block read 92.651
+        // INSERT / 66.972 UPDATE against 147.715 / 130.262 later, and because 'default' ran first on even reps
+        // it was the encrypted arm that paid the cold cost. (2) The hand-rolled loop could only print medians,
+        // never the per-rep range the protocol requires before a cell may be quoted (plan §6 rule 7) — and on
+        // the unpaired version READ swung 2,12x cold -> 0,85x warm, which is exactly the failure a range
+        // exposes and a median hides.
+        var (raw, deflt) = RunInterleavedPairedReps(
+            () => RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed),
+            () => RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed),
+            "raw", "default", reps);
 
         Console.WriteLine();
         Console.WriteLine($"  {"operation",-10}{"raw",13}{"default",13}{"raw/default",14}");
@@ -3374,6 +3345,10 @@ class Program
         Console.WriteLine();
         Console.WriteLine("  /default is the multiplier paid for the encrypted default versus the opt-out arm.");
         Console.WriteLine("  FAILED means that configuration could not complete the workload (message printed above).");
+
+        // The medians above say how much is paid; the paired range below says whether the cell may be quoted
+        // at all. Keep both — the medians are the published shape, the ranges are the gate on publishing them.
+        ReportPaired("raw (NoEncryptMode=true)", "default (encrypted)", raw, deflt);
 
         try
         {

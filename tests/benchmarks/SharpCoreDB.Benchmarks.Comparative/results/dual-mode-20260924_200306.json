@@ -1,0 +1,87 @@
+{
+  "timestamp": "2026-09-24T18:03:06.1133408Z",
+  "engine": "AppendOnly",
+  "reps": 5,
+  "inserts": 100000,
+  "reads": 10000,
+  "updates": 10000,
+  "deletes": 10000,
+  "arms": {
+    "raw": "NoEncryptMode=true (opt-out; plaintext everywhere)",
+    "default": "product default (EnableAtRestRecordEncryption=True)"
+  },
+  "raw": [
+    {
+      "InsertOpsPerSec": 149368,
+      "ReadOpsPerSec": 180359,
+      "UpdateOpsPerSec": 258360,
+      "DeleteOpsPerSec": 335261,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 170052,
+      "ReadOpsPerSec": 141906,
+      "UpdateOpsPerSec": 182543,
+      "DeleteOpsPerSec": 335291,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 134787,
+      "ReadOpsPerSec": 173268,
+      "UpdateOpsPerSec": 265657,
+      "DeleteOpsPerSec": 338997,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 146687,
+      "ReadOpsPerSec": 183269,
+      "UpdateOpsPerSec": 211010,
+      "DeleteOpsPerSec": 346911,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 145186,
+      "ReadOpsPerSec": 194698,
+      "UpdateOpsPerSec": 244645,
+      "DeleteOpsPerSec": 386700,
+      "SqlitePragmas": null
+    }
+  ],
+  "default": [
+    {
+      "InsertOpsPerSec": 141302,
+      "ReadOpsPerSec": 142445,
+      "UpdateOpsPerSec": 184460,
+      "DeleteOpsPerSec": 151381,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 144226,
+      "ReadOpsPerSec": 147466,
+      "UpdateOpsPerSec": 182190,
+      "DeleteOpsPerSec": 156989,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 140558,
+      "ReadOpsPerSec": 146080,
+      "UpdateOpsPerSec": 192112,
+      "DeleteOpsPerSec": 157908,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 135918,
+      "ReadOpsPerSec": 140506,
+      "UpdateOpsPerSec": 211282,
+      "DeleteOpsPerSec": 131892,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 142725,
+      "ReadOpsPerSec": 145644,
+      "UpdateOpsPerSec": 222536,
+      "DeleteOpsPerSec": 133529,
+      "SqlitePragmas": null
+    }
+  ]
+}

@@ -3366,6 +3366,43 @@ Three of four cells now sit where an encryption tax belongs. **READ inverted ins
 **5. Consequence for the plan.** Arm D is now correctly instrumented but **under-powered**, so its row cannot be closed on this evidence. Raising `--dual-mode`'s rep count (or driving it through the same `RunInterleavedPairedReps` + `ReportPaired` machinery the other arms use, which would also print the paired range the protocol requires) is the next step, and it is a harness change, not an engine one.
 - NEXT: **arm D needs rep count, not a code change** — either raise `--dual-mode`'s reps or route it through `RunInterleavedPairedReps`/`ReportPaired` so it prints the paired ranges the protocol requires; READ's 0,85× cannot be published until it settles. Then **PageBased (`--engine=pagebased`)** is the last arm still on an unverified protocol. And arm B remains the campaign's main work item: INSERT 0,83×, UPDATE 0,39×, DELETE 0,41×, with the two named engine targets from sessions 31 and 32.
 
+---
+
+### 2026-09-24 (session 34) — arm D through the paired machinery: the encryption tax is **published with ranges**, and only **DELETE** stands
+
+- Session: 1 of 1 (arm D, second pass — the rep count and the range the protocol requires)
+- Command(s): `--dual-mode` ×1 at `SHARPCOREDB_BENCH_REPS=5`, warm-up 3, paired interleaved with arm order alternated
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): n/a for this arm` · MaxFreq 100 %, disk queue 0, I/O exclusion ratio 1,37–1,44× (5/5 rounds). Build servers shut down before the run; WSearch still **NOISY**; CPU 10,9 %
+- Verdict: **KEPT** — the arm is now correctly instrumented *and* powerful enough to answer its question, and the answer is narrower than the plan assumed
+- Commit: `test(bench)`: arm D runs through RunInterleavedPairedReps/ReportPaired — the encryption tax, with ranges
+
+**1. The runner now uses the shared machinery instead of a hand-rolled loop**, which buys the two things it lacked: the warm-up (added in session 33, now applied by the same helper as everywhere else) and the **per-rep paired range** that plan §6 rule 7 requires before a cell may be quoted. `reps` also comes from `SHARPCOREDB_BENCH_REPS` rather than a hard-coded 3, so this table is driven by the same dial as the others instead of being the one surface that cannot be re-measured at a different power.
+
+**2. And the ranges immediately earn their place, because the READ cell has now given three different answers on three protocols.**
+
+| READ, raw/default | value | what it would have been published as |
+|---|---|---|
+| unpaired, no warm-up, 3 reps | **2,12×** | "encryption doubles READ cost" |
+| warm-up only, 3 reps | **0,85×** | "encryption makes READ *faster*" — impossible |
+| paired, warm-up, 5 reps | **1,27× (0,96–1,34)** | straddles 1,00× — **not a conclusion** |
+
+None of the first two is a fact about encryption, and the third says so out loud. That is the whole argument for the range rule in one cell: the same code, the same machine, three protocols, three stories — and only the one that prints a range tells you it has nothing to say.
+
+**3. The published table, on the corrected protocol.**
+
+| operation | raw | default (encrypted) | ratio | range | stands? |
+|---|---:|---:|---:|---|---|
+| INSERT | 146.687 | 141.302 | **1,06×** | 0,96–1,18 | **no** — straddles |
+| READ | 180.359 | 145.644 | 1,27× | 0,96–1,34 | **no** — straddles |
+| UPDATE | 244.645 | 192.112 | 1,10× | **1,00**–1,40 | borderline — touches exactly 1,00× |
+| DELETE | 338.997 | 151.381 | **2,21×** | **2,14–2,90** | **yes** |
+
+**Only DELETE stands.** At-rest encryption costs **≈ 55 % of DELETE throughput**, reproducibly, with the tightest range in the table after arm B's DELETE. UPDATE's median suggests ~10 % but its range opens *at* 1,00× so it cannot be called. INSERT and READ straddle — and that is a real finding rather than a missing one: **the encryption tax on INSERT is small enough that five paired reps cannot distinguish it from zero**, which is the *opposite* of what a reader would have taken from the 2,12× figure two runs ago.
+
+**4. Why DELETE and not the others, read against the engine rather than inferred.** DELETE is the one phase whose default-arm cost is dominated by per-row work that encryption touches — a tombstone write and index maintenance on an encrypted row — while its INSERT counterpart has the dedicated SQL-free fast path and its READ counterpart is a point lookup that was already measured at 1,74× SQLite. This is the same pattern the campaign keeps finding: **the cells that are behind are the cells where our engine's structure, not the crypto, is doing the work** — and it is consistent with session 31's `parse`/dispatch attribution and with arm B's UPDATE/DELETE deficits. It also means the encryption tax is *not* the campaign's main problem, which is worth knowing before anyone optimises AES.
+- NEXT: **PageBased (`--engine=pagebased`) on the corrected protocol** — the last arm still unverified — then the engine work, in the order the evidence puts it: the SQL-free UPDATE/DELETE batch path that INSERT already has (`InsertBatch`), and the batch dispatcher's per-statement classification (session 31).
+
+
 
 
 
