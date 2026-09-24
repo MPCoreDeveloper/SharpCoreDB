@@ -2856,6 +2856,37 @@ Two things this deliberately does **not** propose: **disabling real-time protect
 
 **6. Validation, and one run thrown away on purpose.** Harness build **0 errors**; core suite **1824 / 0 failed / 0 skipped** (62,1 s); `quiet-machine.ps1` parses with **0 errors** (316 lines). One script run was discarded as contaminated: it reported `Total CPU 45,5 %` and `Build servers alive: 2` **because I ran a `dotnet build` alongside it** — exactly the self-inflicted-noise failure the script exists to catch, so it was not reported as a result. The clean re-run on the same box read CPU 10,4 %, disk queue 0, `MaxFreq` 100 %.
 
+---
+
+### 2026-09-24 (session 18, unattended continuation) — the probe was still **too crude to be trusted**, and the owner's second run proved it: same config, 1,46× then 1,09×. Rebuilt as paired-interleaved median-of-N → **1,32× over 7 rounds**, and the box is now **`QUIET` (exit 0)**
+
+- Session: 1 of 1 (diagnostic continuation)
+- Command(s): `quiet-machine.ps1` ×4 (two with the min-of-2 probe, two with the paired probe at 5 and 7 rounds) · `dotnet build-server shutdown` before each
+- Regime: `MaxFreq 100 %`, total CPU **3,0–4,9 %**, `MsMpEng idle 0,5–1,6 %`, disk queue **0** — the quietest this box has read all campaign
+- Verdict: **KEPT** — the probe is now honest about its own resolution, and the exclusion is confirmed at **1,32×** (median of 7, 6/7 rounds ≥ 1,10×)
+- Commit: `fix(bench)`: the quiet check decides on a paired median, not on one min-of-2 reading
+- NEXT: **S2** — the HOT indexed-column gate (plan §4 S2). The environment gate is green; this is the first `src/` change of the plan.
+
+**1. The owner's second `-Apply` run exposed a flaw in my probe, not in the exclusions.** Same machine, exclusions in place for both: run 1 measured **1,46×**, run 2 measured **1,09×**. Two readings of one configuration cannot both be right, and the tempting move — report the newer one and declare the exclusion ineffective — is precisely the "act on a single reading" error this campaign has paid for six times. The honest reading is that **both numbers were noise**: a min-of-2-per-arm difference has no error bar, so it cannot carry a verdict.
+
+**2. Rebuilt as a paired, interleaved, spread-reported probe.** Five rounds (now `-Rounds`, default 5), arm order **alternated each round** so within-run drift hits both arms instead of only the second — the same protocol the CRUD harness uses for its own arms — and the verdict is read off the **median** of the paired ratios with the range and the count of rounds above the bar printed beside it. Measured with 7 rounds:
+
+| round | data µs | control µs | ratio |
+|---:|---:|---:|---:|
+| 1 | 175,4 | 207,0 | 1,18× |
+| 2 | 163,0 | 214,7 | 1,32× |
+| 3 | **212,9** | 199,4 | **0,94×** |
+| 4 | 151,7 | 202,6 | 1,34× |
+| 5 | 153,1 | 195,2 | 1,27× |
+| 6 | 149,9 | 195,1 | 1,30× |
+| 7 | 146,5 | 198,7 | 1,36× |
+| | | **median** | **1,32×** |
+
+**3. Round 3 is the whole justification for the redesign.** It reads **0,94×** — the data dir *slower* than its excluded sibling — and a rule of "every round must agree" (my previous version) would have thrown the run out; a rule of "use whichever reading came last" (the tempting one) would have reported the exclusion as broken. The median says **1,32×, 6/7 rounds ≥ 1,10×**, which is the truth. The decision band is now explicit: **≥ 1,15× confirmed · 1,08–1,15× INCONCLUSIVE · < 1,08× a finding**, and raising `-Rounds` is the documented way to resolve the middle band.
+
+**4. The environment gate is green.** With `-StopServices` having stopped WSearch/SysMain/DiagTrack and no build servers alive: **`VERDICT: QUIET — no known noise source is active. A gate/baseline run is defensible.`**, **exit 0** — the first `QUIET` this box has returned. The write-through floor is stable across every run (**316–350 µs/open in both directories**), which continues to corroborate decision 7 and to show that the filter is *not* the largest per-open cost.
+
+
 
 
 

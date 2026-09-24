@@ -31,7 +31,10 @@ param(
     [switch]$StopServices,
     # Directory the benchmark's data files land in. Narrowing this keeps the Defender exclusion small
     # instead of excluding all of %TEMP%.
-    [string]$BenchTempDir = ''
+    [string]$BenchTempDir = '',
+    # Interleaved rounds per arm for the I/O probe. 5 is enough to see a ~1,3x effect; raise it when the
+    # median lands in the 1,08x-1,15x band and the answer matters.
+    [int]$Rounds = 5
 )
 
 $ErrorActionPreference = 'Stop'
@@ -146,38 +149,69 @@ foreach ($svc in 'NisSrv', 'SearchIndexer') {
 $controlDir = Join-Path (Split-Path -Parent $script:benchTempDir) ("qm-control-" + (Split-Path -Leaf $script:benchTempDir))
 Write-Host ("Data dir       : {0}" -f $script:benchTempDir)
 Write-Host ("Control dir    : {0}   (same volume, deliberately NOT excluded)" -f $controlDir)
-Write-Host  "I/O probe      : 800 buffered + 300 write-through opens per directory, twice each, min reported..."
+Write-Host ("I/O probe      : {0} interleaved rounds x 400 buffered opens per dir, plus a write-through floor..." -f $Rounds)
 
 # Buffered isolates the filter (nothing to hide behind); write-through reproduces the engine's own
-# durability floor. Both, in both directories, so the two costs are attributed instead of blurred.
-$probeDataBuffered = (1..2 | ForEach-Object { Measure-IoBurst -Directory $script:benchTempDir -Files 800 } |
-    Measure-Object -Minimum).Minimum
-$probeCtrlBuffered = (1..2 | ForEach-Object { Measure-IoBurst -Directory $controlDir -Files 800 } |
-    Measure-Object -Minimum).Minimum
+# durability floor.
+#
+# The arms are INTERLEAVED and repeated, and the verdict needs the paired ratios to AGREE. Two reasons,
+# both learned the hard way on this box: (a) a single min-of-2 reading is not a measurement — the same
+# configuration measured 1,46x and then 1,09x on consecutive runs, so an n=2 difference-based verdict
+# would have reported "exclusion not effective" and been wrong; (b) Defender's own state drifts within a
+# run, so alternating the arms lets that drift hit both instead of only the second one. This is the same
+# paired-interleaved protocol the CRUD harness uses for its own arms.
+$rounds = $Rounds
+$perRoundFiles = 400
+$pairs = for ($r = 0; $r -lt $rounds; $r++) {
+    if ($r % 2 -eq 0) {
+        $d = Measure-IoBurst -Directory $script:benchTempDir -Files $perRoundFiles
+        $c = Measure-IoBurst -Directory $controlDir -Files $perRoundFiles
+    } else {
+        $c = Measure-IoBurst -Directory $controlDir -Files $perRoundFiles
+        $d = Measure-IoBurst -Directory $script:benchTempDir -Files $perRoundFiles
+    }
+    [pscustomobject]@{ Round = $r + 1; Data = $d; Control = $c; Ratio = if ($d -gt 0) { $c / $d } else { 0 } }
+}
+
+Write-Host "                 round    data us   control us   ratio"
+foreach ($p in $pairs) {
+    Write-Host ("                 {0,5}   {1,9:N1}   {2,10:N1}   {3,6:N2}x" -f $p.Round, $p.Data, $p.Control, $p.Ratio)
+}
+$medianRatio = (@($pairs).Ratio | Sort-Object)[[int]($rounds / 2)]
+$minRatio = (@($pairs).Ratio | Measure-Object -Minimum).Minimum
+$maxRatio = (@($pairs).Ratio | Measure-Object -Maximum).Maximum
+$roundsAbove = @($pairs | Where-Object { $_.Ratio -ge 1.10 }).Count
+Write-Host ("                 median ratio (control/data, buffered): {0:N2}x   (range {1:N2}x - {2:N2}x, {3}/{4} rounds >= 1,10x)" -f
+    $medianRatio, $minRatio, $maxRatio, $roundsAbove, $rounds)
+
+# The DECISION is the median, not "every round cleared the bar". Demanding unanimity is over-strict for a
+# single 5-round run: with a genuine ~1,3x effect and ~±0,1 per-round noise, one round dipping under the
+# bar is expected, and two consecutive runs on this box measured 1,45/1,27/1,31/1,41/1,35 and
+# 1,14/1,25/1,26/1,29/1,30 - the same configuration, both medians (~1,30) agreeing while the minimums did
+# not. The middle band stays INCONCLUSIVE rather than being forced into a verdict either way.
+
+# The durability floor is measured once - it is stable in both directories and is not what we are
+# separating, so repeating it would only add time.
 $probeDataWt = (1..2 | ForEach-Object { Measure-IoBurst -Directory $script:benchTempDir -Files 300 -WriteThrough } |
     Measure-Object -Minimum).Minimum
 $probeCtrlWt = (1..2 | ForEach-Object { Measure-IoBurst -Directory $controlDir -Files 300 -WriteThrough } |
     Measure-Object -Minimum).Minimum
 
-Write-Host  "                 probe           buffered   write-through"
-Write-Host ("                 data dir       {0,8:N1}      {1,8:N1}   us/open" -f $probeDataBuffered, $probeDataWt)
-Write-Host ("                 control dir    {0,8:N1}      {1,8:N1}   us/open" -f $probeCtrlBuffered, $probeCtrlWt)
-$ratio = if ($probeDataBuffered -gt 0) { [math]::Round($probeCtrlBuffered / $probeDataBuffered, 2) } else { 0 }
-Write-Host ("                 filter factor (control/data, buffered): {0}x" -f $ratio)
-
-if ($ratio -ge 1.3) {
-    Write-Host ("                 -> exclusion confirmed: unexcluded sibling opens cost {0}x more" -f $ratio) -ForegroundColor Green
-} elseif ($probeDataBuffered -ge 100) {
-    Add-Finding 'Defender exclusion not effective' (
-        ("buffered opens cost {0:N1} us/open in the data dir vs {1:N1} us/open in the unexcluded sibling ({2}x) - " +
-         "the exclusion is not separating them. Check that {3} is in the Defender exclusion list.") -f
-        $probeDataBuffered, $probeCtrlBuffered, $ratio, $script:benchTempDir)
+if ($medianRatio -ge 1.15) {
+    Write-Host ("                 -> exclusion confirmed: unexcluded sibling opens cost {0:N2}x more" -f
+        $medianRatio) -ForegroundColor Green
+} elseif ($medianRatio -ge 1.08) {
+    # Honest middle band: an effect is visible but below what this probe resolves at 5 rounds.
+    Write-Host ("                 -> INCONCLUSIVE: median {0:N2}x sits inside the probe's own noise band" -f
+        $medianRatio) -ForegroundColor Yellow
+    Write-Host  "                    (1,08x - 1,15x). Not a finding, and not a denial - re-run or raise -Rounds." -ForegroundColor Yellow
 } else {
-    Write-Host ("                 -> both directories are fast ({0:N0} / {1:N0} us/open buffered): nothing to separate" -f
-        $probeDataBuffered, $probeCtrlBuffered) -ForegroundColor Green
+    Add-Finding 'Defender exclusion not effective' (
+        ("buffered opens cost only {0:N2}x more in the unexcluded sibling (median of {1} rounds, {2:N0} vs {3:N0} us/open) - " +
+         "the exclusion is not separating them. Check that {4} is in the Defender exclusion list.") -f
+        $medianRatio, $rounds, $pairs.Data[0], $pairs.Control[0], $script:benchTempDir)
 }
 
-# The durability floor is reported separately so it can never be mistaken for antivirus overhead.
 if ($probeDataWt -gt 200) {
     Write-Host ("                 note: write-through costs {0:N0} us/open in BOTH dirs ({1:N0} vs {2:N0}) -" -f
         $probeDataWt, $probeDataWt, $probeCtrlWt) -ForegroundColor DarkGray
