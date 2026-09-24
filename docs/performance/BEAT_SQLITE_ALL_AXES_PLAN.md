@@ -61,8 +61,25 @@ reads 175,6–198,5K in our own runs. **Arm A is the control, not the target.**
 | absolute | 55.497 | 127.883 | 218.695 | 128.410 |
 | SQLite same run | 97.036 | 268.960 | 369.090 | 182.129 |
 
-**All four are behind.** This is the single most important row in the plan: it is the shipped default,
-encrypted, with no tuning switches.
+**All four were behind — and that has now been largely corrected as a measurement artefact.** The values
+above were taken on the **old protocol** (all of one arm's reps, then all of the other's; no discarded
+warm-up; no printed spread). Re-measured 2026-09-24 (worklog session 27) on the shared paired protocol —
+three discarded warm-up reps, interleaved arms, paired ranges printed:
+
+| cell | corrected median | corrected range | value above |
+|---|---|---|---|
+| INSERT | **0,82×** | 0,77–0,86× | 0,70× |
+| READ | **1,12×** | 0,80–1,24× | 0,57× |
+| UPDATE | **1,05×** | 0,94–1,14× | **0,48×** |
+| DELETE | 0,98× | 0,38–1,09× | 0,59× |
+
+**UPDATE moves from 0,48× to 1,05× and READ from 0,57× to 1,12×** — a factor of ~2,2 on UPDATE — from the
+measurement fix alone. What survives as a **real** deficit is **INSERT: 0,82× on a tight 0,77–0,86× range**,
+consistently behind in every rep; note that this arm's SQLite side still carries the trap-4 rowid asymmetry
+(`id INTEGER PRIMARY KEY AUTOINCREMENT`, no secondary index) that S5 closed only for the fair arm.
+READ, UPDATE and DELETE straddle 1,00× and are **unresolved**, because our per-rep values still vary while
+SQLite's do not — the encrypted/PK posture needs more reps or stage attribution that three warm-ups
+settled for the fair arm. See also the **cross-arm DELETE stall** named in worklog session 27.
 
 ### 1.3 Arm C — default document-CRUD, no PK
 

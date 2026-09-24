@@ -3178,6 +3178,37 @@ case DataType.Long:
 
 **4. What S6 hands over instead, which is worth more than the micro-optimisation would have been.** The INSERT budget is **index maintenance (≥ 31,1 %) first, then payload encoding (12,3 %), and per-field writing last (0,3 %)** — so any future INSERT work belongs in the index path, not the codec. That is the **second independent measurement pointing at the same place as §9 row 5**: S2 found `index-maint` at 20.000 calls per 10.000 updates on the Columnar no-PK shape (and it was *correct* work), and this finds index work at 31,1 % of the `--pk` INSERT. Row 5 therefore now has evidence on two sides — a measured cost (indexes are where the time goes) and a measured benefit (S5: on a matched index set our hash indexes beat SQLite's B-trees 4,07× on DELETE) — which is exactly the READ-vs-UPDATE(-vs-INSERT) comparison that row asks the owner to make before touching the default.
 
+---
+
+### 2026-09-24 (session 27) — arm B re-measured on the corrected protocol: the historical numbers were **largely a measurement artefact** (UPDATE **0,48× → 1,05×**, READ **0,57× → 1,12×**), INSERT is a **real standing deficit at 0,82×**, and a **new cross-arm finding: our DELETE stalls in one rep per run**
+
+- Session: 1 of 1 (the "do it" follow-up: re-measure arm B with the corrected protocol)
+- Command(s): harness build ×1 · `quiet-machine.ps1` ×1 · `--pk-default` ×1 at `SHARPCOREDB_BENCH_REPS=4` with the default 3 discarded warm-up reps
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp  [from SHARPCOREDB_BENCH_TEMP]` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL  [built-in reference set]` · `quiet-machine.ps1`: CPU 5,8 %, `MsMpEng idle` 0,5 %, disk queue 0, `MaxFreq` 100 %, exclusion **1,26× (5/5 rounds)**; one `NOISY` finding — Windows Search, which restarts itself
+- Verdict: **KEPT** — the measurement is corrected, one cell stands as a real deficit, and a new engine behaviour is named
+- Commit: `test(bench)`: arm B on the shared paired protocol, and the historical deficit was mostly measurement
+- NEXT: **DELETE's single-rep stall** (named below, reproducible in both arms) and **more reps for arm B's straddling cells**. The five historical pre-warm-up ratios still to re-take are arm B's PageBased and dual-mode columns.
+
+**1. Arm B ran the old protocol until today, and that mattered more than anything else in this session.** `--pk-default` used `RunPkMedian` twice — all of one arm's reps, then all of the other's, no discarded warm-up, no printed spread — i.e. exactly the two defects S5 and S7 closed on the fair arm. It now uses the shared `RunInterleavedPairedReps`/`ReportPaired` helpers, so both arms are read the same way. Publishing the fair arm's corrected numbers while leaving arm B on the old protocol would have been an inconsistency with a number attached to it.
+
+**2. The correction is large, and it moves UPDATE from "behind" to parity.** Four interleaved reps after three discarded warm-up reps:
+
+| cell | median paired ratio | range | decision 10's recorded value |
+|---|---|---|---|
+| INSERT | **0,82×** | 0,77–0,86× | 0,70× |
+| READ | **1,12×** | 0,80–1,24× | 0,57× |
+| UPDATE | **1,05×** | 0,94–1,14× | **0,48×** |
+| DELETE | 0,98× | 0,38–1,09× | 0,59× |
+
+**UPDATE moved from 0,48× to 1,05× and READ from 0,57× to 1,12×** — a factor of ~2,2 on UPDATE — from the measurement fix alone, with no engine change. The historical "the pure default is 30–52 % behind on every operation" was therefore **substantially a cold-rep artefact**, which is what §6 rule 10 predicted and the first time arm B has been measured under the corrected protocol.
+
+**3. But one cell stands as a genuine deficit, and it is INSERT.** **0,82× with a tight range of 0,77–0,86×** — consistently behind across all four reps, on both the median and the range, so this is not noise. The fair arm (no PK, plaintext) reads INSERT at **1,45–1,56× ahead**, so the difference is the PK + at-rest-encryption posture. Note also *why* SQLite is fast here: arm B's SQLite side declares `id INTEGER PRIMARY KEY AUTOINCREMENT` and carries no secondary index, so it inserts through the rowid — the brief's §8 trap 4 asymmetry, still present in this arm and not yet closed the way S5 closed it for the fair arm.
+
+**4. READ, UPDATE and DELETE straddle 1,00× and are therefore unresolved — and the reason is still engine-side.** Our per-rep values vary while SQLite's do not: READ 103.556–152.717 (1,47×) and DELETE 156.666–462.592 (**2,95×**) against SQLite's READ 123.544–130.184 and DELETE 397.044–423.743. Three warm-up reps settled the fair arm; they do not settle arm B, so this is the encrypted/PK posture specifically, and resolving it needs either more reps or the same stage attribution the fair arm got.
+
+**5. A new cross-arm finding, which no single arm could have shown: our DELETE stalls in one rep per run.** In arm B rep 2, DELETE reads **156.666** against 340.875–462.592 in the other three; in the fair arm (session 25) exactly one rep per run also stalled on DELETE (150.623 and 161.641 against 326k–401k). **Both arms, both runs, one stalled rep each, while SQLite's DELETE sits tight at ~400k in arm B and ~50k in the fair arm.** A recurring single-rep stall in one operation, in two independent arms, against a comparator that does not stall, is not machine noise — it is a behaviour in our DELETE path that has now been seen four times. It is named here and not diagnosed: the next instrument is the per-phase stage table for DELETE (the fair arm's machinery made `SHARPCOREDB_MAIN_PROFILE_DELETE`-style attribution possible for UPDATE, and DELETE needs the same).
+
+
 
 
 

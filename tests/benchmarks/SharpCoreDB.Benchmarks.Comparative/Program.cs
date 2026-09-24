@@ -1910,6 +1910,160 @@ class Program
     static bool FairProfileUpdate() =>
         Environment.GetEnvironmentVariable("SHARPCOREDB_FAIR_PROFILE_UPDATE") == "1";
 
+    // ══════════════════════════════════════
+    // Shared paired-rep protocol (§6 rules 4, 7 and 10)
+    // ══════════════════════════════════════
+    //
+    // Extracted for the arms that did NOT yet have the protocol. The fair arm (`--fair-ni`) has an inline
+    // copy of the same logic, and it is deliberately left there for now: its numbers are validated and
+    // published (worklog session 25), and re-shaping a validated measurement without re-validating it is
+    // exactly what this campaign forbids. **Known debt, stated rather than hidden:** two implementations
+    // of one protocol is a drift hazard, and the fair arm should be moved onto these helpers in the same
+    // change that re-runs it — not before.
+    //
+    // The arm that motivated the extraction is the PK-default one (arm B — the pure-default encrypted
+    // posture, the number the product actually ships). It ran all of one arm's reps and then all of the
+    // other's, with no discarded warm-up and no printed spread: the same pair of defects S5 and S7 closed
+    // on the fair arm. Leaving them in arm B while publishing the fair arm's corrected numbers would have
+    // been an inconsistency with a number attached to it.
+
+    /// <summary>Median of a phase's per-rep ops/sec values. Zero-length input yields 0, never a throw.</summary>
+    static int MedianOps(IEnumerable<int> xs)
+    {
+        var sorted = xs.OrderBy(x => x).ToArray();
+        return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+    }
+
+    /// <summary>One paired per-rep ratio; 0 when the denominator is unusable, so it is dropped not faked.</summary>
+    static double PairedRatio(int a, int b) => b > 0 ? a / (double)b : 0;
+
+    /// <summary>Median, min and max of a set of paired ratios — the spread that decides whether a cell stands.</summary>
+    static (double Median, double Min, double Max) RatioSpread(List<double> xs)
+    {
+        var sorted = xs.Where(x => x > 0).OrderBy(x => x).ToArray();
+        return sorted.Length == 0 ? (0, 0, 0) : (sorted[sorted.Length / 2], sorted[0], sorted[sorted.Length - 1]);
+    }
+
+    /// <summary>Measured reps per arm, from <c>SHARPCOREDB_BENCH_REPS</c> (default 3, minimum 1).</summary>
+    static int ResolveReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+            ? parsed
+            : 3;
+    }
+
+    /// <summary>
+    /// Collapses a per-rep list into the single record an archive stores: the per-phase median, the rep
+    /// count, and (for SQLite only) the comparator's pragma set. Same aggregation everywhere, so no archive
+    /// can describe a run differently from the console report that produced it.
+    /// </summary>
+    static BenchmarkResult MedianArm(List<BenchmarkResult> runs, string? sqlitePragmas = null) =>
+        new()
+        {
+            Reps = runs.Count,
+            InsertOpsPerSec = MedianOps(runs.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(runs.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(runs.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(runs.Select(r => r.DeleteOpsPerSec)),
+            SqlitePragmas = sqlitePragmas,
+        };
+
+    /// <summary>
+    /// Runs two arms as <b>discarded warm-up reps followed by interleaved measured reps</b>, and returns
+    /// the two per-rep lists in order. This is the whole protocol in one place: the warm-up
+    /// (<see cref="ResolveWarmupReps"/>, default 3) so a cold first rep cannot charge only the managed hot
+    /// path, and alternating arm order every rep so a slow window lands on both arms of a pair rather than
+    /// on one arm's block. See §6 rules 4, 7 and 10.
+    /// </summary>
+    static (List<BenchmarkResult> A, List<BenchmarkResult> B) RunInterleavedPairedReps(
+        Func<BenchmarkResult> armA, Func<BenchmarkResult> armB, string labelA, string labelB, int reps)
+    {
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = armA();
+            _ = armB();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        var runsA = new List<BenchmarkResult>(reps);
+        var runsB = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            bool aFirst = r % 2 == 0;
+            Console.WriteLine($"── rep {r + 1}/{reps} · {(aFirst ? labelA : labelB)} first ──");
+            if (aFirst)
+            {
+                runsA.Add(armA());
+                runsB.Add(armB());
+            }
+            else
+            {
+                runsB.Add(armB());
+                runsA.Add(armA());
+            }
+        }
+        Console.WriteLine();
+
+        return (runsA, runsB);
+    }
+
+    /// <summary>
+    /// Reports two arms' interleaved runs the one way this campaign reads them: per-rep rows, a median
+    /// table, and the median of the <b>paired</b> per-rep ratios with its range — plus the rule for reading
+    /// it. A range that does not straddle 1,00× supports that cell; one that does means the cell sits inside
+    /// this box's noise and must be re-run rather than rounded. One implementation, so an arm cannot report
+    /// itself differently from the others.
+    /// </summary>
+    static void ReportPaired(string labelA, string labelB, List<BenchmarkResult> runsA, List<BenchmarkResult> runsB)
+    {
+        int reps = Math.Min(runsA.Count, runsB.Count);
+
+        var ratioInsert = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].InsertOpsPerSec, runsB[i].InsertOpsPerSec)).ToList();
+        var ratioRead = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].ReadOpsPerSec, runsB[i].ReadOpsPerSec)).ToList();
+        var ratioUpdate = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].UpdateOpsPerSec, runsB[i].UpdateOpsPerSec)).ToList();
+        var ratioDelete = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].DeleteOpsPerSec, runsB[i].DeleteOpsPerSec)).ToList();
+
+        Console.WriteLine($"  per-rep, {reps} paired reps, arm order alternated (ops/sec):");
+        Console.WriteLine("  rep │  A  INSERT      READ    UPDATE    DELETE │  B  INSERT      READ    UPDATE    DELETE │ paired ratios I / R / U / D");
+        for (int r = 0; r < reps; r++)
+        {
+            var s = runsA[r];
+            var q = runsB[r];
+            Console.WriteLine($"  {r + 1,3} │ {s.InsertOpsPerSec,12:N0} {s.ReadOpsPerSec,8:N0} {s.UpdateOpsPerSec,8:N0} {s.DeleteOpsPerSec,8:N0}"
+                + $" │ {q.InsertOpsPerSec,12:N0} {q.ReadOpsPerSec,8:N0} {q.UpdateOpsPerSec,8:N0} {q.DeleteOpsPerSec,8:N0}"
+                + $" │ {ratioInsert[r]:F2} {ratioRead[r]:F2} {ratioUpdate[r]:F2} {ratioDelete[r]:F2}");
+        }
+        Console.WriteLine();
+
+        Console.WriteLine("║ Arm               │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ {labelA,-18}│ {MedianOps(runsA.Select(r => r.InsertOpsPerSec)),10:N0} │ {MedianOps(runsA.Select(r => r.ReadOpsPerSec)),8:N0} │ {MedianOps(runsA.Select(r => r.UpdateOpsPerSec)),8:N0} │ {MedianOps(runsA.Select(r => r.DeleteOpsPerSec)),8:N0} ║");
+        Console.WriteLine($"║ {labelB,-18}│ {MedianOps(runsB.Select(r => r.InsertOpsPerSec)),10:N0} │ {MedianOps(runsB.Select(r => r.ReadOpsPerSec)),8:N0} │ {MedianOps(runsB.Select(r => r.UpdateOpsPerSec)),8:N0} │ {MedianOps(runsB.Select(r => r.DeleteOpsPerSec)),8:N0} ║");
+        Console.WriteLine();
+
+        var (mI, iMin, iMax) = RatioSpread(ratioInsert);
+        var (mR, rMin, rMax) = RatioSpread(ratioRead);
+        var (mU, uMin, uMax) = RatioSpread(ratioUpdate);
+        var (mD, dMin, dMax) = RatioSpread(ratioDelete);
+        Console.WriteLine($"  {labelA} / {labelB} — median of the PAIRED per-rep ratios, with the range:");
+        Console.WriteLine($"    INSERT: {mI:F2}x  ({iMin:F2}x - {iMax:F2}x)      (> 1,00x means {labelA} is ahead)");
+        Console.WriteLine($"    READ:   {mR:F2}x  ({rMin:F2}x - {rMax:F2}x)");
+        Console.WriteLine($"    UPDATE: {mU:F2}x  ({uMin:F2}x - {uMax:F2}x)");
+        Console.WriteLine($"    DELETE: {mD:F2}x  ({dMin:F2}x - {dMax:F2}x)");
+        Console.WriteLine("  A range that does not straddle 1,00x supports that cell's direction; one that does means the");
+        Console.WriteLine("  cell sits inside this box's noise and must be re-run, not rounded.");
+    }
+
     /// <summary>
     /// The fair comparison the default job cannot provide.
     /// <para>
@@ -2780,21 +2934,28 @@ class Program
         Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
-        Console.WriteLine("(median of 3 per phase)");
-
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, default config = Columnar fixed-width) ━━━");
-        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType, useDefaultConfig: true));
+        Console.WriteLine("(paired interleaved reps, arm order alternated, with discarded warm-up reps)");
+        Console.WriteLine("Arm B — the posture the product actually ships (at-rest records on, no harness flags).");
+        Console.WriteLine("It ran the OLD protocol until 2026-09-24: all of one arm's reps and then all of the");
+        Console.WriteLine("other's, no warm-up, no printed spread. See the fair arm for why that mattered.");
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SQLite (reference) ━━━");
-        var sqlite = RunPkMedian(() => RunSQLite());
+        int reps = ResolveReps();
+        var (runsScDb, runsSqlite) = RunInterleavedPairedReps(
+            () => RunSharpCoreDBPk(engineType, useDefaultConfig: true),
+            RunSQLite,
+            "SharpCoreDB",
+            "SQLite",
+            reps);
+
+        ReportPaired("SharpCoreDB (default cfg)", "SQLite (reference)", runsScDb, runsSqlite);
         Console.WriteLine();
 
-        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
-        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap: SQLite vs default-config {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x");
-        Console.WriteLine($"  DELETE gap: SQLite vs default-config {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x");
+        var scdb = MedianArm(runsScDb);
+        var sqlite = MedianArm(runsSqlite, runsSqlite.Count > 0 ? runsSqlite[0].SqlitePragmas : null);
+
+        // The per-phase table and the one-line gap readout that used to live here are superseded by
+        // ReportPaired above, which prints the same medians plus the paired ranges the protocol requires.
 
         var results = new Dictionary<string, BenchmarkResult>
         {
