@@ -553,6 +553,17 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > dial is wired to the fair arm only, and no default-posture cell moves. Archives:
 > `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
 > `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
+> 💡 **The auto-index cost is now measured, and it is shape-dependent (2026-09-25, session 49).** With
+> `SHARPCOREDB_HASH_INDEXES=0` (which gates auto-creation since session 42) the default no-PK `docs` arm's
+> INSERT goes **0,90× → 1,38× / 1,41×** against SQLite in two independent runs — *both* our arms move (the SQL
+> arm's own control 0,71× → 0,99× / 1,00×) while the SQLite reference does not, so the dial and not the machine
+> is the cause. Arm B showed **nothing** for the same dial in session 42 (INSERT 0,82× → 0,80×, UPDATE/DELETE
+> unmoved). So §9 row 5's question is answered *per shape* and the answer is asymmetric: on the legacy
+> variable-length no-PK shape the auto-index set costs ~29–46 % of INSERT; on the fixed-width PK default shape
+> it costs nothing measurable. What is **not** measured is the benefit side (this workload reads only `name`,
+> through its explicit index): the row still needs the owner's call, now with a cost number attached.
+> `HashIndexAutoCreationGateTests` pins the gate so the question stays askable.
+
 > ✅ **The dictionary-free INSERT overload lands and is measured (2026-09-25, session 48).** `Database.InsertBatch(table, IReadOnlyList<object[]> rows, IReadOnlyList<string> columns)`
 > exposes the engine path the SQL batch parser already used (`Table.InsertBatch(object[][], columnOrder)`,
 > "explicitly dictionary-free") — until now the fastest INSERT the engine had was unreachable from the public

@@ -3902,3 +3902,37 @@ The ranges tighten and the median moves 4–7 %, but every movement is inside th
 
 
 **6. Validation.** `src`, tests and benchmark build with 0 errors. Structured-DML tests **13 / 0 failed / 0 skipped** (12 + the new contiguous-DELETE canary). Every rep of every run printed its gate line and every one read **0 empty · 0 wrong value · 0 still present**. Core suite and `--gate` are re-run at the end of the session; no default changed, no encryption or durability touched, nothing pushed.
+
+---
+
+### 2026-09-25 (session 49) — the per-column auto hash indexes cost the no-PK `docs` shape **~29–46 % of its INSERT**: with the dial off that arm's INSERT reads **1,38× / 1,41× ahead of SQLite** (two runs, both controls tight), where with them on it read 0,90×
+
+- Session: 1 of 1 for the auto-index item (the cost side of plan §9 row 5)
+- Command(s): `--docs-batch` ×4 (1-rep smoke, then 5 reps ×3 — two with `SHARPCOREDB_HASH_INDEXES=0`, the third being session 48's dial-on baseline) · `--fair-ni-batch` ×2 (dial off + the same) · hash-index gate tests ×3 · core suite ×1
+- Regime: `REGIME (overridden): SHARPCOREDB_BENCH_REPS=5  SHARPCOREDB_BENCH_TEMP=D:\scdb-bench-tmp  SHARPCOREDB_HASH_INDEXES=0  SHARPCOREDB_WARMUP_REPS=8` — the banner enumerates every `SHARPCOREDB_*` switch, so each run says which dial it is; SQLite at its built-in reference pragma set
+- Verdict: **KEPT** — the auto-index cost is now a measured per-shape number (large on arm C, nil on arm B), reproduced in two independent runs, with a control that identifies the dial rather than the machine
+- Commit: `test(bench)`: the auto-index cost on the docs shape's INSERT, measured twice, and the gate pinned by tests
+- NEXT: **run arm B through the same dial + array INSERT** — session 42 measured arm B's dial *before* the dictionary-free INSERT existed, and the dial does not reach `BuildPkDefaultVariantConfig` at all (only the tuned config reads `HashIndexesOverride()`), so arm B's "arrays + no auto indexes" combination is unmeasured. Wire the dial into the default-posture builder as a documented opt-in (unset ⇒ the pure default, unchanged), re-run, and see whether decision 4's INSERT obligation is met on the arm that ships to users.
+
+**1. The measurement, and the control that makes it a dial effect rather than a machine effect.** Same binary, same protocol, same session, same data dir — one environment variable different. `--docs-batch`, 5 reps × 8 warm-ups, three arms rotated:
+
+| docs-arm cell | auto indexes ON (session 48) | OFF, run 1 | OFF, run 2 |
+|---|---|---|---|
+| **INSERT vs SQLite** (batch arm, dictionary-free arrays) | 0,90× (0,87–0,96) | **1,38×** (1,29–1,48) | **1,41×** (1,37–1,43) |
+| **INSERT vs SQLite** (SQL arm, dictionaries — *same code in all three runs*) | 0,71× (0,69–0,75) | 0,99× (0,92–1,07) | 1,00× (1,00–1,12) |
+| INSERT batch/SQL (attribution) | 1,25× (1,19–1,34) | 1,39× (1,30–1,46) | 1,37× (1,24–1,43) |
+| READ vs SQLite | 1,09× (0,91–1,19) | 1,01× (0,92–1,17) | 1,08× (1,06–1,26) |
+| UPDATE vs SQLite | 0,36× (0,17–0,38) | 0,55× (0,32–0,69) | 0,53× (0,34–0,62) |
+| DELETE vs SQLite | 0,16× (0,14–0,17) | 0,17× (0,15–0,17) | — |
+
+**Both SharpCoreDB arms move and the SQLite reference does not** (187.099 → 176.803 → 178.270 ops/s), which is what identifies the cause: the dial removes the same per-column index work from both of our arms, so the *attribution* column holds (1,25× → 1,37–1,39×) while both *mission* cells jump. In absolutes: our SQL arm's INSERT 135.348 → 175.070 → 180.481 (+29–33 %), our batch arm 167.424 → 244.017 → 249.793 (+46–49 %). The **second dial-off run reproduces the first** on every cell that matters (INSERT 1,38× → 1,41×, control 0,99× → 1,00×), with tight ranges, so this is not a single-run artefact.
+
+
+
+**2. What this does and does not say for §9 row 5.** It says: on the legacy variable-length no-PK `docs` shape, the per-column auto-index set costs **~29–46 % of the INSERT phase**, and with it removed the dictionary-free INSERT reads **1,38–1,41× ahead of SQLite** — decision 4's obligation, met on this shape *at that configuration*. It does **not** say the default should change: this workload only reads `name` (through its explicit index, which the dial leaves alone — its READ cell held at 1,01–1,09×) and writes `score`, so the measurement prices the **cost** of the auto indexes, not their **benefit** for arbitrary user equality queries on `email`/`age`/`score`/`data`. §9 row 5 asked for exactly this comparison and now has a number on the cost side, on one shape. A candidate mechanism for the shape-dependence is recorded as a *candidate* only (the fixed-width path's keys come out of typed slots; this shape's keys are variable-length values that also travel through the overflow arena) — this campaign has paid four times for turning a plausible reading into a stated cause, and nothing here is stamped.
+
+**3. Arm B's own dial measurement already exists — and it says nil.** Session 42 (commit `bf5f960f`) ran `SHARPCOREDB_HASH_INDEXES` on arm B *before* the dictionary-free INSERT existed: INSERT 0,82× → 0,80× (no gain), READ 1,10× → 1,00×, UPDATE 0,39× → 0,41×, DELETE 0,38× → 0,35×. So the cost is **shape-dependent in the data we have**: large on the legacy no-PK docs shape, nil on the fixed-width PK default shape. That is the sentence §9 row 5 needed, and it is why the owner decision is now a *per-shape* question rather than a global one.
+
+**4. The `--fair-ni-batch` run of this session is unusable for its INSERT phase, and is recorded that way.** Its control column contains an **8.929,60×** paired ratio and a **0,00** step (ranges 1,22–8929,60× and 0,00–2,29×), i.e. at least one arm's INSERT sample collapsed to a near-zero rate in one rep; its UPDATE batch/SQL range likewise opens at 0,78×. Only its DELETE-vs-SQLite cell is quoted (6,38×, 5,02–9,94×) and it agrees with the three earlier fair samples (9,42× / 10,42× / 12,01×). The collapse is the campaign's known isolated-rep signature at extreme magnitude; nothing was concluded from it.
+
+**5. A gate that now carries evidence is pinned by tests (session 42's lesson, applied).** `EnableHashIndexes` was a dead property until session 42, and the dial built to ask this question could not ask it. Three tests now hold the gate from the outside (`HashIndexAutoCreationGateTests`): default registers **one index per column**, disabled registers **none**, and a table with no auto indexes still inserts / reads / deletes correctly — so if the gate ever silently stops firing, the measurement behind this entry becomes unaskable *and* a test fails. Core suite **1845 / 0 failed / 0 skipped** (1842 + 3). Every gate line in all four measurement runs read 0/0. No default changed; encryption and durability untouched; nothing pushed.
