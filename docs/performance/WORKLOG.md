@@ -3832,8 +3832,44 @@ The regression was **mine, not the engine's**, and the code explained it: arm B'
 | **UPDATE** | **0,35×** (0,28–0,38) | 0,25× (0,25–0,26) | **1,35×** (1,13–1,50) |
 | **DELETE** | 0,14× (0,09–0,18) | 0,13× (0,12–0,16) | **1,11×** (0,67–1,15) |
 
+
+---
+
+### 2026-09-25 (session 47) — both micro-levers measured and **refuted before being kept**: the dictionary-free op shape has a **1,1–3,0 %** ceiling, and the no-PK delete's per-key row decode is worth nothing measurable (so it was **reverted**)
+
+- Session: 1 of 1 for the dictionary-free item (session 46's `NEXT:`), which also carried the fair-arm third sample
+- Command(s): `--batch-dml-shape-cost` ×1 (new diagnostic) · `--docs-batch` ×1 (5 reps) · `--fair-ni-batch` ×1 (5 reps) · structured-DML tests ×3 · core suite ×1
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp` · `SHARPCOREDB_WARMUP_REPS=8` · `SHARPCOREDB_BENCH_REPS=5` · no `SHARPCOREDB_BATCH_DML` set · SQLite at its built-in reference pragma set
+- Verdict: **two `REJECTED`s and one `KEPT`** — the dictionary-free lever is refuted by its own ceiling, the positions-only delete was reverted on the "measured or reverted" rule, and what survived is the diagnostic mode plus two tests that pin both index-maintenance modes
+- Commit: `test(bench)`: the dictionary-free lever's ceiling, and the no-PK delete decode that is worth nothing
+- NEXT: **give the INSERT arms the column-ordered array API and measure it** — `Table.InsertBatch(object[][], columnOrder)` already exists *inside* the engine ("explicitly dictionary-free", and decision 8's inline-capacity win came through that path) while every harness arm inserts through `Database.InsertBatch(table, List<Dictionary<string, object>>)`, i.e. the dictionary overload. Expose the array form publicly, drive the fair/arm-B/arm-C INSERT phases through it, and measure: this is the one place where the dictionary cost is per **column** per row rather than per operation — and INSERT is the cell decision 4 still fails (arm B 0,83×, arm C 0,72×). If it does not move, the residue is §9 row 5 (index maintenance, ≥31,1 % of INSERT on the fair profile) and payload encoding (12,3 %), both already attributed.
+
+**1. The dictionary-free lever, refuted by a measured ceiling — before a line of it was written.** Session 45's `NEXT:` pointed at `InsertBatch(object[][], columnOrder)`'s "explicitly dictionary-free" property and asked for the same for UPDATE/DELETE. The trap in that reading is that the dictionaries are built by the **caller**, outside the timed window (the harness caches the op list), so the only thing a dictionary-free shape can remove from a cell is the read pattern and GC pressure. New diagnostic `--batch-dml-shape-cost` (the `--update-parse-cost` method: measure the pieces in isolation rather than stamping inside a 10.000-statement loop), 10.000 ops per pass, 200 passes, warmed:
+
+| shape | ns/op | B/op |
+|---|---:|---:|
+| A · `Dictionary<string,object>(1)` + one entry, read the way the core reads it | 47,5 | 289 |
+| B · shared column list + `object[]`, read the same way | 7,7 | 104 |
+
+In-window difference **39,8 ns/op**, which is **1,1–3,0 %** of the five cells it would touch (fair UPDATE 2,6–2,8 %, arm B UPDATE 2,1 %, arm B DELETE 3,0 %, arm C UPDATE 1,1 %) — against a protocol whose own resolution is ±20 % per rep and whose INSERT/READ control column reads 0,92–1,07× where both arms are the *same code*. The op-list build is 2,8 MB versus 1,0 MB and **0 gen0 collections either way**, and it is outside the window regardless. **Verdict: `REJECTED`** — the same shape of result as B3 (measured ceiling 1,6 % against a 156 % gap). No API was added, and the fair/arm-B/arm-C cells are untouched by this session's decisions.
+
 On the no-PK shape the SQL-free path is **1,35× ahead on UPDATE with a range that clears 1,00×**, and only **1,11× on DELETE with a range that straddles** — expected, and the reason is visible in the code: with no PK there is no contiguous resolver to reach, so DELETE keeps its per-key locate cost and the API change removes only the dispatcher layer. Against SQLite both cells stay far behind (0,35× / 0,14×) because that reference resolves through `id INTEGER PRIMARY KEY` while this arm matches on `name` — trap 4, unchanged, and exactly why `--fair-ni` exists (where the same shape reads 5–8× *ahead* on DELETE).
 
 **5. The API's shape cost, named for the next session.** The public batch API takes a `Dictionary<string, object>` per operation; `InsertBatch(object[][], columnOrder)` — the campaign's best PK cell — is *"explicitly dictionary-free"*. That difference is now the most obvious remaining lever on these two phases, and the NEXT line above is its measurement. Archives: `results/pk_default_batch_20260925_042426.json` (before the fix — kept, it is the evidence for §3) and `…_043638.json` (after), `results/docs_batch_20260925_044213.json`; raw logs in `D:\scdb-bench-tmp\pk-default-batch-*.txt` and `docs-batch-20260925.txt`.
+
+**2. A second lever tried and reverted: the no-PK delete's per-key row decode.** Reading `DeleteRecordsCore` shows its row payloads are consumed in exactly two situations — the non-deferred hash-index cleanup and the PK-index cleanup — while the product default defers index maintenance. On a no-PK table that means both the SQL and the typed batch DELETE decode one row per key for a field no code path reads. Implemented (positions only, one shared empty row), measured, and **reverted**:
+
+| cell | before (session 46) | after (positions only) |
+|---|---|---|
+| arm C DELETE batch/SQL | 1,11× (0,67–1,15) | 1,16× (1,10–1,31) |
+| arm C DELETE vs SQLite | 0,14× (0,09–0,18) | 0,14× (0,14–0,20) |
+| fair DELETE batch/SQL | 1,50× (0,33–1,80) / 1,84× (0,69–2,94) | 1,61× (0,68–1,84) |
+
+The ranges tighten and the median moves 4–7 %, but every movement is inside the run-to-run spread the control columns expose (this run was ~8 % slower overall: the docs job's SQL DELETE read 124.297 against 135.522, its SQL INSERT 121.510 against 132.627). **A change that cannot be told from noise cannot satisfy "measured or reverted" — so it was reverted** (S6's rule, applied to my own change this time). What stays: the finding is recorded, `Table.DeferredDeleteIndexesEnabled` is a one-line diagnostic so a test can assert which side of the deferral a delete ran on instead of inferring it, and two tests now pin **both** maintenance modes (`DeleteBatch_WithDeferredIndexesAndNoPk_DeletesRowsAndSurvivesReopen`, `DeleteBatch_WithDeferredIndexesDisabled_StillDecodesAndDeletes`).
+
+**3. The fair-arm attribution reproduces a third time; the fair *mission* cell still straddles.** Session 47's `--fair-ni-batch` run (5 reps, 8 warm-ups): UPDATE batch/SQL **2,01× (0,55–3,72)**, DELETE batch/SQL **1,61× (0,68–1,84)**, controls 1,00× / 1,03×. Across three independent runs the *attribution* now reads 3,47× / 1,82× / 2,01× (UPDATE) and 1,50× / 1,84× / 1,61× (DELETE) — the same story every time — while the *mission* cell (fair UPDATE vs SQLite) reads 2,24×, 2,05× and 1,42× with ranges that straddle, because that ratio inherits the SQL arm's own unresolved spread (its control has now read 0,64×, 1,04× and 0,74× in three runs). **The honest statement is therefore: the SQL-free path is 1,5–3,5× ahead of the SQL path on this shape, reproducibly; its ratio against SQLite is ahead in every run's median but is not quotable as a floor.** Archives: `results/fair_ni_batch_20260925_045947.json`, and `results/docs_batch_20260925_045859.json` (which carries the reverted variant's arm-C numbers).
+
+**4. Validation.** Core suite **1839 / 0 failed / 0 skipped** (1837 + the two index-maintenance tests), structured-DML tests 15/0/0, all three projects build with 0 errors, and every gate line in both measurement runs read **0 empty · 0 wrong value · 0 still present**. The reverted change is out of the tree — `Table.StructuredDml.cs` is byte-identical to the session-46 commit. No default changed; encryption and durability untouched; nothing pushed.
+
 
 **6. Validation.** `src`, tests and benchmark build with 0 errors. Structured-DML tests **13 / 0 failed / 0 skipped** (12 + the new contiguous-DELETE canary). Every rep of every run printed its gate line and every one read **0 empty · 0 wrong value · 0 still present**. Core suite and `--gate` are re-run at the end of the session; no default changed, no encryption or durability touched, nothing pushed.

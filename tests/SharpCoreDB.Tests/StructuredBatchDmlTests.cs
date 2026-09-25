@@ -44,12 +44,13 @@ public sealed class StructuredBatchDmlTests : IDisposable
         try { if (Directory.Exists(_dirPath)) Directory.Delete(_dirPath, true); } catch { }
     }
 
-    private Database CreateDb(bool noEncrypt = true, StorageEngineType? engine = null) =>
+    private Database CreateDb(bool noEncrypt = true, StorageEngineType? engine = null, bool eagerDeleteIndexes = false) =>
         (Database)_factory.Create(_dirPath, "pw", isReadOnly: false, config: new DatabaseConfig
         {
             NoEncryptMode = noEncrypt,
             EnableAtRestRecordEncryption = !noEncrypt,
             StorageEngineType = engine ?? StorageEngineType.Auto,
+            EnableDeferredDeleteIndexes = !eagerDeleteIndexes,
         });
 
     private static List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)> UpdateOp(
@@ -82,6 +83,62 @@ public sealed class StructuredBatchDmlTests : IDisposable
             new Dictionary<string, object?> { ["@name"] = name });
         Assert.Single(rows);
         return Convert.ToDouble(rows[0]["score"]);
+    }
+
+    [Fact]
+    public void DeleteBatch_WithDeferredIndexesAndNoPk_DeletesRowsAndSurvivesReopen()
+    {
+        // The product default defers index maintenance (EnableDeferredDeleteIndexes), which is the mode where a
+        // delete's index work is skipped and the tombstone is the durable truth. This pins both halves from the
+        // outside: the rows go, the index still answers for the survivors, and the deletion survives a reopen.
+        const string Table = "t";
+        using (var db = CreateDb())
+        {
+            InsertFive(db, Table);
+            var table = GetTable(db, Table);
+            Assert.True(table.DeferredDeleteIndexesEnabled);
+
+            var keys = new List<(string KeyColumn, object? KeyValue)>();
+            for (int i = 1; i <= 3; i++)
+            {
+                keys.Add(("name", $"u{i}"));
+            }
+
+            Assert.Equal(3, db.DeleteBatch(Table, keys));
+            db.Flush();
+
+            Assert.Equal(2, db.ExecuteQuery($"SELECT name FROM {Table}").Count);
+            Assert.Single(db.ExecuteQuery($"SELECT name FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u5" }));
+            Assert.Empty(db.ExecuteQuery($"SELECT name FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u2" }));
+        }
+
+        using var reopened = CreateDb();
+        Assert.Equal(2, reopened.ExecuteQuery($"SELECT name FROM {Table}").Count);
+        Assert.Single(reopened.ExecuteQuery($"SELECT name FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u5" }));
+    }
+
+    [Fact]
+    public void DeleteBatch_WithDeferredIndexesDisabled_StillDecodesAndDeletes()
+    {
+        // The eager half of the same pair: with EnableDeferredDeleteIndexes=false every delete removes its index
+        // entries immediately, so the row payloads are read. A no-PK table takes the per-key locate path here.
+        const string Table = "t";
+        using (var db = CreateDb(eagerDeleteIndexes: true))
+        {
+            InsertFive(db, Table);
+            var keys = new List<(string KeyColumn, object? KeyValue)> { ("name", "u4") };
+
+            Assert.Equal(1, db.DeleteBatch(Table, keys));
+
+            Assert.Equal(4, db.ExecuteQuery($"SELECT name FROM {Table}").Count);
+            Assert.Empty(db.ExecuteQuery($"SELECT name FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u4" }));
+        }
+    }
+
+    private static Table GetTable(Database db, string table)
+    {
+        Assert.True(db.TryGetTable(table, out var probe));
+        return Assert.IsType<Table>(probe);
     }
 
     [Fact]

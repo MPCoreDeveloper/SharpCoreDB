@@ -553,6 +553,25 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > dial is wired to the fair arm only, and no default-posture cell moves. Archives:
 > `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
 > `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
+> ⛔ **Two micro-levers refuted the same way (2026-09-25, session 47), both before they could be kept:**
+> (1) **"make the op shape dictionary-free"** — measured with `--batch-dml-shape-cost` as a **ceiling** first:
+> the dictionary read pattern costs 47,5 ns/op against 7,7 ns/op for a shared column list + `object[]`, i.e.
+> **39,8 ns/op = 1,1–3,0 %** of the five cells it would touch, inside a protocol whose own resolution is ±20 %;
+> the op-list build (2,8 MB vs 1,0 MB) happens outside the window and produced **0 gen0** either way. Not
+> built — the B3 pattern, applied before writing the code instead of after.
+> (2) **the no-PK delete's per-key row decode** — `DeleteRecordsCore` reads its row payloads only for the
+> eager hash cleanup and the PK cleanup, and the product default defers the former, so the decode is dead work
+> on a no-PK table; removing it moved arm C's DELETE batch/SQL **1,11× → 1,16×** and left the mission cell at
+> **0,14×**, i.e. inside the run's own spread, so it was **reverted** rather than kept on faith (S6's rule).
+> What survived: one diagnostic property (`Table.DeferredDeleteIndexesEnabled`), two tests pinning both
+> index-maintenance modes, and the `--batch-dml-shape-cost` mode itself.
+>
+> ✅ **The fair-arm attribution now has three independent samples** (5/9/5 reps): UPDATE batch/SQL **3,47× /
+> 1,82× / 2,01×**, DELETE batch/SQL **1,50× / 1,84× / 1,61×**, with the INSERT/READ control column at
+> 0,98–1,03× in all three (same code in both arms). The **attribution** is quotable; the **mission** cell
+> (fair UPDATE vs SQLite: 2,24× / 2,05× / 1,42×, ranges straddling) is not — it inherits the SQL arm's own
+> unresolved spread, whose control has read 0,64× / 1,04× / 0,74× across those runs.
+
 > ✅ **The same lever, measured on arm B and arm C (2026-09-25, session 46).** The dial is general now
 > (`SHARPCOREDB_BATCH_DML`), arm B and the default no-PK `docs` job both accept a `batchDml` override, and
 > `--pk-default-batch` / `--docs-batch` drive the same three-arm protocol on them. Attribution (batch/SQL,

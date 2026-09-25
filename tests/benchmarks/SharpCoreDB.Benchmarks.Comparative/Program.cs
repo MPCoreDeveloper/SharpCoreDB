@@ -283,6 +283,15 @@ class Program
             return;
         }
 
+        // Optional: --batch-dml-shape-cost → the dictionary-free lever's CEILING, before anything is built.
+        // In-process micro-measurement (the --update-parse-cost method): what a column-ordered op shape could
+        // remove from the window, against the live per-op time of the cells it would touch. Diagnostic only.
+        if (args.Any(a => a.Equals("--batch-dml-shape-cost", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunBatchDmlShapeCostDiagnostic();
+            return;
+        }
+
         // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
         // the columns side by side, so the cost of protection is a published per-operation number
         // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
@@ -4243,6 +4252,146 @@ class Program
         Console.WriteLine("  and SqlParser.ParseValue are left with. Whichever component dominates is the one worth");
         Console.WriteLine("  removing — and that decision should not be taken from the 531 B total alone, because the");
         Console.WriteLine("  tuple also has to keep a non-empty WHERE for TryBulkUpdateContiguousFixedWidth (B8) to fire.");
+    }
+
+    /// <summary>
+    /// The dictionary-free lever's <b>ceiling</b>, measured before anything is built (the B3 lesson: measure the
+    /// ceiling first — that item was cancelled at 1,6 % of its cell). The INSERT path's documented advantage is
+    /// that it is "explicitly dictionary-free", and the new batch UPDATE/DELETE API takes one
+    /// <c>Dictionary&lt;string, object&gt;</c> per operation — so "make the op shape dictionary-free" is the
+    /// obvious next lever. But the dictionaries are built by the <b>caller</b>, outside the timed window (the
+    /// harness caches the op list), so what a dictionary-free shape could remove from the window is only the
+    /// <b>read pattern</b> and the <b>GC pressure</b>. This measures those two at the real batch size and prints
+    /// the share against the live cells' per-op time, which is the number that decides.
+    /// </summary>
+    static void RunBatchDmlShapeCostDiagnostic()
+    {
+        const int Ops = 10_000;
+        const int Repeats = 200;
+
+        // Runtime-built strings, never const literals: with a constant the compiler folds the concat and the
+        // interning removes the lookup cost, which is exactly the mistake session 44's first version made.
+        string setCol = new string(['s', 'c', 'o', 'r', 'e']);
+        string[] setColumns = [setCol];
+
+        // Shape A: the live op dictionaries, built once (this is what the harness caches — out of window).
+        long allocBeforeA = GC.GetAllocatedBytesForCurrentThread();
+        int gen0BeforeA = GC.CollectionCount(0);
+        var dictOps = new List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>(Ops);
+        for (int i = 0; i < Ops; i++)
+        {
+            dictOps.Add(("id", i + 1, new Dictionary<string, object>(1) { [setCol] = i * 99.9 }));
+        }
+
+        long dictBytes = GC.GetAllocatedBytesForCurrentThread() - allocBeforeA;
+        int dictGen0 = GC.CollectionCount(0) - gen0BeforeA;
+
+        // Shape B: the column-ordered alternative — one shared column list + one object[] per operation.
+        long allocBeforeB = GC.GetAllocatedBytesForCurrentThread();
+        int gen0BeforeB = GC.CollectionCount(0);
+        var arrayOps = new List<(string KeyColumn, object? KeyValue, object[] Values)>(Ops);
+        for (int i = 0; i < Ops; i++)
+        {
+            arrayOps.Add(("id", i + 1, [i * 99.9]));
+        }
+
+        long arrayBytes = GC.GetAllocatedBytesForCurrentThread() - allocBeforeB;
+        int arrayGen0 = GC.CollectionCount(0) - gen0BeforeB;
+
+        static (double NsPerOp, double BytesPerOp) Measure(int n, Action body)
+        {
+            for (int i = 0; i < 20_000; i++)
+            {
+                body();
+            }
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < n; i++)
+            {
+                body();
+            }
+            sw.Stop();
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            return (sw.Elapsed.TotalNanoseconds / n, (after - before) / (double)n);
+        }
+
+        // The read pattern the UPDATE core performs per operation: enumerate the SET entries, test a column
+        // name, fetch it. Both shapes are read the way the core would have to read them.
+        double dictRead = 0;
+        double arrayRead = 0;
+        for (int r = 0; r < Repeats; r++)
+        {
+            var readDict = Measure(Ops, () =>
+            {
+                var op = dictOps[0];
+                foreach (var kvp in op.Values)
+                {
+                    _ = kvp.Key;
+                    _ = kvp.Value;
+                }
+
+                if (op.Values.ContainsKey(setCol))
+                {
+                    _ = op.Values[setCol];
+                }
+            });
+
+            var readArray = Measure(Ops, () =>
+            {
+                var op = arrayOps[0];
+                for (int c = 0; c < setColumns.Length; c++)
+                {
+                    _ = setColumns[c];
+                    _ = op.Values[c];
+                }
+            });
+
+            dictRead += readDict.NsPerOp;
+            arrayRead += readArray.NsPerOp;
+        }
+
+        dictRead /= Repeats;
+        arrayRead /= Repeats;
+        double deltaNs = dictRead - arrayRead;
+
+        Console.WriteLine("Batch-DML op shape - what a dictionary-free variant could actually remove");
+        Console.WriteLine();
+        Console.WriteLine($"  batch size {Ops:N0} ops · read patterns averaged over {Repeats} passes of {Ops:N0} ops each");
+        Console.WriteLine();
+        Console.WriteLine($"  {"shape",-44}{"ns/op",11}{"B/op",10}");
+        Console.WriteLine($"  {"A  Dictionary<string,object>(1) + one entry",-44}{dictRead,11:F1}{dictBytes / (double)Ops,10:F0}");
+        Console.WriteLine($"  {"B  shared column list + object[] per op",-44}{arrayRead,11:F1}{arrayBytes / (double)Ops,10:F0}");
+        Console.WriteLine();
+        Console.WriteLine($"  op-list build (outer, once per batch): dictionaries {dictBytes / 1024.0 / 1024.0:F1} MB"
+            + $" · arrays {arrayBytes / 1024.0 / 1024.0:F1} MB · gen0 {dictGen0} vs {arrayGen0}");
+        Console.WriteLine($"  in-window difference (A reads - B reads): {deltaNs:F1} ns/op");
+        Console.WriteLine();
+
+        // The live per-op times this delta has to be compared against, from the medians measured in sessions
+        // 45/46 (ops/s -> ns/op). Absolute ops/s differ per run; these are the phases this lever would touch.
+        var cells = new (string Label, double OpsPerSec)[]
+        {
+            ("fair arm UPDATE (SQL-free batch, 5-rep run)", 715_793),
+            ("fair arm UPDATE (SQL-free batch, 9-rep run)", 645_765),
+            ("arm B UPDATE (SQL-free batch)", 531_629),
+            ("arm B DELETE (SQL-free batch)", 766_594),
+            ("arm C UPDATE (SQL-free batch)", 284_759),
+        };
+
+        Console.WriteLine("  share of each measured cell, if the ENTIRE read difference were removed:");
+        foreach (var (label, opsPerSec) in cells)
+        {
+            double nsPerOp = 1_000_000_000.0 / opsPerSec;
+            Console.WriteLine($"    {label,-44}{deltaNs / nsPerOp * 100.0,7:F1} %   ({nsPerOp:F0} ns/op in the cell)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Read this against the protocol's own resolution: the INSERT/READ control column of the three-arm");
+        Console.WriteLine("  runs reads 0,92-1,07x where both arms are the SAME code, and per-rep ratios move ~20 %. A");
+        Console.WriteLine("  ceiling well inside that is not a lever — it is a change that cannot be told from noise, which is");
+        Console.WriteLine("  what cancelled B3. The dictionaries are built OUTSIDE the window (the harness caches the op");
+        Console.WriteLine("  list), so their allocation is not part of any measured cell; only the reads and the GC above are.");
     }
 
     static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)

@@ -4567,6 +4567,13 @@ public partial class Table
     /// </summary>
     public long BulkContiguousDeleteBatches => Interlocked.Read(ref _bulkContiguousDeleteBatches);
 
+    /// <summary>
+    /// Whether this table's deletes defer hash-index maintenance (<c>EnableDeferredDeleteIndexes</c>, product
+    /// default: true). Diagnostics only — it is the condition that decides whether a batch delete's row payloads
+    /// are ever read, so a test can assert which side of it a delete ran on instead of inferring it.
+    /// </summary>
+    public bool DeferredDeleteIndexesEnabled => _config?.EnableDeferredDeleteIndexes == true;
+
     private long _bulkContiguousDeleteBatches;
 
     /// <summary>
