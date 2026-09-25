@@ -644,6 +644,43 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
 
+### 5.1 Where each cell stands now (session 51, after sessions 45–51)
+
+Two batch paths were built in this stretch — `Database.InsertBatch(table, rows, columns)` (dictionary-free,
+column-ordered) and `Database.UpdateBatch` / `DeleteBatch` (SQL-free, typed keys) — plus the three-arm paired
+harness that measures them (`--fair-ni-batch`, `--pk-default-batch`, `--docs-batch`). Cells below are the
+**paired, per-rep median** against the same run's SQLite reference; the range in brackets is the observed
+spread, and a range that straddles 1,00× is marked *unresolved* rather than rounded.
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---|---|---|---|
+| **B — pure default, encrypted** (shipped posture) | **0,95×** (0,88–1,02) — *unresolved at the top of the range* | 1,13× (1,02–1,20) | 0,62× (0,61–0,65) SQL-free batch · 0,36× (0,29–0,40) SQL path | 0,83× (0,58–0,88) batch · 0,35× (0,30–0,38) SQL path |
+| **C — default no-PK `docs` job** | **0,90×** (0,87–0,96) | 1,07–1,13× | 0,35–0,55× | 0,14–0,17× |
+| **Fair (tuned, no PK, indexed predicate)** | 1,45–1,56× (SQL path) · **2,96×** (array path) | 1,74–2,07× | **2,01–3,47×** batch/SQL, 1,42–2,24× vs SQLite | 5–8× (SQL) · **10,4–12,0×** (batch) |
+| **Arm B / C with the auto-index set off** | **1,60×** (1,38–1,78) / **1,38–1,41×** | unchanged (1,08–1,13×) | 0,92× (0,76–0,98) | 0,64× (0,61–0,73) |
+
+**The three behind-cells, and the evidence for each:**
+
+1. **Arm B INSERT 0,95× and arm C INSERT 0,90×** — *configuration-limited, not code-limited.* With the
+   per-column auto-index set off, the same build reads **1,60×** (arm B) and **1,38–1,41×** (arm C), both
+   reproduced, both with the dial as the only variable and both of our arms moving while SQLite's reference
+   stays flat. The blocker is the owner decision §9 row 5, which now has **both** numbers: the set costs
+   ~30–45 % of INSERT and buys **32×–7.298×** on equality queries for columns the user did not explicitly
+   index. Narrowing the default is therefore *not* the lever; lazy/on-demand creation or a column-class rule
+   are the live options.
+2. **Arm B UPDATE 0,62× / DELETE 0,83×** — *partially closed by this stretch* (they were 0,39× / 0,38× on the
+   SQL path; the SQL-free route is 1,53–1,68× / 1,91–2,02× the same engine's SQL path). What remains is
+   dominated by the reference's shape: SQLite resolves `WHERE id = …` through its rowid with one prepared
+   command, which trap 4 has documented since session 0, plus the encrypted default posture's per-row cost.
+   Not attributable to a missing fast path: the contiguous single-range UPDATE/DELETE both arms use is
+   reached by both entry points (session 46's regression was exactly this, and it is fixed and canary-pinned).
+3. **Arm C UPDATE 0,35–0,55× / DELETE 0,14–0,17×** — *trap-4-dominated, with an independent measurement to
+   prove it.* The same schema shape measured against a **fair** SQLite reference (no rowid, matched index set)
+   reads **1,43×** (UPDATE) and **1,16×** (DELETE) on the SQL-free path and 5–8× on DELETE via the SQL path.
+   So the deficit is the comparison, not the row write: this arm matches on `name` while the reference
+   matches on `id`.
+
+
 > ⚠️ **Arm B re-measured on the symmetric protocol (2026-09-24, session 32): INSERT 0,83× (0,79–0,88) ·
 > READ 1,10× (0,88–1,20) · UPDATE 0,39× (0,38–0,43) · DELETE 0,41× (0,33–0,42).** Arm B was still running
 > the old harness shape — statements formatted inside the timed window, no `StmtBuild` stamp on DELETE —
@@ -841,7 +878,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 2 | **The −24 % rail, if S3 reproduces it in the other direction.** If forcing the constant-size layout on the PK-less shape is ≤ 1,0× cost at capacity 24, may it be enabled for new tables (not migrated) as a *conditional* default? | S3's table + `[2][3][4][5]` | Keep the rail; report and wait |
 | 3 | **A numeric floor for arm B.** Decision 10 lists this as its one open sub-decision. | §1.2's recorded band | Keep the no-regression-against-its-own-values rule until a floor is chosen |
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
-| 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row. |
+| 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row.<br>**✅ MEASURED BOTH SIDES (sessions 42/49/50/51).** *Cost:* the set is ~**30–45 % of INSERT** — with `SHARPCOREDB_HASH_INDEXES=0` the INSERT cell reads **0,95× → 1,60× (1,38–1,78)** on arm B and **0,90× → 1,38× / 1,41×** on arm C, reproduced in two runs per arm, with the dial as the only variable (both of our arms move, SQLite's reference does not). *Benefit:* without it, equality queries on columns the user did not explicitly index degrade **32×–7.298×** (`--auto-index-benefit`, 20.000 rows: `email` **940×**, `age` **32×**, `score` **7.298×**; the explicitly indexed control reads **1,07×** and the row counts agree exactly). **So "narrow the default" is the wrong lever** — it trades a bounded per-row cost for up to three orders of magnitude on a class of user queries. Lazy/on-demand creation, or a rule by column class, are the live options and both now have their numbers. `HashIndexAutoCreationGateTests` pins the gate so the experiment stays askable. |
 | 6 | **Install the Visual Studio C++ workload to unblock NativeAOT (S4).** `...\VC\Tools\MSVC\14.51.36231\` has `bin` and `lib\onecore` only — no `include`, no `lib\x64`, no `msvcrt.lib` — and `vcvarsall.bat` is absent, so `link.exe` cannot link. | S4's verdict (worklog session 24), with the directory listing and the `vswhere -requires` result | **VS Installer → Modify → Desktop development for C++** (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`). After that, plain `dotnet publish -r win-x64 -p:PublishAot=true` needs no override. Until then S4 stays `BLOCKED` and its hypothesis is *untested*, not refuted. |
 
 ---

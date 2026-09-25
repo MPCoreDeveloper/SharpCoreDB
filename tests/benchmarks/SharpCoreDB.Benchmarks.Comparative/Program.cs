@@ -292,6 +292,15 @@ class Program
             return;
         }
 
+        // Optional: --auto-index-benefit → what the per-column auto hash indexes BUY (point queries on the
+        // columns no explicit index covers), measured against what sessions 42/49/50 priced them at on INSERT.
+        // Diagnostic only, two in-process configurations, same data, row counts printed beside the timings.
+        if (args.Any(a => a.Equals("--auto-index-benefit", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunAutoIndexBenefitComparison();
+            return;
+        }
+
         // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
         // the columns side by side, so the cost of protection is a published per-operation number
         // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
@@ -4471,6 +4480,132 @@ class Program
         Console.WriteLine("  ceiling well inside that is not a lever — it is a change that cannot be told from noise, which is");
         Console.WriteLine("  what cancelled B3. The dictionaries are built OUTSIDE the window (the harness caches the op");
         Console.WriteLine("  list), so their allocation is not part of any measured cell; only the reads and the GC above are.");
+    }
+
+    /// <summary>
+    /// <c>--auto-index-benefit</c>: the other half of §9 row 5. Sessions 42/49/50 measured what the per-column
+    /// auto hash indexes cost (large on INSERT for both the no-PK docs shape and the default-posture arm);
+    /// this measures what they <b>buy</b>, by running the same point queries against two databases built from
+    /// the same data — one with the auto-index set, one with only the explicit index — and reporting µs/query
+    /// beside the row counts, so a difference in speed can never be a difference in results.
+    /// <para>
+    /// The queries deliberately target the columns the auto indexes cover and no explicit index does
+    /// (<c>email</c>, <c>age</c>, <c>score</c>), plus <c>name</c> as the control: <c>name</c> carries the explicit
+    /// index in both configurations, so its numbers should agree while the others show what the auto-index set
+    /// is worth. Integer and REAL columns are included because the hash index has to be reached with a typed
+    /// value there (<c>ParseValueForHashLookup</c>), which is a different route from TEXT.
+    /// </para>
+    /// </summary>
+    static void RunAutoIndexBenefitComparison()
+    {
+        const int Rows = 20_000;
+        const int Queries = 2_000;
+
+        Console.WriteLine("Per-column auto hash indexes - what they COST (sessions 42/49/50) vs what they BUY");
+        Console.WriteLine();
+        Console.WriteLine($"  {Rows:N0} rows, {Queries:N0} point queries per column per configuration, same data both times");
+        Console.WriteLine();
+
+        static (Dictionary<string, double> Micros, Dictionary<string, int> Counts) Measure(bool hashIndexes)
+        {
+            var dbPath = Path.Combine(BenchTempDirectory(), $"bench-autoidx-{hashIndexes}-{Guid.NewGuid()}");
+            var micros = new Dictionary<string, double>();
+            var counts = new Dictionary<string, int>();
+
+            try
+            {
+                var services = new ServiceCollection();
+                services.AddSharpCoreDB();
+                var sp = services.BuildServiceProvider();
+                var factory = sp.GetRequiredService<DatabaseFactory>();
+
+                using var db = (SharpCoreDB.Database)factory.Create(
+                    dbPath: dbPath,
+                    masterPassword: BenchDbPassword,
+                    isReadOnly: false,
+                    config: new DatabaseConfig
+                    {
+                        NoEncryptMode = true,
+                        EnableHashIndexes = hashIndexes,
+                    });
+
+                db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                // The explicit index the real docs job creates: it survives the dial, so `name` is the control.
+                db.ExecuteSQL("CREATE INDEX idx_docs_name_benefit ON docs(name)");
+
+                var columnList = new List<string> { "name", "email", "age", "score", "data" };
+                for (int batch = 0; batch < Rows; batch += BatchSize)
+                {
+                    int end = Math.Min(batch + BatchSize, Rows);
+                    var rows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.5, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", rows, columnList);
+                }
+
+                db.Flush();
+
+                var probes = new (string Label, string Column, Func<int, object> Value)[]
+                {
+                    ("name  (explicit index, control)", "name", i => $"User{i}"),
+                    ("email (auto index only)", "email", i => $"user{i}@test.com"),
+                    ("age   (auto index only, INTEGER)", "age", i => 20 + i % 60),
+                    ("score (auto index only, REAL)", "score", i => i * 0.5),
+                };
+
+                foreach (var (label, column, valueFor) in probes)
+                {
+                    int stride = Math.Max(1, Rows / Queries);
+                    int found = 0;
+                    var sw = Stopwatch.StartNew();
+                    for (int q = 0; q < Queries; q++)
+                    {
+                        var rows = db.ExecuteQuery($"SELECT name FROM docs WHERE {column} = @p",
+                            new Dictionary<string, object?> { ["@p"] = valueFor(q * stride) });
+                        found += rows.Count;
+                    }
+
+                    sw.Stop();
+                    micros[label] = sw.Elapsed.TotalMicroseconds / Queries;
+                    counts[label] = found;
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
+            }
+
+            return (micros, counts);
+        }
+
+        // Rule 10, applied inside a diagnostic this time: the FIRST pass measured in a process is cold (JIT), and
+        // because the probe order is fixed it charges that cold cost to whichever column runs first — the first
+        // single-shot version of this mode read the `name` control at 0,33x for exactly that reason. So both
+        // configurations are run once discarded and once measured, and only the warm pair is printed.
+        Console.WriteLine("  (one discarded warm-up pass per configuration; only the warm pair is printed)");
+        Console.WriteLine();
+        _ = Measure(hashIndexes: true);
+        _ = Measure(hashIndexes: false);
+
+        var (withIndexes, countsWith) = Measure(hashIndexes: true);
+        var (withoutIndexes, countsWithout) = Measure(hashIndexes: false);
+
+        Console.WriteLine($"  {"query on",-34}{"auto indexes",13}{"only explicit",15}{"ratio",9}{"rows found (on/off)",20}");
+        foreach (var label in withIndexes.Keys)
+        {
+            double on = withIndexes[label];
+            double off = withoutIndexes[label];
+            Console.WriteLine($"  {label,-34}{on,10:F1} µs{off,12:F1} µs{off / on,8:F2}x"
+                + $"   {countsWith[label],8:N0} / {countsWithout[label]:N0}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  A ratio near 1,00x means the column was answered from an index either way; a large ratio means");
+        Console.WriteLine("  the query fell back to something else without the auto-index set. The row counts must agree");
+        Console.WriteLine("  column for column — if they do not, this measured two different result sets and is void.");
     }
 
     static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)

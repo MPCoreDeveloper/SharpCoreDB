@@ -3967,3 +3967,32 @@ Absolutes: our SQL arm's INSERT 140.816 → 235.099 (**+67 %**), our batch arm 1
 
 **4. Validation.** Core suite **1845 / 0 failed / 0 skipped**; all three projects build with 0 errors; every gate line in the run read 0/0. No default changed — `EnableHashIndexes = HashIndexesOverride()` was added only to the harness's *default-posture builder*, where the unset value returns the product default (`true`), so every run that does not ask for the dial measures the pure default exactly as before (and the run's own `REGIME` banner names the dial when it is set). Encryption and durability untouched; nothing pushed.
 
+
+---
+
+### 2026-09-25 (session 51) — §9 row 5 is now answered on **both** sides: the per-column auto hash indexes cost ~30–45 % of INSERT and buy **32×–7.298×** on equality queries for columns the user did not explicitly index — so narrowing the default is the wrong lever, and that is now measured rather than argued
+
+- Session: 1 of 1 for the auto-index *benefit* side (the gap session 50's `NEXT:` named), plus the campaign state section in the plan
+- Command(s): `--auto-index-benefit` ×2 (single-shot, then with a discarded warm-up pass) · core suite ×1 · benchmark build
+- Regime: in-process, two configurations, same data (20.000 rows, 2.000 point queries per column per configuration), `NoEncryptMode=true` both times, explicit `idx_docs_name_benefit` in both
+- Verdict: **KEPT** — the benefit side is measured, the control validates the method (1,07×), and the row counts agree exactly so this compares speeds and not result sets
+- Commit: `test(bench)`: what the auto-index set buys, measured against what it costs
+- NEXT: **the campaign's remaining behind-cells need the owner, not another lever.** Everything measured now points at two decisions: (1) the auto-index default — the numbers above say *keep it* (or make it lazier, which is a design change, not a default flip); (2) arm C's UPDATE/DELETE cells, which are trap-4-dominated (0,35× / 0,14× against a rowid reference, 1,43× / 1,16× against a fair one). What is left that a session can do without an owner decision: the plan's §5 acceptance section now carries the per-cell state, so the next session should either (a) re-derive the ranges with a robust statistic (trimmed mean / MAD), which the owner flagged as the open protocol improvement and which touches every range in this worklog at once, or (b) take the dictionary-free idea to the ladders (Direct/StructRow), which decision 5 puts in scope.
+
+**1. What the auto-index set buys — measured, with the control that makes the numbers readable.** New diagnostic `--auto-index-benefit`: two databases built from *identical* data (20.000 rows through the dictionary-free array INSERT), one with the auto-index set and one with only the explicit `name` index, then 2.000 point queries per column against each:
+
+| query on | auto indexes | only explicit | ratio | rows found (on/off) |
+|---|---:|---:|---:|---:|
+| **name** (explicit index — **the control**) | 4,8 µs | 5,1 µs | **1,07×** | 2.000 / 2.000 |
+| **email** (auto index only, TEXT) | 5,4 µs | **5.044,7 µs** | **939,82×** | 2.000 / 2.000 |
+| **age** (auto index only, INTEGER, 60 distinct values) | 1.036,5 µs | **33.639,4 µs** | **32,46×** | 666.668 / 666.668 |
+| **score** (auto index only, REAL) | 4,9 µs | **36.043,8 µs** | **7.297,94×** | 2.000 / 2.000 |
+
+The control reads **1,07×** — the explicitly indexed column is unaffected by the dial, which is what makes the other three columns' movement attributable to the auto-index set rather than to the two databases differing. **Row counts agree exactly in every row of the table**, so the unindexed runs return the same rows; they just scan for them.
+
+**2. The first version of this diagnostic lied, and rule 10 caught it.** Run single-shot, the control read **0,33×** (21,3 µs with indexes, 7,0 µs without) — i.e. it claimed the *explicitly indexed* column was three times faster *without* the auto indexes, which is not a thing. The cause is the one this campaign has now recorded three times: the **first** pass measured in the process carries the cold-JIT cost, and because the probe order is fixed that cost lands entirely on whichever column runs first. With one discarded warm-up pass per configuration the control reads 1,07× and the same three columns read 940× / 32× / 7.298×. The lesson is the campaign's own, applied inside a diagnostic rather than to a published cell: **a single-shot reading with no warm-up is not a reading**, and the tell was a control that moved when it had no mechanism to move.
+
+**3. What §9 row 5 now says, on both sides.** Cost: **~30–45 % of INSERT** on the two shapes measured (sessions 42/49/50 — arm B 0,95× → 1,60× against SQLite, arm C 0,90× → 1,38–1,41×, both cases with the dial as the only variable and both of our arms moving). Benefit: **32× to 7.298×** on equality queries against the columns the user did not explicitly index. So the row's three candidate answers are now decidable: *narrowing the default* would trade a real but bounded per-row cost for an unbounded query regression for every user who filters on such a column — **not the lever**; *exempting columns* and *lazy/on-demand creation* remain open **design** options, and both now have the numbers they need. The `HashIndexAutoCreationGateTests` keep the dial askable.
+
+**4. Validation.** Core suite **1845 / 0 failed / 0 skipped**; benchmark builds with 0 errors. The diagnostic itself prints its own correctness check (row counts, both configurations) — the gate the campaign requires of every measurement, inside the diagnostic. No default changed, no `src/` change in this session (harness only), encryption and durability untouched, nothing pushed.
+
