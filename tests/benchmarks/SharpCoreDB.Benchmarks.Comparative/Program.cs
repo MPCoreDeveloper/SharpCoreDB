@@ -1403,6 +1403,7 @@ class Program
         // Session 46: same SQL-free batch dial as arm B, for the no-PK `docs` shape (arm C).
         bool useBatchUpdate = batchDml ?? BatchDmlDial("UPDATE");
         bool useBatchDelete = batchDml ?? BatchDmlDial("DELETE");
+        bool useArrayInsert = batchDml ?? BatchDmlDial("INSERT");
         var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
@@ -1442,24 +1443,39 @@ class Program
                     $"(config FixedWidthRecordLayout={config.FixedWidthRecordLayout}, AutoFixedWidthRecords={config.AutoFixedWidthRecords})");
             }
 
-            // INSERT (batched via InsertBatch API for optimal performance)
+            // INSERT (batched via InsertBatch API for optimal performance). Session 48: the dial/triple flag can
+            // route this phase through the dictionary-free `object[]` + column-order API; see the fair arm.
             var sw = Stopwatch.StartNew();
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
-                var rows = new List<Dictionary<string, object>>(end - batch);
-                for (int i = batch; i < end; i++)
+                if (useArrayInsert)
                 {
-                    rows.Add(new Dictionary<string, object>
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
                     {
-                        ["name"] = $"User{i}",
-                        [EmailColumn] = $"user{i}@test.com",
-                        ["age"] = 20 + i % 60,
-                        [ScoreColumn] = i * 0.1,
-                        ["data"] = $"payload-{i}"
-                    });
+                        arrayRows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", arrayRows, DocsColumns);
                 }
-                db.InsertBatch("docs", rows);
+                else
+                {
+                    var rows = new List<Dictionary<string, object>>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add(new Dictionary<string, object>
+                        {
+                            ["name"] = $"User{i}",
+                            [EmailColumn] = $"user{i}@test.com",
+                            ["age"] = 20 + i % 60,
+                            [ScoreColumn] = i * 0.1,
+                            ["data"] = $"payload-{i}"
+                        });
+                    }
+
+                    db.InsertBatch("docs", rows);
+                }
             }
             db.Flush();
             sw.Stop();
@@ -1992,6 +2008,16 @@ class Program
     /// SQL-free batch API is given as a key column, so both shapes locate through the same index.
     /// </summary>
     const string FairNiKeyColumn = "name";
+
+    /// <summary>
+    /// The user-facing column order the dictionary-free INSERT arms pass with each row (session 48). The
+    /// internal <c>_rowid</c> column is deliberately absent — the engine re-maps this order onto the table's
+    /// positions, which is exactly what the SQL batch parser's fast path does.
+    /// </summary>
+    static readonly string[] DocsColumns = ["name", "email", "age", "score", "data"];
+
+    /// <inheritdoc cref="DocsColumns"/>
+    static readonly string[] PkColumns = ["id", "name", "email", "age", "score", "data"];
 
     /// <summary>
     /// The columns the fair arm indexes on the SQLite side. SharpCoreDB's Columnar <c>CREATE TABLE</c>
@@ -2676,8 +2702,9 @@ class Program
         Console.WriteLine("    batch/SQLite  — the mission cell, with the SQL-free API in place.");
         Console.WriteLine("    SQL/SQLite    — the control: this run's reproduction of the published SQL shape.");
         Console.WriteLine("    batch/SQL     — the attribution: what the API change alone is worth on this engine.");
-        Console.WriteLine("  INSERT and READ are the same code in arms A and B, so their batch/SQL column is a");
-        Console.WriteLine("  sanity control on the protocol itself; a straddling range means re-run, not rounding.");
+        Console.WriteLine("  READ is the same code in arms A and B, so its batch/SQL column is the protocol's own resolution.");
+        Console.WriteLine("  INSERT differs in the input shape too (dictionary-free object[] vs dictionaries), so its column");
+        Console.WriteLine("  is that API's own measurement; a straddling range means re-run, not rounding.");
 
         var results = new Dictionary<string, BenchmarkResult>
         {
@@ -2777,8 +2804,10 @@ class Program
         ReportBatchComparisonCell("DELETE", sqlRuns, batchRuns, referenceRuns, static x => x.DeleteOpsPerSec);
 
         Console.WriteLine();
-        Console.WriteLine("  INSERT and READ are the same code in arms A and B, so their batch/SQL column is the");
-        Console.WriteLine("  protocol's own resolution; a straddling range means re-run, not rounding.");
+        Console.WriteLine("  READ is the same code in arms A and B, so its batch/SQL column is the protocol's own resolution.");
+        Console.WriteLine("  INSERT differs in the input shape only when the dictionary-free array API drives it, so that");
+        Console.WriteLine("  column is that API's own measurement (both arms still insert through InsertBatch, no SQL text).");
+        Console.WriteLine("  A straddling range means re-run, not rounding.");
 
         var results = new Dictionary<string, BenchmarkResult>
         {
@@ -3012,6 +3041,7 @@ class Program
     {
         bool useBatchUpdate = batchUpdate ?? FairBatchDml("UPDATE");
         bool useBatchDelete = batchDelete ?? FairBatchDml("DELETE");
+        bool useArrayInsert = batchUpdate ?? FairBatchDml("INSERT");
         var dbPath = Path.Combine(BenchTempDirectory(), $"bench-fairni-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
@@ -3070,25 +3100,44 @@ class Program
                     + $" completions={fairNiTable.AutoCompactionCompletions}");
             }
 
-            // INSERT (batched, same batch size as every other arm)
+            // INSERT (batched, same batch size as every other arm). Session 48: the dial/triple flag can route this
+            // phase through the dictionary-free `object[]` + column-order API, which is the engine path the SQL
+            // batch parser already used and the public dictionary overload never reached. Row construction stays
+            // inside the window on purpose: building the input IS part of the API shape a caller pays for, and
+            // SQLite's side builds its own input per row in the same window.
             var sw = Stopwatch.StartNew();
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
-                var rows = new List<Dictionary<string, object>>(end - batch);
-                for (int i = batch; i < end; i++)
+                if (useArrayInsert)
                 {
-                    rows.Add(new Dictionary<string, object>
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
                     {
-                        ["name"] = $"User{i}",
-                        [EmailColumn] = $"user{i}@test.com",
-                        ["age"] = 20 + i % 60,
-                        [ScoreColumn] = i * 0.1,
-                        ["data"] = $"payload-{i}"
-                    });
+                        arrayRows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch(FairNiTable, arrayRows, FairNiAllColumns);
                 }
-                db.InsertBatch(FairNiTable, rows);
+                else
+                {
+                    var rows = new List<Dictionary<string, object>>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add(new Dictionary<string, object>
+                        {
+                            ["name"] = $"User{i}",
+                            [EmailColumn] = $"user{i}@test.com",
+                            ["age"] = 20 + i % 60,
+                            [ScoreColumn] = i * 0.1,
+                            ["data"] = $"payload-{i}"
+                        });
+                    }
+
+                    db.InsertBatch(FairNiTable, rows);
+                }
             }
+
             db.Flush();
             sw.Stop();
             result.InsertTime = sw.Elapsed.TotalSeconds;
@@ -3397,6 +3446,7 @@ class Program
         // claim; the fair arm's dial can split them (SHARPCOREDB_BATCH_DML=update).
         bool useBatchUpdate = batchDml ?? BatchDmlDial("UPDATE");
         bool useBatchDelete = batchDml ?? BatchDmlDial("DELETE");
+        bool useArrayInsert = batchDml ?? BatchDmlDial("INSERT");
         var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
@@ -3468,6 +3518,25 @@ class Program
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
+                long pkAllocBefore = GC.GetTotalAllocatedBytes(precise: false);
+                int pkGen0Before = GC.CollectionCount(0);
+                if (useArrayInsert)
+                {
+                    // Session 48: the dictionary-free `object[]` + column-order shape, measured with the same
+                    // engine-scoped allocation counters (read around the InsertBatch call, so the harness's own
+                    // row objects stay excluded) so the two shapes' engine cost is comparable.
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        arrayRows.Add([i + 1, $"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", arrayRows, PkColumns);
+                    pkEngineAlloc += GC.GetTotalAllocatedBytes(precise: false) - pkAllocBefore;
+                    pkEngineGen0 += GC.CollectionCount(0) - pkGen0Before;
+                    continue;
+                }
+
                 var rows = new List<Dictionary<string, object>>(end - batch);
                 for (int i = batch; i < end; i++)
                 {
@@ -3482,8 +3551,6 @@ class Program
                     });
                 }
 
-                long pkAllocBefore = GC.GetTotalAllocatedBytes(precise: false);
-                int pkGen0Before = GC.CollectionCount(0);
                 db.InsertBatch("docs", rows);
                 pkEngineAlloc += GC.GetTotalAllocatedBytes(precise: false) - pkAllocBefore;
                 pkEngineGen0 += GC.CollectionCount(0) - pkGen0Before;
@@ -3496,6 +3563,7 @@ class Program
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
 
             var pkFiles = TableFileSizes(db);
+            Console.WriteLine($"    [diag] pk INSERT shape: {(useArrayInsert ? "dictionary-free object[] columns=" + string.Join(",", PkColumns) : "List<Dictionary<string,object>>")}");
             Console.WriteLine($"    [diag] pk INSERT fixedWidth={fixedWidth} noEncrypt={noEncrypt} "
                 + $"atRest={config.EnableAtRestRecordEncryption} IsFixedWidthRecords={pkFixedWidth} inline={pkInline}");
             Console.WriteLine($"    [diag] pk INSERT engine allocated {pkEngineAlloc:N0} B "

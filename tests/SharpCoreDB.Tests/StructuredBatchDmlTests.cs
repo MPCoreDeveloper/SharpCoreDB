@@ -9,6 +9,7 @@ using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using Xunit;
@@ -133,6 +134,99 @@ public sealed class StructuredBatchDmlTests : IDisposable
             Assert.Equal(4, db.ExecuteQuery($"SELECT name FROM {Table}").Count);
             Assert.Empty(db.ExecuteQuery($"SELECT name FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u4" }));
         }
+    }
+
+    [Fact]
+    public void InsertBatchWithColumnOrder_WritesEveryColumnInTheGivenOrder()
+    {
+        // The dictionary-free overload's whole contract is the column ORDER: values arrive positionally, so a
+        // mis-mapping would silently write a name into the score column. This reads every column back.
+        const string Table = "t";
+        using var db = CreateDb();
+        db.ExecuteSQL($"CREATE TABLE {Table} (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+
+        List<object[]> rows =
+        [
+            ["u1", "u1@test.com", 21, 1.5, "payload-1"],
+            ["u2", "u2@test.com", 22, 2.5, "payload-2"],
+        ];
+        string[] columns = ["name", "email", "age", "score", "data"];
+
+        var positions = db.InsertBatch(Table, rows, columns);
+        Assert.Equal(2, positions.Length);
+        db.Flush();
+
+        var read = db.ExecuteQuery($"SELECT * FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "u2" });
+        Assert.Single(read);
+        Assert.Equal("u2@test.com", read[0]["email"]);
+        Assert.Equal(22, Convert.ToInt32(read[0]["age"], CultureInfo.InvariantCulture));
+        Assert.Equal(2.5, Convert.ToDouble(read[0]["score"], CultureInfo.InvariantCulture));
+        Assert.Equal("payload-2", read[0]["data"]);
+    }
+
+    [Fact]
+    public void InsertBatchWithColumnOrder_OnPkTable_WritesKeysAndSurvivesReopen()
+    {
+        const string Table = "docs";
+        using (var db = CreateDb())
+        {
+            db.ExecuteSQL($"CREATE TABLE {Table} (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+
+            List<object[]> rows =
+            [
+                [1, "u1", 1.0],
+                [2, "u2", 2.0],
+                [3, "u3", 3.0],
+            ];
+            string[] columns = ["id", "name", "score"];
+
+            Assert.Equal(3, db.InsertBatch(Table, rows, columns).Length);
+            db.Flush();
+        }
+
+        using var reopened = CreateDb();
+        var rowsBack = reopened.ExecuteQuery($"SELECT name, score FROM {Table} ORDER BY id");
+        Assert.Equal(3, rowsBack.Count);
+        Assert.Equal("u3", rowsBack[2]["name"]);
+        Assert.Equal(3.0, Convert.ToDouble(rowsBack[2]["score"], CultureInfo.InvariantCulture));
+    }
+
+    [Fact]
+    public void InsertBatchWithColumnOrder_OmittedColumns_MatchTheDictionaryOverloadExactly()
+    {
+        // Parity with the dictionary overload, asserted by *comparing the two overloads* rather than by assuming
+        // what the default should be: the engine's default for an absent TEXT column is the empty string (not
+        // NULL), and the array overload must reach that same value through the same defaulting pass.
+        const string Table = "t";
+        using var db = CreateDb();
+        db.ExecuteSQL($"CREATE TABLE {Table} (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL)");
+
+        string[] columns = ["name", "score"];
+
+        List<object[]> arrayRows = [["array-row", 7.5]];
+        Assert.Single(db.InsertBatch(Table, arrayRows, columns));
+
+        Assert.Single(db.InsertBatch(Table, [new Dictionary<string, object>
+        {
+            ["name"] = "dict-row",
+            ["score"] = 8.5,
+        }]));
+
+        db.Flush();
+
+        var arrayBack = db.ExecuteQuery($"SELECT * FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "array-row" });
+        var dictBack = db.ExecuteQuery($"SELECT * FROM {Table} WHERE name = @name", new Dictionary<string, object?> { ["@name"] = "dict-row" });
+        Assert.Single(arrayBack);
+        Assert.Single(dictBack);
+
+        foreach (var column in new[] { "email", "age" })
+        {
+            Assert.Equal(
+                Convert.ToString(dictBack[0][column], CultureInfo.InvariantCulture) ?? "<null>",
+                Convert.ToString(arrayBack[0][column], CultureInfo.InvariantCulture) ?? "<null>");
+        }
+
+        Assert.Equal(7.5, Convert.ToDouble(arrayBack[0]["score"], CultureInfo.InvariantCulture));
     }
 
     private static Table GetTable(Database db, string table)

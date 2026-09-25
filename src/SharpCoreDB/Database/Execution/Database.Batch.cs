@@ -585,6 +585,65 @@ public partial class Database
         }
     }
 
+    /// <summary>
+    /// ✅ SQL-free, <b>dictionary-free</b> batch INSERT with an explicit column order — the public form of the
+    /// engine path behind <c>ExecuteBatchSQL</c>'s INSERT fast path. Each row is a column-ordered
+    /// <c>object[]</c> aligned with <paramref name="columns"/>, so no per-row <c>Dictionary</c> is allocated and
+    /// no column name is looked up: the engine re-maps the user-facing order onto the table's positions, applies
+    /// defaults / AUTO values and validates exactly as the dictionary overload does.
+    /// <para>
+    /// Why it exists: <c>Database.InsertBatch(table, List&lt;Dictionary&lt;string, object&gt;&gt;)</c> builds one
+    /// dictionary per row and the engine then does one name-based lookup per column per row, while the internal
+    /// path the SQL batch parser uses (<c>Table.InsertBatch(object[][], columnOrder)</c>) is "explicitly
+    /// dictionary-free" — so the fastest INSERT the engine has was not reachable from the public API.
+    /// </para>
+    /// <para>
+    /// New optional API — the dictionary overload and the SQL path are untouched. See
+    /// docs/performance/WORKLOG.md session 48 for the measurement this exists for.
+    /// </para>
+    /// </summary>
+    /// <param name="tableName">The table to insert into.</param>
+    /// <param name="rows">Column-ordered rows, each aligned with <paramref name="columns"/>.</param>
+    /// <param name="columns">The user-facing column order (the internal <c>_rowid</c> column must not be listed).</param>
+    /// <returns>Array of storage positions for inserted rows.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the table doesn't exist or the database is readonly.</exception>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    public long[] InsertBatch(string tableName, IReadOnlyList<object[]> rows, IReadOnlyList<string> columns)
+    {
+        ArgumentNullException.ThrowIfNull(tableName);
+        ArgumentNullException.ThrowIfNull(rows);
+        ArgumentNullException.ThrowIfNull(columns);
+
+        if (rows.Count == 0) return [];
+        if (isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
+        if (!tables.TryGetValue(tableName, out var table))
+            throw new InvalidOperationException($"Table '{tableName}' does not exist");
+        if (table is not DataStructures.Table concreteTable)
+            throw new NotSupportedException(
+                $"The dictionary-free batch INSERT path requires a SharpCoreDB table; '{tableName}' is a {table.GetType().Name}.");
+
+        // The engine's fast path takes arrays; a caller that already holds them is not copied.
+        object[][] rowArrays = rows as object[][] ?? [.. rows];
+        List<string> columnOrder = columns as List<string> ?? [.. columns];
+
+        lock (_walLock)
+        {
+            storage.BeginTransaction();
+
+            try
+            {
+                var positions = concreteTable.InsertBatch(rowArrays, columnOrder);
+                storage.CommitSync();
+                return positions;
+            }
+            catch
+            {
+                storage.Rollback();
+                throw;
+            }
+        }
+    }
+
     #endregion
 
     /// <summary>

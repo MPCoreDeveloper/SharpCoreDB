@@ -3860,6 +3860,35 @@ On the no-PK shape the SQL-free path is **1,35× ahead on UPDATE with a range th
 **2. A second lever tried and reverted: the no-PK delete's per-key row decode.** Reading `DeleteRecordsCore` shows its row payloads are consumed in exactly two situations — the non-deferred hash-index cleanup and the PK-index cleanup — while the product default defers index maintenance. On a no-PK table that means both the SQL and the typed batch DELETE decode one row per key for a field no code path reads. Implemented (positions only, one shared empty row), measured, and **reverted**:
 
 | cell | before (session 46) | after (positions only) |
+
+---
+
+### 2026-09-25 (session 48) — the dictionary-free INSERT API lands and is **measured**: **1,10×** arm B and **1,25×** arm C over the dictionary overload, and both INSERT mission cells move toward parity (**0,87× → 0,95×**, **0,71× → 0,90×**)
+
+- Session: 1 of 1 for the array-INSERT item (session 47's `NEXT:`)
+- Command(s): `--pk-default-batch` ×2 (1-rep smoke + 5 reps) · `--docs-batch` ×2 (same) · structured-DML tests ×3 · core suite ×1
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp` · `SHARPCOREDB_WARMUP_REPS=8` · `SHARPCOREDB_BENCH_REPS=5` · no `SHARPCOREDB_BATCH_DML` set (the triple modes drive both shapes explicitly) · SQLite at its built-in reference pragma set
+- Verdict: **KEPT** — a public dictionary-free INSERT overload, a reproducible 1,10–1,25× over the dictionary overload, both mission cells moved with tight ranges, and every gate green in every rep
+- Commit: `perf(insert)`: the dictionary-free column-ordered INSERT the engine already had, now reachable and measured
+- NEXT: **the auto-index cost on INSERT, measured with an existing dial** — §9 row 5 (the per-column auto hash indexes) has evidence on the UPDATE/DELETE side (session 42: the lever is refuted *there*) but **no INSERT number at all**, while §9 row 5 asks exactly for that comparison. `SHARPCOREDB_HASH_INDEXES=0` gates auto-creation (session 42) and arm B/C keep their explicit index on `name`, so one run per arm gives the INSERT/UPDATE/DELETE cost **and** the READ benefit of the auto-index set. Measured-or-reverted; if INSERT does not move, row 5 can be closed with evidence instead of an owner decision.
+
+**1. What was built.** `Database.InsertBatch(string tableName, IReadOnlyList<object[]> rows, IReadOnlyList<string> columns)` — the public form of the engine path the SQL batch parser's INSERT fast path already used (`Table.InsertBatch(object[][], columnOrder)`, "explicitly dictionary-free", decision 8's inline-capacity win went through it). Until this session the fastest INSERT the engine had was **not reachable from the public API**: every harness arm inserted through the dictionary overload, which allocates one dictionary per row *and* makes the engine do one name-based lookup per column per row. The overload re-maps the user-facing column order onto the table's positions, applies defaults / AUTO values and validates through the same `NormalizeInsertRow` / `NormalizeColumnValue` pass the dictionary path uses.
+
+**2. The measurement, two arms, three arms per rep, 5 reps ×8 warm-ups.** The two SharpCoreDB arms differ in the INSERT phase **only in the input shape** (both call `db.InsertBatch`; there is no SQL text on either side), so the batch/SQL column here is a clean measurement of the dictionary-free lever — unlike UPDATE/DELETE, where the same column also contains the dispatcher's removal.
+
+| arm | INSERT batch/SQL | INSERT vs SQLite (SQL → arrays) | UPDATE batch/SQL | DELETE batch/SQL |
+|---|---:|---:|---:|---:|
+| **B** — pure default (encrypted, PK) | **1,10×** (1,05–1,18) | 0,87× (0,82–0,91) → **0,95×** (0,88–1,02) | 1,68× (1,50–2,03) | 2,02× (1,63–2,71) |
+| **C** — default no-PK `docs` job | **1,25×** (1,19–1,34) | 0,71× (0,69–0,75) → **0,90×** (0,87–0,96) | 1,43× (0,69–2,68) | 1,16× (1,10–1,26) |
+
+Both INSERT attributions clear 1,00× with tight ranges, and the READ column reads ~0,95–1,00× in both runs (same code in the two arms) — so the protocol's own resolution is the usual ~±10–20 %, and the INSERT movement is above it. **The two mission cells move toward parity but do not reach it**: arm B 0,95× (0,88–1,02, i.e. straddling 1,00× at the top) and arm C 0,90× (0,87–0,96, still short). Archives: `results/pk_default_batch_…`, `results/docs_batch_…` (this session's files).
+
+**3. The win is work, not memory — and the API's own allocation said so.** The PK arm prints engine-scoped allocation per row for both shapes: **2.304 B/row with dictionaries against 2.313–2.342 B/row with arrays** — unchanged, within noise. So what the array shape removes is the per-column name-based lookup inside the engine plus the caller's far smaller row objects, not engine allocation; the data file and arena are byte-identical (14.400.008 B / 0 B) in both shapes, which is also the check that the two paths really write the same record layout.
+
+**4. One correction to my own assumption, caught by a test.** The first version of the omitted-column test asserted that a column absent from the column order comes back **NULL**. It does not: `GetDefaultValue(DataType.String)` is `string.Empty`, and **both** overloads fill an absent TEXT column with `""` (dictionary path: `Table.CRUD.cs`'s default pass; array path: `NormalizeColumnValue` → the same helper). The test now asserts **parity between the two overloads** rather than a guessed default — which is the assertion that would actually catch a divergence. Same lesson as session 46's `fastPatch` gate: the code, not the expectation, is the reference.
+
+**5. Validation.** Core suite **1842 / 0 failed / 0 skipped** (1839 + 3 array-INSERT tests: column-order correctness on a 5-column table, PK table + reopen, dictionary-overload parity for omitted columns). The PK arm's READ gate ran on **both** shapes and passed (`0 empty · 0 unexpected row count · 0 wrong value`) — that is the array INSERT's correctness gate, since the READ phase reads back by `id`. Every UPDATE/DELETE gate in every rep read 0/0. No default changed, no encryption or durability touched, nothing pushed.
+
 |---|---|---|
 | arm C DELETE batch/SQL | 1,11× (0,67–1,15) | 1,16× (1,10–1,31) |
 | arm C DELETE vs SQLite | 0,14× (0,09–0,18) | 0,14× (0,14–0,20) |

@@ -553,7 +553,25 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > dial is wired to the fair arm only, and no default-posture cell moves. Archives:
 > `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
 > `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
-> ⛔ **Two micro-levers refuted the same way (2026-09-25, session 47), both before they could be kept:**
+> ✅ **The dictionary-free INSERT overload lands and is measured (2026-09-25, session 48).** `Database.InsertBatch(table, IReadOnlyList<object[]> rows, IReadOnlyList<string> columns)`
+> exposes the engine path the SQL batch parser already used (`Table.InsertBatch(object[][], columnOrder)`,
+> "explicitly dictionary-free") — until now the fastest INSERT the engine had was unreachable from the public
+> API. Two arms, three arms per rep, 5 reps × 8 warm-ups; the two SharpCoreDB arms differ in the INSERT phase
+> **only** in the input shape, so the attribution column is a clean measurement of the lever:
+>
+> | arm | INSERT batch/SQL | INSERT vs SQLite (dictionaries → arrays) | UPDATE batch/SQL | DELETE batch/SQL |
+> |---|---:|---:|---:|---:|
+> | B — pure default (encrypted, PK) | **1,10×** (1,05–1,18) | 0,87× (0,82–0,91) → **0,95×** (0,88–1,02) | 1,68× (1,50–2,03) | 2,02× (1,63–2,71) |
+> | C — default no-PK `docs` job | **1,25×** (1,19–1,34) | 0,71× (0,69–0,75) → **0,90×** (0,87–0,96) | 1,43× (0,69–2,68) | 1,16× (1,10–1,26) |
+>
+> Both INSERT attributions clear 1,00× with tight ranges; both **mission** cells move toward parity but do not
+> reach it (arm B 0,95×, arm C 0,90×). The engine's own allocation is **unchanged** (2.304 B/row vs
+> 2.313–2.342 B/row, data file and arena byte-identical), so the win is the per-column name lookup plus the
+> caller's smaller row objects — work, not memory. Decision 4's obligation (INSERT must *beat* SQLite) is now
+> ~5–10 % short on arm B and ~10 % short on arm C, with the remaining residue attributed to index maintenance
+> (§9 row 5) and payload encoding.
+
+
 > (1) **"make the op shape dictionary-free"** — measured with `--batch-dml-shape-cost` as a **ceiling** first:
 > the dictionary read pattern costs 47,5 ns/op against 7,7 ns/op for a shared column list + `object[]`, i.e.
 > **39,8 ns/op = 1,1–3,0 %** of the five cells it would touch, inside a protocol whose own resolution is ±20 %;
