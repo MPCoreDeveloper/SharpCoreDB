@@ -801,6 +801,25 @@ does not replace it.
 8. **A ruled-out explanation is worth recording.** Thermal throttling was the first hypothesis for the
    3,9× spread and it is **refuted by measurement** (see rule 7). Do not re-raise it without new data.
 
+9. **Read the gate's own noise, not its conclusion.** The §2.4 gate discards **no warm-up rep** (unlike
+   every other mode in the harness, which starts with `SHARPCOREDB_WARMUP_REPS` rep(s), default 3), so a
+   cold first rep lands inside the max-rep-spread statistic that decides its verdict (measured: a
+   monotone 58.653 → 142.819 → 174.354 ops/sec default-arm UPDATE ramp *was* the printed 2,97× worst
+   spread — worklog session 52). `INCONCLUSIVE` therefore means "this run cannot arbitrate", never
+   "the machine is loaded": the gate now prints each arm's per-rep sequence and classifies it
+   `cold-start` / `load` / `mixed`, and that shape — not the verdict word — is what a session records.
+   Changing the protocol to consume a warm-up rep requires a quiet-machine `--write-baseline`, so it is
+   an owner decision (§9 row 7), not a session's edit.
+
+10. **Capture the suite's full output, and do not read `Time:` as a duration.** A suite run piped through
+   a summary filter destroys the only evidence a failure produces — session 52 lost one red run's test
+   name and message that way, which is why the standing form is now
+   `… -filterVSTest '<filters>' -result-trx <path> *> <file>`. Four clean runs on that same tree report
+   `Time` **61,6–64,4 s against 62–65 s of wall**, so `Time` tracks wall normally and not always: the one
+   red run reported **3866,074 s** while its captured log spanned ~5 minutes, and no test-level retry
+   policy exists to explain it (`maxParallelThreads: 0`, `parallelizeTestCollections: true`). One
+   un-named red run is a flake to be re-run and named, never explained away.
+
 ---
 
 ## 7. Safety rails and canaries
@@ -825,7 +844,10 @@ because S3 probes exactly the layout whose correctness those two classes pin (th
 distinction and the file-growth floor).
 
 **Every commit:** build clean + core suite green + `--gate` pass, with a documented re-run if the gate
-fails.
+fails. The gate's verdicts on this machine are frequently `INCONCLUSIVE` (exit 2), which is **not a
+failure and not a pass**: it means the run's own reps disagreed by more than 2,50×, so the run cannot
+arbitrate. Record it as `INCONCLUSIVE` with the measured spread, re-run once, and never read it as green
+(§9 row 7 names the mechanism now known to contribute to it).
 
 ---
 
@@ -880,6 +902,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
 | 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row.<br>**✅ MEASURED BOTH SIDES (sessions 42/49/50/51).** *Cost:* the set is ~**30–45 % of INSERT** — with `SHARPCOREDB_HASH_INDEXES=0` the INSERT cell reads **0,95× → 1,60× (1,38–1,78)** on arm B and **0,90× → 1,38× / 1,41×** on arm C, reproduced in two runs per arm, with the dial as the only variable (both of our arms move, SQLite's reference does not). *Benefit:* without it, equality queries on columns the user did not explicitly index degrade **32×–7.298×** (`--auto-index-benefit`, 20.000 rows: `email` **940×**, `age` **32×**, `score` **7.298×**; the explicitly indexed control reads **1,07×** and the row counts agree exactly). **So "narrow the default" is the wrong lever** — it trades a bounded per-row cost for up to three orders of magnitude on a class of user queries. Lazy/on-demand creation, or a rule by column class, are the live options and both now have their numbers. `HashIndexAutoCreationGateTests` pins the gate so the experiment stays askable. |
 | 6 | **Install the Visual Studio C++ workload to unblock NativeAOT (S4).** `...\VC\Tools\MSVC\14.51.36231\` has `bin` and `lib\onecore` only — no `include`, no `lib\x64`, no `msvcrt.lib` — and `vcvarsall.bat` is absent, so `link.exe` cannot link. | S4's verdict (worklog session 24), with the directory listing and the `vswhere -requires` result | **VS Installer → Modify → Desktop development for C++** (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`). After that, plain `dotnet publish -r win-x64 -p:PublishAot=true` needs no override. Until then S4 stays `BLOCKED` and its hypothesis is *untested*, not refuted. |
+| 7 | **May the gate discard a warm-up rep?** `RunRegressionGate` runs its 3 measured reps and nothing else, while every other mode in the same harness discards `SHARPCOREDB_WARMUP_REPS` rep(s) first (default 3); the verdict is the max rep spread against 2,50×, so the cold first rep sits inside the statistic that decides it. Measured (session 52): the default arm's UPDATE ran **58.653 → 142.819 → 174.354 ops/sec** across the three reps — a monotone 2,97× rise that *was* the printed worst spread, and the shape of a cold process rather than of load. This is one non-load mechanism for the ≥ 6 `INCONCLUSIVE` verdicts recorded in sessions 19–32, four of them straddling the limit with docs-only commits behind them. | Session 52 (worklog): four measured runs (3,43× / 2,97× / 3,24× / 3,11×), the code path at `Program.cs:4741-4846`, and the warm-up call sites at `:2388`, `:2511`, `:2664` | **Keep the current protocol until re-baselined.** Adopting the warm-up rep changes the §2 protocol the committed `dual-mode-baseline.json` was recorded under, so it requires `--write-baseline` on a quiet machine (blocked here: Windows Search needs elevation). Doing it without re-recording would make current runs look faster than a cold-rep-containing baseline — i.e. it would silently *loosen* the guard. Meanwhile the gate prints each arm's per-rep sequence and classifies it (`cold-start` / `load` / `mixed`), so every future verdict states the shape it can see instead of asserting load; thresholds, medians and exit codes are unchanged. |
 
 ---
 

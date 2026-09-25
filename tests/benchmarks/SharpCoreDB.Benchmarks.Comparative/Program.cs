@@ -4794,19 +4794,55 @@ class Program
 
         // §2 requires min–median–max, never a single run — and a run whose own reps disagree wildly
         // cannot support any verdict, however it compares. So the spread is measured and reported first.
-        double worstSpread = Math.Max(MaxSpread(raw), MaxSpread(deflt));
+        double rawSpread = MaxSpread(raw);
+        double defltSpread = MaxSpread(deflt);
+        double worstSpread = Math.Max(rawSpread, defltSpread);
+        string rawShape = ArmShape(raw);
+        string defltShape = ArmShape(deflt);
+        string worstShape = rawSpread >= defltSpread ? rawShape : defltShape;
         Console.WriteLine();
         Console.WriteLine($"  rep spread (max ÷ min across the {reps} reps — the run's own noise):");
         Console.WriteLine($"    raw     {SpreadLine(raw)}");
         Console.WriteLine($"    default {SpreadLine(deflt)}");
         Console.WriteLine($"    worst   {worstSpread:F2}x   (a quiet machine sits near 1.0)");
 
+        // Which is it: warm-up, load, or both at once? This matters because the §2 protocol here has NO
+        // discarded warm-up rep, unlike every other mode in this harness (they start with
+        // ResolveWarmupReps() rep(s), default 3), so the first rep measured in the process is cold by
+        // construction and its cost lands inside the very statistic that decides this verdict. Measured,
+        // session 52: the default arm's UPDATE read 58.653 → 142.819 → 174.354 ops/sec across three reps
+        // — a monotone 2,97× rise carrying the whole of the printed worst spread, i.e. the signature of
+        // an unwarmed process rather than of load. So the numbers are printed in rep order, and the
+        // verdict below reports the shape it can actually see (ArmShape asks "was rep 1 the slowest?")
+        // instead of asserting load. This adds no threshold, no statistic and no exit code.
+        Console.WriteLine();
+        Console.WriteLine("  per-rep ops/sec, in rep order (is rep 1 the slowest? then this is a cold process, not load):");
+        Console.WriteLine($"    raw     {SequenceLine(raw)}");
+        Console.WriteLine($"    default {SequenceLine(deflt)}");
+        Console.WriteLine($"    shape   raw {rawShape} · default {defltShape}");
+
         if (worstSpread > GateNoisySpread)
         {
             Console.WriteLine();
             Console.WriteLine($"  GATE INCONCLUSIVE (exit {GateExitInconclusive}): the reps disagree by {worstSpread:F2}x, over the");
-            Console.WriteLine($"  {GateNoisySpread:F2}x limit, so this run measures the machine's load and not the code.");
-            Console.WriteLine("  Nothing is concluded. Re-run on a quiet machine.");
+            Console.WriteLine($"  {GateNoisySpread:F2}x limit, so this run supports no verdict.");
+            switch (worstShape)
+            {
+                case "cold-start":
+                    Console.WriteLine("  Every disagreeing metric is slowest at rep 1, which is the signature of a cold process — and this");
+                    Console.WriteLine("  gate discards no warm-up rep — so the spread is warm-up artefact rather than load. Warm-up reps");
+                    Console.WriteLine("  or a re-run would settle it; the number alone never will.");
+                    break;
+                case "mixed":
+                    Console.WriteLine("  Some disagreeing metrics are slowest at rep 1 (warm-up) and others are not (load), so this run");
+                    Console.WriteLine("  carries both and separates neither. No verdict. Re-run on a quiet machine.");
+                    break;
+                default:
+                    Console.WriteLine("  No disagreeing metric is slowest at rep 1, which is the load signature this limit exists to");
+                    Console.WriteLine("  catch. Nothing is concluded. Re-run on a quiet machine.");
+                    break;
+            }
+
             return GateExitInconclusive;
         }
 
@@ -4929,6 +4965,74 @@ class Program
         $"I {Spread(runs, static r => r.InsertOpsPerSec):F2}x   R {Spread(runs, static r => r.ReadOpsPerSec):F2}x   " +
         $"U {Spread(runs, static r => r.UpdateOpsPerSec):F2}x   D {Spread(runs, static r => r.DeleteOpsPerSec):F2}x";
 
+    /// <summary>One arm's four per-rep sequences, in rep order, so a ramp can be told from a scatter.</summary>
+    static string SequenceLine(IReadOnlyList<BenchmarkResult> runs) =>
+        $"I {SequenceText(runs, static r => r.InsertOpsPerSec)}   R {SequenceText(runs, static r => r.ReadOpsPerSec)}   " +
+        $"U {SequenceText(runs, static r => r.UpdateOpsPerSec)}   D {SequenceText(runs, static r => r.DeleteOpsPerSec)}";
+
+    /// <summary>Per-rep values of one metric, in the order they were measured, zero-padded out.</summary>
+    static string SequenceText(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        string.Join(' ', runs.Select(pick).Select(static v => v.ToString("N0")).ToArray());
+
+    static int[] Sequence(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        runs.Select(pick).ToArray();
+
+    /// <summary>
+    /// Classifies an arm's rep-by-rep behaviour by asking the one question the spread cannot answer:
+    /// <b>is the first measured rep the slowest one?</b> That is the signature of a cold process, and it
+    /// is the mechanism this gate can actually produce, because — unlike every other mode in this harness
+    /// (they start with <see cref="ResolveWarmupReps"/> rep(s), default 3) — it discards no warm-up rep.
+    /// <list type="bullet">
+    /// <item><c>cold-start</c> — every disagreeing metric bottoms out at rep 1: the disagreement is
+    /// explained by warm-up, whether or not the rise is strictly monotone.</item>
+    /// <item><c>load</c> — no disagreeing metric bottoms out at rep 1: the load signature the limit is
+    /// there to catch.</item>
+    /// <item><c>mixed</c> — some metrics do and some do not, i.e. the run carries both and separates
+    /// neither, which is the case a single spread number hides.</item>
+    /// <item><c>flat</c> — every metric agreed across the reps.</item>
+    /// </list>
+    /// Descriptive only: it changes no threshold, no median and no exit code.
+    /// </summary>
+    static string ArmShape(IReadOnlyList<BenchmarkResult> runs)
+    {
+        Func<BenchmarkResult, int>[] metrics =
+        [
+            static r => r.InsertOpsPerSec,
+            static r => r.ReadOpsPerSec,
+            static r => r.UpdateOpsPerSec,
+            static r => r.DeleteOpsPerSec,
+        ];
+
+        int disagreeing = 0;
+        int coldFirst = 0;
+        foreach (var pick in metrics)
+        {
+            int[] measured = Sequence(runs, pick).Where(static v => v > 0).ToArray();
+            if (measured.Length < 2 || Spread(measured) <= 1.0)
+            {
+                continue;   // every rep agreed on this metric, so there is nothing to classify
+            }
+
+            disagreeing++;
+            if (measured[0] == measured.Min())
+            {
+                coldFirst++;
+            }
+        }
+
+        if (disagreeing == 0)
+        {
+            return "flat";
+        }
+
+        if (coldFirst == disagreeing)
+        {
+            return "cold-start";
+        }
+
+        return coldFirst == 0 ? "load" : "mixed";
+    }
+
     /// <summary>The worst of one arm's four per-metric rep spreads.</summary>
     static double MaxSpread(IReadOnlyList<BenchmarkResult> runs) =>
         Math.Max(
@@ -4936,10 +5040,14 @@ class Program
             Math.Max(Spread(runs, static r => r.UpdateOpsPerSec), Spread(runs, static r => r.DeleteOpsPerSec)));
 
     /// <summary>max ÷ min for one metric across an arm's reps; 1.0 when there is nothing to compare.</summary>
-    static double Spread(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick)
+    static double Spread(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        Spread(Sequence(runs, pick));
+
+    /// <summary>max ÷ min across a sequence of per-rep values; 1.0 when there is nothing to compare.</summary>
+    static double Spread(IReadOnlyList<int> values)
     {
-        var values = runs.Select(pick).Where(static v => v > 0).ToArray();
-        return values.Length < 2 ? 1.0 : values.Max() / (double)values.Min();
+        int[] measured = values.Where(static v => v > 0).ToArray();
+        return measured.Length < 2 ? 1.0 : measured.Max() / (double)measured.Min();
     }
 
     /// <summary>
