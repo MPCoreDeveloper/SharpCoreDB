@@ -167,7 +167,7 @@ public class UserRepositoryTests
 
 1. **Always `using`/dispose** `IDatabase` instances.
 2. **Parameterize all SQL** (`@name`) — prevents injection and hits the plan cache.
-3. **Batch writes** (`InsertBatch`, `UpdateMultiple`, `ExecuteBatchSQL`) instead of per-row loops.
+3. **Batch writes** (`InsertBatch`, `UpdateBatch`/`DeleteBatch`, `ExecuteBatchSQL`) instead of per-row loops.
 4. **Index hot lookup columns** — hash index for point lookups, B-tree for ranges.
 5. **Flush after write batches** — one durability point per batch.
 6. **Use transactions** for multi-statement operations (`BeginTransaction`/`Commit`).

@@ -16,7 +16,8 @@
 | ⚡ `FindByPrimaryKey(table, key)` / `FindByIndex(table, col, value)` | per-row `Dictionary` | — | **Direct API**: no SQL parsing, fastest point reads |
 | `ExecuteSQL(sql)` | — | DML/DDL | writes |
 | `Insert(table, row)` / `InsertBatch(table, rows)` | — | — | single-row / bulk writes (see Performance Guide) |
-| `UpdateMultiple` / `DeleteMultiple` | — | — | bulk updates/deletes |
+| `InsertBatch(table, rows, columns)` | — | — | dictionary-free bulk writes: column-ordered `object[]` rows (1,10–1,25× the dictionary overload) |
+| `UpdateBatch(table, ops)` / `DeleteBatch(table, keys)` | — | — | bulk updates/deletes with typed keys — no SQL text (1,4–2,0× `ExecuteBatchSQL` on the measured shapes) |
 
 ## 6.2 SELECT examples
 

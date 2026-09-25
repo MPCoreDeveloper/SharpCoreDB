@@ -1382,7 +1382,18 @@ class Program
             // only difference is that "tuned" turns the NoEncryptMode flag off (isolating it).
             "plain" => BuildConfig(engineType, fixedWidth: true),
             "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
-            _ => new DatabaseConfig { StorageEngineType = engineType },
+            // The pure default posture — EXCEPT for one documented opt-in: `SHARPCOREDB_HASH_INDEXES=0`, which
+            // gates the per-column auto-index set (session 42's fix, pinned by HashIndexAutoCreationGateTests).
+            // Unset, `HashIndexesOverride()` returns true, which is the product default, so this arm stays the
+            // pure default for every run that does not ask. It is here because session 49 showed the dial's cost
+            // is shape-dependent (large on the legacy no-PK docs shape, nil on this arm's fixed-width PK shape
+            // as measured in session 42 *before* the dictionary-free INSERT existed), so "arrays + no auto
+            // indexes" on the arm ordinary users actually run needed its own measurement.
+            _ => new DatabaseConfig
+            {
+                StorageEngineType = engineType,
+                EnableHashIndexes = HashIndexesOverride(),
+            },
         };
     }
 

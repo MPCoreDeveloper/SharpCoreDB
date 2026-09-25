@@ -553,7 +553,24 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > dial is wired to the fair arm only, and no default-posture cell moves. Archives:
 > `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
 > `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
-> 💡 **The auto-index cost is now measured, and it is shape-dependent (2026-09-25, session 49).** With
+> 🟡 **INSERT parity is now a configuration question, and the auto-index default is what stands between the
+> two (2026-09-25, sessions 49–50).** With the dictionary-free INSERT overload *and* the per-column auto-index
+> set off (`SHARPCOREDB_HASH_INDEXES=0`), the INSERT cell reads **1,60× (1,38–1,78)** ahead of SQLite on the
+> **default-posture arm B** (session 48, same arm and binary with the indexes on: 0,95×) and **1,38× / 1,41×**
+> on the no-PK `docs` arm C (0,90× with them on). In both A/Bs *both* of our arms gain while SQLite's reference
+> stays flat, which is what identifies the dial rather than the machine. **So decision 4's ≥1,00× obligation is
+> met at that configuration and not at the shipped default** — arm B's shipped INSERT is 0,95× (0,88–1,02).
+> READ does not degrade without the auto indexes in either workload (the predicate columns carry explicit
+> indexes; the PK point reads keep resolving), but the *benefit* side for arbitrary user equality queries is
+> unmeasured, so §9 row 5 remains an owner decision — now the single blocking item for INSERT parity, with the
+> cost measured and the benefit open. Session 42's contradicting reading (arm B INSERT 0,82× → 0,80× for the
+> same dial) is recorded as unexplained rather than dropped.
+>
+> ⚠️ Also fixed here: the manual's "fast pattern" for bulk writes documented `db.UpdateMultiple(...)` /
+> `db.DeleteMultiple(...)`, which do not exist on `Database` — the pages now document the measured
+> `UpdateBatch`/`DeleteBatch` and the column-ordered `InsertBatch(table, rows, columns)` overload.
+
+> 💡 **The auto-index cost, session 49's reading (the arm-C half; arm B's is in the row above).** With
 > `SHARPCOREDB_HASH_INDEXES=0` (which gates auto-creation since session 42) the default no-PK `docs` arm's
 > INSERT goes **0,90× → 1,38× / 1,41×** against SQLite in two independent runs — *both* our arms move (the SQL
 > arm's own control 0,71× → 0,99× / 1,00×) while the SQLite reference does not, so the dial and not the machine
