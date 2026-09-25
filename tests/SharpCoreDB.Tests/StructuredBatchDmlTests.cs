@@ -138,6 +138,42 @@ public sealed class StructuredBatchDmlTests : IDisposable
     }
 
     [Fact]
+    public void DeleteBatch_FixedWidthPkTable_UsesTheContiguousFastPath()
+    {
+        // The structured DELETE must reach B9 the same way the SQL path does. Measured (session 46): without the
+        // contiguous attempt the structured entry point ran 0,38× the SQL batch path on the default posture,
+        // because the SQL path delegates to this resolver and the typed loop does a PK search + row decode per
+        // key. This test is the canary for that regression, in the shape FixedWidthBulkDeleteTests pins.
+        const string Table = "docs";
+        using var db = CreateDb();
+        db.ExecuteSQL($"CREATE TABLE {Table} (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+        db.InsertBatch(Table, [.. Enumerable.Range(1, 2000).Select(i => new Dictionary<string, object>
+        {
+            ["id"] = i,
+            ["name"] = $"u{i}",
+            ["score"] = i * 1.0,
+        })]);
+        db.Flush();
+
+        Assert.True(db.TryGetTable(Table, out var probe));
+        var table = Assert.IsType<Table>(probe);
+        Assert.True(table.IsFixedWidthRecords);
+        Assert.Equal(0, table.BulkContiguousDeleteBatches);
+
+        var keys = new List<(string KeyColumn, object? KeyValue)>();
+        for (int i = 1; i <= 1000; i++)
+        {
+            keys.Add(("id", i));
+        }
+
+        Assert.Equal(1000, db.DeleteBatch(Table, keys));
+
+        Assert.Equal(1, table.BulkContiguousDeleteBatches);
+        Assert.Empty(db.ExecuteQuery($"SELECT id FROM {Table} WHERE id = 500"));
+        Assert.Single(db.ExecuteQuery($"SELECT id FROM {Table} WHERE id = 1500"));
+    }
+
+    [Fact]
     public void DeleteBatch_ByPrimaryKey_RemovesRowAndSurvivesReopen()
     {
         const string Table = "docs";

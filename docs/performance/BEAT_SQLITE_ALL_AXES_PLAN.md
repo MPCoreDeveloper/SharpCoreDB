@@ -553,7 +553,28 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > dial is wired to the fair arm only, and no default-posture cell moves. Archives:
 > `results/fair_ni_batch_20260924_190931.json` (5 reps), `…_191233.json` (9 reps); raw logs in
 > `D:\scdb-bench-tmp\fair-ni-batch-20260924-1900.txt` and `…-run2-reps9.txt`. Suite 1836/0/0; `--gate`
-> `INCONCLUSIVE` (exit 2, spread 3,27× against the 2,50× limit — recorded, not a regression verdict).
+> ✅ **The same lever, measured on arm B and arm C (2026-09-25, session 46).** The dial is general now
+> (`SHARPCOREDB_BATCH_DML`), arm B and the default no-PK `docs` job both accept a `batchDml` override, and
+> `--pk-default-batch` / `--docs-batch` drive the same three-arm protocol on them. Attribution (batch/SQL,
+> same engine, same values, three arms rotated in one process):
+>
+> | arm | UPDATE batch/SQL | DELETE batch/SQL | UPDATE vs SQLite (SQL → batch) | DELETE vs SQLite (SQL → batch) |
+> |---|---:|---:|---:|---:|
+> | B — pure default (encrypted, PK) | **1,53×** (1,20–2,56) | **1,91×** (1,57–2,30) | 0,36× → 0,56× | 0,35× → 0,68× |
+> | C — no-PK `docs` job | **1,35×** (1,13–1,50) | 1,11× (0,67–1,15) | 0,25× → 0,35× | 0,13× → 0,14× |
+>
+> **Arm B's first run read DELETE 0,38× (0,19–0,46) — a regression introduced by the new entry point, not by
+> the engine** — because the typed loop never attempted the contiguous fixed-width DELETE resolver (B9) that
+> the SQL path reaches. Fixed in `Table.StructuredDml.cs` and pinned by
+> `DeleteBatch_FixedWidthPkTable_UsesTheContiguousFastPath`; the re-run reads **1,91×** with a range that
+> clears 1,00×. **A new entry point inherits nothing.**
+> ⚠️ **Arm C's protocol changed with this session:** the default job formatted its 10.000 UPDATE/DELETE
+> statements *inside* the timed window while SQLite's side has used one prepared command since session 31, so
+> both lists are now cached and **arm C's posted cells are not comparable with these new ones** — on the
+> corrected harness its SQL columns read 0,25× (UPDATE) and 0,13× (DELETE) against SQLite, where the recorded
+> cells said 0,24× and 0,31×. Arm B and arm C both remain behind SQLite on UPDATE/DELETE largely for trap 4's
+> reason (the reference resolves through `id INTEGER PRIMARY KEY`; arm C matches on `name`), which is what
+> `--fair-ni` exists to separate.
 
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.

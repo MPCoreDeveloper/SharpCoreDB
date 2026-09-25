@@ -64,6 +64,26 @@ public partial class Table
             var engine = GetOrCreateStorageEngine();
             EnsureAllRegisteredIndexesLoaded();
 
+            // B9: the same single-pass contiguous DELETE the SQL path uses for a `pk = literal` batch. Measured
+            // (session 46): without this attempt the structured entry point lost arm B's fastest DELETE outright
+            // — 0,38× the SQL batch path on the default posture, because the SQL path delegates to this resolver
+            // and the typed loop below does a PK search plus a row decode per key. Its gate is all-or-nothing and
+            // consumes `col = literal` text, so the keys are formatted once for this ONE gated call, and only
+            // when every key targets the PK column — which is its own precondition anyway.
+            if (this.PrimaryKeyIndex >= 0 && AllKeysTargetPrimaryKey(keys))
+            {
+                var wheres = new List<string>(keys.Count);
+                foreach (var (column, value) in keys)
+                {
+                    wheres.Add(BuildStructuredWhereText(column, value));
+                }
+
+                if (TryBulkDeleteContiguousFixedWidth(wheres))
+                {
+                    return keys.Count;
+                }
+            }
+
             // B1: decode only the columns the delete core touches (PK + loaded hash-index columns).
             int[] deleteKeyColumns = BuildDeleteKeyColumns();
 
@@ -206,6 +226,25 @@ public partial class Table
         {
             this.rwLock.ExitWriteLock();
         }
+    }
+
+    /// <summary>
+    /// True when every key targets the table's primary-key column — the precondition the contiguous
+    /// fixed-width DELETE resolver has anyway, checked up front so a mixed batch takes the typed loop
+    /// instead of formatting text it would then throw away.
+    /// </summary>
+    private bool AllKeysTargetPrimaryKey(IReadOnlyList<(string KeyColumn, object? KeyValue)> keys)
+    {
+        var pkColumn = this.Columns[this.PrimaryKeyIndex];
+        foreach (var (column, _) in keys)
+        {
+            if (!string.Equals(column, pkColumn, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     /// <summary>

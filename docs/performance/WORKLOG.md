@@ -3792,3 +3792,48 @@ The fair arm's **published** UPDATE cell is 0,90× (0,68–0,97) on the SQL path
 **6. Validation.** Builds clean (`src`, tests, benchmarks: 0 errors). Core suite **1836 / 0 failed / 0 skipped** in 59,6 s — 1824 + the 12 new tests, canaries included. `--gate` was attempted **once** after `dotnet build-server shutdown`: **`GATE INCONCLUSIVE (exit 2)`** — worst rep spread **3,27×** against the 2,50× limit, so it "measures the machine's load and not the code". That is not a regression verdict (exit 1), it is the known elevation-bound `WSearch` finding plus the still-2026-09-15 baseline, and per §5 it was recorded rather than retried.
 
 **7. What is explicitly NOT claimed.** (a) Arm B (`--pk-default`) and the no-PK `docs` job were **not** run through the new path — the dial is wired to the fair arm only, so no default-posture cell moves. (b) The SQL path remains the **default**; the new API is optional and nothing shipped changed behaviour. (c) No absolute ops/s is quoted as a verdict, and this run's absolutes differ from the published ones by up to ~2× (SQLite's own UPDATE reference reads 315k here against ~136k in the published cells) — which is precisely why every number above is a **within-run paired ratio**. (d) The API is new surface: it is not yet on `IDatabase` (the precedent is `InsertBatch`, which is also only on the concrete `Database`), and its key columns are matched case-sensitively against registered indexes, as the SQL canonical path matches them.
+
+---
+
+### 2026-09-25 (session 46) — the same dial on arm B and arm C: the SQL-free path is **1,53× / 1,91× ahead** of the SQL path on the default posture, **1,35× / 1,11×** on the no-PK job — and the first run found a **DELETE regression I introduced**, which the code then explained and a canary now pins
+
+- Session: 1 of 1 for the batch-dial extension (the item session 45's `NEXT:` named)
+- Command(s): `--pk-default-batch` ×3 (1-rep smoke, then 5 reps ×2 — before and after the fix) · `--docs-batch` ×2 (smoke + 5 reps) · structured-DML tests ×2 · builds of `src`, tests and benchmark
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp` (Defender-excluded) · `SHARPCOREDB_WARMUP_REPS=8` · `SHARPCOREDB_BENCH_REPS=5` · no `SHARPCOREDB_BATCH_DML` set (the comparison modes drive both shapes explicitly) · SQLite at its built-in reference pragma set
+- Verdict: **KEPT** — arms B and C now read the SQL-free path, arm C's harness defect is fixed, the DELETE regression is fixed and pinned, and every correctness gate passed in every rep of every run (0 empty · 0 wrong · 0 still present)
+- Commit: `perf(batch-dml)`: the SQL-free path on arm B and arm C — and the contiguous DELETE it was silently skipping
+- NEXT: **the dictionary-free structured DML** — `InsertBatch(object[][], columnOrder)` is "explicitly dictionary-free" and it is the campaign's best PK cell, while the new `UpdateBatch`/`DeleteBatch` still allocate one `Dictionary<string, object>` per operation; take the same lever for UPDATE/DELETE (column-ordered `object[]` + a prepared column order, mirroring the INSERT path) and measure it on the fair arm and arm B. Then decide whether the fair arm's ranges justify a third run at a higher rep count.
+
+**1. What was built.** The dial is now general (`SHARPCOREDB_BATCH_DML`, with `SHARPCOREDB_FAIR_BATCH_DML` kept as an accepted alias so session 45's archives stay reproducible), arm B (`RunSharpCoreDBPk`) and the default no-PK `docs` job (`RunSharpCoreDbMode`) both accept a `batchDml` override, and two new modes drive the three-arm protocol on them: `--pk-default-batch` and `--docs-batch` (shared `RunBatchDmlTriple`, because `--fair-ni-batch` is published evidence and re-plumbing its implementation would make its archives unreproducible). Both arms got the generic correctness gates (`VerifyBatchUpdateByKey` / `VerifyBatchDeleteByKey`).
+
+**2. A harness defect in arm C, fixed rather than inherited (§6 rule 12).** The no-PK `docs` job still formatted its 10.000 UPDATE and DELETE statements **inside the timed window** — the correction the fair arm and arm B received in sessions 28/31 — while its SQLite comparator has used one prepared command with re-bound parameters since session 31. A comparison against that baseline would have measured harness string formatting as engine work. Both lists are now cached outside the window (`DocsUpdateStatements` / `DocsDeleteStatements`). **Consequence, stated plainly: arm C's posted cells are not comparable with the new ones.** Re-measured on the corrected harness, arm C's *SQL* columns read UPDATE **0,25×** and DELETE **0,13×** against SQLite, where the recorded cells said 0,24× and 0,31× — the DELETE figure moves because the old reference allocated a command per row and therefore flattered our ratio, the session-29/32 effect again.
+
+
+
+**3. Arm B — and the regression the first run found.** `--pk-default-batch`, 5 reps, 8 warm-ups, three arms in one process:
+
+| cell | run 1 (before the fix) | run 2 (after the fix) |
+|---|---|---|
+| INSERT batch/SQL *(arms A and B are the same code)* | 1,06× (0,45–1,37) | 0,92× (0,64–1,19) |
+| READ batch/SQL *(same code)* | 1,05× (0,39–1,31) | 1,07× (0,82–1,36) |
+| **UPDATE batch/SQL** | **1,65×** (0,71–1,72) | **1,53×** (1,20–2,56) |
+| **DELETE batch/SQL** | **0,38× (0,19–0,46) ← regression** | **1,91×** (1,57–2,30) |
+| UPDATE vs SQLite (SQL → batch) | 0,36× → 0,58× | 0,36× → 0,56× |
+| DELETE vs SQLite (SQL → batch) | 0,42× → 0,14× | 0,35× → 0,68× |
+
+The regression was **mine, not the engine's**, and the code explained it: arm B's DELETE is `DELETE FROM docs WHERE id = …` on a fixed-width PK table, so the SQL path reaches `DeleteMultipleKeys` → `TryBulkDeleteContiguousFixedWidth` (B9: one contiguous range read, one tombstone marker per row), while my typed loop did a PK search plus a row decode **per key** and never attempted that resolver. Fixed by attempting it when every key targets the PK column (`Table.StructuredDml.cs`, with `BuildStructuredWhereText` formatting the literals once for that one gated call, exactly as the UPDATE path already formatted `where` for `TryBulkUpdateContiguousFixedWidth`). Pinned by a new test, `DeleteBatch_FixedWidthPkTable_UsesTheContiguousFastPath`, which asserts `BulkContiguousDeleteBatches` moves — the same counter `FixedWidthBulkDeleteTests` uses. **The lesson is the campaign's own, restated: a new entry point inherits nothing.** It gets the branch it is written to take; the fast paths have to be *reached*, and only reading the code shows which branch that is.
+
+**4. Arm C — the default no-PK `docs` job** (`--docs-batch`, 5 reps, 8 warm-ups):
+
+| cell | batch/SQLite | SQL/SQLite (control) | batch/SQL (attribution) |
+|---|---|---|---|
+| INSERT | 0,72× (0,70–0,77) | 0,73× (0,69–0,78) | **0,98×** (0,94–1,05) |
+| READ | 1,07× (0,78–1,28) | 1,17× (1,06–1,33) | 0,86× (0,72–1,04) |
+| **UPDATE** | **0,35×** (0,28–0,38) | 0,25× (0,25–0,26) | **1,35×** (1,13–1,50) |
+| **DELETE** | 0,14× (0,09–0,18) | 0,13× (0,12–0,16) | **1,11×** (0,67–1,15) |
+
+On the no-PK shape the SQL-free path is **1,35× ahead on UPDATE with a range that clears 1,00×**, and only **1,11× on DELETE with a range that straddles** — expected, and the reason is visible in the code: with no PK there is no contiguous resolver to reach, so DELETE keeps its per-key locate cost and the API change removes only the dispatcher layer. Against SQLite both cells stay far behind (0,35× / 0,14×) because that reference resolves through `id INTEGER PRIMARY KEY` while this arm matches on `name` — trap 4, unchanged, and exactly why `--fair-ni` exists (where the same shape reads 5–8× *ahead* on DELETE).
+
+**5. The API's shape cost, named for the next session.** The public batch API takes a `Dictionary<string, object>` per operation; `InsertBatch(object[][], columnOrder)` — the campaign's best PK cell — is *"explicitly dictionary-free"*. That difference is now the most obvious remaining lever on these two phases, and the NEXT line above is its measurement. Archives: `results/pk_default_batch_20260925_042426.json` (before the fix — kept, it is the evidence for §3) and `…_043638.json` (after), `results/docs_batch_20260925_044213.json`; raw logs in `D:\scdb-bench-tmp\pk-default-batch-*.txt` and `docs-batch-20260925.txt`.
+
+**6. Validation.** `src`, tests and benchmark build with 0 errors. Structured-DML tests **13 / 0 failed / 0 skipped** (12 + the new contiguous-DELETE canary). Every rep of every run printed its gate line and every one read **0 empty · 0 wrong value · 0 still present**. Core suite and `--gate` are re-run at the end of the session; no default changed, no encryption or durability touched, nothing pushed.
