@@ -25,12 +25,19 @@ public sealed class DatabaseRegistry(
     private readonly ConcurrentDictionary<string, DatabaseInstance> _databases = new();
     private readonly Lock _registryLock = new();
     private readonly SemaphoreSlim _initializationSemaphore = new(1, 1);
-    private bool _isInitialized;
+    private volatile bool _isInitialized;
 
     /// <summary>
     /// Gets all registered database names.
     /// </summary>
     public IReadOnlyCollection<string> DatabaseNames => _databases.Keys.ToArray();
+
+    /// <summary>
+    /// Gets a value indicating whether <see cref="InitializeAsync"/> has populated the registry.
+    /// Startup code resolves master-database repositories once initialization completed; this flag
+    /// makes the difference between "not configured" and "not ready yet" visible in diagnostics.
+    /// </summary>
+    public bool IsInitialized => _isInitialized;
 
     /// <summary>
     /// Initializes the database registry with configured databases.
@@ -312,11 +319,22 @@ public sealed class DatabaseRegistry(
     /// <param name="cancellationToken">Cancellation token.</param>
     private async Task InitializeSystemDatabasesAsync(CancellationToken cancellationToken)
     {
+        if (_config.Databases.Count == 0)
+        {
+            // Without at least one configured database the system database files (master, model) have
+            // no directory to live in. Report that as a configuration error instead of letting the
+            // path derivation below fail with "Sequence contains no elements".
+            throw new InvalidOperationException(
+                "System databases are enabled but Server:Databases is empty, so the system database files " +
+                "(master, model) have no directory to live in. Add at least one database to Server:Databases " +
+                "or set Server:SystemDatabases:Enabled to false.");
+        }
+
         // Master database - system catalog and metadata
         var masterConfig = new DatabaseInstanceConfiguration
         {
             Name = _config.SystemDatabases.MasterDatabaseName,
-            DatabasePath = Path.Combine(_config.Databases.First().DatabasePath, "..", "master.db"),
+            DatabasePath = Path.Combine(_config.Databases[0].DatabasePath, "..", "master.db"),
             StorageMode = "SingleFile",
             IsSystemDatabase = true,
             ConnectionPoolSize = 10
@@ -328,7 +346,7 @@ public sealed class DatabaseRegistry(
         var modelConfig = new DatabaseInstanceConfiguration
         {
             Name = _config.SystemDatabases.ModelDatabaseName,
-            DatabasePath = Path.Combine(_config.Databases.First().DatabasePath, "..", "model.db"),
+            DatabasePath = Path.Combine(_config.Databases[0].DatabasePath, "..", "model.db"),
             StorageMode = "SingleFile",
             IsSystemDatabase = true,
             ConnectionPoolSize = 5

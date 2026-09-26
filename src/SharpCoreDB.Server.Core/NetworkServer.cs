@@ -268,9 +268,14 @@ public sealed class NetworkServer(
         await _databaseRegistry.InitializeAsync(cancellationToken);
 
         // Bootstrap tenant catalog schema in master database
-        var masterDatabase = _databaseRegistry.GetDatabase(_config.SystemDatabases.MasterDatabaseName)
-            ?? _databaseRegistry.GetDatabase(_config.DefaultDatabase)
-            ?? throw new InvalidOperationException("Unable to resolve master database for tenant catalog bootstrap.");
+        var masterDatabase = MasterDatabaseLocator.TryResolve(
+                _databaseRegistry,
+                _config.SystemDatabases.MasterDatabaseName,
+                _config.DefaultDatabase)
+            ?? throw new InvalidOperationException(MasterDatabaseLocator.DescribeUnresolved(
+                _databaseRegistry,
+                _config.SystemDatabases.MasterDatabaseName,
+                _config.DefaultDatabase));
 
         var catalogRepository = new TenantCatalogRepository(
             masterDatabase,
