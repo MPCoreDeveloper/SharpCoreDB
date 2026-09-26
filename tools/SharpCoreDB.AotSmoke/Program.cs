@@ -10,10 +10,25 @@
 // Run (JIT):
 //   dotnet run -c Release --project tools/SharpCoreDB.AotSmoke
 //
-// Where the MSVC C++ workload is missing the Native AOT publish cannot link (`vswhere.exe failed to locate
-// Visual Studio with Microsoft.VisualStudio.Component.VC.Tools.x86.x64`), and this is the fallback that still
-// exercises the same code path, because trimming alone sets the JSON feature switch to false — i.e. the
-// source-generated arm of AotJsonSerializer, never the reflection resolver:
+// Verified 2026-09-26 on this development box: the stock command above fails while the Visual Studio C++
+// installation is registered without Microsoft.VisualStudio.Component.VC.Tools.x86.x64, ships no
+// vcvarsall.bat (vcvars64.bat is a one-liner that calls it) and carries the onecore-only CRT libs
+// (lib\onecore\x64, no desktop lib\x64). The toolchain itself is present, so the publish links when
+// ILCompiler's vswhere/vcvarsall probe is bypassed with its documented environmental-tools switch and the
+// environment vcvarsall would have set is built by hand. Adjust the two roots, then:
+//
+//   $vc  = 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231'
+//   $sdk = 'C:\Program Files (x86)\Windows Kits\10'; $sdkv = '10.0.22621.0'
+//   $env:PATH    = "$vc\bin\Hostx64\x64;$sdk\bin\$sdkv\x64;$env:PATH"
+//   $env:INCLUDE = "$sdk\Include\$sdkv\ucrt;$sdk\Include\$sdkv\shared;$sdk\Include\$sdkv\um"
+//   $env:LIB     = "$vc\lib\onecore\x64;$sdk\Lib\$sdkv\ucrt\x64;$sdk\Lib\$sdkv\um\x64"
+//   $env:VCToolsInstallDir = "$vc\"; $env:WindowsSdkDir = "$sdk\"; $env:WindowsSDKVersion = "$sdkv\"
+//   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishAot=true -p:IlcUseEnvironmentalTools=true
+//
+// That produced a 9 402 880-byte native image with no runtimeconfig.json (genuine AOT, 0 IL warnings), and
+// running it printed the reflection switch as False and PASSed the same scenario as the JIT and trimmed arms.
+// A trimmed publish remains the cheap substitute when no AOT toolchain is available at all, because trimming
+// alone sets the JSON feature switch to false — i.e. the source-generated arm of AotJsonSerializer:
 //   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishTrimmed=true
 //
 // Exercises the core paths that must work under Native AOT:
