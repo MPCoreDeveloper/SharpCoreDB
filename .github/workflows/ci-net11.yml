@@ -83,6 +83,63 @@ jobs:
         CI: "true"
         GITHUB_ACTIONS: "true"
 
+  # Dedicated coverage job. `dotnet test` cannot collect here: xUnit v3 runs on Microsoft.Testing.Platform,
+  # which rejects the VSTest target, and this branch's test host is xUnit's own in-process runner, which
+  # registers no coverage extension (its `--help` has none, and `--coverage` answers "unknown option").
+  # The reports therefore come from `dotnet-coverage collect` wrapped around the same test hosts the build
+  # job runs - tools/measure-coverage.ps1 does that, merges the reports and enforces codecov.yml's 18% floor
+  # in-job, so the verdict does not depend on the upload succeeding. Ubuntu only and once: it runs the
+  # suites a second time under instrumentation, and line coverage does not change per operating system.
+  coverage:
+    name: Coverage (net11.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 11 (RC)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '11.0.100-rc.1.26425.128'
+        include-prerelease: true
+
+    - name: Restore tools
+      run: dotnet tool restore --configfile NuGet.Config
+
+    # The aggregation and the floor comparison are self-tested before any suite runs, the way
+    # tools/check-banned-simd-api.ps1 self-tests its detector before scanning the tree.
+    - name: Self-test the coverage gate
+      shell: pwsh
+      run: ./tools/measure-coverage.ps1 -SelfTest
+
+    - name: Measure coverage and enforce the floor
+      shell: pwsh
+      run: ./tools/measure-coverage.ps1 -Floor 0.18
+
+    - name: Upload coverage reports
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: artifacts/coverage/*.cobertura.xml
+        if-no-files-found: error
+
+    # No `flags:` on purpose: codecov.yml's project and patch statuses read the unflagged coverage, so
+    # flagging these uploads would leave those statuses with no data (`if_no_uploads: error`).
+    - name: Upload to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: artifacts/coverage/*.cobertura.xml
+        disable_search: true
+        fail_ci_if_error: false
+        verbose: true
+
   # Manual publish to NuGet.org (only via workflow_dispatch, using the repo's
   # NUGET_API_KEY secret). This packs the net11.0 (C# 15 preview) CORE package at the version pinned
   # in the csproj. For the full package set (all ~26 SharpCoreDB packages, in dependency order) use
