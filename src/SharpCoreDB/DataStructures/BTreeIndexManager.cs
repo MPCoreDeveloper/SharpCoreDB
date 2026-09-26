@@ -323,9 +323,10 @@ public sealed class BTreeIndexManager
 
         _btreeIndexTypes[columnName] = colType;
 
-        var indexType = GetBTreeIndexType(colType);
-        var index = Activator.CreateInstance(indexType, columnName);
-        _btreeIndexes[columnName] = index;
+        // NativeAOT/trim-safe: construct the closed generic directly instead of going through
+        // Activator.CreateInstance(Type, object), which needs runtime code generation (IL3050)
+        // and a reflective constructor lookup. One switch arm per DataType replaces that.
+        _btreeIndexes[columnName] = CreateBTreeIndex(colType, columnName);
     }
 
     /// <summary>
@@ -366,18 +367,23 @@ public sealed class BTreeIndexManager
     }
 
     /// <summary>
-    /// Gets the Type for a B-tree index based on column data type.
+    /// Creates a B-tree index instance for the given column data type.
     /// </summary>
-    private static Type GetBTreeIndexType(DataType colType)
+    /// <remarks>
+    /// NativeAOT/trim-safe replacement for the former <c>GetBTreeIndexType</c> +
+    /// <c>Activator.CreateInstance</c> pair: the closed generics are visible to the compiler and the
+    /// trimmer, so no runtime type construction and no reflective constructor binding is needed.
+    /// </remarks>
+    private static object CreateBTreeIndex(DataType colType, string columnName)
     {
         return colType switch
         {
-            DataType.Integer => typeof(BTreeIndex<int>),
-            DataType.Long => typeof(BTreeIndex<long>),
-            DataType.Real => typeof(BTreeIndex<double>),
-            DataType.Decimal => typeof(BTreeIndex<decimal>),
-            DataType.String => typeof(BTreeIndex<string>),
-            DataType.DateTime => typeof(BTreeIndex<DateTime>),
+            DataType.Integer => new BTreeIndex<int>(columnName),
+            DataType.Long => new BTreeIndex<long>(columnName),
+            DataType.Real => new BTreeIndex<double>(columnName),
+            DataType.Decimal => new BTreeIndex<decimal>(columnName),
+            DataType.String => new BTreeIndex<string>(columnName),
+            DataType.DateTime => new BTreeIndex<DateTime>(columnName),
             _ => throw new NotSupportedException($"B-tree index not supported for type {colType}")
         };
     }

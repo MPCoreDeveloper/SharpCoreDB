@@ -10,9 +10,11 @@ using System.Buffers.Binary;
 using System.Collections;
 using System.Collections.Generic;
 using System.Globalization;
-using System.Numerics;
+using System.Numerics; // BitOperations only — System.Numerics.Vector<T> is banned by .github/SIMD_STANDARDS.md
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage;
 using SharpCoreDB.Storage.Hybrid;
@@ -234,8 +236,8 @@ public partial class Table
         }
 
         // Fast path 3: fixed-width numeric equality — SIMD batch filter over extracted values
-        // (no deserialization, no boxing). Integer/Long use portable Vector<T>; Real uses
-        // direct per-record reads.
+        // (no deserialization, no boxing). Integer/Long run through the tiered x86 intrinsics
+        // (AVX-512 → AVX2 → SSE2, scalar tail); Real reads per record.
         if (hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
             TryGetFixedNumericWhereInfo(simpleColumn, out var numericOffset, out var numericType) &&
             TryParseNumericExpected(simpleValue, numericType, out var numericExpected))
@@ -624,28 +626,44 @@ public partial class Table
     }
 
 
-    /// SIMD-accelerated equality filter over a batch of int32 values (portable <c>Vector&lt;int&gt;</c>
-    /// with scalar fallback). Writes matching indices into <paramref name="matches"/>.
+    /// SIMD-accelerated equality filter over a batch of int32 values using explicit multi-tier
+    /// intrinsics (AVX-512 → AVX2 → SSE2, per <c>.github/SIMD_STANDARDS.md</c>) plus a scalar tail.
+    /// Writes matching indices into <paramref name="matches"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void SimdFilterInt32Batch(ReadOnlySpan<int> values, int expected, List<int> matches)
     {
-        int vectorWidth = Vector<int>.Count;
+        const int avx512MinElements = 1024; // AVX-512 element floor per .github/SIMD_STANDARDS.md
         int i = 0;
+        ref int reference = ref MemoryMarshal.GetReference(values);
 
-        if (Vector.IsHardwareAccelerated)
+        if (Avx512F.IsSupported && values.Length >= avx512MinElements)
         {
-            var expectedVec = new Vector<int>(expected);
-            for (; i <= values.Length - vectorWidth; i += vectorWidth)
+            Vector512<int> expectedVector = Vector512.Create(expected);
+            for (; i <= values.Length - Vector512<int>.Count; i += Vector512<int>.Count)
             {
-                Vector<int> mask = Vector.Equals(new Vector<int>(values.Slice(i, vectorWidth)), expectedVec);
-                for (int lane = 0; lane < vectorWidth; lane++)
-                {
-                    if (mask[lane] != 0)
-                    {
-                        matches.Add(i + lane);
-                    }
-                }
+                Vector512<int> vector = Vector512.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector512.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
+            }
+        }
+
+        if (Avx2.IsSupported && values.Length - i >= Vector256<int>.Count)
+        {
+            Vector256<int> expectedVector = Vector256.Create(expected);
+            for (; i <= values.Length - Vector256<int>.Count; i += Vector256<int>.Count)
+            {
+                Vector256<int> vector = Vector256.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector256.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
+            }
+        }
+
+        if (Sse2.IsSupported && values.Length - i >= Vector128<int>.Count)
+        {
+            Vector128<int> expectedVector = Vector128.Create(expected);
+            for (; i <= values.Length - Vector128<int>.Count; i += Vector128<int>.Count)
+            {
+                Vector128<int> vector = Vector128.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector128.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
             }
         }
 
@@ -658,29 +676,67 @@ public partial class Table
         }
     }
 
+    /// <summary>Appends every set bit of a comparison mask, offset by its block start, to <paramref name="matches"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+    private static void AddSetBits(uint mask, int blockStart, List<int> matches)
+    {
+        while (mask != 0)
+        {
+            matches.Add(blockStart + BitOperations.TrailingZeroCount(mask));
+            mask &= mask - 1;
+        }
+    }
+
+    /// <summary>Appends every set bit of a 512-bit comparison mask, offset by its block start, to <paramref name="matches"/>.</summary>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization | MethodImplOptions.AggressiveInlining)]
+    private static void AddSetBits(ulong mask, int blockStart, List<int> matches)
+    {
+        while (mask != 0)
+        {
+            matches.Add(blockStart + BitOperations.TrailingZeroCount(mask));
+            mask &= mask - 1;
+        }
+    }
+
     /// <summary>
-    /// SIMD-accelerated equality filter over a batch of int64 values (portable <c>Vector&lt;long&gt;</c>
-    /// with scalar fallback). Writes matching indices into <paramref name="matches"/>.
+    /// SIMD-accelerated equality filter over a batch of int64 values using explicit multi-tier
+    /// intrinsics (AVX-512 → AVX2 → SSE2, per <c>.github/SIMD_STANDARDS.md</c>) plus a scalar tail.
+    /// Writes matching indices into <paramref name="matches"/>.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private static void SimdFilterInt64Batch(ReadOnlySpan<long> values, long expected, List<int> matches)
     {
-        int vectorWidth = Vector<long>.Count;
+        const int avx512MinElements = 1024; // AVX-512 element floor per .github/SIMD_STANDARDS.md
         int i = 0;
+        ref long reference = ref MemoryMarshal.GetReference(values);
 
-        if (Vector.IsHardwareAccelerated)
+        if (Avx512F.IsSupported && values.Length >= avx512MinElements)
         {
-            var expectedVec = new Vector<long>(expected);
-            for (; i <= values.Length - vectorWidth; i += vectorWidth)
+            Vector512<long> expectedVector = Vector512.Create(expected);
+            for (; i <= values.Length - Vector512<long>.Count; i += Vector512<long>.Count)
             {
-                Vector<long> mask = Vector.Equals(new Vector<long>(values.Slice(i, vectorWidth)), expectedVec);
-                for (int lane = 0; lane < vectorWidth; lane++)
-                {
-                    if (mask[lane] != 0)
-                    {
-                        matches.Add(i + lane);
-                    }
-                }
+                Vector512<long> vector = Vector512.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector512.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
+            }
+        }
+
+        if (Avx2.IsSupported && values.Length - i >= Vector256<long>.Count)
+        {
+            Vector256<long> expectedVector = Vector256.Create(expected);
+            for (; i <= values.Length - Vector256<long>.Count; i += Vector256<long>.Count)
+            {
+                Vector256<long> vector = Vector256.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector256.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
+            }
+        }
+
+        if (Sse2.IsSupported && values.Length - i >= Vector128<long>.Count)
+        {
+            Vector128<long> expectedVector = Vector128.Create(expected);
+            for (; i <= values.Length - Vector128<long>.Count; i += Vector128<long>.Count)
+            {
+                Vector128<long> vector = Vector128.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+                AddSetBits(Vector128.Equals(vector, expectedVector).ExtractMostSignificantBits(), i, matches);
             }
         }
 

@@ -5,7 +5,6 @@
 namespace SharpCoreDB.ColumnStorage;
 
 using System.Buffers;
-using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Linq.Expressions;
