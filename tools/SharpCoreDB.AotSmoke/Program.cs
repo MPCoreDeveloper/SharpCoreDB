@@ -31,6 +31,14 @@
 // alone sets the JSON feature switch to false — i.e. the source-generated arm of AotJsonSerializer:
 //   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishTrimmed=true
 //
+// The clean fix for a partially installed Visual Studio is one elevated command (~2 GB, one command line):
+//   "<VS Installer>\setup.exe" modify --installPath "<VS>\Community" --add Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --quiet --norestart
+// Afterwards check that vswhere -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property
+// installationPath returns a path, and that VC\Auxiliary\Build\vcvarsall.bat and lib\x64\libcmt.lib exist;
+// then the stock publish works and the hand-built environment above is unnecessary. Not done yet: the
+// install needs one interactive UAC consent, which the unattended sessions cannot obtain
+// (docs/performance/WORKLOG.md, session 58 — BLOCKED as an owner action, with that command and its checks).
+//
 // Exercises the core paths that must work under Native AOT:
 //   CREATE TABLE / CREATE INDEX, InsertBatch, parameterized ExecuteQuery,
 //   the zero-allocation ExecuteQueryStruct fast path, reopen, single-file
