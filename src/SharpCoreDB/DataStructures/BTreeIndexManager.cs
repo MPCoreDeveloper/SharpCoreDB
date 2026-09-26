@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.DataStructures;
 
+using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 using System;
 using System.Collections.Generic;
@@ -17,7 +18,7 @@ using System.Linq;
 /// </summary>
 public sealed class BTreeIndexManager
 {
-    private readonly Dictionary<string, object> _btreeIndexes = new();
+    private readonly Dictionary<string, ITypeErasedIndex> _btreeIndexes = new();
     private readonly Dictionary<string, DataType> _btreeIndexTypes = new();
     private readonly List<string> _columns;
     private readonly List<DataType> _columnTypes;
@@ -338,9 +339,10 @@ public sealed class BTreeIndexManager
     }
 
     /// <summary>
-    /// Gets the B-tree index for a column.
+    /// Gets the B-tree index for a column as a type-erased view
+    /// (see <see cref="ITypeErasedIndex"/>) so callers can use it without reflection.
     /// </summary>
-    public object? GetIndex(string columnName)
+    public ITypeErasedIndex? GetIndex(string columnName)
     {
         return _btreeIndexes.TryGetValue(columnName, out var index) ? index : null;
     }
@@ -374,7 +376,7 @@ public sealed class BTreeIndexManager
     /// <c>Activator.CreateInstance</c> pair: the closed generics are visible to the compiler and the
     /// trimmer, so no runtime type construction and no reflective constructor binding is needed.
     /// </remarks>
-    private static object CreateBTreeIndex(DataType colType, string columnName)
+    private static ITypeErasedIndex CreateBTreeIndex(DataType colType, string columnName)
     {
         return colType switch
         {

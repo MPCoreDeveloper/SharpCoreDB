@@ -4754,32 +4754,72 @@ class Program
             ? Path.Combine(projectDir, GateBaselineFolder, GateBaselineFile)
             : Path.GetFullPath(baselineArg);
 
+        int warmupReps = ResolveWarmupReps();
+
         Console.WriteLine();
         Console.WriteLine("━━━ Write-path regression gate (§2.4) ━━━");
         Console.WriteLine($"  engine={engineType} · reps={reps} · tolerance={factor:0.00}x");
         Console.WriteLine(writeBaseline
             ? $"  recording baseline: {baselinePath}"
             : $"  baseline:           {baselinePath}");
+        Console.WriteLine($"  warm-up:            {warmupReps} discarded rep(s) of both arms (SHARPCOREDB_WARMUP_REPS, 0 disables)");
         Console.WriteLine();
 
         // The §2 protocol: the same alternating-rep arms the dual-mode comparison uses, so the two
         // artefacts stay directly comparable and any archived dual-mode JSON is a valid baseline.
         var raw = new List<BenchmarkResult>();
         var deflt = new List<BenchmarkResult>();
-        for (int rep = 0; rep < reps; rep++)
+
+        // One pass = both arms, in the alternating order the protocol prescribes, so a slow window lands on
+        // both arms of a pair rather than on one arm's block. Shared by the warm-up and the measured reps so
+        // the two cannot drift apart.
+        void RunGatePass(int pass, bool measured)
         {
-            if (rep % 2 == 0)
+            BenchmarkResult defltRep;
+            BenchmarkResult rawRep;
+            if (pass % 2 == 0)
             {
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed));
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed));
+                defltRep = RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed);
+                rawRep = RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed);
             }
             else
             {
-                raw.Add(RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed));
-                deflt.Add(RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed));
+                rawRep = RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed);
+                defltRep = RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed);
             }
 
-            Console.WriteLine($"     rep {rep + 1}/{reps} complete");
+            if (!measured)
+            {
+                return;
+            }
+
+            deflt.Add(defltRep);
+            raw.Add(rawRep);
+            Console.WriteLine($"     rep {raw.Count}/{reps} complete");
+        }
+
+        // Warm-up first, and discarded: every other mode in this harness does this through
+        // RunInterleavedPairedReps(), and this gate — the one consumer of the §2 arms that skipped it — cannot
+        // arbitrate without it. Session 52 measured the default arm's UPDATE at 58.653 → 142.819 → 174.354
+        // ops/sec across the three measured reps, and sessions 61–63 added four exit-2 runs (2,76×–4,16×
+        // against the 2,50× limit) whose every disagreeing metric was slowest at rep 1: a starter cost inside
+        // the statistic that decides the verdict, on a machine where nothing else was running.
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            RunGatePass(w, measured: false);
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        for (int rep = 0; rep < reps; rep++)
+        {
+            RunGatePass(warmupReps + rep, measured: true);
         }
 
         if (raw.Any(static r => r.InsertOpsPerSec <= 0) || deflt.Any(static r => r.InsertOpsPerSec <= 0))
@@ -4806,15 +4846,14 @@ class Program
         Console.WriteLine($"    default {SpreadLine(deflt)}");
         Console.WriteLine($"    worst   {worstSpread:F2}x   (a quiet machine sits near 1.0)");
 
-        // Which is it: warm-up, load, or both at once? This matters because the §2 protocol here has NO
-        // discarded warm-up rep, unlike every other mode in this harness (they start with
-        // ResolveWarmupReps() rep(s), default 3), so the first rep measured in the process is cold by
-        // construction and its cost lands inside the very statistic that decides this verdict. Measured,
-        // session 52: the default arm's UPDATE read 58.653 → 142.819 → 174.354 ops/sec across three reps
-        // — a monotone 2,97× rise carrying the whole of the printed worst spread, i.e. the signature of
-        // an unwarmed process rather than of load. So the numbers are printed in rep order, and the
-        // verdict below reports the shape it can actually see (ArmShape asks "was rep 1 the slowest?")
-        // instead of asserting load. This adds no threshold, no statistic and no exit code.
+        // Which is it: warm-up, load, or both at once? The gate now discards ResolveWarmupReps() reps of both
+        // arms before it measures (the protocol every other mode in this harness already used), so a rep-1
+        // ramp is no longer expected — but it is still the one shape that must not be read as load. Measured,
+        // session 52, before that warm-up existed: the default arm's UPDATE read 58.653 → 142.819 → 174.354
+        // ops/sec across three reps — a monotone 2,97× rise carrying the whole of the printed worst spread.
+        // So the numbers are printed in rep order, and the verdict below reports the shape it can actually see
+        // (ArmShape asks "was rep 1 the slowest?") instead of asserting load. This adds no threshold, no
+        // statistic and no exit code.
         Console.WriteLine();
         Console.WriteLine("  per-rep ops/sec, in rep order (is rep 1 the slowest? then this is a cold process, not load):");
         Console.WriteLine($"    raw     {SequenceLine(raw)}");
@@ -4829,9 +4868,11 @@ class Program
             switch (worstShape)
             {
                 case "cold-start":
-                    Console.WriteLine("  Every disagreeing metric is slowest at rep 1, which is the signature of a cold process — and this");
-                    Console.WriteLine("  gate discards no warm-up rep — so the spread is warm-up artefact rather than load. Warm-up reps");
-                    Console.WriteLine("  or a re-run would settle it; the number alone never will.");
+                    Console.WriteLine("  Every disagreeing metric is slowest at rep 1, which is the signature of a cold process rather");
+                    Console.WriteLine("  than of load. This gate discards warm-up reps before it measures, so the ramp has outlasted");
+                    Console.WriteLine(warmupReps > 0
+                        ? $"  the {warmupReps} it ran: raise SHARPCOREDB_WARMUP_REPS and re-run. The number alone never settles it."
+                        : "  none — SHARPCOREDB_WARMUP_REPS=0 disabled them: unset it and re-run. The number alone never settles it.");
                     break;
                 case "mixed":
                     Console.WriteLine("  Some disagreeing metrics are slowest at rep 1 (warm-up) and others are not (load), so this run");

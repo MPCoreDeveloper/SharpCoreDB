@@ -31,7 +31,9 @@ public sealed class NetworkServer(
     UserAuthenticationService authService,
     TenantAuthorizationPolicyService tenantAuthorizationPolicyService,
     PgCatalogService pgCatalogService,
-    MetricsCollector metricsCollector) : IAsyncDisposable
+    MetricsCollector metricsCollector,
+    TenantCatalogRepository catalogRepository,
+    DatabaseGrantsRepository grantsRepository) : IAsyncDisposable
 {
     private readonly ServerConfiguration _config = configuration.Value;
     private readonly ILogger<NetworkServer> _logger = logger;
@@ -42,6 +44,8 @@ public sealed class NetworkServer(
     private readonly TenantAuthorizationPolicyService _tenantAuthorizationPolicyService = tenantAuthorizationPolicyService;
     private readonly PgCatalogService _pgCatalogService = pgCatalogService;
     private readonly MetricsCollector _metricsCollector = metricsCollector;
+    private readonly TenantCatalogRepository _catalogRepository = catalogRepository;
+    private readonly DatabaseGrantsRepository _grantsRepository = grantsRepository;
     private readonly ConcurrentDictionary<string, ClientConnection> _connections = new();
     private readonly Lock _lifecycleLock = new();
     private bool _isRunning;
@@ -267,30 +271,13 @@ public sealed class NetworkServer(
         // Initialize database registry
         await _databaseRegistry.InitializeAsync(cancellationToken);
 
-        // Bootstrap tenant catalog schema in master database
-        var masterDatabase = MasterDatabaseLocator.TryResolve(
-                _databaseRegistry,
-                _config.SystemDatabases.MasterDatabaseName,
-                _config.DefaultDatabase)
-            ?? throw new InvalidOperationException(MasterDatabaseLocator.DescribeUnresolved(
-                _databaseRegistry,
-                _config.SystemDatabases.MasterDatabaseName,
-                _config.DefaultDatabase));
-
-        var catalogRepository = new TenantCatalogRepository(
-            masterDatabase,
-            _loggerFactory.CreateLogger<TenantCatalogRepository>());
-
-        await catalogRepository.InitializeCatalogAsync(cancellationToken);
-
-        var grantsRepository = new DatabaseGrantsRepository(
-            masterDatabase,
-            new TenantSecurityAuditService(
-                new TenantSecurityAuditStore(),
-                _loggerFactory.CreateLogger<TenantSecurityAuditService>()),
-            _loggerFactory.CreateLogger<DatabaseGrantsRepository>());
-
-        await grantsRepository.InitializeGrantsSchemaAsync(cancellationToken);
+        // Bootstrap the tenant catalog and database-grants schemas in the master database. Both
+        // repositories come from the container (see Program.cs), so the schema is created on - and the
+        // catalog/grants locks and the tenant-security audit store belong to - the very instances the API,
+        // gRPC and binary-protocol endpoints serve. Building private copies here instead left the served
+        // singletons uninitialized and split the audit store in two.
+        await _catalogRepository.InitializeCatalogAsync(cancellationToken);
+        await _grantsRepository.InitializeGrantsSchemaAsync(cancellationToken);
 
         // Initialize binary protocol handler
         _binaryProtocolHandler = new BinaryProtocolHandler(

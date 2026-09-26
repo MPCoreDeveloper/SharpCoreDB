@@ -339,16 +339,15 @@ if (serverConfig.EnableWebAdmin)
 builder.Services.Configure<ServerConfiguration>(
     builder.Configuration.GetSection("Server"));
 
-// Add core services
-builder.Services.AddSingleton<NetworkServer>();
-builder.Services.AddSingleton<DatabaseRegistry>();
-builder.Services.AddSingleton(sp =>
+// One resolver for both master-database repositories: the tenant catalog and the database grants must
+// serve the same database, and a misconfiguration has to fail once with the locator's diagnostic instead
+// of differing per copy.
+static DatabaseInstance ResolveMasterDatabase(IServiceProvider serviceProvider)
 {
-    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
-    var registry = sp.GetRequiredService<DatabaseRegistry>();
-    var logger = sp.GetRequiredService<ILogger<TenantCatalogRepository>>();
+    var config = serviceProvider.GetRequiredService<IOptions<ServerConfiguration>>().Value;
+    var registry = serviceProvider.GetRequiredService<DatabaseRegistry>();
 
-    var catalogDatabase = MasterDatabaseLocator.TryResolve(
+    return MasterDatabaseLocator.TryResolve(
             registry,
             config.SystemDatabases.MasterDatabaseName,
             config.DefaultDatabase)
@@ -356,9 +355,14 @@ builder.Services.AddSingleton(sp =>
             registry,
             config.SystemDatabases.MasterDatabaseName,
             config.DefaultDatabase));
+}
 
-    return new TenantCatalogRepository(catalogDatabase, logger);
-});
+// Add core services
+builder.Services.AddSingleton<NetworkServer>();
+builder.Services.AddSingleton<DatabaseRegistry>();
+builder.Services.AddSingleton(sp => new TenantCatalogRepository(
+    ResolveMasterDatabase(sp),
+    sp.GetRequiredService<ILogger<TenantCatalogRepository>>()));
 builder.Services.AddSingleton<TenantProvisioningService>();
 builder.Services.AddSingleton<TenantQuotaEnforcementService>();
 builder.Services.AddSingleton<TenantBackupRestoreService>();
@@ -392,24 +396,10 @@ builder.Services.AddHealthChecks();
 // Add DatabaseService to DI
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddTransient<WebSocketHandler>();
-builder.Services.AddSingleton(sp =>
-{
-    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
-    var registry = sp.GetRequiredService<DatabaseRegistry>();
-    var auditService = sp.GetRequiredService<TenantSecurityAuditService>();
-    var logger = sp.GetRequiredService<ILogger<DatabaseGrantsRepository>>();
-
-    var grantsDatabase = MasterDatabaseLocator.TryResolve(
-            registry,
-            config.SystemDatabases.MasterDatabaseName,
-            config.DefaultDatabase)
-        ?? throw new InvalidOperationException(MasterDatabaseLocator.DescribeUnresolved(
-            registry,
-            config.SystemDatabases.MasterDatabaseName,
-            config.DefaultDatabase));
-
-    return new DatabaseGrantsRepository(grantsDatabase, auditService, logger);
-});
+builder.Services.AddSingleton(sp => new DatabaseGrantsRepository(
+    ResolveMasterDatabase(sp),
+    sp.GetRequiredService<TenantSecurityAuditService>(),
+    sp.GetRequiredService<ILogger<DatabaseGrantsRepository>>()));
 builder.Services.AddSingleton<DatabaseAuthorizationService>();
 
 TryConfigureProjectionRuntime(builder.Services, serverConfig);
