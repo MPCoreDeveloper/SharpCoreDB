@@ -31,9 +31,14 @@
 .PARAMETER KeepServer
     Do not stop the server after tests (useful for manual inspection).
 
+.PARAMETER Python
+    Path to the Python 3 interpreter to use. When omitted, a working Python 3 is
+    resolved automatically (the $env:PYTHON variable, then python3, python and py).
+
 .EXAMPLE
     .\run-smoke.ps1
     .\run-smoke.ps1 -SkipBuild -Timeout 90
+    .\run-smoke.ps1 -Python C:\Python312\python.exe
 #>
 [CmdletBinding()]
 param(
@@ -44,7 +49,8 @@ param(
     [string]$Username = "smokeadmin",
     [string]$Password = "admin123",
     [int]$Timeout = 60,
-    [switch]$KeepServer
+    [switch]$KeepServer,
+    [string]$Python = ""
 )
 
 Set-StrictMode -Version Latest
@@ -73,6 +79,37 @@ function Write-Pass([string]$msg) {
 
 function Write-Fail([string]$msg) {
     Write-Host "  ✗  $msg" -ForegroundColor Red
+}
+
+function Test-PythonCandidate([string]$candidate) {
+    # A candidate only counts when it really is a Python 3 interpreter. On Windows
+    # `python3.exe` is often a Microsoft Store app-execution alias stub that exits
+    # with code 9009 ("Python was not found"), so resolving the name is not enough -
+    # the candidate has to be executed.
+    try {
+        $exe = (Get-Command $candidate -ErrorAction Stop).Source
+    } catch {
+        return $false
+    }
+    if ([string]::IsNullOrWhiteSpace($exe)) { return $false }
+    if ($exe -like "*\WindowsApps\*") { return $false }
+
+    $probe = & $candidate -c "import sys; print(sys.version_info[0])" 2>$null
+    return ($LASTEXITCODE -eq 0 -and "$probe".Trim() -eq "3")
+}
+
+function Resolve-PythonInterpreter {
+    if (-not [string]::IsNullOrWhiteSpace($Python)) {
+        if (Test-PythonCandidate $Python) { return $Python }
+        throw "The -Python interpreter '$Python' is not a working Python 3."
+    }
+    if (-not [string]::IsNullOrWhiteSpace($env:PYTHON) -and (Test-PythonCandidate $env:PYTHON)) {
+        return $env:PYTHON
+    }
+    foreach ($candidate in @("python3", "python", "py")) {
+        if (Test-PythonCandidate $candidate) { return $candidate }
+    }
+    throw "No working Python 3 interpreter found. Install Python 3.10+ or pass -Python <path>."
 }
 
 function Stop-SmokeServer {
@@ -133,18 +170,20 @@ try {
     $env:ASPNETCORE_ENVIRONMENT = "Production"
     $env:DOTNET_ENVIRONMENT     = "Production"
 
-    $startInfo = [System.Diagnostics.ProcessStartInfo]::new()
-    $startInfo.FileName  = "dotnet"
-    $startInfo.Arguments = "run --project $ResolvedServerProject --configuration Release " +
-                           "--no-build -- " +
-                           "--appsettings $patchedConfig"
-    $startInfo.UseShellExecute  = $false
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError  = $true
-    $startInfo.WorkingDirectory = $SmokeDir
+    # The server's stdout/stderr go to files instead of an undrained pipe: an unread
+    # redirected pipe fills after ~4 KB and then blocks the server mid-log-write,
+    # which surfaces as a request that times out (observed on this box as the
+    # information_schema query hanging while SELECT 1 answered in 93 ms).
+    $serverOutLog = Join-Path $LogDir "server-stdout.log"
+    $serverErrLog = Join-Path $LogDir "server-stderr.log"
+    $serverArgs = "run --project `"$ResolvedServerProject`" --configuration Release --no-build " +
+                  "-- --appsettings `"$patchedConfig`""
 
-    $ServerProcess = [System.Diagnostics.Process]::Start($startInfo)
+    $ServerProcess = Start-Process -FilePath "dotnet" -ArgumentList $serverArgs `
+        -WorkingDirectory $SmokeDir -NoNewWindow -PassThru `
+        -RedirectStandardOutput $serverOutLog -RedirectStandardError $serverErrLog
     Write-Pass "Server started (PID: $($ServerProcess.Id))"
+    Write-Host "  Server log: $serverOutLog"
 
     # ── 5. Wait for server ready ──────────────────────────────────────────────
     Write-Step "Waiting for server to become ready (timeout: ${Timeout}s)..."
@@ -171,8 +210,16 @@ try {
     Write-Pass "Server is healthy."
 
     # ── 6. Run Python smoke tests ─────────────────────────────────────────────
+    Write-Step "Resolving a working Python 3 interpreter..."
+    $python = Resolve-PythonInterpreter
+    Write-Pass "Using Python interpreter: $python"
+
     Write-Step "Running Python smoke tests..."
-    $python = if (Get-Command python3 -ErrorAction SilentlyContinue) { "python3" } else { "python" }
+    # The report prints box-drawing and check-mark glyphs. Emit UTF-8 and decode it
+    # as UTF-8 here, otherwise a legacy Windows code page turns the run into a
+    # UnicodeEncodeError before the first test.
+    $env:PYTHONIOENCODING = "utf-8"
+    try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
     & $python -m pip install requests --quiet --disable-pip-version-check 2>&1 | Out-Null
 

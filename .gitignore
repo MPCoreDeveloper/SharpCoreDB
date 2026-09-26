@@ -439,6 +439,10 @@ dist/
 
 # Generated databases: runtime artifacts that the examples and the server create on first run.
 # The compatibility-smoke fixture (tests/CompatibilitySmoke/smoke-data) is CI input and stays tracked.
+# The smoke runner's own per-run output is not.
+tests/CompatibilitySmoke/smoke-results.json
+tests/CompatibilitySmoke/appsettings.smoke.patched.json
+tests/CompatibilitySmoke/appsettings.smoke.ci.json
 Examples/**/*.scdb
 Examples/**/*.scdb/
 src/SharpCoreDB.Server/data/

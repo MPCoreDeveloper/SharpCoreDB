@@ -347,7 +347,26 @@ def wait_for_server(base_url: str, timeout_s: int, verify: bool) -> bool:
     return False
 
 
+def _configure_output_encoding() -> None:
+    """Make console output encoding-safe.
+
+    The report prints box-drawing separators and check-mark glyphs. On a Windows
+    console with a legacy code page (cp1252/cp850) printing those raises
+    UnicodeEncodeError and aborts the run before the first test — Linux CI (UTF-8)
+    never sees it, so it is handled here instead of assumed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main() -> int:
+    _configure_output_encoding()
     args = parse_args()
     base_url = f"https://{args.host}:{args.https_port}"
     verify = not args.no_verify_tls
