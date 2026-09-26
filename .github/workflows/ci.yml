@@ -87,6 +87,17 @@ jobs:
 
         Write-Host "No vulnerable NuGet packages detected."
 
+    # .github/SIMD_STANDARDS.md bans System.Numerics.Vector<T>, and nothing else in this build fails
+    # when it comes back — the last real usage survived until 2026-09-26. The checker self-tests its own
+    # detector first, then scans src/**/*.cs; both exit codes are propagated explicitly.
+    - name: Fail on banned portable SIMD API
+      shell: pwsh
+      run: |
+        ./tools/check-banned-simd-api.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        ./tools/check-banned-simd-api.ps1
+        exit $LASTEXITCODE
+
     - name: Build
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true
 

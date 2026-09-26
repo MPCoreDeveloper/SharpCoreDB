@@ -157,5 +157,28 @@ AVX-512 has a frequency throttling cost on some CPUs. Use minimum element thresh
 
 ---
 
+## Enforcement
+
+The banned-API half of this standard is checked automatically:
+
+```powershell
+pwsh -NoProfile -File tools/check-banned-simd-api.ps1           # scan the product sources
+pwsh -NoProfile -File tools/check-banned-simd-api.ps1 -SelfTest # prove the detector itself
+```
+
+`tools/check-banned-simd-api.ps1` scans `src/**/*.cs` (never `obj/` or `bin/`) for `Vector<T>`,
+`Vector.<member>` and their `System.Numerics`-qualified forms, and exits non-zero when it finds one, so
+a portable `Vector<T>` now fails the build instead of relying on a reviewer noticing it. Both
+`ci.yml` and `ci-net11.yml` run the self-test and the scan. The checker is comment- and string-aware,
+which is why this file's own examples and the ban annotations in the sources do not trip it; anything
+it suppresses is still printed as a `note:` line with the reason, so a suppressed line stays visible in
+the log. `using System.Numerics;` itself stays legal — `BitOperations` lives there and is part of the
+required mask-walk pattern.
+
+The rest of this standard — the tier chain, the always-executed scalar tail, FMA, the AVX-512
+thresholds, `[MethodImpl(AggressiveOptimization)]` — is not statically decidable and stays on the
+review checklist above. A green checker is not a compliant kernel.
+
 **Enforcement:** All new and modified SIMD code must comply. Existing violations should be migrated on contact.  
-**Last Updated:** 2025-07-08
+**Last Updated:** 2026-09-26 (enforcement added; the requirements above are unchanged since 2025-07-08)
+
