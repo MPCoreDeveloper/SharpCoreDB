@@ -1061,19 +1061,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var typeStr = parts[1].ToUpperInvariant();
 
             columns.Add(colName);
-            columnTypes.Add(typeStr switch
-            {
-                "INT" or "INTEGER" => DataType.Integer,
-                "BIGINT" or "LONG" => DataType.Long,
-                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
-                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-                "DECIMAL" or "NUMERIC" => DataType.Decimal,
-                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
-                "BLOB" => DataType.Blob,
-                "BOOLEAN" or "BOOL" => DataType.Boolean,
-                "GUID" or "UUID" => DataType.Guid,
-                _ => DataType.String
-            });
+
+            // ✅ One shared affinity resolver (see SqlTypeAffinity) instead of a local copy: DOUBLE and
+            // FLOAT resolve to REAL and INT/SMALLINT to INTEGER, as SQLite's affinity rules require.
+            // This legacy path never read the UseSqliteIntegerAffinity opt-in, so integer affinity
+            // keeps its historical Int32 mapping here.
+            columnTypes.Add(SqlTypeAffinity.Resolve(typeStr, useSqliteIntegerAffinity: false));
 
             // Parse column constraints from the full definition string
             var isPrimary = upper.Contains("PRIMARY") && upper.Contains("KEY");
@@ -1368,19 +1361,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var tableName = addCol.Groups[1].Value;
             var colName = addCol.Groups[2].Value;
             var typeStr = addCol.Groups[3].Value.ToUpperInvariant();
-            var dataType = typeStr switch
-            {
-                "INT" or "INTEGER" => DataType.Integer,
-                "BIGINT" or "LONG" => DataType.Long,
-                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
-                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-                "DECIMAL" or "NUMERIC" => DataType.Decimal,
-                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
-                "BLOB" => DataType.Blob,
-                "BOOLEAN" or "BOOL" => DataType.Boolean,
-                "GUID" or "UUID" => DataType.Guid,
-                _ => DataType.String
-            };
+
+            // ✅ One shared affinity resolver (see SqlTypeAffinity) instead of a local copy. This legacy
+            // path never read the UseSqliteIntegerAffinity opt-in, so integer affinity keeps its
+            // historical Int32 mapping here.
+            var dataType = SqlTypeAffinity.Resolve(typeStr, useSqliteIntegerAffinity: false);
             if (_tables.TryGetValue(tableName, out var tbl))
             {
                 tbl.AddColumn(new ColumnDefinition { Name = colName, DataType = dataType.ToString() });

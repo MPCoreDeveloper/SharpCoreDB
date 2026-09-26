@@ -544,41 +544,13 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
-    /// Parses a string data type to DataType enum.
-    /// ✅ FIX (Known Issue 6): Honors <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/>
-    /// so ALTER TABLE ADD COLUMN INTEGER maps to Int64 when the opt-in flag is enabled;
-    /// otherwise retains the legacy Int32 mapping for backward compatibility.
+    /// Resolves the engine type for a declared SQL type name (ALTER TABLE ADD COLUMN).
+    /// ✅ FIX (Known Issue 6): honours <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/> and
+    /// SQLite's affinity rules through <see cref="SqlTypeAffinity.Resolve"/>, the single
+    /// implementation every DDL path shares — this used to be a second, drifting copy of the map.
     /// </summary>
     private DataType ParseDataType(string typeStr)
-    {
-        var upper = typeStr.ToUpperInvariant();
-
-        // Handle parameterized types like VECTOR(1536)
-        if (upper.StartsWith("VECTOR"))
-        {
-            return DataType.Vector;
-        }
-
-        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
-        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
-        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
-
-        return upper switch
-        {
-            "INTEGER" or "INT" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-            "TEXT" or "VARCHAR" or "NVARCHAR" => DataType.String,
-            "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-            "BLOB" => DataType.Blob,
-            "BOOLEAN" or "BOOL" => DataType.Boolean,
-            "DATETIME" => DataType.DateTime,
-            "LONG" => DataType.Long,
-            "DECIMAL" => DataType.Decimal,
-            "ULID" => DataType.Ulid,
-            "GUID" => DataType.Guid,
-            "ROWREF" => DataType.RowRef,
-            _ => DataType.String,
-        };
-    }
+        => SqlTypeAffinity.Resolve(typeStr, _config?.UseSqliteIntegerAffinity ?? false);
 
     /// <summary>
     /// Rebuilds the Primary Key B-Tree index from disk by scanning all rows in the data file

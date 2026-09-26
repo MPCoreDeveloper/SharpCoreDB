@@ -1589,28 +1589,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
     private readonly Dictionary<string, object> _metadata = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Resolves the engine type for a declared SQL type name (single-file ALTER TABLE ADD COLUMN).
+    /// ✅ FIX (Known Issue 6): honours <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/> and
+    /// SQLite's affinity rules through <see cref="SqlTypeAffinity.Resolve"/>, the single
+    /// implementation every DDL path shares — this used to be a third, drifting copy of the map.
+    /// </summary>
     private DataType ParseDataType(string typeName)
-    {
-        var upper = typeName.ToUpperInvariant();
-
-        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
-        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
-        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
-
-        return upper switch
-        {
-            "INT" or "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-            "LONG" or "BIGINT" => DataType.Long,
-            "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-            "DECIMAL" or "NUMERIC" => DataType.Decimal,
-            "DATETIME" or "DATE" => DataType.DateTime,
-            "BOOL" or "BOOLEAN" => DataType.Boolean,
-            "BLOB" => DataType.Blob,
-            "GUID" => DataType.Guid,
-            "ULID" => DataType.Ulid,
-            _ => DataType.String
-        };
-    }
+        => SqlTypeAffinity.Resolve(typeName, _config?.UseSqliteIntegerAffinity ?? false);
 
     private static string GetColumnName(ColumnDefinitionEntry entry)
     {

@@ -23,6 +23,43 @@
 | `BLOB` | `byte[]` | binary payloads |
 | `ROWREF` | internal | row reference/pointer |
 
+### 4.1.1 Type affinity and type aliases
+
+The declared type of a column is resolved once, in `SqlTypeAffinity` (`src/SharpCoreDB/Services/SqlTypeAffinity.cs`),
+and every DDL path uses that resolver — `CREATE TABLE`, `ALTER TABLE … ADD COLUMN` in both the multi-file and
+single-file engines. A size argument is ignored for the mapping (`VARCHAR(255)` and `DECIMAL(10,2)` behave like
+`VARCHAR` and `DECIMAL`), and a column declared without a type gets **BLOB** affinity, as in SQLite.
+
+Recognised aliases (same .NET type as the canonical name above):
+
+| Declared type | Maps to | |
+|---------------|---------|---|
+| `INT`, `INT2`, `INT4`, `INT16`, `INT32`, `SMALLINT`, `TINYINT`, `MEDIUMINT` | `INTEGER` | `UseSqliteIntegerAffinity` also applies here |
+| `INT8`, `INT64`, `BIGINT` | `LONG` | |
+| `VARCHAR`, `NVARCHAR`, `NCHAR`, `CHARACTER`, `CLOB`, `CHAR` | `TEXT` | |
+| `DOUBLE`, `FLOAT`, `FLOAT4`, `FLOAT8`, `DOUBLE PRECISION` | `REAL` | |
+| `BOOL` | `BOOLEAN` | |
+| `DATE`, `TIMESTAMP`, `TIMESTAMPTZ` | `DATETIME` | |
+| `NUMERIC`, `NUMBER` | `DECIMAL` | |
+| `UUID` | `GUID` | |
+| `BYTEA`, `BINARY`, `VARBINARY` | `BLOB` | |
+| `VECTOR(1536)` | `VECTOR` | dimension is kept in the declaration |
+
+Any other name is classified with SQLite's affinity rules: a name containing `INT` gets INTEGER affinity
+(so `INT8`, `SMALLINT`, `UNSIGNED BIG INT` and even `POINT` land in the integer bucket), one containing
+`CHAR`, `CLOB` or `TEXT` gets TEXT, one containing `BLOB` gets BLOB, and one containing `REAL`, `FLOA` or
+`DOUB` gets REAL. A name in none of those buckets keeps the engine's historical **TEXT** mapping rather than
+SQLite's NUMERIC affinity: a SQLite NUMERIC column may hold a number *or* non-numeric text, while an engine
+column has exactly one .NET type, so TEXT is the honest choice for an unknown name (it is also what every
+previous release did, so existing schemas are unaffected).
+
+> Only newly created columns are affected by a change here. The column types of an existing table are stored
+> in its metadata (multi-file: the table JSON; single-file: the SCDB table entry) and are read back on reopen,
+> so a database written by an earlier release keeps the types it was written with.
+
+Regression coverage: `DeclaredTypeAffinityTests` (the affinity and extraction tables, `CREATE TABLE`,
+`ALTER TABLE` on both storage modes, and the views that report `data_type`).
+
 ## 4.2 Primary keys & auto-generated IDs
 
 ```sql

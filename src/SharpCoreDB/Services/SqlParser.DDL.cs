@@ -139,8 +139,17 @@ public partial class SqlParser
             }
 
             var partsDef = def.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (partsDef.Length == 0)
+            {
+                continue; // an empty definition cannot declare a column
+            }
+
             var colName = partsDef[0];
-            var typeStr = partsDef[1].ToUpper();
+
+            // ✅ SQLite affinity: the whole declared type decides the column type, so a size argument
+            // is stripped (VARCHAR(255) → VARCHAR) and multi-word types (DOUBLE PRECISION,
+            // UNSIGNED BIG INT) stay intact. No type token at all is legal in SQLite.
+            var declaredType = SqlTypeAffinity.ExtractDeclaredType(partsDef);
 
             var isPrimary = defUpper.Contains("PRIMARY") && defUpper.Contains("KEY");
             var isAutoGen = defUpper.Contains("AUTO");
@@ -160,35 +169,13 @@ public partial class SqlParser
             
             columns.Add(colName);
 
-            // Handle parameterized types like VECTOR(1536)
-            DataType colType;
-            if (typeStr.StartsWith("VECTOR"))
-            {
-                colType = DataType.Vector;
-            }
-            else
-            {
-                // ✅ FIX (Known Issue 6): Optionally map INTEGER to Int64 (SQLite affinity).
-                // Default (UseSqliteIntegerAffinity = false) keeps INTEGER → Int32 for full
-                // backward compatibility with existing databases and consumer code.
-                var useSqliteAffinity = this.config?.UseSqliteIntegerAffinity ?? false;
-                colType = typeStr switch
-                {
-                    "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-                    "BIGINT" => DataType.Long,
-                    "TEXT" => DataType.String,
-                    "REAL" => DataType.Real,
-                    "BLOB" => DataType.Blob,
-                    "BOOLEAN" => DataType.Boolean,
-                    "DATETIME" => DataType.DateTime,
-                    "LONG" => DataType.Long,
-                    "DECIMAL" => DataType.Decimal,
-                    "ULID" => DataType.Ulid,
-                    "GUID" => DataType.Guid,
-                    "ROWREF" => DataType.RowRef,
-                    _ => DataType.String,
-                };
-            }
+            // ✅ FIX: one shared affinity resolver for every declared type (see SqlTypeAffinity).
+            // This used to be a local map that recognised canonical names only, so DOUBLE/FLOAT
+            // (SQLite: REAL affinity) and INT/SMALLINT (SQLite: INTEGER affinity) became TEXT columns.
+            // ✅ Known Issue 6: the opt-in UseSqliteIntegerAffinity still maps the INTEGER affinity
+            // bucket to Int64 instead of Int32; the default keeps the historical Int32 mapping.
+            var useSqliteAffinity = this.config?.UseSqliteIntegerAffinity ?? false;
+            var colType = SqlTypeAffinity.Resolve(declaredType, useSqliteAffinity);
 
             // Parse inline CHECK constraint: e.g. "price REAL CHECK (price > 0)"
             string? colCheckExpr = null;
