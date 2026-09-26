@@ -539,6 +539,141 @@ public partial class Table
         => FixedWidthCodec.DeserializeRow(data, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
 
     /// <summary>
+    /// Reads the OLD values the in-place UPDATE's hash-index maintenance needs — the updated,
+    /// hash-indexed columns only — straight out of the <b>pre-patch</b> record bytes.
+    /// <para>
+    /// <b>Why before the patch.</b> A fixed-width record's variable columns live in the overflow arena, and
+    /// the patch re-points the column's slot to its new block and frees the one that held the old value, so
+    /// the value the index has to remove is not readable from the record afterwards (a freed block is gone
+    /// from the arena's cache). Reading the columns here reads the value the index actually holds.
+    /// </para>
+    /// <para>
+    /// <b>Why targeted.</b> This replaces the whole-row decode that ran per updated row for the same values:
+    /// measured on the default no-PK job, <c>row-decode</c> was 10,000 calls, 623 B/call and 20,6 % of the
+    /// profiled batch UPDATE pass (worklog, 2026-09-26), and every one of those decodes existed only to feed
+    /// the two index calls below.
+    /// </para>
+    /// Returns null when no updated column is hash-indexed, or when the record's layout cannot be walked —
+    /// the caller then keeps the whole-row decode as its fallback.
+    /// </summary>
+    /// <param name="rawData">The record bytes as they were before the patch.</param>
+    /// <param name="updates">The statement's SET values (only the hash-indexed keys are of interest).</param>
+    private List<(string Column, object? OldValue)>? TryCaptureIndexedOldValues(
+        byte[] rawData,
+        Dictionary<string, object> updates)
+    {
+        if (this.hashIndexes.Count == 0 || rawData is not { Length: > 0 } || updates.Count == 0)
+        {
+            return null;
+        }
+
+        var columnIndexCache = GetColumnIndexCache();
+
+        // Fixed-width records resolve their slots from the layout; legacy records walk the encoded fields.
+        FixedWidthRecordLayout? layout = null;
+        int[]? offsets = null;
+        if (_fixedWidthRecords)
+        {
+            layout = GetFixedWidthLayout();
+            if (rawData.Length != layout.FixedSize)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            offsets = ComputeActualColumnOffsets(rawData);
+            if (offsets is null)
+            {
+                return null;
+            }
+        }
+
+        var arena = layout is null ? null : GetOverflowArena();
+        List<(string Column, object? OldValue)>? captured = null;
+
+        foreach (var (column, _) in this.hashIndexes)
+        {
+            if (!updates.ContainsKey(column) ||
+                !columnIndexCache.TryGetValue(column, out int colIdx) ||
+                colIdx < 0)
+            {
+                continue;
+            }
+
+            object? oldValue;
+            if (layout is not null)
+            {
+                if (colIdx >= layout.ColumnCount)
+                {
+                    continue;
+                }
+
+                var slot = rawData.AsSpan(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                if (layout.IsVariable[colIdx])
+                {
+                    // The same reader the fixed-width deserializer uses, so a NULL slot and the inline /
+                    // overflow encodings decode exactly as they do on the whole-row path.
+                    _ = FixedWidthCodec.TryReadVariableSlot(slot, layout, ColumnTypes[colIdx], arena!, out var variableValue);
+                    oldValue = variableValue;
+                }
+                else
+                {
+                    oldValue = ReadTypedValueFromSpan(slot, ColumnTypes[colIdx], out _);
+                }
+            }
+            else
+            {
+                if (colIdx >= offsets!.Length)
+                {
+                    continue;
+                }
+
+                int offset = offsets[colIdx];
+                if (offset < 0 || offset >= rawData.Length)
+                {
+                    continue;
+                }
+
+                oldValue = ReadTypedValueFromSpan(rawData.AsSpan(offset), ColumnTypes[colIdx], out _);
+            }
+
+            (captured ??= new List<(string Column, object? OldValue)>(1)).Add((column, oldValue));
+        }
+
+        return captured;
+    }
+
+    /// <summary>
+    /// Fallback producer of the same value set as <see cref="TryCaptureIndexedOldValues"/>: decodes a
+    /// whole-row image (the pre-patch bytes) and keeps only the updated, hash-indexed columns. Used when the
+    /// record's layout cannot be walked, so an unusual record keeps the pre-2026-09-26 behaviour rather than
+    /// silently skipping index maintenance.
+    /// </summary>
+    private List<(string Column, object? OldValue)>? TryDecodeIndexedOldValues(
+        Dictionary<string, object>? row,
+        Dictionary<string, object> updates)
+    {
+        if (row is null || this.hashIndexes.Count == 0 || updates.Count == 0)
+        {
+            return null;
+        }
+
+        List<(string Column, object? OldValue)>? captured = null;
+        foreach (var (column, _) in this.hashIndexes)
+        {
+            if (!updates.ContainsKey(column) || !row.TryGetValue(column, out var oldValue))
+            {
+                continue;
+            }
+
+            (captured ??= new List<(string Column, object? OldValue)>(1)).Add((column, oldValue));
+        }
+
+        return captured;
+    }
+
+    /// <summary>
     /// Fixed-width in-place patch: overwrites only the updated slots in an existing fixed record
     /// (variable values get a new overflow block and the slot offset is updated). The record length
     /// is constant, so the patched record always fits — the write is an in-place overwrite (#6).

@@ -2616,6 +2616,22 @@ public partial class Table
                             }
                         }
 
+                        // §5.3 (2026-09-26): the values the index maintenance below needs are read from the
+                        // record BEFORE the patch overwrites it. A fixed-width record's patch re-points the
+                        // column's slot to its new overflow block and frees the block that held the old value,
+                        // so afterwards the record no longer carries what the index has to remove. Reading the
+                        // column here is also one column read instead of the whole-row decode this replaced
+                        // (`row-decode` measured 10,000 calls / 623 B per row / 20,6 % of the profiled batch
+                        // UPDATE pass on the default job — worklog, 2026-09-26). Stamped as `row-decode` on
+                        // purpose: the bucket then compares the replacement against what it replaced.
+                        List<(string Column, object? OldValue)>? indexedOldValues = null;
+                        if (touchesHashIndexedColumn)
+                        {
+                            long captureStart = Diagnostics.WritePathProfiler.Stamp();
+                            indexedOldValues = TryCaptureIndexedOldValues(rawData, updates);
+                            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowDecode, captureStart);
+                        }
+
                         long patchStart = Diagnostics.WritePathProfiler.Stamp();
                         byte[]? patched = _fixedWidthRecords
                             ? TryOverwriteFixedWidthInPlace(rawData, updates)
@@ -2629,31 +2645,43 @@ public partial class Table
 
                         if (patchedInPlace)
                         {
-                            // The record was overwritten in place; when the update changed a
-                            // hash-indexed column, re-point its entries (old key decoded from the
-                            // pre-write row bytes, new key added at the same position). Non-indexed
-                            // updates skip this entirely.
+                            // The record was overwritten in place; when the update changed a hash-indexed
+                            // column, re-point its entries (old key removed, new key added at the same
+                            // position). Non-indexed updates skip this entirely.
+                            //
+                            // The old values come from the pre-patch capture above. When that could not walk the
+                            // record (an unusual/corrupt layout) the whole-row decode is kept as the fallback, so
+                            // index maintenance is never silently skipped — and only for an operation that does
+                            // touch a hash-indexed column, exactly as before this change.
                             if (touchesHashIndexedColumn)
                             {
-                                var oldRow = DeserializeRow(rawData);
-                                if (oldRow is not null)
+                                indexedOldValues ??= TryDecodeIndexedOldValues(DeserializeRow(rawData), updates);
+                            }
+
+                            if (indexedOldValues is not null)
+                            {
+                                foreach (var (colName, oldVal) in indexedOldValues)
                                 {
-                                    foreach (var (colName, hashIdx) in this.hashIndexes)
+                                    if (!updates.TryGetValue(colName, out var newVal) ||
+                                        !this.hashIndexes.TryGetValue(colName, out var hashIdx))
                                     {
-                                        if (!updates.TryGetValue(colName, out var newVal) || newVal is null)
-                                        {
-                                            continue;
-                                        }
+                                        continue;
+                                    }
 
-                                        if (oldRow.TryGetValue(colName, out var oldVal) && oldVal is not null)
-                                        {
-                                            long hashRemoveStart = Diagnostics.WritePathProfiler.Stamp();
-                                            hashIdx.Remove(oldVal, rowPosition);
-                                            Diagnostics.WritePathProfiler.Add(
-                                                Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
-                                                hashRemoveStart);
-                                        }
+                                    if (oldVal is not null)
+                                    {
+                                        long hashRemoveStart = Diagnostics.WritePathProfiler.Stamp();
+                                        hashIdx.Remove(oldVal, rowPosition);
+                                        Diagnostics.WritePathProfiler.Add(
+                                            Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
+                                            hashRemoveStart);
+                                    }
 
+                                    // A NULL value has no index entry — the same rule the append fallback path
+                                    // applies (`if (row.TryGetValue(key, out var newKey) && newKey is not null)`):
+                                    // the superseded entry is dropped and nothing is added in its place.
+                                    if (newVal is not null)
+                                    {
                                         long hashAddStart = Diagnostics.WritePathProfiler.Stamp();
                                         hashIdx.Add(newVal, rowPosition);
                                         Diagnostics.WritePathProfiler.Add(
