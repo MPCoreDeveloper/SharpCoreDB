@@ -12,7 +12,7 @@ The smoke tests cover three compatibility layers:
 
 | Layer | Tests |
 |---|---|
-| **HTTP REST API** | Health check, JWT authentication, SELECT 1 query, `information_schema` discovery |
+| **HTTP REST API** | Health check, JWT authentication, SELECT 1 query, `information_schema` discovery (tables/columns/schemata) |
 | **Binary Protocol (TCP)** | TCP connect, SSL negotiation (SSLRequest/S handshake), PostgreSQL startup message exchange |
 | **Output** | JSON results file (`smoke-results.json`), coloured terminal output, CI-friendly exit codes |
 

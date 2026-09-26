@@ -208,13 +208,15 @@ def test_http_metadata_discovery(
         )
         elapsed = (time.perf_counter() - t0) * 1000
         if r.status_code == 200:
-            report.add(TestResult("Metadata discovery (information_schema)", True, "columns accessible", elapsed))
-        elif r.status_code in (400, 422):
-            # Schema may not expose information_schema; note as warning rather than hard fail
-            report.add(TestResult("Metadata discovery (information_schema)", True, f"endpoint reachable (HTTP {r.status_code}; schema may require setup)", elapsed))
-        elif r.status_code == 500 and "does not exist" in r.text:
-            # information_schema is a PostgreSQL compatibility feature not yet implemented
-            report.add(TestResult("Metadata discovery (information_schema)", True, f"endpoint reachable (HTTP {r.status_code}; information_schema not implemented)", elapsed))
+            body = r.json()
+            rows = body.get("rows") or body.get("data") or []
+            columns = [c.get("name") for c in (body.get("columns") or []) if isinstance(c, dict)]
+            if len(rows) >= 1 and "table_schema" in columns and "table_name" in columns:
+                report.add(TestResult("Metadata discovery (information_schema)", True, f"{len(rows)} row(s), columns {columns}", elapsed))
+            else:
+                # A 200 without the requested metadata columns means the schema layer answered
+                # something else — that is a failure, not a pass with a note.
+                report.add(TestResult("Metadata discovery (information_schema)", False, f"HTTP 200 without metadata rows/columns: {body}", elapsed))
         else:
             report.add(TestResult("Metadata discovery (information_schema)", False, f"HTTP {r.status_code}: {r.text[:200]}", elapsed))
     except Exception as e:

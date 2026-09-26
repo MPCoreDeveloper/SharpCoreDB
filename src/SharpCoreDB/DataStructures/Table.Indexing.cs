@@ -347,6 +347,47 @@ public partial class Table
     public bool HasHashIndex(string columnName) => this.hashIndexes.ContainsKey(columnName);
     
     /// <summary>
+    /// Snapshot of the table's registered indexes for catalog introspection
+    /// (<c>information_schema.indexes</c>). One entry per index name; the automatic per-column hash
+    /// indexes created without a name are reported under their column name.
+    /// </summary>
+    /// <returns>Read-only snapshot: index name, indexed column, index kind ("HASH"/"BTREE"), uniqueness.</returns>
+    public IReadOnlyList<(string IndexName, string ColumnName, string IndexType, bool IsUnique)> GetIndexCatalogSnapshot()
+    {
+        this.rwLock.EnterReadLock();
+        try
+        {
+            var snapshot = new List<(string, string, string, bool)>(this.registeredIndexes.Count + this.indexNameToColumn.Count);
+            var namedColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (indexName, columnName) in this.indexNameToColumn)
+            {
+                namedColumns.Add(columnName);
+                var isUnique = this.registeredIndexes.TryGetValue(columnName, out var named) && named.IsUnique;
+                snapshot.Add((indexName, columnName, ResolveRegisteredIndexKind(columnName), isUnique));
+            }
+
+            foreach (var (columnName, metadata) in this.registeredIndexes)
+            {
+                if (namedColumns.Contains(columnName))
+                    continue;
+
+                snapshot.Add((columnName, columnName, ResolveRegisteredIndexKind(columnName), metadata.IsUnique));
+            }
+
+            return snapshot;
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
+    }
+
+    /// <summary>Reports which index kind is maintained for a column (a B-tree wins when both exist).</summary>
+    private string ResolveRegisteredIndexKind(string columnName)
+        => this._btreeManager?.HasIndex(columnName) == true ? "BTREE" : "HASH";
+    
+    /// <summary>
     /// Checks if an index with the specified name exists (by name or column).
     /// ✅ Phase 1.5: Added for IF NOT EXISTS support in CREATE INDEX.
     /// </summary>

@@ -907,6 +907,15 @@ public partial class SqlParser
             return ExecuteSqliteMasterQuery(sql);
         }
 
+        // information_schema metadata views — engine-level, so the embedded API, REST, WebSocket and
+        // binary protocols all receive the same rows. The ordinal pre-check keeps the SELECT fast
+        // path free of regex work for statements that never mention the metadata schema.
+        if (sql.Contains(InformationSchemaSchemaName, StringComparison.OrdinalIgnoreCase)
+            && InformationSchemaSourceRegex.Match(sql) is { Success: true } informationSchemaMatch)
+        {
+            return ExecuteInformationSchemaQuery(sql, informationSchemaMatch.Groups["view"].Value);
+        }
+
         // ✅ Route GRAPH_RAG queries through EnhancedSqlParser before regex-based parsing
         if (sql.Contains("GRAPH_RAG", StringComparison.OrdinalIgnoreCase))
         {
