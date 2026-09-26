@@ -22,3 +22,7 @@ and for the measurement pitfalls. This file only carries the session protocol, w
   next item. Do not spin on it.
 - Keep build, the core test suite and `--gate` green. A gate failure gets a documented re-run, never a
   silent retry.
+- **Bugs found while measuring are fixed, not written down** — in the same session, with a red→green
+  test, the wider suite run, and the evidence in the worklog. See `00-bug-fix-duty.md` (owner
+  directive, 2026-09-26). Only a safety-rail conflict, an owner decision or something outside this
+  repository may be handed on, and then it is `BLOCKED` in the worklog, never a bare note.

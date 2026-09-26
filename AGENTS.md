@@ -95,3 +95,20 @@ C# 15 preview; `master` holds the net10.0 / C# 14 stable packages.
 
 <!-- /bmad:context -->
 
+## Working rules that outrank convenience (owner directive, 2026-09-26 — deliberately outside the managed block)
+
+- **A bug you find is yours to fix, in the same session.** A finding never leaves a session as a bare
+  note, a `TODO`, a worklog bullet or a hand-off. The bar is: a test that fails before and passes
+  after, build clean, core suite green, and the evidence recorded (worklog here, `docs/CHANGELOG.md`
+  when the behaviour is user-visible).
+- Fix the cause, not the symptom: read the code that produces the wrong behaviour before choosing a
+  fix, and when the logic is duplicated, fix every copy.
+- Run the wider suite after the fix, not only the new tests — the full suite has twice caught a
+  regression the focused tests missed.
+- Never "fix" a defect by weakening a guarantee: no disabling encryption, no trading durability, no
+  editing a test until it passes.
+- Only a safety-rail conflict (brief §11), an owner decision, or a defect outside this repository may
+  be handed on — and then it is logged with evidence and marked `BLOCKED`, never dropped.
+- Two defects were fixed under this rule in session 62 (the five-copy DDL type map and the
+  disconnect-logged-as-auth-failure); the mechanical rules live in `.clinerules/00-bug-fix-duty.md`.
+

@@ -35,6 +35,15 @@
    ends or the mission's acceptance criteria are met.
 9. **Respect the timeboxes in §5.** No single work item may consume more than its timebox. When a
    timebox expires you stop, record what you learned, and move on — even mid-experiment.
+10. **A bug you find, you fix — in the same session** (owner directive, 2026-09-26). A defect found
+    while measuring is never parked as a note, a `TODO`, a worklog bullet or a hand-off: reproduce
+    it, fix the cause (read the code that produces the wrong result first; if the same logic is
+    duplicated, fix every copy), leave a test that fails before and passes after, run build + core
+    suite, and record the evidence in the worklog. Hand it on only when §11 (safety rails) or the
+    owner blocks the fix, or when it is outside this repository — then log it with evidence, mark it
+    `BLOCKED`, and keep it in the `NEXT:` line. Never fix anything by weakening a guarantee
+    (encryption, durability, or a test that then passes). Worked example: session 62 closed both of
+    session 61's handed-on findings this way.
 
 ## 1. Mission and success criteria
 
