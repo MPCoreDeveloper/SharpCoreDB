@@ -9,6 +9,11 @@ campaign, now largely closed) and `AUTONOMOUS_AGENT_BRIEF.md` (session protocol)
 SharpCoreDB number in this plan comes from this repository's own harness and is cited to the file it
 lives in.**
 **Reporting channel:** `WORKLOG.md` only (append-only).
+**Outcome so far (§5.2, session 53):** the §0 mandate is **not met**. The *fair* shape is won on all four
+operations and the absolute floors hold, but the two mission arms — **B** (default posture, encrypted) and
+**C** (default no-PK `docs` job) — are still short, and two of the blockers are owner decisions (§9 rows 5
+and 7). §5.2 states every remaining cell with the evidence for it, so nothing here has to be re-derived from
+the worklog.
 
 ---
 
@@ -640,6 +645,62 @@ straddles on rep 1). See §6 rule 10 for the protocol consequence, which is the 
 > cells said 0,24× and 0,31×. Arm B and arm C both remain behind SQLite on UPDATE/DELETE largely for trap 4's
 > reason (the reference resolves through `id INTEGER PRIMARY KEY`; arm C matches on `name`), which is what
 > `--fair-ni` exists to separate.
+
+### 5.2 Outcome against the mandate (session 53) — not met, and every remaining cell has its reason
+
+§0's mandate is "**bring the default posture (B) and the default schema shape (C) to ≥ 1,00× on all four
+operations**". Read against §5.1's paired medians — sessions 52 and 53 added no arm measurements, because
+they fixed the gate's method and landed the branch — the answer is **not met**:
+
+| arm | INSERT | READ | UPDATE | DELETE | cells met |
+|---|---|---|---|---|---|
+| **B** — shipped default (encrypted, PK) | 0,95× (0,88–1,02) | **1,13×** (1,02–1,20) | 0,62× (0,61–0,65) SQL-free batch · 0,36× SQL path | 0,83× (0,58–0,88) batch · 0,35× SQL path | 1 of 4 |
+| **C** — default no-PK `docs` job | 0,90× (0,87–0,96) | **1,07–1,13×** | 0,35–0,55× | 0,14–0,17× | 1 of 4 |
+| **B/C with `SHARPCOREDB_HASH_INDEXES=0`** (dial only, not a shipped posture) | **1,60× (1,38–1,78)** / **1,38–1,41×** | unchanged (1,08–1,13×) | §5.1 row 4 | §5.1 row 4 | INSERT crosses, at that configuration |
+| **fair shape** (tuned, no PK, indexed predicate) | **1,45–1,56×** | **1,74–2,07×** | **1,42–2,24×** (batch) | **10,4–12,0×** (batch) | 4 of 4 |
+| **A** — fair-PK tuned plaintext (control) | 0,87× — *closed as not claimed*, decision 10 | **1,26×** | **1,29×** | **1,62×** | held by decision |
+
+**What the campaign did establish, and can be published:**
+
+1. **The fair shape is won on all four operations**, UPDATE included: S5 had to withdraw its UPDATE cell at
+   0,80× behind, and the SQL-free batch path (`Database.UpdateBatch` / `DeleteBatch`) moved it to **1,42–2,24×
+   ahead**, reproduced in three independent samples (5/9/5 reps) with a same-code control column at 0,98–1,03×.
+2. **A large part of the recorded deficit was the measurement, not the engine.** The paired, interleaved
+   protocol with discarded warm-up reps moved arm B's UPDATE **0,48× → 1,05×** and READ **0,57× → 1,12×** on
+   its own, and session 32's symmetric-harness correction tripled SQLite's own PK UPDATE/DELETE reference. No
+   ratio published before session 27 may be quoted.
+3. **PageBased fixes arm B's INSERT and READ outright** (0,83× → **1,72×**; 1,10× → **4,58×**, correctness
+   checked on a 200-key sample) and is worse on DELETE — so UPDATE/DELETE being behind in *both* engines is
+   **not an engine property**. The engine swap is the A/B that rules the storage engine out.
+4. **All seven work items are closed** (§8): S1 ✅, S5 ✅, S7 ⚖️, S3/S2/S6 ⛔ — and three of the four rejections
+   refuted their own hypothesis *before* a speculative change shipped. S4 is ⛔ `BLOCKED`, so its hypothesis is
+   **untested, not refuted**.
+5. **The absolute floors stay met**: UPDATE ≥ 120K, DELETE ≥ 150K, INSERT ≥ 150K ops/s.
+
+**Why the two mission arms are still short — per cell, with the evidence that decides it:**
+
+- **INSERT — B 0,95×, C 0,90×: a configuration decision, not missing code.** The same build crosses 1,00× with
+  the per-column auto-index set off (**1,60×** arm B, **1,38–1,41×** arm C, reproduced in two runs each), and
+  the dial is identified because both of our arms move while SQLite's reference stays flat. It is blocked on
+  **§9 row 5**, which now carries both halves of the trade: the set costs ~30–45 % of INSERT and buys
+  **32×–7.298×** on equality queries over columns the user did not explicitly index. Narrowing the default is
+  therefore the *wrong* lever; lazy/on-demand creation or a column-class rule are the live options.
+- **UPDATE and DELETE — B 0,62×/0,83×, C 0,35–0,55×/0,14–0,17×: the comparison's shape and the encryption
+  tax.** The same engine on a *matched fair* reference (no rowid, same index set) reads UPDATE **1,43×** and
+  DELETE **1,16×** — so the row write is not the deficit. The reference resolves `WHERE id = …` through
+  `INTEGER PRIMARY KEY` while these arms match a non-key column (trap 4), and arm B additionally pays the
+  default encryption tax. That is the documented, evidence-backed reason of this plan's own completion clause
+  — **but a reason is not the mandate met**, and it is stated as such.
+- **No no-regression claim is verifiable yet: six `--gate` runs, 6 of 6 `INCONCLUSIVE`.** Two mechanisms are
+  named and now separated in the output — machine load, and the cold first rep the gate includes in the
+  statistic that decides it (**§9 row 7**). `D:\scdb-bench-tmp\quiet-gate-run.ps1` is the decisive experiment
+  the moment the owner clears the box (one elevated command; the agent shell has no elevation).
+
+**Not levers — measured, and not to be re-opened:** NativeAOT dispatch (S4 *untested*, blocked on the VS C++
+workload, §9 row 6) · compaction · shape-matched JIT/SIMD (0,3 % available) · the dictionary-free op shape
+(measured *ceiling* 1,1–3,0 %) · the no-PK delete's dead per-key row decode (moved 0,14× by nothing) · the B3
+structured predicate for UPDATE (cancelled by measurement, session 36) · "narrow the auto-index default"
+(§9 row 5, refuted in the direction it was proposed).
 
 The plan is complete when **arm B and arm C each read ≥ 1,00× on all four operations**, or when each
 behind-cell has a documented, evidence-backed reason it cannot.
