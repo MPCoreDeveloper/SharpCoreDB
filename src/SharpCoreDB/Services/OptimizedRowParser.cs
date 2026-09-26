@@ -25,7 +25,7 @@ public static class OptimizedRowParser
         // For small JSON, use the span directly
         if (jsonBytes.Length < 4096)
         {
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes)
+            return AotJsonSerializer.Deserialize<Dictionary<string, object>>(jsonBytes)
                 ?? [];
         }
 
@@ -34,7 +34,7 @@ public static class OptimizedRowParser
         try
         {
             jsonBytes.CopyTo(rentedBuffer.AsSpan());
-            return JsonSerializer.Deserialize<Dictionary<string, object>>(
+            return AotJsonSerializer.Deserialize<Dictionary<string, object>>(
                 rentedBuffer.AsSpan(0, jsonBytes.Length))
                 ?? [];
         }
@@ -57,7 +57,7 @@ public static class OptimizedRowParser
             return [];
         }
 
-        return JsonSerializer.Deserialize<Dictionary<string, object>>(json)
+        return AotJsonSerializer.Deserialize<Dictionary<string, object>>(json)
             ?? new Dictionary<string, object>();
     }
 
@@ -68,7 +68,7 @@ public static class OptimizedRowParser
     /// <returns>JSON string.</returns>
     public static string SerializeRowOptimized(Dictionary<string, object> row)
     {
-        return JsonSerializer.Serialize(row);
+        return AotJsonSerializer.Serialize(row);
     }
 
     /// <summary>
@@ -78,7 +78,7 @@ public static class OptimizedRowParser
     /// <returns>JSON array string.</returns>
     public static string SerializeRowsOptimized(List<Dictionary<string, object>> rows)
     {
-        return JsonSerializer.Serialize(rows);
+        return AotJsonSerializer.Serialize(rows);
     }
 
     /// <summary>
@@ -90,7 +90,7 @@ public static class OptimizedRowParser
     {
         if (jsonArrayBytes.Length < 4096)
         {
-            return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(jsonArrayBytes)
+            return AotJsonSerializer.Deserialize<List<Dictionary<string, object>>>(jsonArrayBytes)
                 ?? new List<Dictionary<string, object>>();
         }
 
@@ -98,7 +98,7 @@ public static class OptimizedRowParser
         try
         {
             jsonArrayBytes.CopyTo(rentedBuffer.AsSpan());
-            return JsonSerializer.Deserialize<List<Dictionary<string, object>>>(
+            return AotJsonSerializer.Deserialize<List<Dictionary<string, object>>>(
                 rentedBuffer.AsSpan(0, jsonArrayBytes.Length))
                 ?? [];
         }

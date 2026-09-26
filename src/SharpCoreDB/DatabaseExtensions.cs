@@ -358,7 +358,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         {
             try
             {
-                compiledPlan = QueryCompiler.Compile(sql);
+                // Expression-tree compilation (Lambda.Compile) does not exist under Native AOT, and
+                // QueryCompiler.Compile says so with [RequiresDynamicCode]. The guard is both what the AOT
+                // analyzer needs to see and the truth of the path: where dynamic code is unsupported the
+                // non-compiled query execution is used, which is exactly what Compile falls back to anyway.
+                if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                {
+                    compiledPlan = QueryCompiler.Compile(sql);
+                }
             }
             catch
             {

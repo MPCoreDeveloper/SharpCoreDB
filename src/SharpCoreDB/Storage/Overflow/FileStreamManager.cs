@@ -221,7 +221,7 @@ public sealed class FileStreamManager : IDisposable
         try
         {
             var json = await File.ReadAllTextAsync(metaPath, cancellationToken);
-            return JsonSerializer.Deserialize<FilePointer>(json);
+            return AotJsonSerializer.Deserialize<FilePointer>(json);
         }
         catch
         {
@@ -305,12 +305,9 @@ public sealed class FileStreamManager : IDisposable
 
     private static async Task WriteMetadataAsync(string metaPath, FilePointer pointer, CancellationToken cancellationToken)
     {
-        var options = new JsonSerializerOptions
-        {
-            WriteIndented = true,
-        };
-        
-        var json = JsonSerializer.Serialize(pointer, options);
+        var options = AotJsonSerializer.CreateOptions(writeIndented: true);
+
+        var json = JsonSerializer.Serialize(pointer, options.GetTypeInfo<FilePointer>());
         await File.WriteAllTextAsync(metaPath, json, cancellationToken);
     }
 }

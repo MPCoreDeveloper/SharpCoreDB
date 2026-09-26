@@ -10,6 +10,12 @@
 // Run (JIT):
 //   dotnet run -c Release --project tools/SharpCoreDB.AotSmoke
 //
+// Where the MSVC C++ workload is missing the Native AOT publish cannot link (`vswhere.exe failed to locate
+// Visual Studio with Microsoft.VisualStudio.Component.VC.Tools.x86.x64`), and this is the fallback that still
+// exercises the same code path, because trimming alone sets the JSON feature switch to false — i.e. the
+// source-generated arm of AotJsonSerializer, never the reflection resolver:
+//   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishTrimmed=true
+//
 // Exercises the core paths that must work under Native AOT:
 //   CREATE TABLE / CREATE INDEX, InsertBatch, parameterized ExecuteQuery,
 //   the zero-allocation ExecuteQueryStruct fast path, reopen, single-file
@@ -18,6 +24,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
+using System.Text.Json;
 
 // Smoke-test tool: throwaway local password, never a real credential.
 const string AotPassword = "aot123"; // NOSONAR:S2068 - intentional test fixture value
@@ -26,6 +33,12 @@ var services = new ServiceCollection();
 services.AddSharpCoreDB();
 var sp = services.BuildServiceProvider();
 var factory = sp.GetRequiredService<DatabaseFactory>();
+
+// State which JsonSerializer arm this build runs: the reflection resolver while reflection is enabled (the JIT
+// default) or the source-generated contexts where it is disabled (trimmed/Native AOT publications). It is the only
+// difference between the two arms of AotJsonSerializer, so printing it is what makes a PASS attributable to one.
+Console.WriteLine($"[aot-smoke] JsonSerializer.IsReflectionEnabledByDefault = {JsonSerializer.IsReflectionEnabledByDefault}");
+
 return await RunAotSmokeAsync(factory);
 
 /// <summary>

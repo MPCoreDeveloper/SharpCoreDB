@@ -9,6 +9,7 @@ using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 
 /// <summary>
 /// B-tree index management for Table - NEW partial class file to avoid edit conflicts.
@@ -162,6 +163,10 @@ public partial class Table
     /// <param name="orderBy">Optional ORDER BY column.</param>
     /// <param name="asc">Sort direction.</param>
     /// <returns>Query results if B-tree was used, null otherwise.</returns>
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2075",
+        Justification = "FindRange is looked up by name on a type-erased index instance (GetBTreeIndex returns object), the lookup has an explicit null path, and the index types are constructed inside this assembly. Removing the reflection needs a non-generic index interface — a change to an index path rather than an annotation — and is recorded as a follow-up in the session-56 worklog entry.")]
     internal List<Dictionary<string, object>>? TryBTreeRangeScan(
         string where,
         string? orderBy,
@@ -431,6 +436,10 @@ public partial class Table
     /// </summary>
     /// <param name="row">The row to index.</param>
     /// <param name="position">The storage position of the row.</param>
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2075",
+        Justification = "Add is looked up by name on a type-erased index instance (GetBTreeIndex returns object), the lookup has an explicit null path, and the index types are constructed inside this assembly. Removing the reflection needs a non-generic index interface — a change to an index path rather than an annotation — and is recorded as a follow-up in the session-56 worklog entry.")]
     private void IndexRowInBTree(Dictionary<string, object> row, long position)
     {
         if (_btreeManager == null)

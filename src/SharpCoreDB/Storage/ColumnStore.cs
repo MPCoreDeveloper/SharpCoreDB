@@ -5,6 +5,7 @@
 namespace SharpCoreDB.ColumnStorage;
 
 using System.Buffers;
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using System.Runtime.Intrinsics;
 using System.Linq.Expressions;
@@ -19,8 +20,10 @@ using System.Linq.Expressions;
 /// - ColumnStore.Aggregates.cs: SIMD-optimized aggregate implementations (SUM, AVG, MIN, MAX)
 /// - ColumnStore.Buffers.cs: Column buffer interface and concrete buffer types
 /// </summary>
-/// <typeparam name="T">The entity type to store in columnar format.</typeparam>
-public sealed partial class ColumnStore<T> : IDisposable where T : class
+/// <typeparam name="T">The entity type to store in columnar format. Its public properties are required —
+/// the column layout is derived from them (<c>typeof(T).GetProperties()</c>), so the annotation is what tells
+/// the trimmer/AOT analyzer those properties must survive (IL2090).</typeparam>
+public sealed partial class ColumnStore<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T> : IDisposable where T : class
 {
     private readonly Dictionary<string, IColumnBuffer> _columns = [];
     private int _rowCount;

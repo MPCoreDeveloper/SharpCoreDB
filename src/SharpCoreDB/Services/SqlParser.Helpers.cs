@@ -274,7 +274,7 @@ public partial class SqlParser
         // JSON array format: [0.1, 0.2, 0.3, ...]
         if (val.StartsWith('[') && val.EndsWith(']'))
         {
-            return System.Text.Json.JsonSerializer.Deserialize<float[]>(val)
+            return AotJsonSerializer.Deserialize<float[]>(val)
                 ?? throw new InvalidOperationException("Failed to parse vector JSON array");
         }
 

@@ -9,6 +9,7 @@ using System;
 using System.Buffers;
 using System.Buffers.Binary;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.IO.Compression;
 using System.Linq;
 using System.Reflection;
@@ -29,8 +30,10 @@ using SharpCoreDB.ColumnStorage;
 /// - Better compression (similar values compress well)
 /// - SIMD-friendly memory layout
 /// </remarks>
-/// <typeparam name="T">The entity type stored in columnar format.</typeparam>
-public sealed class ColumnarAdapter<T> : IDisposable where T : class, new()
+/// <typeparam name="T">The entity type stored in columnar format. Its public properties are required — the
+/// column names are inferred from them when the metadata block has none (<c>typeof(T).GetProperties</c> /
+/// <c>GetProperty</c>), so the annotation is what keeps them alive under trimming (IL2090).</typeparam>
+public sealed class ColumnarAdapter<[DynamicallyAccessedMembers(DynamicallyAccessedMemberTypes.PublicProperties)] T> : IDisposable where T : class, new()
 {
     private readonly SingleFileStorageProvider _storageProvider;
     private readonly string _tableName;

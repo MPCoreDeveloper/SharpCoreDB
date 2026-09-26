@@ -26,7 +26,7 @@ public sealed class UserService(ICryptoService crypto, IStorage storage, string 
         {
             try
             {
-                return JsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? [];
+                return AotJsonSerializer.Deserialize<Dictionary<string, UserCredentials>>(data) ?? [];
             }
             catch (JsonException ex)
             {
@@ -48,7 +48,7 @@ public sealed class UserService(ICryptoService crypto, IStorage storage, string 
     private void SaveUsers()
     {
         var path = Path.Combine(dbPath, "users.json");
-        storage.Write(path, JsonSerializer.Serialize(users));
+        storage.Write(path, AotJsonSerializer.Serialize(users));
     }
 
     /// <inheritdoc />

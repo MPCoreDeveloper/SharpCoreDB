@@ -59,17 +59,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private IGraphRagProvider? _cachedGraphRagProvider;  // v2: cached DI resolution (avoids per-call GetService)
 
     /// <summary>
-    /// v2 (Native AOT readiness): metadata JSON options. Uses the reflection resolver when
-    /// reflection is enabled (identical JIT behavior) and the source-generated
-    /// <see cref="SharpCoreDBJsonContext"/> under Native AOT where reflection-based
-    /// serialization is disabled.
+    /// v2 (Native AOT readiness): metadata JSON options. <see cref="AotJsonSerializer.Options"/> resolves the
+    /// type metadata from the reflection resolver while reflection is enabled (identical JIT behavior) and
+    /// from the source-generated contexts under Native AOT where reflection-based serialization is disabled —
+    /// and every call site below asks it for a <c>JsonTypeInfo</c> instead of using the reflection-only
+    /// <c>JsonSerializer</c> overloads (the IL2026 / IL3050 blockers).
     /// </summary>
-    private static readonly JsonSerializerOptions MetadataJsonOptions = new()
-    {
-        TypeInfoResolver = JsonSerializer.IsReflectionEnabledByDefault
-            ? new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
-            : SharpCoreDBJsonContext.Default
-    };
+    private static readonly JsonSerializerOptions MetadataJsonOptions = AotJsonSerializer.Options;
     
     // ✅ SCDB Phase 1: Storage provider abstraction
     // Null when using legacy directory-based storage (IStorage)
@@ -310,7 +306,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         Dictionary<string, object>? meta;
         try
         {
-            meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson, MetadataJsonOptions);
+            meta = JsonSerializer.Deserialize(metaJson, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>());
         }
         catch (JsonException ex)
         {
@@ -367,7 +363,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             return;
         }
 
-        var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString, MetadataJsonOptions);
+        var tablesList = JsonSerializer.Deserialize(
+            tablesObjString,
+            MetadataJsonOptions.GetTypeInfo<List<Dictionary<string, object>>>());
         if (tablesList is null)
         {
 #if DEBUG
@@ -382,7 +380,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 
         foreach (var tableDict in tablesList)
         {
-            var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict, MetadataJsonOptions), MetadataJsonOptions);
+            var table = JsonSerializer.Deserialize(
+                JsonSerializer.Serialize(tableDict, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>()),
+                MetadataJsonOptions.GetTypeInfo<Table>());
             if (table is not null)  // ✅ C# 14: is not null pattern
             {
                 // Backward compatibility: older metadata may not include StorageMode.
@@ -573,7 +573,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         // ✅ 1.9.5: Persist the ULID-spec marker so reopened databases know whether they were created
         // by 1.9.5+ (spec-compliant ULIDs) or earlier (legacy ULIDs needing MigrateLegacyUlids()).
         meta[PersistenceConstants.UlidSpecMarkerKey] = _ulidSpec ?? true;
-        var metaJson = JsonSerializer.Serialize(meta, MetadataJsonOptions);
+        var metaJson = JsonSerializer.Serialize(meta, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>());
         
         if (_storageProvider is not null)
         {

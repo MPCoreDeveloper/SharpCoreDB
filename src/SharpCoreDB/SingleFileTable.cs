@@ -760,7 +760,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (!_fixedWidthRecords)
         {
             // Legacy JSON row format (write using WriteBlockAsync to properly track data length).
-            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(
+                serializableRows,
+                JsonOptions.GetTypeInfo<List<Dictionary<string, object?>>>());
             _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
             return;
         }
@@ -1052,7 +1054,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 }
 
                 var trimmedJsonBytes = dataBytes.AsSpan(0, endIndex);
-                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
+                var rows = JsonSerializer.Deserialize(
+                    trimmedJsonBytes,
+                    JsonOptions.GetTypeInfo<List<Dictionary<string, object?>>>());
                 _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
 
                 // Config opts into fixed-width: convert the in-memory rows to binary on next flush.

@@ -61,7 +61,7 @@ internal sealed class PolymorphicObjectConverter : JsonConverter<object?>
     }
 
     public override object? Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
-        => JsonSerializer.Deserialize<JsonElement>(ref reader, options);
+        => JsonSerializer.Deserialize(ref reader, options.GetTypeInfo<JsonElement>());
 
     public override void Write(Utf8JsonWriter writer, object? value, JsonSerializerOptions options)
     {
@@ -71,6 +71,8 @@ internal sealed class PolymorphicObjectConverter : JsonConverter<object?>
             return;
         }
 
-        JsonSerializer.Serialize(writer, value, value.GetType(), options);
+        // Resolve the runtime type's metadata from the caller's resolver rather than handing System.Text.Json a
+        // Type, which is the reflection-only overload the AOT/trim analyzer flags (IL2026 / IL3050).
+        JsonSerializer.Serialize(writer, value, options.GetTypeInfo(value.GetType()));
     }
 }

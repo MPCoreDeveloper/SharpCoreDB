@@ -588,7 +588,7 @@ public sealed class ColumnCodec(ColumnFormat format)
             }
             else
             {
-                var bytes = System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(value);
+                var bytes = AotJsonSerializer.SerializeToUtf8Bytes(value);
                 writer.Write(bytes.Length);
                 writer.Write(bytes);
             }
