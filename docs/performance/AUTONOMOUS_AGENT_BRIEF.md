@@ -337,6 +337,21 @@ failure.
 
 ### 5.3 P1 — default-job UPDATE/DELETE (0.24× / 0.31×) — *measurement-first, lower confidence*
 
+**STATUS 2026-09-26: CLOSED AGAIN — `REJECTED (documented)` for the lever, instrumentation KEPT; next item is 5.4.**
+Superseding the 2026-09-23 close kept below: the item was re-opened on 2026-09-26 because `--docs-batch` makes the
+SQL-free batch arm directly observable. Session 65 replaced the `fastPatch` branch's un-stamped whole-row decode with a
+pre-patch single-column capture (**`row-decode` 623 → 144 B/call, −77 %**), and session 66 stamped the last three
+un-stamped regions (`op-setup`, `batch-prep`, `db-flush`, plus plan §2's `wal-flush`, which had **no writer anywhere**)
+and measured the remainder: the batch pass attributes **81,4 % cold (1 rep, no warm-up) against 92,7–100 % warm with one
+discarded warm-up rep** — plan §2's acceptance is ≥ 90 % — so the "missing ~19 %" was **one-time JIT/first-touch inside
+the timed window, not per-operation work**. The per-operation head is **0–24 B and 0,8–2,0 ms per 10.000 operations**,
+the entry points' operation re-listing is **320.112 B per batch** (0,6–0,9 % of the pass, and removable only by also
+reshaping the shared `TryBulkUpdateContiguousFixedWidth`), and the caller's explicit `db.Flush()` inside the window is
+**0,3 ms** of which the WAL-batch-buffer half is **0,0 ms**. The 2026-09-23 table's per-operation ranking still holds
+(`row-locate-index` 279 B/call, `engine-write`, `in-place-patch` 175 B, `index-maint` 43 B × 20.000 calls, the
+10,4–13,2 MB one-call snapshot), and its two candidate levers still need the same owner decisions. Worklog: sessions
+65 and 66.
+
 **STATUS 2026-09-23: CLOSED — `REJECTED (documented)`, timebox rule applied; next item is 5.4.** The count-based
 attribution table now exists for the two `--dual-mode` arms (six interleaved profiled passes, plan §9) and it says the
 residual is **(a) AEAD-per-record**, which is the encryption contract and not a defect (`in-place-patch` 8,3 ms vs
@@ -359,9 +374,13 @@ fallback was already measured worse.
   7,6 %, `in-place-patch` 7,0 %, `row-snapshot` 5,7 % — so the snapshot is **REJECTED as a lever** and the
   next candidates are `commit-overwrites` (a durability-boundary call, 1,5 MB) and `index-maint`. Plan §9
   carries the full table; the worklog entry is session 11.
-- The eventual fix is a **new capability** (not a gate relax): extend in-place patching to
+- ~~The eventual fix is a **new capability** (not a gate relax): extend in-place patching to
   non-PK-located updates — locate via the hash index, overwrite when the changed field's encoded width
-  is unchanged, using `IStorageEngine.TryUpdateInPlaceSameLength` (already exists).
+  is unchanged, using `IStorageEngine.TryUpdateInPlaceSameLength` (already exists).~~ **Stale — corrected
+  2026-09-26 (session 65, §8(a)): the capability already exists and fires.** `in-place-patch` and `engine-write`
+  each record **10.000 calls on a 10.000-row batch** on the default job's SQL-free batch arm, on both routes, so
+  the premise that the machinery is missing was wrong and this paragraph now states what is actually left: the
+  distributed per-operation cost, priced in the 2026-09-26 status line above and in the worklog's session-66 table.
 - **Timebox:** 2 sessions — hard stop, no exceptions. This item must never block 5.1/5.2.
 - **Done when (DoD):** **either** of the two acceptable exits —
   1. **a landed fix:** in-place patching extended to non-PK-located updates, and the default-job UPDATE

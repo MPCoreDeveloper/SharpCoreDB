@@ -297,9 +297,38 @@ public static class WritePathProfiler
         /// on this arm.
         /// </summary>
         EncodeScratch = 35,
+
+        /// <summary>
+        /// The per-operation head of the batch UPDATE loop: resolving an operation's key out of its predicate
+        /// text (text callers only — a structured caller hands it in), the fast-patch gate and the scan that
+        /// decides whether the operation touches a hash-indexed column (<c>Table.CRUD.cs</c>'s
+        /// <c>UpdateMultipleCore</c>). Added (2026-09-26, plan §5.3 session 2) because after session 65 replaced
+        /// the un-stamped whole-row decode the batch pass still attributed only ~81 % of its wall time, and this
+        /// head was the one per-operation region left without a stamp — which made "the remainder is
+        /// dispatch/per-operation glue" a name rather than a measurement.
+        /// </summary>
+        OpSetup = 36,
+
+        /// <summary>
+        /// Normalizing a batch UPDATE's incoming operation list into the shape the shared core reads
+        /// (<c>UpdateMultiple</c> and <c>UpdateMultipleStructured</c> each re-list their caller's operations).
+        /// Added (2026-09-26, plan §5.3 session 2) to put a number on the one per-batch allocation the
+        /// structured entry point makes before the core starts — a <c>List</c> holding one four-part tuple per
+        /// operation, i.e. 10,000 tuple writes per batch on the default job.
+        /// </summary>
+        BatchPrep = 37,
+
+        /// <summary>
+        /// The <c>Database.Flush()</c> call a caller makes after a batch DML phase — the explicit durability
+        /// boundary. Added (2026-09-26, plan §5.3 session 2) because on the profiled default-job UPDATE pass
+        /// that call sits <b>inside</b> the timed window and had no stamp, so one batch-level cost was
+        /// indistinguishable from per-operation glue. Its nested <see cref="WalFlush"/> half separates the
+        /// WAL-batch-buffer flush from the table/engine flush.
+        /// </summary>
+        DbFlush = 38,
     }
 
-    private const int StageCount = 36;
+    private const int StageCount = 39;
 
     private static readonly long[] ElapsedTicks = new long[StageCount];
     private static readonly long[] CallCounts = new long[StageCount];
@@ -343,6 +372,7 @@ public static class WritePathProfiler
         "commit-ovw-write",
         "encode-layout",
         "encode-scratch",
+        "op-setup", "batch-prep", "db-flush",
     ];
 
     private static int _enabled;

@@ -742,12 +742,21 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         if (isReadOnly)
             return;
 
+        // §5.3 session 2 (2026-09-26): this call is the caller's explicit durability boundary, and on the
+        // default-job UPDATE pass it sits INSIDE the timed window (the harness stops its clock after it), with
+        // no stamp of its own — so a batch-level flush was indistinguishable from per-operation glue there.
+        long dbFlushStart = Diagnostics.WritePathProfiler.Stamp();
         try
         {
             // ✅ CRITICAL: Flush WAL batch buffer FIRST
             // Rows 101-200 may still be queued in the batch buffer waiting for batch completion
             // Must flush them before storage engine
+            // §5.3 session 2 (2026-09-26): the plan's §2 recorded `wal-flush` as having no writer anywhere;
+            // this is its first one, and it separates the WAL-batch-buffer half of an explicit flush from the
+            // table/engine half below (which `db-flush` covers).
+            long walFlushStart = Diagnostics.WritePathProfiler.Stamp();
             FlushBatchWalBuffer();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalFlush, walFlushStart);
             
             // ✅ CRITICAL: Flush BOTH storage engine AND all table data
             // Storage engine handles low-level persistence, but table data lives in memory
@@ -783,6 +792,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to flush database changes: {ex.Message}", ex);
+        }
+        finally
+        {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.DbFlush, dbFlushStart);
         }
     }
 

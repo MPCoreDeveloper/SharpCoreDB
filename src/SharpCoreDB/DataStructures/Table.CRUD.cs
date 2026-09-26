@@ -2294,11 +2294,17 @@ public partial class Table
     {
         if (operations.Count == 0) return;
 
+        // §5.3 session 2 (2026-09-26): the per-batch normalization into the shared core's operation shape.
+        // Both entry points re-list their caller's operations, so this stamp is on both — one List of one
+        // four-part tuple per operation, and the only allocation either caller makes before the core starts.
+        long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
         var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
         foreach (var (where, updates) in operations)
         {
             structured.Add((where, null, null, updates));
         }
+
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.BatchPrep, batchPrepStart);
 
         UpdateMultipleCore(structured);
     }
@@ -2318,21 +2324,32 @@ public partial class Table
         ArgumentNullException.ThrowIfNull(operations);
         if (operations.Count == 0) return 0;
 
+        // §5.3 session 2 (2026-09-26): see UpdateMultiple — same normalization, same stamp. The validation
+        // runs inside the stamped region and is wrapped so a rejected operation cannot leave the profiler's
+        // allocation checkpoint open (the report surfaces a leftover depth rather than hiding it).
+        long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
         var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
-        foreach (var (keyColumn, keyValue, updates) in operations)
+        try
         {
-            if (string.IsNullOrWhiteSpace(keyColumn))
+            foreach (var (keyColumn, keyValue, updates) in operations)
             {
-                throw new ArgumentException("A key column is required for every batch UPDATE operation.", nameof(operations));
-            }
+                if (string.IsNullOrWhiteSpace(keyColumn))
+                {
+                    throw new ArgumentException("A key column is required for every batch UPDATE operation.", nameof(operations));
+                }
 
-            if (keyValue is null)
-            {
-                throw new ArgumentException("A non-null key value is required for every batch UPDATE operation.", nameof(operations));
-            }
+                if (keyValue is null)
+                {
+                    throw new ArgumentException("A non-null key value is required for every batch UPDATE operation.", nameof(operations));
+                }
 
-            ArgumentNullException.ThrowIfNull(updates);
-            structured.Add((string.Empty, keyColumn, keyValue, updates));
+                ArgumentNullException.ThrowIfNull(updates);
+                structured.Add((string.Empty, keyColumn, keyValue, updates));
+            }
+        }
+        finally
+        {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.BatchPrep, batchPrepStart);
         }
 
         return UpdateMultipleCore(structured);
@@ -2396,6 +2413,13 @@ public partial class Table
 
             foreach (var (where, structuredKeyColumn, structuredKeyValue, updates) in operations)
             {
+                // §5.3 session 2 (2026-09-26): the per-operation head of this loop — key resolution, the
+                // fast-patch gate and the touch-the-index scan — was the last per-operation region without a
+                // stamp, which is why the batch pass attributed ~81 % of its wall time and the remainder only
+                // had a name ("dispatch/per-operation glue"). It closes again right after that scan; the
+                // locate, capture, patch, write and index stages below keep their own stamps.
+                long opSetupStart = Diagnostics.WritePathProfiler.Stamp();
+
                 // One key resolution per operation. Text callers get it from the predicate text —
                 // the parse both fast branches below used to perform separately; structured callers
                 // hand it in already typed, so nothing is parsed at all.
@@ -2444,6 +2468,8 @@ public partial class Table
                         }
                     }
                 }
+
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.OpSetup, opSetupStart);
 
                 // Resolve matching rows as (storage position, row, raw bytes) so the columnar
                 // write path can patch fields in place even when the table has no primary key.
