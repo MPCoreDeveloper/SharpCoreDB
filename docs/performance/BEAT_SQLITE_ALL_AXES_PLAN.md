@@ -660,7 +660,39 @@ they fixed the gate's method and landed the branch — the answer is **not met**
 | **fair shape** (tuned, no PK, indexed predicate) | **1,45–1,56×** | **1,74–2,07×** | **1,42–2,24×** (batch) | **10,4–12,0×** (batch) | 4 of 4 |
 | **A** — fair-PK tuned plaintext (control) | 0,87× — *closed as not claimed*, decision 10 | **1,26×** | **1,29×** | **1,62×** | held by decision |
 
-**What the campaign did establish, and can be published:**
+**The same cells in percent** (ratio − 1, so **+** means ahead of the same run's SQLite; a presentation of the
+recorded ratios, not a new statistic). The config column is the point: the INSERT "we win" cells are
+**not** the shipped default.
+
+| configuration | INSERT | READ | UPDATE | DELETE |
+|---|---|---|---|---|
+| **shipped default** (arm B: encrypted, PK, no settings) | **−5 %** (−12…+2) | **+13 %** (+2…+20) | −38 % (−39…−35) | −17 % (−42…−12) |
+| shipped default (arm C: no-PK `docs` job) | **−10 %** (−13…−4) | +9 % (−9…+19) *unresolved* | −64 % (−83…−62) | −84 % (−86…−83) |
+| arm B with `EnableHashIndexes=false` | **+60 %** (+38…+78) | +13 % (+2…+20) | −8 % (−24…−2) | −36 % (−39…−27) |
+| arm C with the same dial | **+38…+41 %** (+29…+48 / +37…+43) | +1…+8 % | −47…−45 % | −83 % |
+| **fair shape** (tuned, no PK, indexed predicate) | **+45…+56 %** | **+74…+107 %** | −20 % SQL path · **+42…+124 %** batch | **+533 %** SQL · **+940…+1100 %** batch |
+| **PageBased** on the arm-B shape (opt-in) | **+72 %** | **+358 %** | — | −69 % |
+| **arm A** fair-PK tuned plaintext (control) | −13 % — *closed as not claimed* | **+26 %** | **+29 %** | **+62 %** |
+
+The fair-shape medians above are the session-51 spread (INSERT 1,45–1,56×, READ 1,74–2,07×, UPDATE/DELETE
+batch). Session 29's single-valued medians on the corrected protocol carried *wider* ranges (INSERT 1,56× at
+1,36–1,71, READ 1,74× at 1,18–2,05), which is exactly why the campaign quotes a range beside every median and
+treats a percentage here as a presentation of a ratio, never as a claim on its own.
+
+So, stated as percentages: **faster than SQLite out of the box** on **READ in the default posture (+13 %)**,
+and on **all four operations on the fair shape**; **INSERT is only a win if `EnableHashIndexes=false` is set**
+(+60 % arm B, +38–41 % arm C) — which is a supported configuration but not the default, and it is a *trade*,
+not free: see §9 row 5 for what that dial costs on queries (the explicitly indexed control is unaffected at
+1,07×, while `email` / `age` / `score` equality queries degrade 940× / 32× / 7.298× — expressed as multipliers,
+because "−99,9 %" would hide the three orders of magnitude between them).
+
+The dial behind those two "+" cells is **not** a private harness knob: `SHARPCOREDB_HASH_INDEXES=0` sets
+`DatabaseConfig.EnableHashIndexes = false` (`Program.cs:1313`/`1404`), a public `init` property defaulting to
+`true` (`DatabaseConfig.cs:368`) whose auto-creation gate is `SqlParser.DDL.cs:434` and applies to **Columnar**
+storage — the two shapes measured here. PageBased never auto-creates them (`SqlParser.DDL.cs:421`), which is
+also why the PageBased row above reaches INSERT/READ without the dial. No default was changed in any session
+named here.
+
 
 1. **The fair shape is won on all four operations**, UPDATE included: S5 had to withdraw its UPDATE cell at
    0,80× behind, and the SQL-free batch path (`Database.UpdateBatch` / `DeleteBatch`) moved it to **1,42–2,24×
