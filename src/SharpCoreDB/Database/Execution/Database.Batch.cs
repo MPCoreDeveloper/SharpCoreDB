@@ -1038,18 +1038,22 @@ public partial class Database
 
     /// <summary>
     /// Attempts to parse an UPDATE statement for batch execution.
-    /// Extracts the table name, WHERE clause, and SET column-value pairs.
+    /// Extracts the table name and the operation in the shared UPDATE core's own shape.
     /// </summary>
     /// <param name="sql">The SQL statement to parse.</param>
-    /// <param name="tableName">The parsed table name.</param>
-    /// <param name="where">The parsed WHERE clause.</param>
-    /// <param name="updates">The parsed column-value pairs from the SET clause.</param>
+    /// <param name="tableName">The parsed table name — the batch's grouping key.</param>
+    /// <param name="operation">
+    /// The classified operation. A canonical statement carries its resolved key (column, value, raw literal)
+    /// with an empty <c>Where</c>; every other statement carries its predicate text with the key fields null.
+    /// </param>
     /// <returns>True if the statement was successfully parsed as an UPDATE.</returns>
-    private bool TryParseUpdateForBatch(string sql, out string tableName, out string where, out Dictionary<string, object> updates)
+    private bool TryParseUpdateForBatch(
+        string sql,
+        out string tableName,
+        out (string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates) operation)
     {
         tableName = string.Empty;
-        where = string.Empty;
-        updates = [];
+        operation = (string.Empty, null, null, null, null!);
 
         // Phase-2 fast path: canonical single-column shape
         // `UPDATE <table> SET <col> = <literal> WHERE <col> = <literal>` — regex-free.
@@ -1067,9 +1071,36 @@ public partial class Database
             }
 
             var parsed = SqlParser.ParseValue(setValRaw, fastTableMeta.ColumnTypes[colIdx]);
-            updates[setCol] = parsed ?? DBNull.Value;
+            var updates = new Dictionary<string, object> { [setCol] = parsed ?? DBNull.Value };
             tableName = fastTable;
-            where = whereCol + " = " + whereValRaw;
+
+            // The WHERE key is resolved HERE, while the statement is still spans (session 76, plan §5 item 2):
+            // the text route built `col = literal` and the UPDATE core split that string back into its two
+            // halves, so the classifier pays the split it already knows the answer to and the core re-parses
+            // it — ≈500 B and ≈2 µs per statement on both `--pk` engines (the largest single stage of the arm).
+            //
+            // Claimed only when the text resolver would have produced the SAME key: a bare column name (it
+            // normalizes quoted/bracketed/alias-qualified ones) and a value half it accepts
+            // (Table.IsSimpleWhereValueSpan — the shared definition, not a copy of it). Anything else keeps
+            // the predicate text and the text route's exact behaviour.
+            if (IsBareColumnIdent(whereCol) && DataStructures.Table.IsSimpleWhereValueSpan(whereValRaw))
+            {
+                // Raw literal kept as the predicate's text half so the core's SelectInternal fallback gets
+                // byte-for-byte the string the text route would have carried; the value is the same
+                // normalization (Table.UnquoteSqlLiteral) the core would have computed out of it.
+                operation = (
+                    string.Empty,
+                    whereCol,
+                    DataStructures.Table.UnquoteSqlLiteral(whereValRaw),
+                    whereValRaw,
+                    updates);
+                return true;
+            }
+
+            // Not a key the text resolver would have taken (empty value, an '=' or a compound token inside the
+            // literal, a quoted or qualified column name): the predicate text is built and the core resolves
+            // it exactly as it always has.
+            operation = (whereCol + " = " + whereValRaw, null, null, null, updates);
             return true;
         }
 
@@ -1085,13 +1116,14 @@ public partial class Database
             return false;
 
         tableName = match.Groups[1].Value;
-        where = match.Groups[3].Value.Trim();
+        var where = match.Groups[3].Value.Trim();
         var setClause = match.Groups[2].Value;
 
         if (!tables.TryGetValue(tableName, out var table))
             return false;
 
         // Parse SET clause: "col1 = val1, col2 = val2"
+        var fallbackUpdates = new Dictionary<string, object>();
         var setParts = setClause.Split(',');
         foreach (var setPart in setParts)
         {
@@ -1101,15 +1133,30 @@ public partial class Database
             var colName = setPart[..eqIdx].Trim();
             var valStr = setPart[(eqIdx + 1)..].Trim();
 
-            var colIdx = table.Columns.IndexOf(colName);
-            if (colIdx < 0) return false;
+            var fallbackColIdx = table.Columns.IndexOf(colName);
+            if (fallbackColIdx < 0) return false;
 
-            var parsed = SqlParser.ParseValue(valStr, table.ColumnTypes[colIdx]);
-            updates[colName] = parsed ?? DBNull.Value;
+            var fallbackParsed = SqlParser.ParseValue(valStr, table.ColumnTypes[fallbackColIdx]);
+            fallbackUpdates[colName] = fallbackParsed ?? DBNull.Value;
         }
 
-        return updates.Count > 0;
+        if (fallbackUpdates.Count == 0)
+        {
+            return false;
+        }
+
+        operation = (where, null, null, null, fallbackUpdates);
+        return true;
     }
+
+    /// <summary>
+    /// True when a scanned identifier is already in the form the table layer matches its column names against:
+    /// no alias qualifier and no quoting or bracketing. <see cref="DataStructures.Table.TryParseSimpleWhereClause"/>
+    /// strips those before the PK/index lookups ever see the name, so a structured key carries only the bare
+    /// form — a column this returns false for stays on the text route, where that normalization still happens.
+    /// </summary>
+    private static bool IsBareColumnIdent(ReadOnlySpan<char> ident) =>
+        ident.IndexOfAny(".\"[]`".AsSpan()) < 0;
 
     /// <summary>
     /// Attempts to parse a DELETE statement for batch execution.
@@ -1276,8 +1323,18 @@ public partial class Database
         /// <summary>Gets the INSERT rows, keyed by the prepared statement's schema key.</summary>
         public Dictionary<string, InsertBucket> InsertsByShape { get; } = new(StringComparer.Ordinal);
 
-        /// <summary>Gets the UPDATE operations, grouped per table.</summary>
-        public Dictionary<string, List<(string Where, Dictionary<string, object> Updates)>> UpdatesByTable { get; } = [];
+        /// <summary>
+        /// Gets the UPDATE operations, grouped per table, already in the shared UPDATE core's operation shape
+        /// so the dispatcher hands the list straight over (session 76 — plan §5 item 2).
+        /// <para>
+        /// A canonical statement (<c>UPDATE &lt;t&gt; SET &lt;c&gt; = &lt;lit&gt; WHERE &lt;c&gt; = &lt;lit&gt;</c>)
+        /// carries its pre-resolved key column, key value and raw literal with an empty <c>Where</c>, exactly as
+        /// the DELETE bucket below does since B3 — so the table layer skips the per-statement WHERE rebuild
+        /// <b>and</b> the parse of the predicate it was handed. Every other statement keeps the text route it
+        /// has always taken (non-empty <c>Where</c>, key fields null).
+        /// </para>
+        /// </summary>
+        public Dictionary<string, List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>> UpdatesByTable { get; } = [];
 
         /// <summary>
         /// Gets the DELETE operations, grouped per table. Canonical statements carry the pre-parsed column
@@ -1335,7 +1392,7 @@ public partial class Database
                     batch.NonInserts.Add(sql);
                 }
             }
-            else if (TryParseUpdateForBatch(sql, out var updTableName, out var updWhere, out var updSets))
+            else if (TryParseUpdateForBatch(sql, out var updTableName, out var updOperation))
             {
                 if (!batch.UpdatesByTable.TryGetValue(updTableName, out var updList))
                 {
@@ -1343,7 +1400,7 @@ public partial class Database
                     batch.UpdatesByTable[updTableName] = updList;
                 }
 
-                updList.Add((updWhere, updSets));
+                updList.Add(updOperation);
             }
             else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere, out var delCol, out var delLiteral))
             {
@@ -1402,7 +1459,10 @@ public partial class Database
         {
             if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
             {
-                concreteUpdate.UpdateMultiple(ops);
+                // The classifier already builds the core's operation shape and resolves a canonical
+                // statement's key, so the list is handed straight over: no re-listing, no WHERE rebuild and
+                // no second parse of a predicate the classifier had already split (session 76).
+                concreteUpdate.UpdateMultiplePrepared(ops);
             }
         }
 

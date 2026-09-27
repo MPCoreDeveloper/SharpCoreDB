@@ -321,8 +321,14 @@ public static class WritePathProfiler
         /// Normalizing a batch UPDATE's incoming operation list into the shape the shared core reads
         /// (<c>UpdateMultiple</c> and <c>UpdateMultipleStructured</c> each re-list their caller's operations).
         /// Added (2026-09-26, plan §5.3 session 2) to put a number on the one per-batch allocation the
-        /// structured entry point makes before the core starts — a <c>List</c> holding one four-part tuple per
+        /// structured entry point makes before the core starts — a <c>List</c> holding one five-part tuple per
         /// operation, i.e. 10,000 tuple writes per batch on the default job.
+        /// <para>
+        /// Empty by construction on the SQL batch route since session 76: the classifier hands its operations
+        /// to <c>UpdateMultiplePrepared</c> in that shape already, so nothing is re-listed there. This stage
+        /// therefore stamps the two <i>adapters</i> only, and a SQL batch that shows a non-zero reading took
+        /// a route it should not have.
+        /// </para>
         /// </summary>
         BatchPrep = 37,
 

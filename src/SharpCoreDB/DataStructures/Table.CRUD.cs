@@ -2327,17 +2327,45 @@ public partial class Table
 
         // §5.3 session 2 (2026-09-26): the per-batch normalization into the shared core's operation shape.
         // Both entry points re-list their caller's operations, so this stamp is on both — one List of one
-        // four-part tuple per operation, and the only allocation either caller makes before the core starts.
+        // five-part tuple per operation, and the only allocation either caller makes before the core starts.
         long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
-        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>(operations.Count);
         foreach (var (where, updates) in operations)
         {
-            structured.Add((where, null, null, updates));
+            structured.Add((where, null, null, null, updates));
         }
 
         Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.BatchPrep, batchPrepStart);
 
         UpdateMultipleCore(structured);
+    }
+
+    /// <summary>
+    /// Batch UPDATE for a caller that has <b>already</b> put its operations in the shared core's own shape —
+    /// the SQL batch dispatcher, whose classifier resolves a canonical statement's key and literal while it
+    /// still has them as spans (session 76).
+    /// <para>
+    /// It exists so that the dispatcher's operations do not have to be re-listed, re-texted and re-parsed one
+    /// layer below: <see cref="UpdateMultiple"/> (text adapter) and <see cref="UpdateMultipleStructured"/>
+    /// (typed adapter) both normalize what their callers handed them, and this entry point is the one caller
+    /// that needs no normalization at all. The batch-prep stage therefore stays empty on the SQL route — it
+    /// stamps the two adapters' re-listing, which this path never performs.
+    /// </para>
+    /// </summary>
+    /// <param name="operations">
+    /// One (where text, key column, key value, raw key literal, updates) tuple per operation. A canonical
+    /// statement from the classifier carries an empty where text with its key filled in; every other
+    /// statement carries its where text with the key fields null, exactly as the text route always has.
+    /// </param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal int UpdateMultiplePrepared(
+        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        if (operations.Count == 0) return 0;
+
+        return UpdateMultipleCore(operations);
     }
 
     /// <summary>
@@ -2359,7 +2387,7 @@ public partial class Table
         // runs inside the stamped region and is wrapped so a rejected operation cannot leave the profiler's
         // allocation checkpoint open (the report surfaces a leftover depth rather than hiding it).
         long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
-        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)>(operations.Count);
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>(operations.Count);
         try
         {
             foreach (var (keyColumn, keyValue, updates) in operations)
@@ -2375,7 +2403,7 @@ public partial class Table
                 }
 
                 ArgumentNullException.ThrowIfNull(updates);
-                structured.Add((string.Empty, keyColumn, keyValue, updates));
+                structured.Add((string.Empty, keyColumn, keyValue, null, updates));
             }
         }
         finally
@@ -2392,11 +2420,17 @@ public partial class Table
     /// out of the predicate text when that is what the caller had, taken as given otherwise — and both
     /// fast branches below read that single resolution, so no predicate is ever parsed twice.
     /// </summary>
-    /// <param name="operations">One (where text, optional key column, optional typed key value, updates) per operation.</param>
+    /// <param name="operations">
+    /// One (where text, optional key column, optional typed key value, optional raw key literal, updates)
+    /// per operation. The raw literal is carried <b>instead of</b> the predicate text by callers that have it
+    /// (the SQL batch classifier, which reads it out of the statement as a span): the key resolution below
+    /// then skips the text parse entirely, and the <c>SelectInternal</c> fallback rebuilds the identical
+    /// predicate text from it — which is why it is kept rather than formatted back out of the value.
+    /// </param>
     /// <returns>The number of rows matched and updated.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int UpdateMultipleCore(
-        List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
+        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
         if (operations.Count == 0) return 0;
@@ -2442,7 +2476,13 @@ public partial class Table
 
             int appendedInBatch = 0; // only appends create stale versions that need compaction
 
-            foreach (var (where, structuredKeyColumn, structuredKeyValue, updates) in operations)
+            // Diagnostics (session 76, plan §5 item 2): only operations whose key the caller handed in skip
+            // the predicate parse below, so counting them makes the routing observable from a test instead of
+            // only from a profile. Accumulated in a local and published once per batch — the counter must not
+            // put an atomic per operation into the loop it measures.
+            long structuredOps = 0;
+
+            foreach (var (where, structuredKeyColumn, structuredKeyValue, structuredKeyLiteral, updates) in operations)
             {
                 // §5.3 session 2 (2026-09-26): the per-operation head of this loop — key resolution, the
                 // fast-patch gate and the touch-the-index scan — was the last per-operation region without a
@@ -2461,6 +2501,11 @@ public partial class Table
                 {
                     keyColumn = parsedKeyColumn;
                     keyValue = parsedKeyValue;
+                }
+
+                if (structuredKeyColumn is not null)
+                {
+                    structuredOps++;
                 }
 
                 // B7: when the operation only touches non-indexed, non-PK columns on a table
@@ -2635,10 +2680,16 @@ public partial class Table
                     // call count of 1 there (the contiguous attempt only — session 74's profile). It still fires
                     // for compound/unindexed predicates and for tables without a primary key.
                     // Text callers already hold the predicate; a structured caller gets it built here —
-                    // this branch is the only one that needs the string at all.
+                    // this branch is the only one that needs the string at all. A classifier-supplied
+                    // literal is preferred over rebuilding from the value: `column = <raw literal>` is
+                    // byte-for-byte the predicate the text route would have carried, so a statement whose
+                    // key was claimed as structured reaches this fallback with exactly the text it would
+                    // have had before (session 76) — including the quoting the literal arrived in.
                     var fallbackWhere = where.Length > 0 || keyColumn is null
                         ? where
-                        : BuildStructuredWhereText(keyColumn, keyValue);
+                        : structuredKeyLiteral is not null
+                            ? keyColumn + " = " + structuredKeyLiteral
+                            : BuildStructuredWhereText(keyColumn, keyValue);
                     long locateStart = Diagnostics.WritePathProfiler.Stamp();
                     foreach (var row in SelectInternal(fallbackWhere, orderBy: null, asc: true, noEncrypt: false))
                     {
@@ -2987,6 +3038,11 @@ public partial class Table
                 TryAutoCompact();
             }
 
+            if (structuredOps > 0)
+            {
+                Interlocked.Add(ref _structuredUpdateOperations, structuredOps);
+            }
+
             return updatedRows;
         }
         finally
@@ -3004,6 +3060,17 @@ public partial class Table
     private long _bulkContiguousUpdateBatches;
 
     /// <summary>
+    /// Number of batch-UPDATE operations whose key the caller handed in already resolved (a structured key
+    /// column plus value) instead of leaving it in the predicate text for this layer to parse — i.e. the
+    /// operations the structured routes claim (session 76, plan §5 item 2). Published for the same reason
+    /// <see cref="BulkContiguousUpdateBatches"/> is: a routing decision has to be observable from a test,
+    /// not only from a profile, because both routes produce identical results by design.
+    /// </summary>
+    public long StructuredUpdateOperations => Interlocked.Read(ref _structuredUpdateOperations);
+
+    private long _structuredUpdateOperations;
+
+    /// <summary>
     /// B8: single-pass contiguous UPDATE fast path for plaintext fixed-width tables. Requires every
     /// operation to be a simple <c>pk = &lt;numeric literal&gt;</c> match on the primary key, with keys
     /// strictly increasing AND records physically adjacent in the data file (the fixed-width layout
@@ -3015,7 +3082,7 @@ public partial class Table
     /// </summary>
     private bool TryBulkUpdateContiguousFixedWidth(
         IStorageEngine engine,
-        List<(string Where, string? KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
+        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         int count = operations.Count;
         if (count < 2)
@@ -3054,7 +3121,7 @@ public partial class Table
 
         for (int i = 0; i < count; i++)
         {
-            var (where, structuredKeyColumn, structuredKeyValue, updates) = operations[i];
+            var (where, structuredKeyColumn, structuredKeyValue, _, updates) = operations[i];
 
             // Key resolution mirrors the shared UPDATE core: the structured key when the caller
             // supplied one (the SQL-free API), the parsed predicate otherwise (the text adapters).
@@ -4312,8 +4379,14 @@ public partial class Table
     /// <summary>
     /// Mirrors the value normalization of <see cref="TryParseSimpleWhereClause"/> (trim whitespace,
     /// then trim enclosing <c>'</c>/<c>"</c> quotes) on a raw SQL literal.
+    /// <para>
+    /// Two callers: the structured DELETE/UPDATE routes, which normalize the literal a canonical batch
+    /// statement carried, and the SQL batch classifier itself (session 76), which needs the same
+    /// normalized value to hand the UPDATE core as a structured key — one normalization, not a second
+    /// one written against the scanner.
+    /// </para>
     /// </summary>
-    private static string UnquoteSqlLiteral(string raw)
+    internal static string UnquoteSqlLiteral(string raw)
     {
         return raw.AsSpan().Trim().Trim("'\"".AsSpan()).ToString();
     }
