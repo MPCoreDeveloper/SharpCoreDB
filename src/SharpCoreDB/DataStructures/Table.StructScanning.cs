@@ -218,7 +218,7 @@ public partial class Table
         // Fast path 1: hash-index point lookup (mirrors SelectInternal). StructRow can only
         // represent variable-length records, so fixed-width tables skip this path.
         if (!fixedWidth && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-            this.registeredIndexes.ContainsKey(simpleColumn))
+            this.EnsureAutoHashIndexRegistered(simpleColumn))
         {
             foreach (var row in ScanByHashIndexPoint(simpleColumn, simpleValue, schema, engine, enableCaching))
                 yield return row;
@@ -529,7 +529,7 @@ public partial class Table
             // Fast path 1: hash-index point lookup (mirrors SelectInternal). Disabled for
             // fixed-width tables (their records use the overflow format, not the walkable layout).
             if (!_table._fixedWidthRecords && hasSimpleWhere && simpleColumn is not null && simpleValue is not null &&
-                _table.registeredIndexes.ContainsKey(simpleColumn))
+                _table.EnsureAutoHashIndexRegistered(simpleColumn))
             {
                 _table.EnsureIndexLoaded(simpleColumn);
                 if (_table.hashIndexes.TryGetValue(simpleColumn, out var hashIndex))

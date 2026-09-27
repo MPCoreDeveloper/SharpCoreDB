@@ -1418,7 +1418,7 @@ public partial class Table
             simpleWhereColumn != null &&
             simpleWhereValue != null &&
             _hashIndexCollation == CollationType.Binary &&
-            this.registeredIndexes.ContainsKey(simpleWhereColumn))
+            this.EnsureAutoHashIndexRegistered(simpleWhereColumn))
         {
             EnsureIndexLoaded(simpleWhereColumn);
 
@@ -1689,41 +1689,13 @@ public partial class Table
             var row = DeserializeRowWithSimd(recordData);
             bool valid = row != null;
 
-            // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE
+            // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE.
+            // The version rule itself now lives in one place (Table.IsCurrentRecordVersion) because the
+            // hash-index rebuild applies it too: an index and the scan that replaces it must never disagree
+            // about which rows exist.
             if (valid && row != null)
             {
-                bool isCurrentVersion = true;
-
-                // Check if this row is the current version by verifying PK index points to this position
-                if (this.PrimaryKeyIndex >= 0)
-                {
-                    var pkCol = this.Columns[this.PrimaryKeyIndex];
-                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-                    {
-                        var pkStr = pkValue.ToString() ?? string.Empty;
-                        var searchResult = this.Index.Search(pkStr);
-
-                        // ✅ CRITICAL FIX: Only apply stale filtering if index position was properly tracked
-                        // If searchResult.Value == 0, it means this row wasn't properly indexed during insertion
-                        // (probably from a batch insert), so we should include it regardless
-                        if (searchResult.Found && searchResult.Value != 0)
-                        {
-                          // Row is current version only if PK index points to THIS position (the
-                          // physical record offset — see staleCheckPosition above)
-                          isCurrentVersion = searchResult.Value == staleCheckPosition;
-                        }
-                        else if (searchResult.Found && searchResult.Value == 0)
-                        {
-                          // Index position wasn't tracked during batch insert - always include
-                          isCurrentVersion = true;
-                        }
-                        else if (!searchResult.Found)
-                        {
-                          // PK was removed from index (row was deleted) - exclude from results
-                          isCurrentVersion = false;
-                        }
-                    }
-                }
+                bool isCurrentVersion = this.IsCurrentRecordVersion(row, staleCheckPosition);
 
                 bool matchesWhere = string.IsNullOrEmpty(where) || EvaluateWhere(row, where);
 
@@ -1946,10 +1918,12 @@ public partial class Table
         // and the file does not grow. Falls back to full serialization when a field
         // cannot be patched in place (e.g. a variable-length field that changes size).
         byte[] rowData;
+        byte[]? existingRecord = null;
         if (rowPos >= 0)
         {
             long locateStart = Diagnostics.WritePathProfiler.Stamp();
             var existingData = engine.Read(Name, rowPos);
+            existingRecord = existingData;
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
 
             long patchStart = Diagnostics.WritePathProfiler.Stamp();
@@ -2004,9 +1978,18 @@ public partial class Table
                 this.Index.Insert(pkVal, newPosition);
             }
 
+            // The append moved the row, so EVERY loaded hash index must drop the entry that points at the
+            // position we just left — not only the ones this statement itself touches. The in-place branch's
+            // S2 shortcut ("the statement named no indexed column, so every entry still holds the same key at
+            // the same position") is valid only while the position is unchanged; here a kept entry is a stale
+            // one, and the next lookup on that column returned the superseded record (session 71:
+            // SqlInPlaceUpdateTests.SqlUpdate_VariableWidth_GrowsWhenStoredLengthChanges_StillCorrect, which
+            // stopped loading every column and so stopped masking it).
+            var hashKeysAtOldPosition = oldHashKeys ?? CaptureHashKeysAt(existingRecord, rowPos, engine);
+
             foreach (var kvp in this.hashIndexes)
             {
-                if (rowPos >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                if (rowPos >= 0 && hashKeysAtOldPosition != null && hashKeysAtOldPosition.TryGetValue(kvp.Key, out var oldKey))
                 {
                     kvp.Value.Remove(oldKey, rowPos); // Remove old ref
                 }
@@ -2114,6 +2097,54 @@ public partial class Table
         }
     }
 
+    /// <summary>
+    /// Captures the current value of every LOADED hash index's column from the record at
+    /// <paramref name="position"/>, so an append-update can drop the entries that point at the position it
+    /// leaves behind.
+    /// <para>
+    /// Needed because the single-row UPDATE captures those values only when the statement touches a loaded
+    /// index (<c>oldHashKeys</c>, the S2 shortcut) — and that shortcut only holds while the position is
+    /// unchanged. On the append fallback the position moves for every row, so the entries of columns the
+    /// statement does NOT name would otherwise keep pointing at the superseded record.
+    /// </para>
+    /// </summary>
+    /// <param name="existingRecord">The record bytes already read for the patch attempt, if any.</param>
+    /// <param name="position">The record's storage position, or -1 when it is not known.</param>
+    /// <param name="engine">The storage engine to read the record from when it was not read already.</param>
+    /// <returns>The old key per loaded index, or null when there is nothing to capture.</returns>
+    private Dictionary<string, object>? CaptureHashKeysAt(byte[]? existingRecord, long position, IStorageEngine engine)
+    {
+        if (this.hashIndexes.Count == 0 || position < 0)
+        {
+            return null;
+        }
+
+        var data = existingRecord ?? engine.Read(Name, position);
+        if (data is null || data.Length == 0)
+        {
+            return null;
+        }
+
+        var oldRow = _fixedWidthRecords
+            ? DeserializeRowFixedWidth(data)
+            : DeserializeRowWithSimd(data.AsSpan());
+        if (oldRow is null)
+        {
+            return null;
+        }
+
+        var keys = new Dictionary<string, object>(this.hashIndexes.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var column in this.hashIndexes.Keys)
+        {
+            if (oldRow.TryGetValue(column, out var value) && value is not null)
+            {
+                keys[column] = value;
+            }
+        }
+
+        return keys;
+    }
+
     private void RepointPrimaryKeyIfChanged(Dictionary<string, object> row, string? oldPkValue, long position)
     {
         // Re-point the PK index only when the PK value itself changed.
@@ -2178,7 +2209,7 @@ public partial class Table
         // Hash index fast path for a simple equality on an indexed binary-collation column.
         if (!string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
-            this.registeredIndexes.ContainsKey(whereCol))
+            this.EnsureAutoHashIndexRegistered(whereCol))
         {
             var colIdx = this.Columns.IndexOf(whereCol);
             var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count
@@ -2524,7 +2555,7 @@ public partial class Table
 
                 long locateIndexStart = 0L;
                 if (rows is null && keyColumn is not null &&
-                    this.registeredIndexes.ContainsKey(keyColumn))
+                    this.EnsureAutoHashIndexRegistered(keyColumn))
                 {
                     // §5.5 instrumentation (2026-09-21): the per-operation locate on this route — the
                     // registered-index lookup plus the record read/slice — had no stamp at all, which is why
@@ -3686,7 +3717,7 @@ public partial class Table
 
                 if (!string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var deleteWhereCol, out var deleteWhereVal) &&
-                    this.registeredIndexes.ContainsKey(deleteWhereCol))
+                    this.EnsureAutoHashIndexRegistered(deleteWhereCol))
                 {
                     EnsureIndexLoaded(deleteWhereCol);
                     if (this.hashIndexes.TryGetValue(deleteWhereCol, out var deleteHashIndex))
@@ -3795,7 +3826,7 @@ public partial class Table
                 // Try hash index fast path
                 if (!string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var col, out var val) &&
-                    this.registeredIndexes.ContainsKey(col))
+                    this.EnsureAutoHashIndexRegistered(col))
                 {
                     EnsureIndexLoaded(col);
                     if (this.hashIndexes.TryGetValue(col, out var hashIndex))
@@ -3951,7 +3982,7 @@ public partial class Table
                     }
                 }
                 // Hash index fast path.
-                if (this.registeredIndexes.ContainsKey(col))
+                if (this.EnsureAutoHashIndexRegistered(col))
                 {
                     EnsureIndexLoaded(col);
                     if (this.hashIndexes.TryGetValue(col, out var hashIndex))

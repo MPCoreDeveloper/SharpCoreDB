@@ -420,18 +420,22 @@ public partial class SqlParser
         // product default, so no existing caller changes behaviour.
         if (storageMode == StorageMode.Columnar && (this.config?.EnableHashIndexes ?? true))
         {
-            // Auto-create hash indexes (will be built lazily on first query)
-            if (primaryKeyIndex >= 0)
+            // ✅ §9 row 5 (owner-decided 2026-09-26, implemented 2026-09-26/session 71): registration is
+            // ON DEMAND. Only a user-declared PRIMARY KEY is registered up front — it is the canonical
+            // point-lookup key. Every other column registers itself the first time an operation actually
+            // filters on it (Table.EnsureAutoHashIndexRegistered, called by every lookup gate), and that is
+            // what stops a write from maintaining an index per column the workload never filters on:
+            // EnsureAllRegisteredIndexesLoaded (Table.Indexing.cs) loads every REGISTERED index before a
+            // write on the append/Columnar engines, so the previous eager set was the measured 20.000
+            // index-maint calls per 10.000 updates on the five-column `docs` shape.
+            //
+            // The hidden `_rowid` fallback is deliberately NOT registered here: only PK-less tables get it,
+            // the PK B-tree already serves its point lookups (TrySelectIndexedPointLookup routes PK columns
+            // there), and no user query filters on it — so registering it would be per-write cost with no
+            // lookup benefit.
+            if (primaryKeyIndex >= 0 && !hasInternalRowId)
             {
-                table.CreateHashIndex(table.Columns[primaryKeyIndex]);
-            }
-            
-            for (int i = 0; i < columns.Count; i++)
-            {
-                if (i != primaryKeyIndex)
-                {
-                    table.CreateHashIndex(columns[i]);
-                }
+                table.EnsureAutoHashIndexRegistered(table.Columns[primaryKeyIndex]);
             }
         }
     }

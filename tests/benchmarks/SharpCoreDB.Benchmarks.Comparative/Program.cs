@@ -4542,11 +4542,13 @@ class Program
         Console.WriteLine($"  {Rows:N0} rows, {Queries:N0} point queries per column per configuration, same data both times");
         Console.WriteLine();
 
-        static (Dictionary<string, double> Micros, Dictionary<string, int> Counts) Measure(bool hashIndexes)
+        static (Dictionary<string, double> Micros, Dictionary<string, int> Counts, Dictionary<string, double> FirstMicros, Dictionary<string, int> FirstCounts) Measure(bool hashIndexes)
         {
             var dbPath = Path.Combine(BenchTempDirectory(), $"bench-autoidx-{hashIndexes}-{Guid.NewGuid()}");
             var micros = new Dictionary<string, double>();
             var counts = new Dictionary<string, int>();
+            var firstMicros = new Dictionary<string, double>();
+            var firstCounts = new Dictionary<string, int>();
 
             try
             {
@@ -4595,9 +4597,21 @@ class Program
                 foreach (var (label, column, valueFor) in probes)
                 {
                     int stride = Math.Max(1, Rows / Queries);
-                    int found = 0;
+
+                    // §9 row 5 constraint (e): the FIRST filtered query on a column is the one that pays for the
+                    // index — with registration on demand that is the moment the index is created AND built — so
+                    // it is timed and reported on its own. Blending it into the repeated queries would hide the
+                    // build the change pays, which is exactly the trade the row decided.
+                    var firstSw = Stopwatch.StartNew();
+                    var firstRows = db.ExecuteQuery($"SELECT name FROM docs WHERE {column} = @p",
+                        new Dictionary<string, object?> { ["@p"] = valueFor(0) });
+                    firstSw.Stop();
+                    firstMicros[label] = firstSw.Elapsed.TotalMicroseconds;
+                    firstCounts[label] = firstRows.Count;
+
+                    int found = firstRows.Count;
                     var sw = Stopwatch.StartNew();
-                    for (int q = 0; q < Queries; q++)
+                    for (int q = 1; q < Queries; q++)
                     {
                         var rows = db.ExecuteQuery($"SELECT name FROM docs WHERE {column} = @p",
                             new Dictionary<string, object?> { ["@p"] = valueFor(q * stride) });
@@ -4605,7 +4619,7 @@ class Program
                     }
 
                     sw.Stop();
-                    micros[label] = sw.Elapsed.TotalMicroseconds / Queries;
+                    micros[label] = sw.Elapsed.TotalMicroseconds / Math.Max(1, Queries - 1);
                     counts[label] = found;
                 }
             }
@@ -4614,7 +4628,7 @@ class Program
                 try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
             }
 
-            return (micros, counts);
+            return (micros, counts, firstMicros, firstCounts);
         }
 
         // Rule 10, applied inside a diagnostic this time: the FIRST pass measured in a process is cold (JIT), and
@@ -4626,22 +4640,26 @@ class Program
         _ = Measure(hashIndexes: true);
         _ = Measure(hashIndexes: false);
 
-        var (withIndexes, countsWith) = Measure(hashIndexes: true);
-        var (withoutIndexes, countsWithout) = Measure(hashIndexes: false);
+        var (withIndexes, countsWith, firstWith, firstCountsWith) = Measure(hashIndexes: true);
+        var (withoutIndexes, countsWithout, firstWithout, firstCountsWithout) = Measure(hashIndexes: false);
 
-        Console.WriteLine($"  {"query on",-34}{"auto indexes",13}{"only explicit",15}{"ratio",9}{"rows found (on/off)",20}");
+        Console.WriteLine($"  {"query on",-34}{"1st query",12}{"repeated on",14}{"repeated off",15}{"ratio",9}   rows 1st/repeated on / off");
         foreach (var label in withIndexes.Keys)
         {
             double on = withIndexes[label];
             double off = withoutIndexes[label];
-            Console.WriteLine($"  {label,-34}{on,10:F1} µs{off,12:F1} µs{off / on,8:F2}x"
-                + $"   {countsWith[label],8:N0} / {countsWithout[label]:N0}");
+            Console.WriteLine($"  {label,-34}{firstWith[label],9:F0} µs{on,11:F1} µs{off,12:F1} µs{off / on,8:F2}x"
+                + $"   {firstCountsWith[label]} / {countsWith[label],6:N0} /{firstCountsWithout[label]} / {countsWithout[label]:N0}");
         }
 
         Console.WriteLine();
-        Console.WriteLine("  A ratio near 1,00x means the column was answered from an index either way; a large ratio means");
-        Console.WriteLine("  the query fell back to something else without the auto-index set. The row counts must agree");
-        Console.WriteLine("  column for column — if they do not, this measured two different result sets and is void.");
+        Console.WriteLine("  `1st query` is the FIRST filtered query on that column, timed on its own: it is the query that");
+        Console.WriteLine("  registers the index (on demand since §9 row 5) and pays for building it. `repeated on/off` are");
+        Console.WriteLine("  the per-query means of the warm queries that follow, with the auto indexes on and with the dial");
+        Console.WriteLine("  off — the `ratio` is off/on over those two, i.e. what the index buys once it exists. A ratio near");
+        Console.WriteLine("  1,00x means the column was answered from an index either way; a large ratio means the query fell");
+        Console.WriteLine("  back to something else with the dial off. The row counts must agree column for column — if they do");
+        Console.WriteLine("  not, this measured two different result sets and is void.");
     }
 
     static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)

@@ -311,6 +311,15 @@ public interface ITable
     bool HasHashIndex(string columnName);
 
     /// <summary>
+    /// Registers the automatic hash index for <paramref name="columnName"/> the first time an operation
+    /// filters on that column, and reports whether a hash index can serve such a lookup (§9 row 5).
+    /// Implementations without automatic hash indexes (the single-file table) answer <c>false</c>.
+    /// </summary>
+    /// <param name="columnName">The column a filtered operation targets.</param>
+    /// <returns>True when a hash index serves this column — already registered, or just registered.</returns>
+    bool EnsureAutoHashIndexRegistered(string columnName) => false;
+
+    /// <summary>
     /// Gets hash index statistics for a column.
     /// </summary>
     /// <param name="columnName">The column name.</param>

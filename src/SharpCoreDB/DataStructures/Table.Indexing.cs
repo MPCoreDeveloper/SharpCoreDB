@@ -206,7 +206,14 @@ public partial class Table
                     ? DeserializeRowFixedWidth(recordData.AsSpan())
                     : DeserializeRowFromSpan(recordData);
 
-                if (record is not null && record.TryGetValue(columnName, out var recordValue) && recordValue != null)
+                // Only the CURRENT version of a row is indexed: a length-changing update leaves its
+                // superseded record in the file, and the scan that replaces this index filters those by
+                // the PK pointer. Without the same filter here the index answered with rows the scan
+                // never returns (see IsCurrentRecordVersion).
+                if (record is not null
+                    && record.TryGetValue(columnName, out var recordValue)
+                    && recordValue != null
+                    && IsCurrentRecordVersion(record, recordOffset))
                 {
                     index.Add(record, recordOffset);
                 }
@@ -269,7 +276,12 @@ public partial class Table
                     ? DeserializeRowFixedWidth(rowData.AsSpan())
                     : DeserializeRowFromSpan(rowData);
 
-                if (row is not null && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
+                // Same current-version filter as the at-rest walk above: this walk sees the superseded
+                // records of a length-changing update, which the scan (PK-pointer rule) never returns.
+                if (row is not null
+                    && row.TryGetValue(columnName, out var indexedValue)
+                    && indexedValue != null
+                    && IsCurrentRecordVersion(row, position))
                 {
                     index.Add(row, position);
                 }
@@ -337,6 +349,133 @@ public partial class Table
         {
             EnsureIndexLoaded(columnName);
         }
+    }
+
+    /// <summary>
+    /// Whether automatic per-column hash indexes may be created for this table at all — the same
+    /// condition the Columnar <c>CREATE TABLE</c> path applies (<c>SqlParser.DDL.cs</c>): Columnar storage
+    /// and <c>DatabaseConfig.EnableHashIndexes</c> (default <c>true</c>). PageBased never auto-creates hash
+    /// indexes — its row lookups are served by B-trees and its records are never versioned.
+    /// </summary>
+    internal bool AutoHashIndexesEnabled =>
+        this.StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar &&
+        (this._config?.EnableHashIndexes ?? true);
+
+    /// <summary>
+    /// Registers the automatic hash index for <paramref name="columnName"/> the first time an operation
+    /// actually filters on that column, and reports whether a hash index can serve such a lookup.
+    /// <para>
+    /// This is §9 row 5's lever, owner-decided 2026-09-26: <em>registration</em> used to be eager (one index
+    /// per column at <c>CREATE TABLE</c>), and because <see cref="EnsureAllRegisteredIndexesLoaded"/> then
+    /// loads every registered index before a write, a workload that filters on one column paid index
+    /// maintenance for all of them — 20.000 <c>index-maint</c> calls per 10.000 updates on the five-column
+    /// <c>docs</c> shape. Registering on demand keeps exactly the indexes the workload uses.
+    /// </para>
+    /// <para>
+    /// Every genuine lookup gate in the read/write paths calls this instead of testing
+    /// <c>registeredIndexes.ContainsKey</c>, so "may this column use a hash index" has ONE answer (and the
+    /// on-demand registration happens at the same moment, in the same place, for all of them). Returning
+    /// <c>true</c> for an already-registered column (explicit <c>CREATE INDEX</c> included) means the
+    /// callers' existing <c>EnsureIndexLoaded</c> + lookup flow is unchanged.
+    /// </para>
+    /// </summary>
+    /// <param name="columnName">The column a filtered operation targets.</param>
+    /// <returns>True when a hash index serves this column — already registered, or just registered.</returns>
+    public bool EnsureAutoHashIndexRegistered(string columnName)
+    {
+        if (string.IsNullOrEmpty(columnName) || !this.Columns.Contains(columnName))
+        {
+            return false;
+        }
+
+        // Hot path: already registered (auto, or explicitly via CREATE INDEX) — no lock, mirroring the
+        // lock-free reads the lookup gates already perform on this registry.
+        if (this.registeredIndexes.ContainsKey(columnName))
+        {
+            return true;
+        }
+
+        if (!this.AutoHashIndexesEnabled)
+        {
+            return false;
+        }
+
+        var colIdx = this.Columns.IndexOf(columnName);
+        var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], false);
+
+        // Registration mutates the registry, so it belongs under the write lock — EXCEPT when the caller
+        // already holds it: the write paths (UPDATE/DELETE) resolve their rows through SelectInternal,
+        // which can reach here while the write lock is held, and ReaderWriterLockSlim's default
+        // non-recursive policy throws on a second EnterWriteLock (the same reason
+        // EnsureAllRegisteredIndexesLoaded documents the pre-load it performs).
+        bool ownsLock = !this.rwLock.IsWriteLockHeld;
+        if (ownsLock)
+        {
+            this.rwLock.EnterWriteLock();
+        }
+
+        try
+        {
+            if (this.registeredIndexes.ContainsKey(columnName))
+            {
+                return true; // another thread registered it while we waited
+            }
+
+            this.registeredIndexes[columnName] = metadata;
+            return true;
+        }
+        finally
+        {
+            if (ownsLock)
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the record at <paramref name="recordPosition"/> is the <b>current</b> version of its row —
+    /// the exact rule the Columnar scan uses (<c>ScanRowsWithSimdAndFilterStale</c>): with a primary key
+    /// (including the hidden <c>_rowid</c> fallback every PK-less table gets), the current version is the
+    /// one the PK index points at.
+    /// <para>
+    /// Why it is one shared method: an index built by walking the data file and the scan that replaces it
+    /// must never disagree about which rows exist. The Columnar engines append a new version on a
+    /// length-changing update and leave the superseded record in the file (compaction drops it), so a
+    /// rebuild that ignores this rule indexes rows the scan does not return — measured session 71: a hash
+    /// index created <em>after</em> such an update answered <c>WHERE v = 'old'</c> with the superseded row
+    /// (1 row where SQLite returns 0).
+    /// </para>
+    /// </summary>
+    /// <param name="row">The deserialized record.</param>
+    /// <param name="recordPosition">The record's physical length-prefix offset (the value the index stores).</param>
+    /// <returns>True when the record is the row's current version (or when no witness exists).</returns>
+    internal bool IsCurrentRecordVersion(Dictionary<string, object> row, long recordPosition)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return true;
+        }
+
+        var pkColumn = this.Columns[this.PrimaryKeyIndex];
+        if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null)
+        {
+            return true; // no PK value to compare with — the scan includes such rows too
+        }
+
+        var searchResult = this.Index.Search(pkValue.ToString() ?? string.Empty);
+        if (!searchResult.Found)
+        {
+            return false; // PK removed from the index → the row is deleted
+        }
+
+        if (searchResult.Value == 0)
+        {
+            // Position was not tracked during a batch insert — the scan includes these, so the index must too.
+            return true;
+        }
+
+        return searchResult.Value == recordPosition;
     }
 
     /// <summary>

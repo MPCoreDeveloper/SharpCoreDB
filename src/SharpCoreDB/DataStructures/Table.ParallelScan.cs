@@ -67,11 +67,12 @@ public partial class Table
             }
         }
 
-        // 1. HashIndex lookup (O(1)) - only for columnar storage
-        if (this.StorageMode == StorageMode.Columnar &&
-            !string.IsNullOrEmpty(where) &&
+        // 1. HashIndex lookup (O(1)). Table.EnsureAutoHashIndexRegistered is the single gate that decides
+        //    whether a hash index serves this column (Columnar + the EnableHashIndexes dial); it also
+        //    registers the index on demand the first time a query filters on the column (§9 row 5).
+        if (!string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var col, out var valObj) &&
-            this.registeredIndexes.ContainsKey(col))
+            this.EnsureAutoHashIndexRegistered(col))
         {
             EnsureIndexLoaded(col);
 

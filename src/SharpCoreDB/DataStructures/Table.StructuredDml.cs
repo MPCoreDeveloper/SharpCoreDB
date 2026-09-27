@@ -128,7 +128,7 @@ public partial class Table
 
                 // Registered-hash-index fast path — the fair shape's route (no PK, predicate on an
                 // indexed column).
-                if (this.registeredIndexes.ContainsKey(keyColumn))
+                if (this.EnsureAutoHashIndexRegistered(keyColumn))
                 {
                     EnsureIndexLoaded(keyColumn);
                     if (this.hashIndexes.TryGetValue(keyColumn, out var hashIndex))
