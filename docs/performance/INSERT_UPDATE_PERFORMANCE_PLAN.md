@@ -219,7 +219,10 @@ first attempt at that build optimization was aimed at the wrong phase until inst
     **210.263**, R 104.216 → **191.192**, U 107.082 → **257.141**, D 204.393 → **556.715**; default I 123.493 →
     **184.922**, R 81.198 → **145.486**, U 77.823 → **181.222**, D 98.725 → **165.296** ops/s. The 2,76 / 2,77 / 2,91 /
     3,31× floors quoted above were all measured *before* the service stop, so they describe the unquiet box rather than a
-    harness limit; the stop is the fix and `quiet-machine.ps1` makes it reproducible on demand. Evidence: WORKLOG
+    harness limit; the stop is the fix and `quiet-machine.ps1` makes it reproducible on demand — though only for as long as it
+    lasts: the stop is per-session by contract, and Windows restarted `WSearch` at **12:13:49**, about four minutes after
+    this record, so the elevated `Stop-Service` belongs immediately before a re-record rather than hours before it (the
+    Defender exclusion is the part that persists). Evidence: WORKLOG
     session 72 — which also records that the first gate run *after* the record came out `INCONCLUSIVE` on the UPDATE
     cells, with a quiet check confirming no known noise source.
 

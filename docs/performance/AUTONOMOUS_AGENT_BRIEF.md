@@ -266,7 +266,10 @@ beside them so nobody mistakes a median for a guarantee.
 (`scripts/quiet-machine.ps1`, exit 0) the first `--write-baseline` attempt returned **exit 0** at a **1,86×** worst rep
 spread, so the committed JSON is now dated 2026-09-27 — recorded *with* the 8 discarded warm-ups the gate itself uses,
 which removes the mismatch with a baseline taped before `97fb2651`. The refusals of 2026-09-16/22 (2,97 / 2,77 / 3,31×)
-were a property of the unquiet box, not of the harness. The reference got **stricter**, not looser (raw I 140.440 →
+were a property of the unquiet box, not of the harness. One operational note for the next record: the script's
+`-StopServices` **stops** rather than disables, and Windows brought `WSearch` back about four minutes after this one
+(`Win32_Process.CreationDate` 12:13:49), so the elevated stop belongs **immediately before** the run — while the Defender
+exclusion it applies is what actually persists. The reference got **stricter**, not looser (raw I 140.440 →
 **210.263** ops/s, default U 77.823 → **181.222**), and no threshold or tolerance moved.
 
 
