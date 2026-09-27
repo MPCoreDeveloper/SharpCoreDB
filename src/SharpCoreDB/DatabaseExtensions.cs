@@ -1448,8 +1448,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
     private void ExecuteDeleteInternal(string sql)
     {
+        // WHERE is optional here too (2026-09-27, session 73), matching the live parser DeleteRegex. This
+        // method has no caller anywhere in the repository at that date, so it is fixed for consistency.
         var regex = new Regex(
-            @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)",
+            @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?(?:\s+WHERE\s+(.*))?",
             RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         
         var match = regex.Match(sql);
@@ -1459,7 +1461,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         var tableName = match.Groups[1].Value.Trim();
-        var whereClause = match.Groups[2].Value.Trim();
+        var whereClause = match.Groups[2].Success ? match.Groups[2].Value.Trim() : string.Empty;
         
         if (!_tables.TryGetValue(tableName, out var table))
         {

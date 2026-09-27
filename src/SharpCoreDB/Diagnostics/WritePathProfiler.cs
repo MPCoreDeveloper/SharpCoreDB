@@ -61,7 +61,9 @@ public static class WritePathProfiler
         /// <summary>
         /// Parsing a SQL statement and resolving its execution plan. Instrumented on the batch dispatcher
         /// (2026-09-14) because a stage report previously showed only the work *inside* the table, so its
-        /// total was never wall time — the missing share was parse/plan/dispatch.
+        /// total was never wall time — the missing share was parse/plan/dispatch. Its second dispatcher,
+        /// <c>ExecuteBatchSQLAsync</c>, got the same stamp on 2026-09-27 (§5.5 (ii)), which is what made the
+        /// two comparable: the async one spends 2,9× as long here and allocates 6,2× per statement.
         /// </summary>
         Parse = 9,
 

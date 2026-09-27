@@ -1699,12 +1699,34 @@ serialization — plus RowLocate around the batch PK probes; the path had none),
 path (RowLocate / IndexMaintenance / IndexDecode / EngineWrite), bulk-update per-row hash-index maintenance
 (IndexMaintenance), the batch dispatcher's statement classification (Parse) and the batch commit (Commit).
 Still uncovered, recorded honestly: the *second* batch dispatcher path and parser internals below the
-dispatcher. **`WalAppend` is now wired (2026-09-15)** — the per-statement SQL `INSERT` path's `wal?.Log(…)`
+dispatcher. **✅ CLOSED (2026-09-27, session 73):** `ExecuteBatchSQLAsync` and the four remaining
+statement-level entry points — `ExecuteSQL(sql, parameters)`, its positional helper, and both
+`ExecuteSQLAsync` overloads — are wired to the same stages as the paths that already had them, and the
+parameterized `SqlParser.Execute` stamps `StmtSplit` like its single-argument sibling. Covered by a new
+red→green test (`WritePathEntryPointCoverageTests`, 2 facts: `Failed: 2` before the wiring, `parse` at
+**zero** calls for a 5-statement async batch), and the measurement it made possible is recorded here — the async dispatcher classifies at **2,9×** the sync one's cost.
+ **`WalAppend` is now wired (2026-09-15)** — the per-statement SQL `INSERT` path's `wal?.Log(…)`
 call, in both the VALUES and `INSERT … SELECT` branches — and it measured **0.025 µs/statement with zero
 allocation**, which refutes the per-statement-WAL-fsync hypothesis outright. `WalFlush` **got its first writer
 on 2026-09-26** (`Database.Core.cs:759`, the explicit `Database.Flush()` boundary; corrected here 2026-09-27,
 session 68), and the *scoped* claim this sentence was making still holds: **nothing on the per-statement INSERT
 path flushes the log**, which is why `wal-flush` never appears in that pass's stage table.
+
+   **✅ The statement-level coverage is closed (2026-09-27, session 73), and the first measurement it enabled
+   found a real gap of its own.** Wired: `ExecuteBatchSQLAsync`'s classification loop (`Parse`, one call per
+   statement — the column read **zero** calls on that path before) and its `Commit`, the `StatementValidate`
+   and `Dispatch` envelopes of `ExecuteSQL(sql, parameters)` and of both `ExecuteSQLAsync` overloads, and the
+   parameterized `SqlParser.Execute`'s `StmtSplit`. Measured on a temporary probe (5.000 single-row INSERTs,
+   `NoEncryptMode`, both dispatchers back to back, `artifacts/s73-batch-dispatcher-profiles.txt`):
+   `ExecuteBatchSQL` spent **117,9 ms** with `parse` at **23,6 ms / 5.000 calls (186 B/call)**, while
+   `ExecuteBatchSQLAsync` spent **185,1 ms** with `parse` at **69,0 ms / 5.000 calls (1.155 B/call)** — the
+   async twin is **1,57×** slower end to end, spends **2,9×** as long classifying and allocates **6,2×** per
+   statement, because it classifies through the dictionary-based `ParseInsertStatement` and inserts per
+   dictionary row instead of using the sync dispatch's prepared-statement
+   `ParseInsertStatementFastToArray` + array-row `Table.InsertBatch`. Correctness is unaffected (same table
+   API, older shape), so it is logged as this item's own next step rather than changed blind: give the async
+   dispatcher the sync dispatcher's DML half. Still open in this item: the StructRow ladder arm's
+   UPDATE/DELETE phases and the two PageBased per-row regions §5.2 delegated here.
 
 **Closed (2026-09-16): the contiguous fast path was the one route that ignored the deferral, and honouring it is
 worth ~4×.** §7's verdict above said "the lever is to stop doing it per key" and §7a built it — but
@@ -2716,7 +2738,9 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `Table.Insert`'s work after the engine call (the per-row PK check and index updates have no stamp on this
    path). ⚠️ Coverage note, recorded rather than hidden: this stamp is wired on `ExecuteSQL(sql)` only — the
    parameterized and async overloads share an identical block that could not be disambiguated safely, so they
-   stay unstamped rather than being edited blind on a hot path.
+   stay unstamped rather than being edited blind on a hot path. **Closed 2026-09-27 (session 73):** the block
+   was disambiguated and all four remaining entry points are wired — see §7's instrumentation-coverage note
+   and §5.5 item 5.
 2. **The remaining text-SQL cost — §5 item 4 is settled (2026-09-15): the row shape is not the gap.** The
    `object[]` unification was implemented (a second batched entry point using the direct API's
    `InsertBatch(object[][], columnOrder)`, with the dictionary path kept wherever a post-insert read needs it)
@@ -2738,8 +2762,7 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `--pk-profile [--engine=…]`.
 4. **§4b two-region records** — the only remaining format change, and it owns the too-small inline threshold
    §5 item 1b turned up (all three TEXT columns overflow; nothing inlines).
-5. **Coverage still missing:** the second batch-dispatcher path and parser internals below the dispatcher (§7,
-   2026-09-14 note); the StructRow ladder arm's UPDATE/DELETE phases, which are never run
+5. **Coverage — what is still missing after the statement-level half was CLOSED (2026-09-27, session 73):** the second batch-dispatcher path, the four remaining statement-level entry points and the parameterized tokenisation are wired, and the coverage note in §7 carries the **1,57×** async/sync measurement that wiring made possible. Still open: the StructRow ladder arm's UPDATE/DELETE phases, which are never run
    (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/Program.cs:1839-1844`, so §5.4's ladder prints `0`
    there); and the two PageBased per-row regions §5.2 delegated to §5.5. ~~`WalAppend`/`WalFlush` have no writer
    at all~~ — **stale, corrected 2026-09-27 (session 68):** both have writers (`WalAppend` since 2026-09-15 on

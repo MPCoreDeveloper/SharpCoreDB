@@ -173,6 +173,10 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         }
 
         string[] parts;
+        // §5.5 instrumentation (2026-09-27, session 72): the parameterized overload does the same tokenisation
+        // work as the single-argument one and had no stamp, so its split/query-cache share was invisible.
+        // Binding stays outside it: BindParameters is a different cost and the stage means tokenisation.
+        long stmtSplitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         if (this.queryCache != null)
         {
             // PERF: reuse the cache's tokenized Parts on the hot path. For non-parameterized
@@ -202,6 +206,7 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         {
             parts = sql.Trim().Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         }
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtSplit, stmtSplitStart);
         
         this.ExecuteInternal(sql, parts, wal);
     }

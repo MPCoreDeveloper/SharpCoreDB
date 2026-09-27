@@ -158,11 +158,17 @@ public partial class Database
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
 
+        // §5.5 instrumentation (2026-09-27, session 72): this overload and the two async siblings share the
+        // single-argument shape but carried no stamp, so a caller that binds parameters paid a per-statement
+        // cost no column showed. Same two stages, same nesting as ExecuteSQL(string) -- comparable shapes.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         SqlQueryValidator.ValidateQuery(
             sql, 
             parameters, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
 
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
@@ -186,10 +192,13 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
@@ -249,10 +258,14 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §5.5 instrumentation (2026-09-27): the async twin of ExecuteSQL(string), same Dispatch envelope.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
@@ -292,10 +305,14 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §5.5 instrumentation (2026-09-27): the parameterized async entry point ADO.NET-shaped callers reach.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {

@@ -22,7 +22,11 @@ public partial class SqlParser
 {
     private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
-    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    // The WHERE clause is OPTIONAL (2026-09-27, session 73): SQLite accepts `DELETE FROM t` and removes every
+    // row, and the table layer already reads a null/empty WHERE that way (Table.CRUD.cs — the full-scan filter
+    // is `string.IsNullOrEmpty(where) || EvaluateSimpleWhere(...)`). This regex required a WHERE, so the
+    // statement threw "Invalid DELETE syntax" instead of deleting all rows.
+    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?(?:\s+WHERE\s+(.*))?", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// v2: Pre-compiled regex used to detect subqueries in SELECT routing.
@@ -1903,7 +1907,7 @@ public partial class SqlParser
         if (!tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
-        var whereClause = deleteMatch.Groups[2].Value.Trim();
+        var whereClause = deleteMatch.Groups[2].Success ? deleteMatch.Groups[2].Value.Trim() : string.Empty;
 
         // Issue #8: single-pass delete — DeleteAffectedRows deletes AND returns the affected rows,
         // so RETURNING + affected-count no longer need a separate full Select pass (the old code

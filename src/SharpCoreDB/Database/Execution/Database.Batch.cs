@@ -1708,6 +1708,11 @@ public partial class Database
 
         foreach (var sql in statements)
         {
+            // §5.5 instrumentation (2026-09-27, session 72): this is the second batch dispatcher -- the async
+            // twin of ExecuteBatchSQL had no stamp at all, so a batch run through it reported a stage table
+            // that looked complete while its own classification cost was invisible. Same stage and the same
+            // non-double-counting rule as the sync dispatcher: only the classification, never the DML.
+            long batchParseStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             if (IsInsertStatement(sql))
             {
                 var parsed = ParseInsertStatement(sql);
@@ -1732,9 +1737,11 @@ public partial class Database
             {
                 nonInserts.Add(sql);
             }
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Parse, batchParseStart);
         }
 
         Task commitTask;
+        long commitStart = 0;
         lock (_walLock)
         {
             storage.BeginTransaction();
@@ -1764,6 +1771,9 @@ public partial class Database
                     SaveMetadata();
                 }
                 
+                // §5.5 instrumentation (2026-09-27): the async commit, from the launch to the await. This path
+                // has no separate transaction-buffer flush, so it has no CommitBuffer twin of the sync one.
+                commitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
                 commitTask = storage.CommitAsync();
             }
             catch
@@ -1774,6 +1784,7 @@ public partial class Database
         }
         
         await commitTask;
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
     }
 
     /// <summary>
