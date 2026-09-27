@@ -290,6 +290,17 @@ failure.
 
 ### 5.1 P2 — INSERT throughput (0.54× → ≥ 1.0×) — *do this first*
 
+**STATUS 2026-09-22: CLOSED — the absolute target is met, the ratio clause is not claimed, and the lever list is
+exhausted.** The DoD's absolute half is met (**161.802 / 171.000 / 168.853 ops/s**, all ≥ 150K, up from 130–135K at
+inline capacity 16) while the ratio half is **0,92 / 0,87 / 0,85× (median 0,87×)** against a same-run SQLite of
+176–199K; the per-stage `--multirowinsert` budget exists (worklog session 2, §4); decision 8 (inline capacity
+16 → 24) shipped as a default change with no rewrite for existing data. DoD #4's `--gate` half is the
+**INCONCLUSIVE**-on-this-machine outcome (2,91× and 2,76× rep spread, the second attempt on an idle machine),
+recorded as a re-run rather than a revert per this brief's own rule. **Do not reopen 5.1 without a new lever** —
+the residual is a reference that moves plus plumbing the close-out priced and rejected (+3–6 %). Evidence: the
+worklog's 2026-09-22 session-6 entry and plan §0.1 decision 10. As with §5.3/§5.4, the text below is kept as the
+historical record.
+
 - **Already done (do not redo):** §4b inline capacity default = 16 (+19% multi-row INSERT);
   the `QueryCache.Count` gate fix; the `Storage.AppendBytes` buffer-size fix.
 - **Remaining:** the ~2.4× lives in SQL-only work — statement parsing (~15.4% at 1000 rows/statement),
@@ -313,6 +324,16 @@ failure.
   refuted hypothesis. Then move to 5.2 — do **not** keep attacking INSERT.
 
 ### 5.2 P3 — PageBased UPDATE parity (4.9× → ≤ 2×)
+
+**STATUS 2026-09-21: CLOSED on its DoD check — 3 of the 4 points met, #1 partially; next item was 5.3.** The fix
+(`2bc3e947`) and the stamps it is measured with (`cad4715c`) landed, and the profile now attributes **88,3 ms of a
+120 ms** pass (**73,6 %**, against ~24 % when the item opened). DoD #2 is met the way it demands — the dominant
+cost is named with evidence rather than inferred from a ratio: **`row-decode` = 100.000 calls = one per table row,
+630 B/call, 79,7 %** of the stamped pass. DoD #1 is the **partial** one: two per-row regions in that path were
+left unstamped and are handed to **§5.5**, named in the 2026-09-21 worklog entry — the per-row locate (the
+hash-index lookup plus `engine.Read`, which fires per operation) and the contiguous patch's internals (hidden
+behind a batch-level outer `row-locate` stamp). **Re-verify that entry's line numbers before using them: they
+drift.** The item's own lever landed as follow-up 6; the text below is kept as the historical record.
 
 - Profiled 2026-09-15: ~75% of the cost is in unstamped code; the largest *measured* cost is the
   overflow arena (6.81 µs/update, 2829 B/update = full re-serialization).
@@ -446,8 +467,32 @@ SQL/Direct/StructRow ladders **separately**, never as one number.
 
 ### 5.5 Instrumentation coverage gaps — *only as needed*
 
-`WalAppend`/`WalFlush` have no writer stamp; the second batch-dispatcher path and parser internals
-below the dispatcher are uncovered. Add stamps only where needed to answer 5.1/5.3.
+**STATUS 2026-09-27 (session 68): the WAL half of this item's text was stale and has been removed — both stages
+have had writers for days, and a session that stamped them again would double-count.** `WalAppend` was wired on
+**2026-09-15** on the per-statement SQL `INSERT` path's `wal?.Log(…)` call, in **both** branches —
+`src/SharpCoreDB/Services/SqlParser.DML.cs:336` (the `INSERT … SELECT` branch) and `:561` (VALUES) — where it
+measured 0,025 µs/statement with zero allocation; `WalFlush`'s first writer landed **2026-09-26** in
+`src/SharpCoreDB/Database/Core/Database.Core.cs:759` (the explicit `FlushBatchWalBuffer()` half of
+`Database.Flush()`), which is what let plan §2's acceptance be read at **92,7–100 % warm / 81,4 % cold** on the
+batch pass (worklog sessions 65–66). Read `WritePathProfiler` before stamping: `Stage.WalAppend = 6` and
+`Stage.WalFlush = 7` are both written to today, and this item's own DoD is why that matters — a second writer for
+the same region is the "misleading half-stamp" it calls worse than no stamp.
+
+The gaps that are genuinely still open, each with its evidence in the code:
+
+1. **The StructRow ladder arm's UPDATE/DELETE phases are never run** —
+   `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/Program.cs:1839-1844` zero-fills both cells with the
+   comment that they share the Direct API row's code paths. The §5.4 ladder therefore prints `0` for those two
+   cells, which reads as *unmeasured* as a *bad* result rather than as an intentional omission. Either run the
+   phases (the Direct row already does, so the shape exists) or print them as explicitly *not measured*; the
+   ambiguity is the defect, not the missing number.
+2. **The *second* batch-dispatcher path and the parser internals below the dispatcher** — uncovered since
+   2026-09-14 and still restated as such in plan §2/§7.
+3. **The two PageBased per-row regions §5.2 delegated here** (its STATUS above): the per-row locate — hash-index
+   lookup plus `engine.Read`, which fires per operation — and the contiguous patch's internals, invisible because
+   they sit under a batch-level `row-locate` stamp. Re-verify the 2026-09-21 entry's line numbers first.
+
+Add stamps only where needed to answer 5.1/5.3.
 - **Timebox:** 0.5 session, **on demand only** — skip this item entirely if 5.1/5.3 produced a clean
   answer without new stamps.
 - **Done when (DoD):** the new stamp(s) answer the specific question that motivated them (stated in the

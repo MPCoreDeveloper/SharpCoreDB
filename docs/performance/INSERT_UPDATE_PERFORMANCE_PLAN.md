@@ -153,9 +153,14 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    Result on the multi-row workload (20,000 rows, 1,000 rows/statement, one profiled pass): `validate`
    34.2 %, **`index-maint` 18.2 %**, `row-build` 14.3 %, `parse` 10.7 %, `engine-write` 5.7 %, `commit` 4.3 %
    (0.98 ms per statement — the flush boundary the storage transaction moved), `row-locate` 1.6 %.
-   **Still not wired:** `wal-append` and `wal-flush` have no writer at all, and the stage report remains a
-   sum of stages rather than wall time where they nest (the outer `validate`/`encode` wrap the arena stages,
-   so the raw total exceeds the pass).
+   **Wire status — corrected 2026-09-27 (session 68), because this paragraph had been read as current for eleven
+   days:** `wal-append` **is** wired, since **2026-09-15** — the per-statement SQL `INSERT` path's `wal?.Log(…)`
+   call, in **both** the VALUES and `INSERT … SELECT` branches (`src/SharpCoreDB/Services/SqlParser.DML.cs:561`
+   and `:336`) — and `wal-flush` got its first writer on **2026-09-26** (`Database.Core.cs:759`, the explicit
+   `FlushBatchWalBuffer()` half of `Database.Flush()`), which is what closed §5.3's attribution at 92,7–100 %
+   warm. So do **not** add a second writer for either stage: the profiler would double-count the region. What
+   still holds is this sentence's second half — the stage report remains a sum of stages rather than wall time
+   where they nest (the outer `validate`/`encode` wrap the arena stages, so the raw total exceeds the pass).
    **Allocation attribution added (2026-09-15)** — the same `Stamp`/`Add` pair now also measures
    `GC.GetAllocatedBytesForCurrentThread()` per stage, which is what a 6.2 KB/row measurement needed: the
    time stages could not say where the garbage came from, and four hand-checked suspects (the PK key's
@@ -1678,8 +1683,10 @@ path (RowLocate / IndexMaintenance / IndexDecode / EngineWrite), bulk-update per
 Still uncovered, recorded honestly: the *second* batch dispatcher path and parser internals below the
 dispatcher. **`WalAppend` is now wired (2026-09-15)** — the per-statement SQL `INSERT` path's `wal?.Log(…)`
 call, in both the VALUES and `INSERT … SELECT` branches — and it measured **0.025 µs/statement with zero
-allocation**, which refutes the per-statement-WAL-fsync hypothesis outright. `WalFlush` still has no writer:
-nothing on this path flushes the log per statement.
+allocation**, which refutes the per-statement-WAL-fsync hypothesis outright. `WalFlush` **got its first writer
+on 2026-09-26** (`Database.Core.cs:759`, the explicit `Database.Flush()` boundary; corrected here 2026-09-27,
+session 68), and the *scoped* claim this sentence was making still holds: **nothing on the per-statement INSERT
+path flushes the log**, which is why `wal-flush` never appears in that pass's stage table.
 
 **Closed (2026-09-16): the contiguous fast path was the one route that ignored the deferral, and honouring it is
 worth ~4×.** §7's verdict above said "the lever is to stop doing it per key" and §7a built it — but
@@ -2709,8 +2716,13 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `--pk-profile [--engine=…]`.
 4. **§4b two-region records** — the only remaining format change, and it owns the too-small inline threshold
    §5 item 1b turned up (all three TEXT columns overflow; nothing inlines).
-5. **Coverage still missing:** `WalAppend`/`WalFlush` have no writer at all, plus the second batch-dispatcher
-   path and parser internals below the dispatcher (§7, 2026-09-14 note).
+5. **Coverage still missing:** the second batch-dispatcher path and parser internals below the dispatcher (§7,
+   2026-09-14 note); the StructRow ladder arm's UPDATE/DELETE phases, which are never run
+   (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/Program.cs:1839-1844`, so §5.4's ladder prints `0`
+   there); and the two PageBased per-row regions §5.2 delegated to §5.5. ~~`WalAppend`/`WalFlush` have no writer
+   at all~~ — **stale, corrected 2026-09-27 (session 68):** both have writers (`WalAppend` since 2026-09-15 on
+   the SQL `INSERT` branches, `WalFlush` since 2026-09-26 in `Database.Core.cs:759`), so adding another would
+   double-count the region.
 6. **The INSERT target (§8/§8a):** ≥150K not met — 109K tuned plaintext, 88K at-rest, 81K pure default. §8a
    already records that the target was set on a noisier machine and that re-stating it under the §2 protocol
    is a task, not a claim that the target moved.
