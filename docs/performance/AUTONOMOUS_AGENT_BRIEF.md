@@ -504,12 +504,22 @@ place below, with the commit or the artifact that carries its evidence:
    `DeleteMeasured: false`). The gap's own line numbers had drifted (`:1839-1844` → `:1868-1881`).
 2. ~~**The *second* batch-dispatcher path and the parser internals below the dispatcher**~~ — **CLOSED
    2026-09-27 (session 73)**: wired, pinned by `WritePathEntryPointCoverageTests` (Failed 2 → 0) and measured —
-   the async dispatcher is **1,57×** slower end to end, classifies **2,9×** slower and allocates **6,2×** per
-   statement. Plan §7 carries the numbers.
+   the async dispatcher was **1,57×** slower end to end, classified **2,9×** slower and allocated **6,2×** per
+   statement. **Its follow-up is closed too (session 75)**, and it is the one that removed the cause rather
+   than the symptom: both dispatchers now run **one** `ClassifyBatchStatements` + `ExecuteClassifiedBatch`
+   (`Database.Batch.cs:1302` / `:1377`), and the async arm's classification allocation per statement goes
+   **1.223,5 B → 194,5 B** — **6,29× → 1,00×** of the sync arm (972.608 B for both arms, byte for byte) with
+   total allocation at parity (+0,09 %). Two silent defects came out of the unification and were fixed in the
+   same session: a permuted/partial explicit column list on the batch path stored the wrong row, and a batch
+   inside a caller's transaction threw on the async arm. Both async SQL entry points also validate now
+   (`SqlQueryValidator`), which was the owner-gated half of session 73's NEXT line. Plan §7 carries the table.
+
 3. ~~**The two PageBased per-row regions §5.2 delegated here**~~ — **CLOSED 2026-09-27 (session 74)**: the
    2026-09-21 line numbers were re-verified (they now point at the batch entry and the structured wrapper, not at
    the locate), and reading the code showed the arm's *route* changed since that entry — the SQL batch dispatcher
-   aggregates UPDATE statements (`Database.Batch.cs:1306`). Both regions are stamped today: the per-operation
+   aggregates UPDATE statements (`Database.Batch.cs:1401-1407` — one `Table.UpdateMultiple` per table, grouped at
+   `:1338`; the reference read `:1306` until session 75 moved the loop into the shared `ExecuteClassifiedBatch`).
+   Session 75 also records this route in plan §7. Both regions are stamped today: the per-operation
    locate is **`row-locate-index`** (one stamp over the mutually exclusive PK-B-tree and hash-index branches:
    **10.000 calls, 13,1 ms, 17,2 % of the pass, 320 B/op** on the `--pk` arm) and the contiguous patch's internals
    are the **single** batch-level `row-locate` call. Plan §6 carries the correction block.

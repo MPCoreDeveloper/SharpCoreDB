@@ -4356,7 +4356,7 @@ class Program
         Console.WriteLine($"  {"A  Dictionary<string,object>(1) + one entry (the `updates` arg)",-48}{dict.NsPerOp,11:F1}{dict.BytesPerOp,10:F0}");
         Console.WriteLine($"  {"B  WHERE rebuild: \"col\" + \" = \" + literal",-48}{concat.NsPerOp,11:F1}{concat.BytesPerOp,10:F0}");
         // The `parse` stage's OWN instrumentation runs inside the region it measures: the dispatcher stamps and
-        // adds per statement (Database.Batch.cs:1028 / :1073), so any share sampled with the profiler ON is an
+        // adds per statement (Database.Batch.cs:1315 / :1363, the classifier both dispatchers share), so any share sampled with the profiler ON is an
         // upper bound that includes the observer. Measure it enabled, which is the only state in which stage
         // tables are produced at all.
         SharpCoreDB.Diagnostics.WritePathProfiler.Reset();

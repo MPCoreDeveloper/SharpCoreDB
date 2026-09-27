@@ -55,9 +55,12 @@ public sealed class WritePathEntryPointCoverageTests : IDisposable
 
     /// <summary>
     /// The five statement-level DML entry points must each record the <c>dispatch</c> envelope (the write
-    /// lock, the shared-parser fetch and the hand-off). The two async overloads and the parameterized sync
-    /// one are the ones this pins: they reach the same parser call as <c>ExecuteSQL(string)</c> and carried
-    /// no stamp until §5.5 (ii).
+    /// lock, the shared-parser fetch and the hand-off) and the <c>stmt-validate</c> stage (the per-statement
+    /// security and parameter check). The two async overloads are what this pins today: they carried no
+    /// stamp at all until §5.5 (ii), and they reached the same parser as <c>ExecuteSQL(string)</c> without
+    /// ever calling <see cref="SharpCoreDB.Services.SqlQueryValidator.ValidateQuery"/> — the sync sibling had
+    /// validated since 2026-09-15, so the async entry point a caller reaches through ADO.NET bypassed a
+    /// check its own twin enforced (fixed 2026-09-27, session 75).
     /// </summary>
     [Fact]
     public async Task EveryStatementEntryPoint_ReachesTheDispatchEnvelope()
@@ -102,17 +105,12 @@ public sealed class WritePathEntryPointCoverageTests : IDisposable
             WritePathProfiler.Disable();
 
             Assert.True(Calls("dispatch") >= 1, $"{entryPoint} did not reach the dispatch envelope");
+
+            // §5.5 (ii) follow-up (session 75): every entry point that validates records `stmt-validate`.
+            // The two async overloads skipped the validator entirely before that, so a stage report could
+            // not even show that a security check was missing on them.
+            Assert.True(Calls("stmt-validate") >= 1, $"{entryPoint} did not reach the validation stage");
         }
-
-        // The parameterized sync overload validates as well, and that phase had no stamp on it before.
-        WritePathProfiler.Reset();
-        WritePathProfiler.Enable();
-        db.ExecuteSQL(
-            "INSERT INTO docs VALUES (@id, @name, @score)",
-            new Dictionary<string, object?> { ["@id"] = 6, ["@name"] = "f", ["@score"] = 6.5 });
-        WritePathProfiler.Disable();
-
-        Assert.True(Calls("stmt-validate") >= 1, "the parameterized overload skipped the stmt-validate stamp");
     }
 
     /// <summary>

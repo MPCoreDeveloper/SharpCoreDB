@@ -1590,8 +1590,9 @@ instrumentation added here stays: it covers real entry points that other shapes 
 
 > **⚠️ Corrected 2026-09-27 (session 74): the arm's route changed, and the paragraph above is now wrong about
 > what it measures.** `--pk-profile --engine=pagebased` on the current build does **not** show the generic
-> per-op route: `Database.Batch.cs:1306` aggregates the 10.000 UPDATE statements into **one**
-> `Table.UpdateMultiple` call, and that core's PK-equality branch (`Table.CRUD.cs:2522`) carries **no**
+> per-op route: `Database.Batch.cs:1401-1407` (the aggregation itself at `:1338`; the reference read `:1306` until
+> session 75 moved it into the shared `ExecuteClassifiedBatch`) aggregates the 10.000 UPDATE statements into **one**
+> `Table.UpdateMultiple` call, and that core's PK-equality branch (`Table.CRUD.cs:2531`) carries **no**
 > `StorageMode` gate — so PageBased takes the raw-byte fast patch. The current pass shows **10.000
 > `in-place-patch` calls, 10.000 `page-read` calls** (off the per-op `engine.Read`), a **single** `row-locate`
 > call (the contiguous attempt, declining in 1,1 ms) and **zero** `SelectInternal` materialization — `row-decode`
@@ -1607,7 +1608,9 @@ instrumentation added here stays: it covers real entry points that other shapes 
 > for is measured, and it is not materialization. With it, the pass attributes ~88 % of its wall time, and the
 > largest single stage on **both** engines is the dispatcher's per-statement UPDATE classification
 > (`parse`: 19,7 ms / 10.000 calls / 500 B/op on PageBased, 22,2 ms on AppendOnly — `TryParseUpdateForBatch`,
-> `Database.Batch.cs:1234`), which is §5 item 2's territory, not this item's. The same session's back-to-back
+> `Database.Batch.cs:1048` — the reference read `:1234`, which is the *call site* the shared classifier moved to
+> `:1338`; `:1048` is the definition and was already the definition when the earlier entry was written —), which
+> is §5 item 2's territory, not this item's. The same session's back-to-back
 > passes read PageBased **8,68 µs/update (115.148 ops/s)** against AppendOnly **8,72 µs/update (114.742 ops/s)**
 > — parity, where this section opened at a 3,4× trap. Quote that as a same-session pair, never as an absolute.
 
@@ -2396,9 +2399,12 @@ Three conclusions, and the second is the important one:
    per-operation work.
 
    **And the one routing candidate is now quantitatively refuted too.** `TryParseUpdateForBatch`
-   (`Database.Batch.cs:864`) takes an allocation-free canonical scan (`TryScanCanonicalDml`, `:526`) for
+   (`Database.Batch.cs:1048`) takes an allocation-free canonical scan (`TryScanCanonicalDml`, `:710`) for
    `UPDATE <t> SET <col> = <lit> WHERE <col> = <lit>` and otherwise falls back to `BatchUpdateRegex.Match(sql)` — a
-   regex per statement — with anything that fails both going to `nonInserts` for per-statement execution (`:1167`).
+   regex per statement — with anything that fails both going to `NonInserts` for per-statement execution (`:1450`,
+   the loop at `:1454`). **All four references were re-verified against the code on 2026-09-27 (session 75) and
+   every earlier one had drifted** (`:864`/`:526`/`:1167` → `:1048`/`:710`/`:1450`); the definitions were correct
+   under the symbol names either way, which is why this paragraph is now cited by symbol first.
    The arms' predicates differ in exactly that way (`id = 12` numeric versus `name = 'User12'` quoted), so a regex
    fallback was the best candidate. It is not the answer: the arms' `parse` differs by only **1.55 µs versus 2.28 µs
    per statement — 0.73 µs, ~5 %** of the 15 µs. A regex cannot be a 6.2×.
@@ -2530,7 +2536,7 @@ of the evidence.
 - **What it is worth — corrected 2026-09-22 by reading the call path, before anything was built: a low single-digit percentage, not the +33 % this bullet first claimed.** The +33 % (0,63× → 0,84×, −25,3 % allocation) belongs to *not using the arena at all* (capacity 24), and a batch-granular call does **not** achieve that, because the storage's buffered branch of `AppendBytesMultiple` (`Storage.Append.cs:1068-1080`) still calls `AppendBytes` **once per payload** — it loops, under `IsInTransaction`/`BuffersAppends`, and takes `appendLock` each time. So batching removes, per row: one `_gate` acquisition, two one-element `long[]`s (the `WriteMany` result and `AppendBytesMultiple`'s `result`) and the scratch `Clear` — while the arena cache node, the buffered-append list entry and the `bufferedAppendLookup` node all remain per payload, because read-your-writes and durability need them. Bounding it from the existing table: `arena-write` 2,21 µs/call − `arena-append` 1,30 µs/call = **0,91 µs/call profiled (~0,45 µs/row unprofiled)** for everything inside `WriteMany` that is not the storage append, and only about half of that is call overhead rather than the per-payload cache node — against the **2,3 µs/row** the whole arena path costs (the ib=16 → ib=24 delta). That is ~10-20 % of the available delta, i.e. **+3-6 % on the tracked ratio at best**.
 - **Verdict on this item: measured-and-deferred, not built.** A designed codec change (deferred slot patching, per-thread accumulators) plus its tests is not worth +3-6 % when the same measurement says the remaining 80-90 % of the arena cost is only reachable by not writing to the arena — which is the capacity decision above. The design sketch is kept because it is still the right shape *if* the arena path is ever attacked for another reason (e.g. a payload-only write path).
 - **One further hypothesis was checked and refuted on the way:** per-payload encryption probing. `ShouldEncryptWrites` (`Storage.Append.cs:118`) short-circuits on `!UseRecordEncryption` and is otherwise memoised per path in `_encryptModeCache`, so it is not the per-row cost — the append frame's per-payload `AppendBytes` call is.
-- **Why it is NOT a durability change — checked 2026-09-22 rather than assumed.** The arena has no flush of its own: `WriteMany` routes into the storage's buffered-append path (`AppendBytesMultiple` → `AppendBytes` → `bufferedAppends` + `bufferedAppendLookup`), and everything is flushed at the transaction boundary by `FlushTransactionBuffer()` / `FlushBufferedAppends()` (`Database.Batch.cs:1194`, `Table.cs:842`). The arena's `_cache` is the read-your-writes layer, so block offsets stay resolvable. A batch call changes **call granularity only** — same buffer, same flush, same crash story — which removes the rail this item was assumed to touch.
+- **Why it is NOT a durability change — checked 2026-09-22 rather than assumed.** The arena has no flush of its own: `WriteMany` routes into the storage's buffered-append path (`AppendBytesMultiple` → `AppendBytes` → `bufferedAppends` + `bufferedAppendLookup`), and everything is flushed at the transaction boundary by `FlushTransactionBuffer()` / `FlushBufferedAppends()` (`Storage.Append.cs:1306` / `:1146`; the batch dispatcher's call is `Database.Batch.cs:1230`, the direct-insert path's `:675`). The line pair this sentence originally carried (`Database.Batch.cs:1194`, `Table.cs:842`) had drifted and was corrected 2026-09-27 (session 75); the claim itself was re-checked and holds. The arena's `_cache` is the read-your-writes layer, so block offsets stay resolvable. A batch call changes **call granularity only** — same buffer, same flush, same crash story — which removes the rail this item was assumed to touch.
 - **What the work actually is.** The codec patches each row's slots *during* serialization, so batch granularity needs a deferred shape: phase 1 serializes rows and records `(recordIndex, slotOffset)` descriptors while collecting payloads in a batch accumulator; phase 2 is one `IOverflowArena.WriteMany` (it already accepts a list); phase 3 patches the slots from the descriptors. The byte format is untouched, so the reopen/compat matrix does not apply; the >10,000-row `Parallel.For` serialization path needs a per-thread accumulator, for which the codec's existing `[ThreadStatic]` scratch is the precedent.
 - **Acceptance:** the deterministic columns this session established — the arm's own `[diag]` engine allocation per row (1.923 B/row today, ~1.5 KB/row if the per-row arena plumbing is removed) and the tracked ratio over interleaved pairs. Not a single pre-change ops/s sample.
 

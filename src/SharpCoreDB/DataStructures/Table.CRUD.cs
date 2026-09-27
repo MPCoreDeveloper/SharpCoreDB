@@ -2630,7 +2630,7 @@ public partial class Table
                     // statement because its contiguous, PK-lookup and raw-byte fast paths are all gated away from
                     // it" — was true of the route the arm took then (`ResolveUpdateRows`, whose PK branch is still
                     // gated on `StorageMode != PageBased`, :2186); it is NOT true of this core since the SQL batch
-                    // dispatcher began aggregating UPDATE statements into one call (`Database.Batch.cs:1306`). The
+                    // dispatcher began aggregating UPDATE statements into one call (`Database.Batch.cs:1401-1407`). The
                     // ungated PK branch above now serves the `--pk` arm, and this fallback's `row-locate` reads a
                     // call count of 1 there (the contiguous attempt only — session 74's profile). It still fires
                     // for compound/unindexed predicates and for tables without a primary key.

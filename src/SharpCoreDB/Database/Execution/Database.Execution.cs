@@ -239,6 +239,21 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
+        // §5.5 (ii) follow-up (2026-09-27, session 75): the sync sibling has validated its statement since
+        // 2026-09-15 and this overload never called the validator at all — so a caller that reached the
+        // database asynchronously (ADO.NET async, EF Core, the Serilog sink) bypassed a security check its
+        // own sync twin enforced, and the two disagreed about which SQL is acceptable. Same call, same
+        // arguments, same position as `ExecuteSQL(string)`: before the SELECT branch, so the entry points
+        // stay comparable column for column.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+        SqlQueryValidator.ValidateQuery(
+            sql,
+            null,
+            config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
+            config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
+
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, null, cancellationToken).ConfigureAwait(false);
@@ -258,7 +273,8 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
-        // §5.5 instrumentation (2026-09-27): the async twin of ExecuteSQL(string), same Dispatch envelope.
+        // §5.5 instrumentation (2026-09-27): the async twin of ExecuteSQL(string) — both of its stages now,
+        // `stmt-validate` (added 2026-09-27, session 75) and this Dispatch envelope.
         long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
@@ -291,6 +307,20 @@ public partial class Database
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
 
+        // §5.5 (ii) follow-up (2026-09-27, session 75): the parameterized sync sibling validates the
+        // statement *and* the parameter set (`StrictParameterValidation`); this overload did neither, so the
+        // async entry point ADO.NET-shaped callers reach accepted a statement whose named parameters do not
+        // match the SQL where the sync one threw. Same call, same arguments, same position as
+        // `ExecuteSQL(sql, parameters)`.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+        SqlQueryValidator.ValidateQuery(
+            sql,
+            parameters,
+            config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
+            config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
+
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
@@ -305,7 +335,8 @@ public partial class Database
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
-        // §5.5 instrumentation (2026-09-27): the parameterized async entry point ADO.NET-shaped callers reach.
+        // §5.5 instrumentation (2026-09-27): the parameterized async entry point ADO.NET-shaped callers
+        // reach. It carries `stmt-validate` too since session 75, like its sync sibling.
         long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {

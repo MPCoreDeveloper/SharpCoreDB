@@ -1189,73 +1189,12 @@ public partial class Database
             return;
         }
 
-        // ✅ PERF: Dedicated batch-INSERT path uses column-ordered object[] rows
-        // (no per-row Dictionary<string, object> allocation, no column-name lookups)
-        Dictionary<string, List<object[]>> insertsByTableArray = [];
-        List<string> nonInserts = [];
-
-        // ✅ PHASE 3: Track prepared statement per table for fast repeated parsing
-        Dictionary<string, PreparedInsertStatement?> preparedStatements = [];
-
-        // ✅ PERF: Group UPDATE/DELETE by table for single-lock batch execution
-        Dictionary<string, List<(string where, Dictionary<string, object> updates)>> updatesByTable = [];
-        // Canonical DELETE statements carry the pre-parsed column + raw literal so the table layer
-        // can skip the per-statement WHERE rebuild/re-parse (B3); Where stays empty for those.
-        Dictionary<string, List<(string Where, string? Column, string? Literal)>> deletesByTable = [];
-
-        foreach (var sql in statements)
-        {
-            // §2 instrumentation (2026-09-14): the batch dispatcher's own cost — statement classification and
-            // the per-table parse passes below — was invisible, so a stage report looked complete while a
-            // large share of the wall time was spent here. Only the classification, not the DML (which the
-            // table layer stamps itself), so nothing is double counted.
-            long batchParseStart = Diagnostics.WritePathProfiler.Stamp();
-            if (IsInsertStatement(sql))
-            {
-                // ✅ PHASE 3: Fast path — parse directly into column-ordered object[] rows
-                var parsed = ParseInsertStatementFastToArray(sql, preparedStatements);
-                if (parsed.HasValue)
-                {
-                    var (tableName, values) = parsed.Value;
-
-                    if (!insertsByTableArray.TryGetValue(tableName, out var valueList))
-                    {
-                        valueList = [];
-                        insertsByTableArray[tableName] = valueList;
-                    }
-
-                    valueList.Add(values);
-                }
-                else
-                {
-                    nonInserts.Add(sql);
-                }
-            }
-            else if (TryParseUpdateForBatch(sql, out var updTableName, out var updWhere, out var updSets))
-            {
-                if (!updatesByTable.TryGetValue(updTableName, out var updList))
-                {
-                    updList = [];
-                    updatesByTable[updTableName] = updList;
-                }
-                updList.Add((updWhere, updSets));
-            }
-            else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere, out var delCol, out var delLiteral))
-            {
-                if (!deletesByTable.TryGetValue(delTableName, out var delList))
-                {
-                    delList = [];
-                    deletesByTable[delTableName] = delList;
-                }
-                delList.Add((delWhere, delCol, delLiteral));
-            }
-            else
-            {
-                nonInserts.Add(sql);
-            }
-
-            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Parse, batchParseStart);
-        }
+        // ✅ PERF: one classification pass, shared by both dispatchers (session 75). The sync and async
+        // batch dispatchers used to carry their own copy of this loop and they had drifted apart: the
+        // async twin still classified through the dictionary-based `ParseInsertStatement` and inserted
+        // one dictionary row at a time, so the same batch cost 2,9× the classification time and
+        // allocated 6,2× per statement (plan §5.5 (ii), session 73). One implementation, two callers.
+        var batch = ClassifyBatchStatements(statements);
 
         lock (_walLock)
         {
@@ -1272,96 +1211,10 @@ public partial class Database
             
             try
             {
-                foreach (var (tableName, rows) in insertsByTableArray)
-                {
-                    if (tables.TryGetValue(tableName, out var table))
-                    {
-                        if (table is DataStructures.Table concreteInsert)
-                        {
-                            // Dedicated fast path: column-ordered object[] rows (no dictionaries).
-                            // The prepared statement carries the user-facing column order
-                            // (excludes the internal _rowid column).
-                            if (preparedStatements.TryGetValue(tableName, out var prepared) && prepared is not null)
-                            {
-                                concreteInsert.InsertBatch(rows.ToArray(), prepared.Columns);
-                            }
-                            else
-                            {
-                                concreteInsert.InsertBatch(rows.ToArray());
-                            }
-                        }
-                        else
-                        {
-                            // Fallback for other ITable implementations
-                            table.InsertBatch(RowsToDictionaryList(table, rows));
-                        }
-                    }
-                }
-
-                // ✅ PERF: Batch UPDATE — single lock per table instead of per-statement
-                foreach (var (tableName, ops) in updatesByTable)
-                {
-                    if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
-                    {
-                        concreteUpdate.UpdateMultiple(ops);
-                    }
-                }
-
-                // ✅ PERF: Batch DELETE — single lock per table instead of per-statement
-                foreach (var (tableName, deletes) in deletesByTable)
-                {
-                    if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
-                    {
-                        // Canonical batches go through the structured path (no WHERE rebuild or re-parse).
-                        // NOSONAR:S125 - prose description: any non-canonical statement forces the
-                        // string form for the whole table, not commented-out code.
-                        bool allCanonical = true;
-                        foreach (var (_, column, _) in deletes)
-                        {
-                            if (column is null)
-                            {
-                                allCanonical = false;
-                                break;
-                            }
-                        }
-
-                        if (allCanonical)
-                        {
-                            var keys = new List<(string Column, string Literal)>(deletes.Count);
-                            foreach (var (_, column, literal) in deletes)
-                            {
-                                keys.Add((column!, literal!));
-                            }
-
-                            concreteDelete.DeleteMultipleKeys(keys);
-                        }
-                        else
-                        {
-                            var wheres = new List<string>(deletes.Count);
-                            foreach (var (where, column, literal) in deletes)
-                            {
-                                wheres.Add(where.Length > 0 ? where : column + " = " + literal);
-                            }
-
-                            concreteDelete.DeleteMultiple(wheres);
-                        }
-                    }
-                }
-
-                if (nonInserts.Count > 0)
-                {
-                    var sqlParser = GetSharedSqlParser();
-
-                    foreach (var sql in nonInserts)
-                    {
-                        sqlParser.Execute(sql, null);
-                    }
-                }
-
-                if (!isReadOnly && statements.Any(IsSchemaChangingCommand))
-                {
-                    SaveMetadata();
-                }
+                // The DML half is shared with the async dispatcher — one implementation, so the two cannot
+                // drift apart again (session 75: they had, and the async twin paid 2,9× the classification
+                // time and 6,2× the allocation per statement for it — plan §5.5 (ii)).
+                ExecuteClassifiedBatch(batch, statements);
                 
                 // Only commit if we started the transaction
                 if (!isInTransactionBefore)
@@ -1379,23 +1232,10 @@ public partial class Database
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitBuffer, commitBufferStart);
                 }
                 
-                // ✅ FIX: Force tables to refresh row count from disk to ensure visibility
-                if (insertsByTableArray.Count > 0)
-                {
-                    foreach (var tableName in insertsByTableArray.Keys)
-                    {
-                        if (tables.TryGetValue(tableName, out var table))
-                        {
-                            table.RefreshRowCount();
-                        }
-                    }
-                }
-                
-                // ✅ FIX: Set metadata dirty flag to ensure ExecuteCompiledQuery flushes before reading
-                if (insertsByTableArray.Count > 0 || nonInserts.Count > 0)
-                {
-                    _metadataDirty = true;
-                }
+                // ✅ FIX: refresh the inserted tables' row counts from disk (visibility) and mark the
+                // metadata dirty so ExecuteCompiledQuery flushes before reading. Both live in the shared
+                // helper — the async dispatcher had neither before session 75: it inserted and committed.
+                FinishClassifiedBatch(batch);
             }
             catch
             {
@@ -1406,6 +1246,291 @@ public partial class Database
                 throw;
             }
         }
+    }
+
+    /// <summary>
+    /// The INSERT rows of one table-and-column-shape, in the order that statement's list declared them.
+    /// </summary>
+    private sealed class InsertBucket(string tableName, PreparedInsertStatement prepared)
+    {
+        /// <summary>Gets the table the rows belong to.</summary>
+        public string TableName { get; } = tableName;
+
+        /// <summary>
+        /// Gets the prepared statement whose schema key is this bucket's key, so two shapes of one table
+        /// never share a bucket — and therefore never share a column order. A permuted or partial explicit
+        /// column list is legal SQLite and assigns by name, so sharing one order would write wrong rows.
+        /// </summary>
+        public PreparedInsertStatement Prepared { get; } = prepared;
+
+        /// <summary>Gets the column-ordered rows.</summary>
+        public List<object[]> Rows { get; } = [];
+    }
+
+    /// <summary>
+    /// One classification pass over a batch: the INSERT rows grouped by table and column shape, the grouped
+    /// UPDATE and DELETE operations per table, and the statements no fast path claimed.
+    /// </summary>
+    private sealed class BatchClassification
+    {
+        /// <summary>Gets the INSERT rows, keyed by the prepared statement's schema key.</summary>
+        public Dictionary<string, InsertBucket> InsertsByShape { get; } = new(StringComparer.Ordinal);
+
+        /// <summary>Gets the UPDATE operations, grouped per table.</summary>
+        public Dictionary<string, List<(string Where, Dictionary<string, object> Updates)>> UpdatesByTable { get; } = [];
+
+        /// <summary>
+        /// Gets the DELETE operations, grouped per table. Canonical statements carry the pre-parsed column
+        /// and raw literal instead of a WHERE clause, so the table layer can skip the per-statement WHERE
+        /// rebuild and re-parse (B3); Where stays empty for those.
+        /// </summary>
+        public Dictionary<string, List<(string Where, string? Column, string? Literal)>> DeletesByTable { get; } = [];
+
+        /// <summary>Gets the statements no batch fast path claimed; the shared parser runs them.</summary>
+        public List<string> NonInserts { get; } = [];
+    }
+
+    /// <summary>
+    /// Classifies a batch of statements into the four buckets both batch dispatchers execute. Extracted
+    /// (2026-09-27, session 75) so the sync and async dispatchers cannot drift apart again — their two
+    /// copies had, and the async one still classified through the dictionary-based
+    /// <c>ParseInsertStatement</c> and inserted one dictionary row at a time, which cost the same batch
+    /// 2,9× the classification time and 6,2× the allocation per statement (plan §5.5 (ii), session 73).
+    /// </summary>
+    /// <param name="statements">The batch, already materialised to an array.</param>
+    /// <returns>The classification, with the <c>parse</c> stage stamped per statement.</returns>
+    private BatchClassification ClassifyBatchStatements(string[] statements)
+    {
+        var batch = new BatchClassification();
+
+        // ✅ PHASE 3: Track prepared statement per table for fast repeated parsing
+        Dictionary<string, PreparedInsertStatement?> preparedStatements = [];
+
+        foreach (var sql in statements)
+        {
+            // §2 instrumentation (2026-09-14): the batch dispatcher's own cost — statement classification and
+            // the per-table parse passes below — was invisible, so a stage report looked complete while a
+            // large share of the wall time was spent here. Only the classification, not the DML (which the
+            // table layer stamps itself), so nothing is double counted.
+            long batchParseStart = Diagnostics.WritePathProfiler.Stamp();
+
+            if (IsInsertStatement(sql))
+            {
+                // ✅ PHASE 3: Fast path — parse directly into column-ordered object[] rows
+                var parsed = ParseInsertStatementFastToArray(sql, preparedStatements);
+                if (parsed.HasValue)
+                {
+                    var (bucketKey, tableName, prepared, values) = parsed.Value;
+
+                    if (!batch.InsertsByShape.TryGetValue(bucketKey, out var bucket))
+                    {
+                        bucket = new InsertBucket(tableName, prepared);
+                        batch.InsertsByShape[bucketKey] = bucket;
+                    }
+
+                    bucket.Rows.Add(values);
+                }
+                else
+                {
+                    batch.NonInserts.Add(sql);
+                }
+            }
+            else if (TryParseUpdateForBatch(sql, out var updTableName, out var updWhere, out var updSets))
+            {
+                if (!batch.UpdatesByTable.TryGetValue(updTableName, out var updList))
+                {
+                    updList = [];
+                    batch.UpdatesByTable[updTableName] = updList;
+                }
+
+                updList.Add((updWhere, updSets));
+            }
+            else if (TryParseDeleteForBatch(sql, out var delTableName, out var delWhere, out var delCol, out var delLiteral))
+            {
+                if (!batch.DeletesByTable.TryGetValue(delTableName, out var delList))
+                {
+                    delList = [];
+                    batch.DeletesByTable[delTableName] = delList;
+                }
+
+                delList.Add((delWhere, delCol, delLiteral));
+            }
+            else
+            {
+                batch.NonInserts.Add(sql);
+            }
+
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Parse, batchParseStart);
+        }
+
+        return batch;
+    }
+
+    /// <summary>
+    /// Executes a classified batch: the INSERT rows (column-ordered arrays), the grouped UPDATEs and
+    /// DELETEs, then the statements no fast path claimed, through the shared parser. Both batch dispatchers
+    /// call this inside the write lock and inside their own transaction — the caller owns begin, commit and
+    /// rollback, and calls <see cref="FinishClassifiedBatch"/> once the commit succeeded.
+    /// </summary>
+    /// <param name="batch">The classification to execute.</param>
+    /// <param name="statements">The original batch, for the schema-change check.</param>
+    private void ExecuteClassifiedBatch(BatchClassification batch, string[] statements)
+    {
+        foreach (var bucket in batch.InsertsByShape.Values)
+        {
+            if (!tables.TryGetValue(bucket.TableName, out var table))
+            {
+                continue;
+            }
+
+            if (table is DataStructures.Table concreteInsert)
+            {
+                // Dedicated fast path: column-ordered object[] rows (no dictionaries). The prepared
+                // statement carries the statement's own column order — the table layer re-maps those names
+                // to table positions, so a permuted or partial list is assigned by name, as SQLite does.
+                concreteInsert.InsertBatch(bucket.Rows.ToArray(), bucket.Prepared.Columns);
+            }
+            else
+            {
+                // Fallback for other ITable implementations
+                table.InsertBatch(RowsToDictionaryList(table, bucket.Rows));
+            }
+        }
+
+        // ✅ PERF: Batch UPDATE — single lock per table instead of per-statement
+        foreach (var (tableName, ops) in batch.UpdatesByTable)
+        {
+            if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
+            {
+                concreteUpdate.UpdateMultiple(ops);
+            }
+        }
+
+        // ✅ PERF: Batch DELETE — single lock per table instead of per-statement
+        foreach (var (tableName, deletes) in batch.DeletesByTable)
+        {
+            if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
+            {
+                // Canonical batches go through the structured path (no WHERE rebuild or re-parse).
+                // NOSONAR:S125 - prose description: any non-canonical statement forces the
+                // string form for the whole table, not commented-out code.
+                bool allCanonical = true;
+                foreach (var (_, column, _) in deletes)
+                {
+                    if (column is null)
+                    {
+                        allCanonical = false;
+                        break;
+                    }
+                }
+
+                if (allCanonical)
+                {
+                    var keys = new List<(string Column, string Literal)>(deletes.Count);
+                    foreach (var (_, column, literal) in deletes)
+                    {
+                        keys.Add((column!, literal!));
+                    }
+
+                    concreteDelete.DeleteMultipleKeys(keys);
+                }
+                else
+                {
+                    var wheres = new List<string>(deletes.Count);
+                    foreach (var (where, column, literal) in deletes)
+                    {
+                        wheres.Add(where.Length > 0 ? where : column + " = " + literal);
+                    }
+
+                    concreteDelete.DeleteMultiple(wheres);
+                }
+            }
+        }
+
+        if (batch.NonInserts.Count > 0)
+        {
+            var sqlParser = GetSharedSqlParser();
+
+            foreach (var sql in batch.NonInserts)
+            {
+                sqlParser.Execute(sql, null);
+            }
+        }
+
+        if (!isReadOnly && statements.Any(IsSchemaChangingCommand))
+        {
+            SaveMetadata();
+        }
+    }
+
+    /// <summary>
+    /// The bookkeeping both dispatchers owe once the DML and the commit are done: refresh the inserted
+    /// tables' row counts from disk so the rows are visible, and mark the metadata dirty so the
+    /// compiled-query path flushes before it reads. Shared (2026-09-27, session 75) — the async dispatcher
+    /// had neither, so a batch through it left the count and the dirty flag stale.
+    /// </summary>
+    /// <param name="batch">The classification that was executed.</param>
+    private void FinishClassifiedBatch(BatchClassification batch)
+    {
+        if (batch.InsertsByShape.Count > 0)
+        {
+            // ✅ FIX: Force tables to refresh row count from disk to ensure visibility. A table can own
+            // several shapes, so refresh each table once.
+            HashSet<string> refreshed = new(StringComparer.OrdinalIgnoreCase);
+            foreach (var bucket in batch.InsertsByShape.Values)
+            {
+                if (refreshed.Add(bucket.TableName) && tables.TryGetValue(bucket.TableName, out var table))
+                {
+                    table.RefreshRowCount();
+                }
+            }
+        }
+
+        // ✅ FIX: Set metadata dirty flag to ensure ExecuteCompiledQuery flushes before reading
+        if (batch.InsertsByShape.Count > 0 || batch.NonInserts.Count > 0)
+        {
+            _metadataDirty = true;
+        }
+    }
+
+    /// <summary>
+    /// Splits the parenthesised column list of an INSERT statement into its column names, stripping
+    /// SQLite's optional quoting (<c>"c"</c>, <c>[c]</c>, <c>`c`</c>).
+    /// </summary>
+    /// <param name="list">The text between the parentheses.</param>
+    /// <returns>The names, or <c>null</c> for an empty name or an empty list — the caller then sends the
+    /// whole statement to the general parser instead of mis-mapping it here.</returns>
+    private static List<string>? ParseColumnList(ReadOnlySpan<char> list)
+    {
+        List<string> columns = [];
+        int nameStart = 0;
+
+        for (int i = 0; i <= list.Length; i++)
+        {
+            if (i != list.Length && list[i] != ',')
+            {
+                continue;
+            }
+
+            var column = list[nameStart..i].Trim().ToString();
+            if (column.Length == 0)
+            {
+                return null;
+            }
+
+            if (column.Length >= 2 &&
+                ((column[0] == '"' && column[^1] == '"') ||
+                 (column[0] == '[' && column[^1] == ']') ||
+                 (column[0] == '`' && column[^1] == '`')))
+            {
+                column = column[1..^1];
+            }
+
+            columns.Add(column);
+            nameStart = i + 1;
+        }
+
+        return columns.Count == 0 ? null : columns;
     }
 
     /// <summary>
@@ -1526,8 +1651,23 @@ public partial class Database
     /// Fast INSERT parsing that produces a column-ordered <c>object[]</c> instead of a dictionary.
     /// Used by the dedicated SQL batch-INSERT fast path (<see cref="ExecuteBatchSQL"/>).
     /// </summary>
+    /// <param name="sql">The INSERT statement.</param>
+    /// <param name="preparedCache">The per-batch prepared-statement cache, filled on first use.</param>
+    /// <returns>
+    /// The bucket key (the prepared statement's schema key, unique per table <em>and</em> column shape),
+    /// the table name, the prepared statement whose column order the values are in, and the values.
+    /// </returns>
+    /// <remarks>
+    /// An explicit column list (<c>INSERT INTO t (b, a) VALUES (…)</c>) is read and kept as the value order:
+    /// SQLite assigns VALUES by name, so ignoring the list wrote a permuted or partial one positionally
+    /// against the table's own column order — a silent wrong row rather than an error. Measured before the
+    /// fix (session 75): <c>INSERT INTO shapes (score, id, name) VALUES (9.5, 1, 'perm')</c> stored
+    /// <c>id=0 name=1 score=0</c>. The table layer re-maps the list's names to table positions
+    /// (<c>Table.InsertBatch(rows, columnOrder)</c>), so the values only have to stay in the statement's
+    /// order, and a shape of its own keeps a bucket of its own.
+    /// </remarks>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private (string tableName, object[] values)? ParseInsertStatementFastToArray(
+    private (string bucketKey, string tableName, PreparedInsertStatement prepared, object[] values)? ParseInsertStatementFastToArray(
         string sql,
         Dictionary<string, PreparedInsertStatement?> preparedCache)
     {
@@ -1556,21 +1696,51 @@ public partial class Database
             if (!tables.ContainsKey(tableName))
                 return null;
 
-            if (!preparedCache.TryGetValue(tableName, out var prepared))
+            // Find the VALUES clause, and before it the optional explicit column list. Only parsed when
+            // it is present, so a list-less batch allocates nothing extra.
+            var rest = insertSql.Slice(tableEnd);
+            var valuesIdx = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase);
+            if (valuesIdx < 0) return null;
+
+            List<string>? statementColumns = null;
+            var beforeValues = rest[..valuesIdx];
+            int listOpen = beforeValues.IndexOf('(');
+            if (listOpen >= 0)
             {
-                prepared = GetOrCreatePreparedInsert(tableName);
-                preparedCache[tableName] = prepared;
+                int listClose = beforeValues.LastIndexOf(')');
+                if (listClose <= listOpen)
+                {
+                    return null;
+                }
+
+                statementColumns = ParseColumnList(beforeValues[(listOpen + 1)..listClose]);
+                if (statementColumns is null)
+                {
+                    return null;
+                }
+            }
+
+            PreparedInsertStatement? prepared;
+            if (statementColumns is null)
+            {
+                if (!preparedCache.TryGetValue(tableName, out prepared))
+                {
+                    prepared = GetOrCreatePreparedInsert(tableName);
+                    preparedCache[tableName] = prepared;
+                }
+            }
+            else
+            {
+                // A shape of its own. The global prepared-statement cache is keyed by the schema key
+                // ("table:col,col,…"), so it already separates shapes and there is no second key format to
+                // keep in sync here; the returned statement's SchemaKey is the bucket key.
+                prepared = GetOrCreatePreparedInsert(tableName, statementColumns);
             }
 
             if (prepared == null)
             {
                 return null;
             }
-
-            // Find VALUES clause
-            var rest = insertSql.Slice(tableEnd);
-            var valuesIdx = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase);
-            if (valuesIdx < 0) return null;
 
             var valuesClause = rest.Slice(valuesIdx + "VALUES".Length).Trim();
 
@@ -1586,7 +1756,7 @@ public partial class Database
             }
 
             var values = prepared.ParseValuesToArray(valuesClause);
-            return (tableName, values);
+            return (prepared.SchemaKey, tableName, prepared, values);
         }
         catch
         {
@@ -1703,88 +1873,61 @@ public partial class Database
             return;
         }
 
-        Dictionary<string, List<Dictionary<string, object>>> insertsByTable = [];
-        List<string> nonInserts = [];
+        // §5.5 (ii) follow-up (session 75): this dispatcher used to classify with the dictionary-based
+        // `ParseInsertStatement` and insert one dictionary row at a time, so the same batch cost 2,9× the
+        // classification time and 6,2× the allocation per statement (session 73). It runs the sync
+        // dispatcher's DML half now — the one shared classifier and the one shared executor.
+        var batch = ClassifyBatchStatements(statements);
 
-        foreach (var sql in statements)
-        {
-            // §5.5 instrumentation (2026-09-27, session 72): this is the second batch dispatcher -- the async
-            // twin of ExecuteBatchSQL had no stamp at all, so a batch run through it reported a stage table
-            // that looked complete while its own classification cost was invisible. Same stage and the same
-            // non-double-counting rule as the sync dispatcher: only the classification, never the DML.
-            long batchParseStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
-            if (IsInsertStatement(sql))
-            {
-                var parsed = ParseInsertStatement(sql);
-                if (parsed.HasValue)
-                {
-                    var (tableName, row) = parsed.Value;
-
-                    if (!insertsByTable.TryGetValue(tableName, out var rows))
-                    {
-                        rows = [];
-                        insertsByTable[tableName] = rows;
-                    }
-
-                    rows.Add(row);
-                }
-                else
-                {
-                    nonInserts.Add(sql);
-                }
-            }
-            else
-            {
-                nonInserts.Add(sql);
-            }
-            SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Parse, batchParseStart);
-        }
-
-        Task commitTask;
+        bool startedTransaction = false;
+        Task commitTask = Task.CompletedTask;
         long commitStart = 0;
         lock (_walLock)
         {
-            storage.BeginTransaction();
+            // Same transaction contract as the sync dispatcher (and as RunInBatchTransaction): open an outer
+            // transaction only when the caller does not already hold one, and then commit — and roll back —
+            // only what this call started. Before session 75 this method called BeginTransaction()
+            // unconditionally, and every provider throws "Transaction already in progress" on a second begin,
+            // so an async batch inside a caller's transaction failed where the sync sibling worked.
+            var isInTransactionBefore = storage.IsInTransaction;
+            startedTransaction = !isInTransactionBefore;
+
+            if (startedTransaction)
+            {
+                storage.BeginTransaction();
+            }
 
             try
             {
-                foreach (var (tableName, rows) in insertsByTable)
-                {
-                    if (tables.TryGetValue(tableName, out var table))
-                    {
-                        table.InsertBatch(rows);
-                    }
-                }
+                ExecuteClassifiedBatch(batch, statements);
 
-                if (nonInserts.Count > 0)
-                {
-                    var sqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-                    
-                    foreach (var sql in nonInserts)
-                    {
-                        sqlParser.Execute(sql, null);
-                    }
-                }
-
-                if (!isReadOnly && statements.Any(IsSchemaChangingCommand))
-                {
-                    SaveMetadata();
-                }
-                
                 // §5.5 instrumentation (2026-09-27): the async commit, from the launch to the await. This path
                 // has no separate transaction-buffer flush, so it has no CommitBuffer twin of the sync one.
-                commitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
-                commitTask = storage.CommitAsync();
+                if (startedTransaction)
+                {
+                    commitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+                    commitTask = storage.CommitAsync();
+                }
             }
             catch
             {
-                storage.Rollback();
+                if (startedTransaction)
+                {
+                    storage.Rollback();
+                }
+
                 throw;
             }
         }
-        
+
         await commitTask;
-        SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+
+        if (startedTransaction)
+        {
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+        }
+
+        FinishClassifiedBatch(batch);
     }
 
     /// <summary>

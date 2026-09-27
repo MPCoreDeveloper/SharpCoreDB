@@ -246,7 +246,7 @@ public static class WritePathProfiler
 
         /// <summary>
         /// The <c>storage.FlushTransactionBuffer()</c> half of the batch-commit pair
-        /// (<c>Database.Batch.cs:1185-1189</c>), split out of <see cref="Commit"/> (2026-09-21) because
+        /// (<c>Database.Batch.cs:1230-1232</c>), split out of <see cref="Commit"/> (2026-09-21) because
         /// <c>commit</c> is the largest single stage on the encrypted default-job UPDATE arm — one call whose cost
         /// ranges from 5.7 ms to 32.4 ms across reps against 4.8-12.8 ms for the same stamp on the plaintext arm,
         /// so the two calls it covers have to be separated before either can be attacked. <see cref="Commit"/>
