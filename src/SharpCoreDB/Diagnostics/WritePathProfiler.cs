@@ -230,11 +230,17 @@ public static class WritePathProfiler
         RowSnapshot = 28,
 
         /// <summary>
-        /// The per-operation row locate on the hash-predicate UPDATE route: the registered-index lookup plus the
-        /// record read/slice for the matched position (<c>Table.CRUD.cs:2344-2390</c>). Added (2026-09-21, plan
-        /// §5.5) to answer §5.3's question — what <c>UpdateMultiple</c>'s per-operation work actually is — because
-        /// the only pre-existing <c>row-locate</c> stamp on that route covers the *batch-level* contiguous
-        /// attempt, which never applies to a table without a primary key.
+        /// The per-operation row locate on the batch UPDATE route (<c>Table.UpdateMultipleCore</c> — one call per
+        /// operation whenever the batch does not take the contiguous path): the PK-equality B-tree search or the
+        /// registered-hash-index lookup, whichever fires, plus the record read/slice for the matched position. The
+        /// two branches are mutually exclusive per operation, so one stamp over both cannot double-count. Added
+        /// (2026-09-21, plan §5.5) to answer §5.3's question — what <c>UpdateMultiple</c>'s per-operation work
+        /// actually is — because the only pre-existing <c>row-locate</c> stamp on that route covers the
+        /// *batch-level* contiguous attempt, which never applies to a table without a primary key. Extended
+        /// 2026-09-27 (§5.5 (iii), session 74) to cover the PK branch, which is the one the fair-PK PageBased arm
+        /// uses: **10.000 calls, 13,1 ms, 17,2 % of the profiled pass, 320 B per operation**, all of it invisible
+        /// before the extension. The single-statement route's own resolve (<c>ResolveUpdateRows</c>) stays
+        /// unstamped on purpose: it is not on any arm this harness measures.
         /// </summary>
         RowLocateIndex = 29,
 

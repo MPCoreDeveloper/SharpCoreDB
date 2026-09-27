@@ -340,7 +340,12 @@ cost is named with evidence rather than inferred from a ratio: **`row-decode` = 
 left unstamped and are handed to **§5.5**, named in the 2026-09-21 worklog entry — the per-row locate (the
 hash-index lookup plus `engine.Read`, which fires per operation) and the contiguous patch's internals (hidden
 behind a batch-level outer `row-locate` stamp). **Re-verify that entry's line numbers before using them: they
-drift.** The item's own lever landed as follow-up 6; the text below is kept as the historical record.
+drift.** §5.5 did exactly that on 2026-09-27 (session 74) and **both regions are stamped now** — the
+per-operation locate is `row-locate-index` (one stamp over the mutually exclusive PK-B-tree and hash-index
+branches) and the contiguous patch's internals are the single batch-level `row-locate` call — see §5.5 gap 3
+and §6's 2026-09-27 correction block for the measurement and for the route change that made this item's
+"generic per-op route" reading obsolete. The item's own lever landed as follow-up 6; the text below is kept as
+the historical record.
 
 - Profiled 2026-09-15: ~75% of the cost is in unstamped code; the largest *measured* cost is the
   overflow arena (6.81 µs/update, 2829 B/update = full re-serialization).
@@ -485,19 +490,29 @@ batch pass (worklog sessions 65–66). Read `WritePathProfiler` before stamping:
 `Stage.WalFlush = 7` are both written to today, and this item's own DoD is why that matters — a second writer for
 the same region is the "misleading half-stamp" it calls worse than no stamp.
 
-The gaps that are genuinely still open, each with its evidence in the code:
+**STATUS 2026-09-27 (session 74): all three gaps are CLOSED — closed, not deleted.** Each closure is recorded in
+place below, with the commit or the artifact that carries its evidence:
 
-1. **The StructRow ladder arm's UPDATE/DELETE phases are never run** —
-   `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/Program.cs:1839-1844` zero-fills both cells with the
-   comment that they share the Direct API row's code paths. The §5.4 ladder therefore prints `0` for those two
-   cells, which reads as *unmeasured* as a *bad* result rather than as an intentional omission. Either run the
-   phases (the Direct row already does, so the shape exists) or print them as explicitly *not measured*; the
-   ambiguity is the defect, not the missing number.
-2. **The *second* batch-dispatcher path and the parser internals below the dispatcher** — uncovered since
-   2026-09-14 and still restated as such in plan §2/§7.
-3. **The two PageBased per-row regions §5.2 delegated here** (its STATUS above): the per-row locate — hash-index
-   lookup plus `engine.Read`, which fires per operation — and the contiguous patch's internals, invisible because
-   they sit under a batch-level `row-locate` stamp. Re-verify the 2026-09-21 entry's line numbers first.
+1. ~~**The StructRow ladder arm's UPDATE/DELETE phases are never run**~~ — **CLOSED 2026-09-27** (fixed in
+   session 69, `390afb87`; re-verified live in session 74). The phases stay deliberately un-run — they are the
+   same `ExecuteBatchSQL` call path as the Direct API row — and the defect was the **ambiguous printed `0`**:
+   `BenchmarkResult.UpdateMeasured`/`DeleteMeasured` (additive, default `true`, propagated through the ladder
+   median so a median cannot launder an omission into a measurement), **`n/a`** in the summary table with a
+   footnote, `not measured` in the ladder's per-metric line, and the same distinction in the JSON. Session 74's
+   live run re-proved it on the current build: `artifacts/s74-ladder-struct-row.txt` (the StructRow row reads
+   `n/a` … `n/a`, and the footnote names plan §5.5) and `comparative_20260927_120306.json` (`UpdateMeasured: false`,
+   `DeleteMeasured: false`). The gap's own line numbers had drifted (`:1839-1844` → `:1868-1881`).
+2. ~~**The *second* batch-dispatcher path and the parser internals below the dispatcher**~~ — **CLOSED
+   2026-09-27 (session 73)**: wired, pinned by `WritePathEntryPointCoverageTests` (Failed 2 → 0) and measured —
+   the async dispatcher is **1,57×** slower end to end, classifies **2,9×** slower and allocates **6,2×** per
+   statement. Plan §7 carries the numbers.
+3. ~~**The two PageBased per-row regions §5.2 delegated here**~~ — **CLOSED 2026-09-27 (session 74)**: the
+   2026-09-21 line numbers were re-verified (they now point at the batch entry and the structured wrapper, not at
+   the locate), and reading the code showed the arm's *route* changed since that entry — the SQL batch dispatcher
+   aggregates UPDATE statements (`Database.Batch.cs:1306`). Both regions are stamped today: the per-operation
+   locate is **`row-locate-index`** (one stamp over the mutually exclusive PK-B-tree and hash-index branches:
+   **10.000 calls, 13,1 ms, 17,2 % of the pass, 320 B/op** on the `--pk` arm) and the contiguous patch's internals
+   are the **single** batch-level `row-locate` call. Plan §6 carries the correction block.
 
 Add stamps only where needed to answer 5.1/5.3.
 - **Timebox:** 0.5 session, **on demand only** — skip this item entirely if 5.1/5.3 produced a clean

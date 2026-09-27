@@ -1587,6 +1587,30 @@ record. **What is still unstamped is now down to two named regions** in that rou
 materialization at `:2340` and the post-patch write after it — and stamping those two is the remaining work
 before the last ~75 % can be split between materialization, serialization and the page write. The
 instrumentation added here stays: it covers real entry points that other shapes use, and both were blank.
+
+> **⚠️ Corrected 2026-09-27 (session 74): the arm's route changed, and the paragraph above is now wrong about
+> what it measures.** `--pk-profile --engine=pagebased` on the current build does **not** show the generic
+> per-op route: `Database.Batch.cs:1306` aggregates the 10.000 UPDATE statements into **one**
+> `Table.UpdateMultiple` call, and that core's PK-equality branch (`Table.CRUD.cs:2522`) carries **no**
+> `StorageMode` gate — so PageBased takes the raw-byte fast patch. The current pass shows **10.000
+> `in-place-patch` calls, 10.000 `page-read` calls** (off the per-op `engine.Read`), a **single** `row-locate`
+> call (the contiguous attempt, declining in 1,1 ms) and **zero** `SelectInternal` materialization — `row-decode`
+> has no calls at all, so the "full re-serialize" reading is refuted for this shape. The gates the paragraph
+> quotes are the per-statement route's (`ResolveUpdateRows`, `Table.CRUD.cs:2186`, which is still gated and which
+> the arm no longer takes); the raw-byte `fastPatch` gate it cites as `:2226` is now `:2480` and admits
+> `_fixedWidthRecords` besides the columnar engine — and that arm's **10.000 `in-place-patch` calls** are the
+> evidence that this is the branch it takes.
+>
+> **The locate was the last region there without a stamp, and it has one now** (`RowLocateIndex`, opened above
+> both the PK and the hash branch so a mutually exclusive pair cannot be counted twice): **10.000 calls,
+> 13,1 ms, 17,2 % of the profiled pass, 320 B per operation** — i.e. the "last ~75 %" this block was written
+> for is measured, and it is not materialization. With it, the pass attributes ~88 % of its wall time, and the
+> largest single stage on **both** engines is the dispatcher's per-statement UPDATE classification
+> (`parse`: 19,7 ms / 10.000 calls / 500 B/op on PageBased, 22,2 ms on AppendOnly — `TryParseUpdateForBatch`,
+> `Database.Batch.cs:1234`), which is §5 item 2's territory, not this item's. The same session's back-to-back
+> passes read PageBased **8,68 µs/update (115.148 ops/s)** against AppendOnly **8,72 µs/update (114.742 ops/s)**
+> — parity, where this section opened at a 3,4× trap. Quote that as a same-session pair, never as an absolute.
+
 **Two code facts found while looking, which already re-scope the package** (both need profiling to
 quantify, but neither is a guess about the page manager's inner loop):
 
@@ -1725,8 +1749,16 @@ path flushes the log**, which is why `wal-flush` never appears in that pass's st
    dictionary row instead of using the sync dispatch's prepared-statement
    `ParseInsertStatementFastToArray` + array-row `Table.InsertBatch`. Correctness is unaffected (same table
    API, older shape), so it is logged as this item's own next step rather than changed blind: give the async
-   dispatcher the sync dispatcher's DML half. Still open in this item: the StructRow ladder arm's
-   UPDATE/DELETE phases and the two PageBased per-row regions §5.2 delegated here.
+   dispatcher the sync dispatcher's DML half. **Both gaps this item still carried were then closed (2026-09-27,
+   session 74):** the StructRow arm's UPDATE/DELETE cells print `n/a` rather than a `0` (fixed session 69,
+   `390afb87`; verified live on the current build — `artifacts/s74-ladder-struct-row.txt`), and the two PageBased
+   per-row regions §5.2 delegated here are stamped — `RowLocateIndex` now covers both mutually exclusive locate
+   branches (**10.000 calls / 13,1 ms / 17,2 % of the profiled pass / 320 B per op** on the `--pk` arm) while the
+   contiguous attempt stays the single batch-level `row-locate` call — with §6 carrying the route correction that
+   measurement forced. Session 74 also made this file's own `stmt-build` claim true: the `Lazy` statement cache was
+   materialized **inside** its stamp on first touch (7,2 ms / **1,84 MB** — the 10.000-string build, not the shallow
+   copy the comment promised), and forcing it before the stamp takes the stage to **80 KB** on both the UPDATE and
+   the DELETE copy.
 
 **Closed (2026-09-16): the contiguous fast path was the one route that ignored the deferral, and honouring it is
 worth ~4×.** §7's verdict above said "the lever is to stop doing it per key" and §7a built it — but
@@ -2762,9 +2794,21 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
    `--pk-profile [--engine=…]`.
 4. **§4b two-region records** — the only remaining format change, and it owns the too-small inline threshold
    §5 item 1b turned up (all three TEXT columns overflow; nothing inlines).
-5. **Coverage — what is still missing after the statement-level half was CLOSED (2026-09-27, session 73):** the second batch-dispatcher path, the four remaining statement-level entry points and the parameterized tokenisation are wired, and the coverage note in §7 carries the **1,57×** async/sync measurement that wiring made possible. Still open: the StructRow ladder arm's UPDATE/DELETE phases, which are never run
-   (`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/Program.cs:1839-1844`, so §5.4's ladder prints `0`
-   there); and the two PageBased per-row regions §5.2 delegated to §5.5. ~~`WalAppend`/`WalFlush` have no writer
+5. **Coverage — CLOSED 2026-09-27 (session 74); all three gaps accounted for.** The statement-level half was
+   wired in session 73 (the second batch-dispatcher path, the four remaining statement-level entry points and
+   the parameterized tokenisation; the coverage note in §7 carries the **1,57×** async/sync measurement that
+   wiring made possible). Session 74 closed the other two:
+   - **The StructRow ladder arm's UPDATE/DELETE phases** are *deliberately* not run — they are the same
+     `ExecuteBatchSQL` call path as the Direct API row — and the defect was the ambiguous printed `0`, fixed in
+     session 69 (`390afb87`: `UpdateMeasured`/`DeleteMeasured`, `n/a` in the summary table with a footnote,
+     `not measured` in the ladder, the flags in the JSON) and re-verified live in session 74
+     (`artifacts/s74-ladder-struct-row.txt`; `comparative_20260927_120306.json` → `UpdateMeasured: false`).
+     The line numbers this item used (`Program.cs:1839-1844`) had drifted to `:1868-1881`.
+   - **The two PageBased per-row regions §5.2 delegated here**: re-verified against the current source, and the
+     answer is in §6's 2026-09-27 correction block — the per-row locate is now `row-locate-index`
+     (**10.000 calls, 13,1 ms, 17,2 % of the pass, 320 B/op**) and the contiguous patch's internals are the
+     single batch-level `row-locate` call. No half-stamp was added and no unrelated path changed.
+   ~~`WalAppend`/`WalFlush` have no writer
    at all~~ — **stale, corrected 2026-09-27 (session 68):** both have writers (`WalAppend` since 2026-09-15 on
    the SQL `INSERT` branches, `WalFlush` since 2026-09-26 in `Database.Core.cs:759`), so adding another would
    double-count the region.

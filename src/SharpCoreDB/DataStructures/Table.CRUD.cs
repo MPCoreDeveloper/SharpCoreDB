@@ -2519,6 +2519,15 @@ public partial class Table
                 // (RepointIndexesAfterRelocation), so relocation was never this decision's business. Alone it changed
                 // nothing measurable (30,037 vs 33,933 ops/s); paired with the fast patch it is the route that keeps
                 // the record as raw bytes instead of materializing it.
+                //
+                // §5.5 (iii), session 74 (2026-09-27): this locate had no stage of its own, and it is the one the
+                // `--pk` arm actually uses. The two branches below are mutually exclusive per operation — this PK
+                // B-tree search (one search plus one record read) and the registered-hash-index lookup
+                // (`RowLocateIndex` since 2026-09-21) — so one stamp opens here and closes after both, which is why
+                // no operation can be counted twice. The batch-level `row-locate` reading (one call: the contiguous
+                // attempt) stays comparable, and the `SelectInternal` fallback keeps the `row-locate` it already had.
+                long locateIndexStart = Diagnostics.WritePathProfiler.Stamp();
+
                 if (this.PrimaryKeyIndex >= 0 &&
                     keyColumn is not null &&
                     string.Equals(keyColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
@@ -2553,15 +2562,13 @@ public partial class Table
                     }
                 }
 
-                long locateIndexStart = 0L;
                 if (rows is null && keyColumn is not null &&
                     this.EnsureAutoHashIndexRegistered(keyColumn))
                 {
-                    // §5.5 instrumentation (2026-09-21): the per-operation locate on this route — the
-                    // registered-index lookup plus the record read/slice — had no stamp at all, which is why
-                    // §5.3 could attribute only 39-61 % of the arm. It is stamped as its own stage so the
-                    // batch-level `row-locate` reading (one call, the contiguous attempt) stays comparable.
-                    locateIndexStart = Diagnostics.WritePathProfiler.Stamp();
+                    // §5.5 instrumentation (2026-09-21; stamp opened above the PK branch since 2026-09-27): the
+                    // registered-index lookup plus the record read/slice had no stamp at all, which is why §5.3
+                    // could attribute only 39-61 % of the arm. The stamp opens above because either branch is the
+                    // per-operation locate and only one of them can fire.
                     EnsureIndexLoaded(keyColumn);
                     if (this.hashIndexes.TryGetValue(keyColumn, out var hashIndex))
                     {
@@ -2610,8 +2617,8 @@ public partial class Table
                     }
                 }
 
-                    Diagnostics.WritePathProfiler.Add(
-                        Diagnostics.WritePathProfiler.Stage.RowLocateIndex, locateIndexStart);
+                Diagnostics.WritePathProfiler.Add(
+                    Diagnostics.WritePathProfiler.Stage.RowLocateIndex, locateIndexStart);
 
                 if (rows is null)
                 {
@@ -2619,9 +2626,14 @@ public partial class Table
 
                     // §6 instrumentation (2026-09-15): the "full-row materialization plus a per-row re-search"
                     // §6 named by reading, and one of the two regions this engine's UPDATE arm left
-                    // unattributed. PageBased reaches here for every statement because its contiguous,
-                    // PK-lookup and raw-byte fast paths are all gated away from it (StorageMode gates at
-                    // :2226 and :2260).
+                    // unattributed. ⚠️ The 2026-09-15 sentence that followed — "PageBased reaches here for every
+                    // statement because its contiguous, PK-lookup and raw-byte fast paths are all gated away from
+                    // it" — was true of the route the arm took then (`ResolveUpdateRows`, whose PK branch is still
+                    // gated on `StorageMode != PageBased`, :2186); it is NOT true of this core since the SQL batch
+                    // dispatcher began aggregating UPDATE statements into one call (`Database.Batch.cs:1306`). The
+                    // ungated PK branch above now serves the `--pk` arm, and this fallback's `row-locate` reads a
+                    // call count of 1 there (the contiguous attempt only — session 74's profile). It still fires
+                    // for compound/unindexed predicates and for tables without a primary key.
                     // Text callers already hold the predicate; a structured caller gets it built here —
                     // this branch is the only one that needs the string at all.
                     var fallbackWhere = where.Length > 0 || keyColumn is null

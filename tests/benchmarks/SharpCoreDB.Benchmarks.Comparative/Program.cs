@@ -3672,6 +3672,13 @@ class Program
             // flush to the engine. The list now comes from a cache built outside the window (session 31), so the
             // stamp measures a shallow copy; it is kept so the stage table stays comparable across sessions and
             // so a future regression that puts formatting back here shows up as a jump in this field.
+            //
+            // ⚠️ "a cache built outside the window" was only true from the SECOND touch: the cache is a `Lazy`, so
+            // its first materialization happened inside this stamp, and the 2026-09-27 profile showed the stage as
+            // 7,2 ms / 1,84 MB (184 B per statement) — the 10.000-string build, not the shallow copy the sentence
+            // above promises. Forcing the lazy here keeps that claim true on every run, and it stays outside the
+            // timed window below (`sw.Restart()`), so no published ops/s moves.
+            _ = PkUpdateStatements.Value;
             long stmtBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             List<string>? updateStmts = null;
             if (!useBatchUpdate)
@@ -3739,7 +3746,9 @@ class Program
             // The DELETE build had no stamp at all before session 31: the harness's own formatting was charged to
             // the engine unmeasured, which is why this cell's collapsed rep (124.714 against 380k–460k in its
             // siblings) never had a stage that could explain it. Cached like UPDATE's, and stamped for the same
-            // reason.
+            // reason — and forced before the stamp for the same reason UPDATE's is (see the note there: a `Lazy`'s
+            // first materialization is the build, not the copy).
+            _ = PkDeleteStatements.Value;
             long deleteBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             List<string>? deleteStmts = null;
             if (!useBatchDelete)
