@@ -4508,7 +4508,7 @@ Gen 2 is the trap: it made UPDATE look like near-parity (1,05×), and it was the
 - Command(s): read-only verification — `Select-String` over `WritePathProfiler.cs`, `SqlParser.DML.cs`, `Database.Core.cs`, the comparative harness's `Program.cs` and the two performance plans; `git rev-list --count` / `git status --porcelain` for the tree state.
 - Regime: **documentation only** — no `src/` change, no test change, no default, no threshold; tree clean and **0 commits ahead** of `origin/perf/autonomous-20260921` (`535dbebc`, session 67's commit).
 - Verdict: **FIXED — a documentation defect at four sites, plus two closed items that carried no closure marker; no code was wrong, which is exactly why the fix is in the docs.**
-- Commit: *(this entry's commit — `docs(perf)`: §5.5's stale WAL claim removed, §5.1/§5.2 closure markers added)*
+- Commit: `0d3113f9` (`docs(perf)`: §5.5's stale WAL claim removed at all four sites, §5.1/§5.2 closure markers added)
 - NEXT: §5.5 in its corrected shape — (i) the StructRow arm's UPDATE/DELETE phases (`Program.cs:1839-1844` zero-fills them today), (ii) the second batch-dispatcher path and the parser internals below the dispatcher, (iii) the two PageBased per-row regions §5.2 delegated to it. Nothing else on the brief's §5 list is open.
 
 **1. How the finding surfaced — a question about the todo list is a read of the brief, and the brief makes a claim about code.** The answer to "what is next" is §5.5 (brief §5, and this log's session-67 `NEXT:`), whose opening sentence reads "`WalAppend`/`WalFlush` have no writer stamp". That is checkable in one grep, so it was checked before it was repeated — and it is **false for both stages**:
