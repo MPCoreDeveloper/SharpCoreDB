@@ -4426,3 +4426,79 @@ Both postures now clear the plan §2 acceptance (≥ 90 %) **on the batch route*
 
 **8. Findings for the next session — none of them a defect parked as a note.** (a) The brief's §5.3 is **corrected in this session** (the stale "the eventual fix is a new capability" paragraph now says what was actually left, and the STATUS line carries the 2026-09-26 close) — that was the previous entry's NEXT (iv). (b) The harness still calls `db.Flush()` and prints its UPDATE `[diag]` line **inside** the timed window (`Program.cs:1545/1552`) while its SQLite reference commits once with no equivalent call; that is worth 0,3 ms per phase and therefore changes no ratio — recorded so a future session does not re-derive it (sessions 28/46's corrections were for statement formatting, which measured 0–17 ms of a 21–65 ms phase). (c) The remaining big allocation columns on this route — `row-locate-index` 279 B/call and `row-snapshot`'s 10,4–13,2 MB single call — are candidates 1 and 3 of the 2026-09-21 `BLOCKED` entry and stay `BLOCKED` on the same capability question (serve the per-row locate from one range read with in-memory decryption); the §9 row 5 owner decision still owns arm B/C's INSERT/UPDATE dial.
 
+
+---
+
+### 2026-09-27 (session 67) — §5.4 re-validation on `a62ef168`: three arms and **six** provider suites green — and the pass found a **stale reference band**, not a regression
+
+- Session: 1 of 1 (§5.4's own timebox, brief §5.4)
+- Command(s): build (`s67-build-1..6.txt`) · `--multirowinsert` (`s67-arm-multirowinsert.txt`) · `--pk` (`s67-arm-pk.txt`, JSON `results/pk_comparative_20260927_052444.json`) · `--pk-default` **×2** (`s67-arm-pkdefault.txt` / `s67-arm-pkdefault-2.txt`, JSON `results/pk_default_20260927_052512.json` / `_052627.json`) · ladder with `SHARPCOREDB_LADDER_REPS=3` (`s67-ladder-reps3.txt`, JSON `results/comparative_20260927_052528.json`) · six provider suites (`s67-prov-*.txt`) · core suite **2051 / 0 failed / 16 skipped**, exit 0 (`s67-suite.txt`) · `--gate` **PASSED, exit 0** (`s67-gate.txt`)
+- Regime: `REGIME (overridden): SHARPCOREDB_BENCH_TEMP=D:\scdb-bench-tmp` · `REGIME (SQLite reference): journal_mode=WAL, synchronous=NORMAL [built-in reference set]` · three paired measured reps per arm with the arm order alternated and discarded warm-ups before each phase; product-default posture for arm B (encrypted, `inline=24` on the `[diag]` line)
+- Verdict: **KEPT — §5.4 is DONE for this build, and what the pass found is a superseded reference band in the plan, not an engine regression**
+- Commit: `docs(perf)`: §5.4 re-validated (3 arms + 6 provider suites green); the superseded arm-B band corrected in all three documents
+
+**1. The item, and why it lands on §5.4.** The brief's §5.4 is the "after every core change" re-validation: the three comparative arms plus the provider suites, with the SQL/Direct/StructRow ladders reported separately and never as one number. Its 2026-09-24 status was DONE for *that* build; the core has moved since (sessions 62–66), so the re-run is owed, and the timebox is one session. Everything below is the current build, `a62ef168`, built clean before any arm ran (`s67-build-*.txt`).
+
+**2. Providers — the part the item exists for: nothing re-introduced row-by-row overhead.** Six suites, run as MTP executables, all exit 0:
+
+| suite | tests | failed | time |
+|---|---:|---:|---:|
+| `SharpCoreDB.EntityFrameworkCore.Tests` | 116 | 0 | 2,5 s |
+| `SharpCoreDB.Functional.Tests` | 38 | 0 | 5,6 s |
+| `SharpCoreDB.Functional.EntityFrameworkCore.Tests` | 3 | 0 | 0,7 s |
+| `SharpCoreDB.Functional.Dapper.Tests` | 3 | 0 | 1,5 s |
+| `SharpCoreDB.Functional.Linq2DB.Tests` | 24 | 0 | 5,0 s |
+| `SharpCoreDB.Provider.Sync.Tests` | 135 | 0 | 0,6 s |
+| **total** | **319** | **0** | — |
+
+That is the 09-24 set plus `SharpCoreDB.Functional.Tests`, which the 09-24 wording omitted while counting 281 — so the honest comparison is **319 now against 281 then**, and the six suites are named above rather than summarised. Core suite on the same binary: **2051 / 0 failed / 16 skipped** in 112,1 s.
+
+**3. The deterministic half is byte-identical, which is what makes the rest comparable.** `--multirowinsert`: allocated **3.555 / 3.556 / 3.556 / 3.556 / 3.563 B/row** across its five reps, **data file 2.320.000 B**, **overflow arena 0 B** — the same three figures the 09-24 run recorded (3.556–3.562 B/row, 2.320.000 B, arena 0), so the inline-capacity-24 default and the 09-22 layout changes are still the shipped ones and the arm is the same one under test. Its rows/s median is **97.909** against the recorded 84.263 / 70.619 — **recorded, not claimed**: the shape's spread on this box exceeds the difference, and per §2 the allocation and file figures are the evidence, not the throughput. The profiled pass attributes `dispatch` **36,6 %** and `table-batch` **21,9 %** of it with no `arena-append` / `arena-write` line at all, which is the zero arena showing up in the stages.
+
+**4. `--pk`, the fair PK shape — median of three runs per arm, each with its own same-run SQLite:**
+
+| arm | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB FW, plaintext | 124.285 | **157.161** | 426.821 | 629.453 |
+| SharpCoreDB FW, at-rest (product default) | 153.973 | 138.005 | 322.815 | 411.005 |
+| SharpCoreDB legacy, plaintext | 121.058 | 96.196 | 176.765 | 280.323 |
+| SQLite (same runs) | 195.215 | 117.880 | 768.220 | 1.145.160 |
+
+Ratios, ours ÷ SQLite (> 1,00× = ahead): FW plaintext **0,64 / 1,33 / 0,56 / 0,55**, at-rest **0,79 / 1,17 / 0,42 / 0,36**, legacy **0,62 / 0,82 / 0,23 / 0,24** — READ is the only cell any of the three arms leads. The harness's own gap lines agree: UPDATE legacy 4,3× / FW 1,8× / at-rest 2,4×, DELETE 4,1× / 1,8× / 2,8×, INSERT 1,6× / 1,6× / 1,3×; and the at-rest tax on the identical shape is INSERT **0,81×** / READ 1,14× / UPDATE 1,32× / DELETE **1,53×**, i.e. DELETE pays the encryption tax hardest. **Every SharpCoreDB column in this table is higher than the 09-24 reading** (FW plaintext UPDATE 318.799 → **426.821**, DELETE 416.411 → **629.453**, READ 114.004 → **157.161**) on a build that touched none of these paths — which is exactly why the arm-B ratios below had to be read against the *reference's* movement and not ours, and that is where the session's finding came from.
+
+**5. The ladder — median of 3 per arm (the `SHARPCOREDB_LADDER_REPS=3` protocol §5.4 asked for), never one number:**
+
+| arm | INSERT | READ | UPDATE | DELETE | spreads (I/R/U/D) |
+|---|---:|---:|---:|---:|---|
+| SharpCoreDB (SQL) | 125.858 | 91.742 | 153.308 | 212.656 | 1,60 / 1,37 / 2,53 / 2,25× |
+| SharpCoreDB (Direct) | 152.444 | **264.855** | 225.790 | 336.563 | 1,17 / 1,19 / 1,25 / 2,29× |
+| SharpCoreDB (StructRow) | 135.815 | 120.922 | **0** | **0** | 1,41 / 2,01 / — / — |
+| SQLite (each arm's own same-run) | 189.225 | 124.012 | 867.430 | 1.143.785 | 1,35 / 1,03 / 1,04 / 1,14× |
+| LiteDB | 69.596 | 16.892 | 11.824 | 15.983 | — |
+
+Ratios (ours ÷ SQLite): SQL **0,66 / 0,74 / 0,18 / 0,19**, Direct **0,81 / 2,14 / 0,26 / 0,29**, StructRow **0,72 / 0,98 / — / —**. Three things are worth naming. (a) **Direct is the only arm that beats SQLite on any cell — READ 2,14×** — and it reproduces the recorded picture, as does StructRow on INSERT/READ. (b) **StructRow's `0` is not zero throughput: that arm does not run the UPDATE/DELETE phases at all**, so it is a §5.5 instrumentation gap and is written down as one — a later reader must not take it for a result. (c) **The SQL arm is still the noisy one, and it is noisy on our side**: UPDATE spread 2,53× and DELETE 2,25× against SQLite's 1,04× / 1,14× in the same window, which is the session-30 finding restated on a fresh build. BLite was skipped by its own `NotSupportedException` (its Bson document builder has no public setter), unchanged from the 09-24 run and not a regression.
+
+**6. Arm B — and the finding is a stale *reference*, not a regression.** The two `--pk-default` runs read, as median of the paired per-rep ratios with the range printed:
+
+| run | INSERT | READ | UPDATE | DELETE |
+|---|---|---|---|---|
+| 1 (`_052512`) | 0,81× (0,79–0,93) | 1,01× (0,68–1,22) | **0,39× (0,18–0,42)** | **0,31× (0,30–0,38)** |
+| 2 (`_052627`) | 0,87× (0,79–0,91) | 1,03× (0,81–1,07) | **0,39× (0,36–0,40)** | **0,35× (0,34–0,38)** |
+
+Plan §0.1 decision 10 — the plan decision that makes this arm the tracked default-posture cell — recorded its no-regression obligation as **INSERT 0,70× / READ 0,57× / UPDATE 0,48× / DELETE 0,59×**, i.e. *better* than what I just measured on UPDATE and DELETE. Read as a no-regression rule, that is a 20–40 % regression on two cells. **It is not one, and the reference's own history says so.** There were three generations of these four cells:
+
+| generation | protocol | INSERT | READ | UPDATE | DELETE | SQLite UPDATE reference |
+|---|---|---|---|---|---|---|
+| gen 1 (09-24, decision 10) | old; SQLite allocates a command per row | 0,70× | 0,57× | 0,48× | 0,59× | 268.960 |
+| gen 2 (09-24, session 27) | paired + discarded warm-ups; **SQLite still handicapped** | 0,82× | 1,12× | **1,05×** | 0,98× | ~288.000 |
+| **gen 3 (session 32 → this session)** | **symmetric: SQLite gets one prepared command too** | **0,83×** | **1,10×** | **0,39×** | **0,41×** | **878.557** |
+
+Gen 2 is the trap: it made UPDATE look like near-parity (1,05×), and it was the comparator, not the engine. Session 32 gave the **SQLite** arm the same one-prepared-command correction our arm had just received — symmetrically, on purpose, because correcting one side is a bias (plan §6 rule 12) — and SQLite's own PK UPDATE/DELETE references **tripled**: 288.108 → **878.557** and 385.116 → **1.172.704**, while ours moved +19 % / +11 %. SQLite's reference is still there nine days and many sessions later: my same-run readings are **UPDATE 808.662 / 875.779** and **DELETE 1.104.691 / 1.189.598**, i.e. the post-correction regime held (against the 09-24 decision-10 reference of 268.960 / 369.090, a **3,0–3,2×** step that never went back). Our own absolute columns, meanwhile, are **not** worse: run 1's DELETE median 330.321 with a rep range of 303.743–444.827, run 2's 427.206, against session 32's 393.431–491.320 — overlapping, and inside this arm's own documented spread (the harness prints DELETE's range as 0,30–0,38× and 0,34–0,38× across the two runs, i.e. ~1,2–1,3× between two runs of the *same* binary). **So the honest reading is: the cells reproduce session 32's corrected numbers, the movement is in the denominator, and no regression is demonstrated.** What *is* demonstrated is that the plan's tracked band had gone stale — and that a future session reading decision 10 literally would have reported a phantom 20–40 % UPDATE/DELETE regression on a correct engine, which is the exact inference error this plan has already paid for four times.
+
+**7. The correction, and why it is in the plan rather than a note.** Fixed in this session, in all three documents that carried it: **plan §0.1 decision 10** now names the symmetric-protocol cells as the tracked values and marks `0,70 / 0,57 / 0,48 / 0,59` superseded; the **plan's §8e close note** (the paragraph decision 10 refers to) carries the same correction and the three-generation history; **plan §9 item 7** records the finding with the reference's own numbers; and **`BEAT_SQLITE_ALL_AXES_PLAN.md` §1.2**, whose second generation had made the same cells look like near-parity, now warns against that reading — its §4 had already struck the band. **No `src/` change was made or needed:** the harness has no hard-coded arm-B band (`GateDefaultFactor = 1.5` guards the *dual-mode* arm against its own committed baseline), so this was a documentation defect with a documentation fix, and the fix is the cross-reference plus the evidence above. Code and docs now agree, and the "fix every copy" rule is satisfied by naming all four sites rather than patching the one that was found first.
+
+**8. Gate and the rest of the verification.** `--gate`: **PASSED, exit 0 — "nothing is slower than baseline × 1,50"**, all eight metrics `ok`, and the raw and default UPDATE cells read **0,31×** and **0,34×** (baseline ÷ current, so ~3× *faster* than the committed baseline), which is an independent confirmation of section 6 from a completely different instrument. Core suite **2051 / 0 failed / 16 skipped** (exit 0, 112,1 s); the six provider suites **319 / 0 failed**; `--multirowinsert` byte-identical. One thing did **not** move, deliberately: no engine behaviour, record format, durability setting, encryption path or threshold; no test weakened; and §5.4's own protocol (`SHARPCOREDB_LADDER_REPS=3`, spreads printed) stays the standing form of the ladder answer. The **remaining gap this pass names for §5.5** is that the StructRow arm reports `0` for UPDATE/DELETE because it never runs those phases, so those two cells are currently unmeasurable rather than bad.
+
+- NEXT: §5.4 is DONE for `a62ef168` — three arms, six provider suites (319 / 0), the ladder with spreads, core suite 2051 / 0 and `--gate` PASSED. **The next item is §5.5 (instrumentation coverage gaps):** open the StructRow arm's UPDATE/DELETE phases so its `0` cells become measurements, then the two gaps the plan already lists (`WalAppend` / `WalFlush` still have no writer, and the second batch-dispatcher path plus parser internals below the dispatcher). Arm B's cells stay tracked against the **symmetric-protocol** values (INSERT 0,83× / READ 1,10× / UPDATE 0,39× / DELETE 0,41×) — never against 0,70 / 0,57 / 0,48 / 0,59 — and the one sub-decision still open in decision 10 (whether that arm gets a *numeric* floor) remains an owner call, unchanged by this session.
+
+

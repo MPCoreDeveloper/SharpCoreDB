@@ -66,8 +66,16 @@ reads 175,6–198,5K in our own runs. **Arm A is the control, not the target.**
 | absolute | 55.497 | 127.883 | 218.695 | 128.410 |
 | SQLite same run | 97.036 | 268.960 | 369.090 | 182.129 |
 
-**All four were behind — and that has now been largely corrected as a measurement artefact.** The values
-above were taken on the **old protocol** (all of one arm's reps, then all of the other's; no discarded
+**All four were behind — but the correction below is *itself* superseded, so read it as history, not as the current
+picture.** This second generation (0,82 / 1,12 / 1,05 / 0,98) was measured with discarded warm-ups and paired ranges,
+but with **SQLite still handicapped**: its arm allocated a command and two parameters per row. Session 32 gave it the
+same one-prepared-command correction our own arm had just received, SQLite's PK UPDATE/DELETE references rose **3,05×**
+(288.108 → 878.557, 385.116 → 1.172.704), and the cells landed at **INSERT 0,83× / READ 1,10× / UPDATE 0,39× /
+DELETE 0,41×** (see §4 below, and plan §9 item 7). **The parity this table shows on UPDATE (1,05×) does not exist** —
+it was the comparator, not the engine. Re-measured again on 2026-09-27 (`a62ef168`) the same cells read 0,81–0,87× /
+1,01–1,03× / 0,39× / 0,31–0,35×.
+
+The values above were taken on the **old protocol** (all of one arm's reps, then all of the other's; no discarded
 warm-up; no printed spread). Re-measured 2026-09-24 (worklog session 27) on the shared paired protocol —
 three discarded warm-up reps, interleaved arms, paired ranges printed:
 

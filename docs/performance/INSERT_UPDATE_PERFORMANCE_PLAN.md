@@ -48,7 +48,7 @@ packaging — now run, and **§8d** records the verification run they are based 
 | 7 | Per-row write durability under the default (FullSync) | **Stays write-through per value — recorded, not changed.** The default is a 34× cliff behind buffered appends on per-row statements (961–1,037 µs/row against ~30 µs/row, measured 2026-09-16), but a buffered *default* would trade the crash-durability promise (constraint 2: buffered rows are lost on process crash as well as power loss). The gain is already available exactly where a bulk caller wants it — `BulkImport` sets `EnableBufferedAppends = true` explicitly (with `Async` WAL, group commit and the query cache off), as does the write-once logging sink — so this is a deliberate posture, not an oversight. Any change to it is an owner call with both durability columns published. |
 | 8 | Inline-capacity default (§4b) | **Raised to 24 bytes (2026-09-22, was 16).** It is the knee: 24 removes the per-row overflow-arena write on this plan's tracked shapes, 32 buys no further speed at +20 % of the file, and the *combined* data+arena footprint moves −0,4 % / +2,0 % on the two benchmark schemas. Effect on the tracked ratio: fair-PK INSERT **0,63× → 0,87×** and absolute **130–135K → 162–171K ops/s**, so the plan's 150K absolute INSERT target is met; the ≥ 1,0× *ratio* target is not claimed (SQLite's own same-run reference moved from ~155K when the target was set to 176–199K on the quiet machine). The cost is disk on schemas whose values are shorter than the capacity, and an existing database is never rewritten — it keeps the capacity its records were written with. *(Re-confirmed unchanged in the 2026-09-24 review; the rows below are the decisions taken then.)* |
 | 9 | Single-file (`.scdb`) minimum file extension | **Lowered to 1 MiB (2026-09-24, was 10 MiB)** — *decision 5B of the 2026-09-24 review.* The 10 MiB minimum was why any small `.scdb` database was 14,7 MB whatever it held (a fresh file is 1.037 pages; the minimum, 2.560 pages at 4 KiB, won the `max(required, currentSize/2, min)` contest), and lowering it takes the same database to **6.369.280 B** because the halving term then decides. Measured at 1 / 100 / 200 / 2.000 / 20.000 / 200.000 / **1.000.000 rows** (seven sizes, each measured at both settings): file **6.369.280 B vs 14.733.312 B (−56,8 %)** and **byte-identical allocation per row** with no measurable rows/s difference (the apparent differences follow the order inside each pair). It is read **per open**, is **not** part of the on-disk format, and the historical 10 MiB is one config line away (`DatabaseConfig.SingleFileMinExtensionBytes = 10 * 1024 * 1024`), pinned by a test. |
-| 10 | INSERT ratio target (decision 4, "beat SQLite") | **Absolute floor kept; the ≥ 1,0× ratio is closed as *not claimed*.** §8e measures the absolute target **met** (162–171K ops/s, floor 150K) while the ratio sits at **0,87×** against a same-run SQLite that reads 175,6–198,5K where the bar was set on ~155K — so the honest record is "absolute met, ratio 0,87× against a faster reference". What replaces the ratio as a tracked obligation is **publication**: both columns on every number (decision 6), and the **encrypted default arm** (`--pk-default`) becomes the tracked default-posture cell under a **no-regression rule against its own recorded values** (2026-09-24: INSERT 0,70×, READ 0,57×, UPDATE 0,48×, DELETE 0,59×). No new numeric floor is invented here; if one is wanted for the encrypted arm, that is the one sub-decision left open in this row. |
+| 10 | INSERT ratio target (decision 4, "beat SQLite") | **Absolute floor kept; the ≥ 1,0× ratio is closed as *not claimed*.** §8e measures the absolute target **met** (162–171K ops/s, floor 150K) while the ratio sits at **0,87×** against a same-run SQLite that reads 175,6–198,5K where the bar was set on ~155K — so the honest record is "absolute met, ratio 0,87× against a faster reference". What replaces the ratio as a tracked obligation is **publication**: both columns on every number (decision 6), and the **encrypted default arm** (`--pk-default`) becomes the tracked default-posture cell under a **no-regression rule against its own recorded values** — **and those values are the *symmetric-protocol* ones: INSERT 0,83×, READ 1,10× (straddling), UPDATE 0,39×, DELETE 0,41×** (session 32; re-measured 2026-09-27 on `a62ef168` as 0,81–0,87× / 1,01–1,03× / 0,39× / 0,31–0,35×). The `0,70× / 0,57× / 0,48× / 0,59×` reading this row used to carry is **superseded, not "better"**: it was taken while the benchmark left the *SQLite* arm allocating a command and two parameters per row, and SQLite's own PK UPDATE/DELETE references jumped **3,05×** (288.108 → 878.557, 385.116 → 1.172.704) once the comparator got one prepared command (see §9 item 7). Tracking the superseded band makes a correct engine read as a 20–40 % UPDATE/DELETE regression. No new numeric floor is invented here; if one is wanted for the encrypted arm, that is the one sub-decision left open in this row. |
 | 11 | Overflow-arena appends through the append buffer | **Stays write-through.** `arena-append` was the fair-PK profile's next lever at **63,3 ms = one `FileOptions.WriteThrough` open per row**, which is exactly what the append buffer removed for single-row INSERTs — but routing the arena through that buffer changes its durability window, so it is the same owner call as §5 item 2's, and it is **not taken**: `BulkImport` already opts into buffering where a bulk caller wants it. |
 | 12 | Encrypted commit's `commit-overwrites` half | **Left as-is (durability boundary).** It is 16,4 % of the encrypted UPDATE pass, of which the non-prep half is 14,4 ms, and it is the point where a batch's overwrites reach the disk — changing it trades the crash story, not a benchmark number. |
 | 13 | `index-maint` on the batched update path | **Left as-is (index freshness).** 7,6 % of the pass at 43 B × 20.000 calls. The deferred-index experiment already showed what removing in-session maintenance costs elsewhere: the O(n) reconcile at `Table.Flush()` took random-key DELETE from **294.185 → 70.248 ops/s**, which is why the threshold was raised rather than lowered. |
@@ -2105,6 +2105,22 @@ becoming the tracked default-posture cell under a no-regression rule against its
 127.883 / 218.695 against SQLite 182.129 / 97.036 / 268.960 / 369.090), which is inside the band recorded at capacity 16
 and 24. The only sub-decision left open in this row is whether that encrypted arm gets a *numeric* floor of its own.
 
+> **Corrected 2026-09-27 (session 67) — the band above is superseded; do not track it.** There were **three**
+> generations of these four cells, and this plan tracked the oldest: (1) the `0,70 / 0,57 / 0,48 / 0,59` of
+> 2026-09-24, taken on the old protocol; (2) `0,82 / 1,12 / 1,05 / 0,98` once warm-ups and paired interleaving landed
+> — which made UPDATE look like near-parity; and (3) the current, **symmetric-protocol** reading. (2) did not hold,
+> and (1) is worse: both were measured while the **SQLite** arm allocated a command and two parameters per row.
+> Session 32 then gave the comparator the same one-prepared-command correction our own arm had just received —
+> symmetrically, on purpose, because correcting one side is a bias (plan §6 rule 12) — and SQLite's own PK
+> UPDATE/DELETE references rose **3,05×** — 288.108 → **878.557** and 385.116 → **1.172.704** — while ours moved
+> +19 % / +11 %. The cells were therefore *not* measuring our engine against SQLite's, but against **SQLite
+> handicapped by the benchmark**. The symmetric-protocol cells decision 10 tracks are **INSERT 0,83× / READ 1,10×
+> (straddling) / UPDATE 0,39× / DELETE 0,41×**, re-measured 2026-09-27 on `a62ef168` at **0,81–0,87× / 1,01–1,03× /
+> 0,39× / 0,31–0,35×**; the SQLite references in that session still sit in the post-correction regime (UPDATE
+> 808.662–875.779, DELETE 1.104.691–1.189.598), and our own columns are equal or better than the 09-24 run
+> everywhere they can be compared. See §9 item 7 for the full finding, and `BEAT_SQLITE_ALL_AXES_PLAN.md` §4 (which
+> struck the band) and its §1.2 (which now warns that its own parity reading was the comparator, not the engine).
+
 ### 8f. The `.scdb` file-size decision, measured *(2026-09-24, decision 9)*
 
 `DatabaseConfig.SingleFileMinExtensionBytes`'s **product default went 10 MiB → 1 MiB**, on the mechanism §9 diagnosed the
@@ -2698,6 +2714,27 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
 6. **The INSERT target (§8/§8a):** ≥150K not met — 109K tuned plaintext, 88K at-rest, 81K pure default. §8a
    already records that the target was set on a noisier machine and that re-stating it under the §2 protocol
    is a task, not a claim that the target moved.
+7. **The arm-B band decision 10 tracks was superseded, and both plans still carried it *(found and corrected
+   2026-09-27, session 67 — §5.4's re-validation pass)*.** Decision 10's no-regression obligation for the
+   encrypted default arm was recorded as `INSERT 0,70× / READ 0,57× / UPDATE 0,48× / DELETE 0,59×`, measured
+   **before** session 32 corrected the comparator. There were in fact **three generations** of these four cells —
+   gen 1 as recorded, gen 2 `0,82 / 1,12 / 1,05 / 0,98` once warm-ups and paired interleaving landed (which made
+   UPDATE look like near-parity), and gen 3, the symmetric-protocol reading — and **both older generations were taken
+   with the comparator handicapped**, so a session could read either one and be wrong in a different direction. Session 32 gave the *SQLite* arm one prepared command with
+   re-bound parameters — the same correction our own arm had just received, applied symmetrically on purpose,
+   because correcting one side is a bias (plan §6 rule 12) — and SQLite's own PK UPDATE/DELETE references jumped
+   **3,05×** (288.108 → 878.557 and 385.116 → 1.172.704) while ours moved **+19 % / +11 %**. The corrected cells are
+   **INSERT 0,83× / READ 1,10× (straddling) / UPDATE 0,39× / DELETE 0,41×**, and session 67 reproduced them on
+   `a62ef168` as **0,81–0,87× / 1,01–1,03× / 0,39× / 0,31–0,35×** (SQLite's own UPDATE 808.662–875.779, DELETE
+   1.104.691–1.189.598 — still in the post-correction regime). Tracked against the superseded band, a correct
+   engine reads as a **20–40 % UPDATE/DELETE regression**, which is the same inference error this plan has already
+   paid for four times, so **decision 10 and the `--pk-default` ladder row now carry the symmetric-protocol numbers
+   and mark the old ones superseded**; `BEAT_SQLITE_ALL_AXES_PLAN.md` §4 had already struck the band, and the two
+   plans agree again. The drift series that exposes it is `results/pk_default_*.json` (2026-09-16 → 2026-09-27,
+   seventeen runs), tabulated in the worklog's session-67 entry. **Nothing in `src/` changed for this:** our own
+   absolute columns are equal or better than the 09-24 run on every cell that can be compared
+   (`--pk` fixed-width plaintext UPDATE 318.799 → **426.821**, DELETE 416.411 → **629.453**, READ 114.004 →
+   **157.161**), and `--multirowinsert` is byte-identical (3.555–3.563 B/row, file 2.320.000 B, arena 0 B).
 
 **One step the original plan omitted — added by the v2.1 audit: re-validate every provider after core
 changes.** §0.1-5 puts every ladder in scope: the Direct API, StructRow, the bulk APIs, and the ADO.NET /

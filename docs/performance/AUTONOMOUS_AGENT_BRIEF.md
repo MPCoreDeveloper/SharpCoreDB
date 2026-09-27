@@ -395,6 +395,29 @@ fallback was already measured worse.
 
 ### 5.4 Providers re-validation — *after every core change*
 
+**STATUS 2026-09-27: RE-DONE on `a62ef168` — and this pass found a stale *reference*, not a regression.** All three
+harness arms plus **six** provider suites (the five below plus `SharpCoreDB.Functional.Tests`, which the 09-24 wording
+omitted) were re-run on the current build: EFCore **116**, Functional **38**, EFCore.Functional **3**, Dapper **3**,
+Linq2DB **24**, Sync **135** = **319 tests, 0 failed**, every suite exit 0 — so **still no provider re-introduces
+row-by-row overhead**. `--multirowinsert` is **3.555–3.563 B/row, data file 2.320.000 B, overflow arena 0 B** —
+byte-identical to the record, so the deterministic half is unchanged. `--pk` fixed-width plaintext is **UPDATE 426.821
+/ DELETE 629.453 / READ 157.161** against a same-run SQLite **768.220 / 1.145.160 / 117.880**; every one of our three
+columns is *higher* than the 09-24 reading (318.799 / 416.411 / 114.004). `--pk-default` reads **INSERT 0,81–0,87× /
+READ 1,01–1,03× / UPDATE 0,39× / DELETE 0,31–0,35×** over two full runs — and **those are the corrected numbers, not a
+regression:** they reproduce session 32's symmetric-protocol cells (0,83 / 1,10 / 0,39 / 0,41) inside the box's own
+spread. The older band (0,70 / 0,57 / 0,48 / 0,59) merely *reads* better because it was taken while the **SQLite** arm
+was left allocating a command and two parameters per row; the moment that arm got one prepared command, SQLite's own PK
+UPDATE/DELETE references jumped **3,05×** (288.108 → 878.557, 385.116 → 1.172.704) while ours moved +19 % / +11 %.
+**Plan §0.1 decision 10 and the §8e close note still carried the superseded band as a no-regression obligation; both are
+corrected in this pass** — and `BEAT_SQLITE_ALL_AXES_PLAN.md` §1.2, whose *second* generation (0,82 / 1,12 / 1,05 / 0,98)
+had made the same cells look like near-parity, now warns against that reading too, because it was measured before the
+comparator was corrected. All three documents agree again, on the symmetric-protocol cells. The SQL/Direct/StructRow
+ladder, median of 3 with spreads quoted, reads **SQL 0,66× / Direct 0,81× /
+StructRow 0,72× INSERT**, **Direct 2,14× / StructRow 0,98× READ**, **SQL UPDATE/DELETE 0,18× / 0,19×**, spreads
+**1,17–2,53×**; StructRow still reports **0** for UPDATE/DELETE (it does not run those phases — a §5.5 gap, not a
+result). **Consequence for anyone re-running this: quote the arm-B cells against the symmetric-protocol values, and
+never against 0,70 / 0,57 / 0,48 / 0,59 — that inference is wrong by 20–40 % in the direction of a phantom regression.**
+
 **STATUS 2026-09-24: DONE for this build — and the ladder half now has a protocol instead of a caveat.** The three
 harness arms and the five provider suites were re-run on the current build (results archived in the project's
 `results/`), the worklog's session-12 and session-13 entries carry the tables, and **no provider re-introduced row-by-row
