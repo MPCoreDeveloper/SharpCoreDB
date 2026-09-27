@@ -301,6 +301,24 @@ class Program
             return;
         }
 
+        // Optional: --struct-arm → the ladder's zero-alloc StructRow arm on its own, so its cells (and the fact
+        // that its UPDATE/DELETE are deliberately not measured) can be read in one short run instead of by
+        // running the whole ladder and isolating one row of it (plan §5.5). Same arm, same workload, same table
+        // and index, and the same median-of-N protocol as the ladder row it stands in for — so a reader never
+        // compares a single-shot reading against a median. Diagnostic only.
+        if (args.Any(a => a.Equals("--struct-arm", StringComparison.OrdinalIgnoreCase)))
+        {
+            var structArm = new Dictionary<string, BenchmarkResult>
+            {
+                ["SharpCoreDB (StructRow)"] = RunLadderMedianOf(
+                    "SharpCoreDB (StructRow)",
+                    LadderReps(),
+                    () => RunSharpCoreDBStruct(ParseEngineType(args))),
+            };
+            PrintComparison(structArm);
+            return;
+        }
+
         // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
         // the columns side by side, so the cost of protection is a published per-operation number
         // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
@@ -1195,10 +1213,10 @@ class Program
         var median = MedianOf(samples);
         Console.WriteLine();
         Console.WriteLine($"  [ladder] {label}: median of {reps} runs, with each cell's min–max so stability is visible");
-        PrintLadderMetric("INSERT", samples, static s => s.InsertOpsPerSec, median.InsertOpsPerSec);
-        PrintLadderMetric("READ", samples, static s => s.ReadOpsPerSec, median.ReadOpsPerSec);
-        PrintLadderMetric("UPDATE", samples, static s => s.UpdateOpsPerSec, median.UpdateOpsPerSec);
-        PrintLadderMetric("DELETE", samples, static s => s.DeleteOpsPerSec, median.DeleteOpsPerSec);
+        PrintLadderMetric("INSERT", samples, static s => s.InsertOpsPerSec, median.InsertOpsPerSec, measured: true);
+        PrintLadderMetric("READ", samples, static s => s.ReadOpsPerSec, median.ReadOpsPerSec, measured: true);
+        PrintLadderMetric("UPDATE", samples, static s => s.UpdateOpsPerSec, median.UpdateOpsPerSec, samples[0].UpdateMeasured);
+        PrintLadderMetric("DELETE", samples, static s => s.DeleteOpsPerSec, median.DeleteOpsPerSec, samples[0].DeleteMeasured);
         return median;
     }
 
@@ -1207,8 +1225,17 @@ class Program
         string metric,
         List<BenchmarkResult> samples,
         Func<BenchmarkResult, int> read,
-        int median)
+        int median,
+        bool measured)
     {
+        // An unrun phase has no median and no spread: printing `median 0 / spread 0,00x` for it would be the
+        // same misleading number the summary table used to print, one level down (plan §5.5).
+        if (!measured)
+        {
+            Console.WriteLine($"           {metric,-7} not measured - this arm deliberately does not run that phase (plan §5.5)");
+            return;
+        }
+
         int min = samples.Min(read);
         int max = samples.Max(read);
         double spread = min > 0 ? max / (double)min : 0;
@@ -1241,6 +1268,8 @@ class Program
             ReadTime = MedianDouble([.. samples.Select(s => s.ReadTime)]),
             UpdateTime = MedianDouble([.. samples.Select(s => s.UpdateTime)]),
             DeleteTime = MedianDouble([.. samples.Select(s => s.DeleteTime)]),
+            UpdateMeasured = samples.All(static s => s.UpdateMeasured),
+            DeleteMeasured = samples.All(static s => s.DeleteMeasured),
         };
     }
 
@@ -1836,12 +1865,19 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE/DELETE intentionally omitted — they use identical code paths to the
-            // Direct API row; this row focuses on the zero-allocation READ path.
+            // UPDATE/DELETE are deliberately not run on this arm: the call path is the same
+            // db.ExecuteBatchSQL with the same statements, over the same table with the same index, as the
+            // Direct API row above — only the READ path differs (FindByIndex vs ExecuteQueryStruct). Running
+            // them would re-measure that row's numbers and invite a reader to read two measurements of one
+            // code path as independent evidence, so the omission stays; what changes (plan §5.5) is that it is
+            // now *printed* as `n/a` instead of as a 0 that reads like a result. The flags travel into the
+            // ladder median and into comparative_*.json.
             result.UpdateTime = 0d;
             result.UpdateOpsPerSec = 0;
+            result.UpdateMeasured = false;
             result.DeleteTime = 0d;
             result.DeleteOpsPerSec = 0;
+            result.DeleteMeasured = false;
         }
         finally
         {
@@ -5231,13 +5267,33 @@ class Program
 
         foreach (var (name, r) in results)
         {
-            Console.WriteLine($"║ {name,-13} │ {r.InsertOpsPerSec,14:N0} │ {r.ReadOpsPerSec,14:N0} │ {r.UpdateOpsPerSec,14:N0} │ {r.DeleteOpsPerSec,8:N0} ║");
+            Console.WriteLine($"║ {name,-13} │ {r.InsertOpsPerSec,14:N0} │ {r.ReadOpsPerSec,14:N0} │ {UpdateCell(r),14} │ {DeleteCell(r),8} ║");
         }
+
+        // A deliberately-unrun phase prints `n/a`, never a 0. This table is the artefact people quote, and a
+        // 0 in it reads as "this engine does 0 updates/sec" rather than "this arm does not measure updates"
+        // (plan §5.5). The distinction travels on the result object, not on the arm's name, and the same flags
+        // are written to comparative_*.json.
+        static string UpdateCell(BenchmarkResult r) =>
+            r.UpdateMeasured ? r.UpdateOpsPerSec.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
+
+        static string DeleteCell(BenchmarkResult r) =>
+            r.DeleteMeasured ? r.DeleteOpsPerSec.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
 
         Console.WriteLine("╠═══════════════════════════════════════════════════════════════════════════════╣");
         Console.WriteLine("║  Test: 100K inserts (10K batches), 10K reads/updates/deletes by PK          ║");
         Console.WriteLine("║  All databases: WAL mode, optimal batch settings                            ║");
         Console.WriteLine("╚═══════════════════════════════════════════════════════════════════════════════╝");
+        // The footnote is printed only when a cell actually is `n/a`, so a run that measures everything stays
+        // byte-identical to what it printed before this distinction existed.
+        if (results.Values.Any(static r => !r.UpdateMeasured || !r.DeleteMeasured))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  n/a = that phase is deliberately not run on that arm (plan §5.5). The Direct API row");
+            Console.WriteLine("        carries those cells: the same ExecuteBatchSQL call path, the same table and index.");
+        }
+
+
     }
 }
 
@@ -5277,4 +5333,21 @@ class BenchmarkResult
     public int UpdateOpsPerSec { get; set; }
     public double DeleteTime { get; set; }
     public int DeleteOpsPerSec { get; set; }
+
+    /// <summary>
+    /// False when an arm deliberately does not run that phase, so its cell is <b>not measured</b> rather
+    /// than a measured zero. Additive and additive-only, like <see cref="Reps"/>: it is written to
+    /// <c>comparative_*.json</c> so a machine reader gets the same distinction the console prints, and an
+    /// older archive default-deserializes it to <c>true</c> — its zeros were published as numbers, which is
+    /// exactly the ambiguity this flag removes.
+    /// <para>
+    /// The distinction is needed because <c>0</c> already means something else in this harness: a failed arm
+    /// reports zero ops/sec and the gate prints <c>FAILED</c> for it. A deliberate omission must not borrow
+    /// that reading (plan §5.5: the StructRow arm's UPDATE/DELETE cells).
+    /// </para>
+    /// </summary>
+    public bool UpdateMeasured { get; set; } = true;
+
+    /// <inheritdoc cref="UpdateMeasured"/>
+    public bool DeleteMeasured { get; set; } = true;
 }

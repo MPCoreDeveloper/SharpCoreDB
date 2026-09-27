@@ -86,8 +86,13 @@ C# 15 preview; `master` holds the net10.0 / C# 14 stable packages.
   edits, while the default job's SharpCoreDB arm uses a non-key predicate.
 - Never infer a verdict from a ratio before reading the code that produces it — this plan has paid
   four times for acting on an inferred reading.
-- The write-path gate refuses to record a baseline on a loaded machine. Re-record with
-  `--write-baseline` only on a quiet machine, and state the reason in the commit message.
+- **"We need a quiet machine" is not a blocker on this box — it is a script.** Check it with
+  `pwsh scripts/quiet-machine.ps1` (exit 0 = `QUIET`, 1 = `NOISY`) and clear what it names with
+  `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp`. Only *recording a baseline* needs the `QUIET`
+  verdict (`--write-baseline`, reason in the commit message); gate *verdicts* are not blocked by the one
+  standing finding (`WSearch` — the gate has passed on this box with it running: attempts 9/10 and
+  sessions 64, 65, 66-rerun, 67). Stopping `WSearch` needs an elevated shell, so an unfixable finding is a
+  *privilege* limit — never grounds to call the machine unusable or the verdict unobtainable.
 - Document competitor developer experience honestly; if an API is hard to use or its docs disagree
   with the API, that is a real benchmark finding. Ease of integration counts as much as raw numbers.
 - Check roadmap status against open issues before calling anything done, and mark the matching issue
@@ -111,4 +116,22 @@ C# 15 preview; `master` holds the net10.0 / C# 14 stable packages.
   be handed on — and then it is logged with evidence and marked `BLOCKED`, never dropped.
 - Two defects were fixed under this rule in session 62 (the five-copy DDL type map and the
   disconnect-logged-as-auth-failure); the mechanical rules live in `.clinerules/00-bug-fix-duty.md`.
+
+## Measurement environment — closed, never re-litigate (owner directive, 2026-09-26)
+
+- **The box is quietable, and that is proven, not assumed.** `scripts/quiet-machine.ps1` exists for it:
+  session 18 returned `VERDICT: QUIET` (exit 0) after `-Apply -StopServices`; the Defender path/process
+  exclusion it applied is **still in force** (session 69 live probe: control ÷ data opens **1,26×**, 4/5
+  rounds ≥ 1,10×); the power plan is High performance on AC, there is no throttling (100 % MaxFreq) and the
+  disk queue is 0.
+- **The write-path gate has PASSED on this box five times**: attempts 9 and 10 (2026-09-21), then sessions
+  64, 65, 66-rerun and 67 (`artifacts/s67-gate.txt` — `GATE PASSED`, 8/8 metrics `ok`), the last four with
+  `WSearch` still running. **So never write "the gate cannot produce a verdict here" again.** A run can
+  still come out `INCONCLUSIVE` — session 69's two runs did, 3,15× and 2,64×, both on the UPDATE cell and
+  neither of them cold-start — and that is a statement about *that run*: record its per-rep shape, run the
+  quiet check once, and carry on. It is never a reason to park work, and never a reason to re-run until a
+  green appears.
+- **The only genuine limits are privilege and the baseline:** stopping `WSearch` needs an elevated shell,
+  and *recording* a baseline (changing the guard's reference, §9 row 7) is an owner decision. Neither is a
+  reason to call a verdict unobtainable.
 

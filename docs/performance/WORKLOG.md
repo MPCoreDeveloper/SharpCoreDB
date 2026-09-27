@@ -4541,3 +4541,54 @@ The code records this in its own comments (`SqlParser.DML.cs:555-558`: "`wal-app
 
 
 
+
+### 2026-09-26 (session 69) — the owner's call-out, verified instead of repeated: the box is quietable and the gate has passed here five times, so "needs a quiet machine" is retired as a blocker — and the StructRow arm's misleading `0` cells now print as `n/a`
+
+- Session: 1 of 1 for the owner-raised item (the measurement-environment claim); then §5.5's first gap.
+- Command(s): `pwsh scripts/quiet-machine.ps1` (live, this session) · the pre-fix harness `SharpCoreDB.Benchmarks.Comparative.exe --engine=appendonly` (`artifacts/s69-struct-before.txt`) · `--struct-arm` with `SHARPCOREDB_LADDER_REPS=2` (`artifacts/s69-struct-after-reps2.txt`) · `SharpCoreDB.Tests.exe` (**2051 / 0 failed / 16 skipped**, exit 0, 115,6 s — `artifacts/s69-suite.txt`) · `--gate` (`artifacts/s69-gate.txt`, plus the documented re-run in item 9).
+- Regime: `REGIME (data dir): D:\scdb-bench-tmp [from SHARPCOREDB_BENCH_TEMP]`; every other `SHARPCOREDB_*` switch cleared before the gate; product default posture for the encrypted arm.
+- Verdict: **KEPT** — the stale claim is corrected at every copy it had (not only the one the owner pointed at), and the harness defect sitting next to it is fixed with a measured before/after.
+- NEXT: §5.5's two remaining gaps, in order — (ii) the second batch-dispatcher path and the parser internals below the dispatcher (uncovered since 2026-09-14), then (iii) the two PageBased per-row regions §5.2 delegated here (re-verify their line numbers first). Owner-gated and unchanged: §9 row 5 (the auto hash-index dial, both sides already measured) and §9 row 7's baseline re-record (one elevated command). **Do not re-open the quiet-machine question** — the script decides it.
+
+**1. The owner's objection was correct, and the record proves it, so the claim is retired rather than softened.** The complaint was about how often "the quiet machine" comes back as a blocker while the script that produces one exists and was confirmed working. Checked, not argued:
+
+| evidence | what it shows |
+|---|---|
+| `scripts/quiet-machine.ps1` (`cc198736`, refined by `a0d4b794` / `28db0b6c`) | the check exists, is read-only by default, prints `VERDICT: QUIET`/`NOISY` and exits 0/1 so it can gate a session |
+| worklog session 18 | the box **has** returned QUIET after `-Apply -StopServices` — "the first QUIET this box has returned" |
+| worklog session 19 item 9 | the **persistent** half of that fix is still in force; only `WSearch` comes back, and stopping it needs *elevation* |
+| gate attempts 9 + 10 (2026-09-21), sessions 64, 65, 66-rerun, 67 | the gate has produced **PASSED** verdicts on this box **five times**, the last four with the `WSearch` finding present (`artifacts/s67-gate.txt`: `GATE PASSED`, 8/8 metrics `ok`) |
+
+**2. Live re-verification, because "it worked once in September" is not a check.** `pwsh scripts/quiet-machine.ps1` in this session: power plan High performance on AC, **MaxFreq 100 %** (no throttle), total CPU **10,7 %**, disk queue **0**, `SHARPCOREDB_BENCH_TEMP=D:\scdb-bench-tmp`, and the interleaved I/O probe reads the Defender exclusion at **1,26× control ÷ data (4/5 rounds ≥ 1,10×)** — the persistent half session 19 recorded is still doing its job. **One finding: `WSearch`**, which needs an elevated shell. `VERDICT: NOISY` (exit 1) therefore describes the script's strictness about *baseline recording*, not an inability to measure.
+
+**3. The stale claim lived in five copies, so all five were fixed, not the one that was quoted.** (a) `AUTONOMOUS_AGENT_BRIEF.md` §8 trap 6 — now names both script commands, the QUIET/NOISY exit codes and the five PASSED verdicts, and separates *recording a baseline* from *running the gate*. (b) `AGENTS.md`: the known pitfall corrected inside the managed block, plus a new section outside it ("Measurement environment — closed, never re-litigate"). (c) `BEAT_SQLITE_ALL_AXES_PLAN.md` §6 rule 7 (live re-verification appended) and §9 rule 9. (d) **§9 row 7**, whose verdict cell called the warm-up adoption "blocked here: Windows Search needs elevation". (e) `INSERT_UPDATE_PERFORMANCE_PLAN.md` §8a, whose "(the owner was away)" framed a command as a coincidence — and `tools/clean-benchmark.ps1`'s closing advice, which said "re-run on a completely quiet machine (after reboot if needed)".
+
+**4. Row 7's factual correction.** Its question ("may the gate discard a warm-up rep?") was **answered in `97fb2651` (2026-09-26)**: the gate now runs `ResolveWarmupReps()` (default 8) discarded reps of both arms through the same pass helper (`Program.cs:4801-4818`), and that commit's run was **exit 0, 8/8 metrics `ok`, worst rep spread 2,23×**. Its message states **no baseline re-recorded**, so the row's remaining half is the re-record, not the protocol — and its stated *reason* ("without re-recording it would silently loosen the guard") is left **unestablished**: the compared statistic is a **median** (`MedianOf(raw)` vs the recorded median) and the cold rep is the minimum of three, so that inference was never measured either way. What *is* established is the provenance mismatch, which is why a re-record on a verified-QUIET box remains the clean end state and an **owner call** — its blocker is one elevated command, never the machine.
+
+**5. §5.5's first gap, fixed: the StructRow arm's `0` cells were ambiguous, and are now explicit.** `Program.cs:1839-1844` set `UpdateOpsPerSec`/`DeleteOpsPerSec` to `0` for the StructRow arm with a comment saying UPDATE/DELETE "use identical code paths to the Direct API row". The code confirms that claim — same `docs` table, same `CreateDocsIndexSql`, same `db.ExecuteBatchSQL` statements as `RunSharpCoreDBDirectApi`; only READ differs (`FindByIndex` vs `ExecuteQueryStruct`) — so **running the phases would re-measure the Direct row and invite a reader to treat two measurements of one code path as independent evidence**. The omission stays; the *printed zero* was the defect. Now: `BenchmarkResult.UpdateMeasured` / `DeleteMeasured` (additive, default `true`, propagated through the ladder median so a median cannot launder an omission into a measurement), the summary table prints **`n/a`** with a footnote that appears only when a cell is `n/a`, and the ladder's per-metric line prints `not measured` instead of `median 0 / spread 0,00×`. The JSON carries the same distinction, so a machine reader cannot repeat the old reading.
+
+**6. Measured before/after, on the artefact itself, same box and session.** Pre-fix binary, `--engine=appendonly` (`artifacts/s69-struct-before.txt`):
+
+```
+║ SharpCoreDB (StructRow) │        130.435 │        145.533 │              0 │        0 ║
+```
+
+Post-fix, `--struct-arm` with `SHARPCOREDB_LADDER_REPS=2` (`artifacts/s69-struct-after-reps2.txt`):
+
+```
+           UPDATE  not measured - this arm deliberately does not run that phase (plan §5.5)
+           DELETE  not measured - this arm deliberately does not run that phase (plan §5.5)
+║ SharpCoreDB (StructRow) │        134.330 │        143.962 │            n/a │      n/a ║
+
+  n/a = that phase is deliberately not run on that arm (plan §5.5). The Direct API row
+        carries those cells: the same ExecuteBatchSQL call path, the same table and index.
+```
+
+The same pre-fix run is also where the missing coverage is quantified: the Direct row *does* measure those cells (**97.129 UPDATE / 78.976 DELETE** ops/sec against SQLite's 758.921 / 1.022.118), so a reader who took the StructRow row's `0` at face value was reading an omission as a 10× deficit. A new `--struct-arm` switch makes the cell readable in one short run instead of isolating a row out of a whole-ladder run — and it goes through the *same* `RunLadderMedianOf` protocol, so its numbers are comparable to the ladder's.
+
+**7. Why there is no test, said plainly rather than dodged.** The harness is a console program with no test host, and the defective artefact is its printed table; the rule's verification is therefore the live before/after above, on the same binary path, in one session. What the fix guarantees mechanically is that the ambiguity cannot return silently: `0` now only ever means "measured zero" (a failed arm, for which the gate prints `FAILED`), and `n/a` only ever means "deliberately not measured".
+
+**8. What deliberately did not move.** No `src/` file, no engine behaviour, no on-disk format, no durability or encryption path, no threshold, no test, and no baseline — `dual-mode-baseline.json` is untouched, and row 7's re-record stays an owner call. The gate's protocol, medians, exit codes and tolerance are unchanged; this session only made the gate's *inputs* honest.
+
+**9. The gate, run twice on this tree, and neither run produced a verdict — recorded, not spun on.** Run 1 (`artifacts/s69-gate.txt`, after the suite, while this session's own edits sat in the tree): worst spread **3,15×**, entirely the **raw** arm's UPDATE — `346.592 → 119.048 → 110.155` ops/sec, so **rep 1 is the *highest* reading**, the opposite of the cold-process ramp the warm-up work targets — classifier `raw mixed · default load`. Run 2, the documented re-run after that shape, with no file activity from this session during it (`artifacts/s69-gate-rerun.txt`): worst spread **2,64×**, now the **default** arm's UPDATE — `102.453 → 270.740 → 238.727`, a rep-1 ramp **that survived 8 discarded warm-up reps** — classifier `mixed` on both arms, with raw READ also moving `93.513` against `176.150` / `190.059`. Both exit 2, and on exit 2 the tool prints **no regression table at all**: these runs support *no* statement about the tree, in either direction. **No third run was taken.** The standing evidence that verdicts are obtainable here is the five PASSED runs (attempts 9/10, sessions 64/65/66-rerun/67, `artifacts/s67-gate.txt`), and re-running until a green appears is fishing, which session 21 already ruled out. What the two runs *do* add is a measured statement of **which cell is unstable — UPDATE, in both postures, the campaign's oldest noise finding — and that 8 warm-ups reduce a rep-1 ramp without removing it.** Neither run is a regression: no `src/` code differs from session 67's tree.
+

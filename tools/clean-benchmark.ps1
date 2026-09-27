@@ -73,4 +73,7 @@ Invoke-Expression $runCommand
 Write-Host "`n=== Benchmark completed ===" -ForegroundColor Green
 Write-Host "Check the JSON in tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/" -ForegroundColor Gray
 Write-Host "Use median values. If rep spread >2.5× the gate will report INCONCLUSIVE." -ForegroundColor Gray
-Write-Host "Re-run on a completely quiet machine (after reboot if needed) for baseline recording." -ForegroundColor Gray
+Write-Host "Before recording a BASELINE, verify the environment:  pwsh scripts/quiet-machine.ps1" -ForegroundColor Gray
+Write-Host "  exit 0 = QUIET (a baseline run is defensible); exit 1 = NOISY - clear it with" -ForegroundColor Gray
+Write-Host "  pwsh scripts/quiet-machine.ps1 -Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp" -ForegroundColor Gray
+Write-Host "A gate VERDICT does not need that: this box has passed --gate with the WSearch finding present." -ForegroundColor Gray

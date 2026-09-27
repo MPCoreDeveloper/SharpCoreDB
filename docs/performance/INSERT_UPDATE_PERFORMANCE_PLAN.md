@@ -1813,8 +1813,12 @@ in this branch taught that lesson twice.
 
 ### 8a. Where the targets stand after the v2.1 work *(measured 2026-09-15, quiet machine)*
 
-Both harnesses re-run on a quiet machine (the owner was away), so these are the least noise-contaminated
-figures the project has published for these shapes. `--pk` is the tuned harness; `--pk-default` is the
+Both harnesses re-run with the machine to themselves (the owner was away), so these are the least
+noise-contaminated figures the project has published for these shapes. **For every later session the
+equivalent is a command, not a coincidence:** `pwsh scripts/quiet-machine.ps1` (exit 0 = `QUIET`) is what
+"the machine was quiet" means now, and `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp` is what
+produces it — see the BEAT_SQLITE plan §6 rule 7. Gate *verdicts* never needed that wait: only baseline
+recording does. `--pk` is the tuned harness; `--pk-default` is the
 **untuned product default** (pure `DatabaseConfig`), which is the number a new user actually gets.
 
 | arm | INSERT | READ | UPDATE | DELETE |

@@ -553,8 +553,15 @@ Add stamps only where needed to answer 5.1/5.3.
    uses a *non-key* predicate, so those columns are **not like-for-like**. Only `--pk` (both engines on
    `WHERE id = @pk`) is a fair comparison.
 5. **Ratios only, never absolutes** — SQLite's own reference drifts between sessions and even runs.
-6. **The gate refuses to write a baseline on a loaded machine.** Re-record `--write-baseline` only on a
-   quiet machine, and put the reason in the commit message.
+6. **The gate refuses to *record a baseline* on a loaded machine — and this box can be made quiet, so that
+   is a command, not a waiting game.** `pwsh scripts/quiet-machine.ps1` diagnoses the environment and exits
+   0 (`QUIET`) or 1 (`NOISY`) so it can gate a session; `-Apply [-StopServices] -BenchTempDir
+   D:\scdb-bench-tmp` applies the fixes it can (Defender path/process exclusions + build-server shutdown).
+   **Verdicts are not blocked by the one standing finding:** the gate has passed on this box with `WSearch`
+   running — attempts 9/10, then sessions 64, 65, 66-rerun and 67 (`artifacts/s67-gate.txt`: `GATE PASSED`,
+   8/8 metrics `ok`). Only re-recording a baseline needs the `QUIET` verdict, and stopping `WSearch` needs
+   an elevated shell — a **privilege** limit, never "the machine cannot do this". Re-record with
+   `--write-baseline` and put the reason in the commit message.
 7. **Every plausible reading must survive its own control run** — this plan has paid four times for
    acting on a reading inferred from a ratio instead of read out of the code.
 
