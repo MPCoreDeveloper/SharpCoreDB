@@ -258,12 +258,16 @@ absolute floor stays met) and is replaced by *publication* plus a no-regression 
 `index-maint` are **left as-is** (durability boundary and index freshness); (14) `.scdb` solo-statement coalescing is
 **rejected** — batching is the answer and is documented; (15) the **unsafe hash-index backend is handed to its owner**
 (0,07×, 75,6 µs per key, cost in the caller).
-**Two items remain open and neither is a code decision:** the **gate baseline** is still dated 2026-09-15 and
-`--write-baseline` still refuses on this machine (spread floor 2,76 / 2,91 / 3,31× against a 2,50× limit), so it needs a
-quieter or self-hosted runner; and the **§5.4 ladders** now have a protocol instead of a caveat —
+**One item remains open and it is not a code decision:** the **§5.4 ladders** now have a protocol instead of a caveat —
 **`SHARPCOREDB_LADDER_REPS=3`**, median-of-3 with the per-cell spread printed, measured 2026-09-24 as **SQL 0,56× /
 Direct 0,65× / StructRow 0,68× INSERT** against the same-run SQLite at 184.257 ops/s, with spreads of 1,05–2,72× quoted
 beside them so nobody mistakes a median for a guarantee.
+**The gate baseline is no longer one of them (closed 2026-09-27, session 72):** on a script-verified `QUIET` box
+(`scripts/quiet-machine.ps1`, exit 0) the first `--write-baseline` attempt returned **exit 0** at a **1,86×** worst rep
+spread, so the committed JSON is now dated 2026-09-27 — recorded *with* the 8 discarded warm-ups the gate itself uses,
+which removes the mismatch with a baseline taped before `97fb2651`. The refusals of 2026-09-16/22 (2,97 / 2,77 / 3,31×)
+were a property of the unquiet box, not of the harness. The reference got **stricter**, not looser (raw I 140.440 →
+**210.263** ops/s, default U 77.823 → **181.222**), and no threshold or tolerance moved.
 
 
 ## 5. Work items, in priority order

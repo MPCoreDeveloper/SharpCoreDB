@@ -212,6 +212,17 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    write requires. Note also that the spread is itself evidence for §2's rule: the dual-mode harness's own UPDATE/DELETE
    reps swing 2,7–3,3× run to run, so that arm can only be judged on a rep ladder.
 
+    ✅ **RESOLVED 2026-09-27 (session 72) — the blocker was `WSearch`, not load.** With the box quieted by
+    `scripts/quiet-machine.ps1` (`VERDICT: QUIET`, exit 0), the first `--write-baseline` attempt returned **exit 0** at a
+    **1,86×** worst rep spread (limit 2,50×, both arms `mixed`), and the committed JSON is now dated
+    **2026-09-27T10:09:37Z** — i.e. post-fix, and a strictly **higher** bar than the stale one: raw I 140.440 →
+    **210.263**, R 104.216 → **191.192**, U 107.082 → **257.141**, D 204.393 → **556.715**; default I 123.493 →
+    **184.922**, R 81.198 → **145.486**, U 77.823 → **181.222**, D 98.725 → **165.296** ops/s. The 2,76 / 2,77 / 2,91 /
+    3,31× floors quoted above were all measured *before* the service stop, so they describe the unquiet box rather than a
+    harness limit; the stop is the fix and `quiet-machine.ps1` makes it reproducible on demand. Evidence: WORKLOG
+    session 72 — which also records that the first gate run *after* the record came out `INCONCLUSIVE` on the UPDATE
+    cells, with a quiet check confirming no known noise source.
+
    🔬 **PROPOSED 2026-09-21 · ACCEPTED 2026-09-22 (option 2 — see the decision below).** The per-arm job runs INSERT → READ → UPDATE → DELETE
    against **one database**, so its late phases are not independent of its early ones. That stopped being theoretical:
    after the buffered-overwrite flush coalescing (`851ac232`) the gate's `default DELETE` cell stepped **1,07× → 1,34×**
@@ -236,8 +247,12 @@ first attempt at that build optimization was aimed at the wrong phase until inst
    it changes what the gate compares, so it invalidates the committed baseline (`708ccb73`, 2026-09-15) and needs a
    `--write-baseline` re-record — and the two re-record attempts of 2026-09-16 both failed `INCONCLUSIVE` (rep spreads
    2,97× and 2,77×) on the same noise floor that produced the eight inconclusive gate attempts below. Adopting option 1
-   without a quiet machine would leave the gate comparing against a baseline it cannot re-record. So the two conditions
-   for revisiting are: **a verdict-grade DELETE cell is wanted, and the machine is quiet.** Nothing else changes — this
+   without a quiet machine would leave the gate comparing against a baseline it cannot re-record. **Updated 2026-09-27
+   (session 72):** the quiet half of that condition is now **met and reproducible on demand** — `scripts/quiet-machine.ps1`
+   returned `VERDICT: QUIET` (exit 0) and the baseline was re-recorded in the same session (`--write-baseline` exit 0,
+   1,86× worst rep spread; the JSON is now dated 2026-09-27), so an option-1 switch has a reference it *can* re-record.
+   So the condition for revisiting is now: **a verdict-grade DELETE cell is wanted** (the quiet machine is a script, not
+   a waiting game). Nothing else changes — this
    is a labelling rule for the late phases, not a relaxation of the §2 protocol (the medians, the rep ladder and the
    tolerance factor all stay as they are).
 
