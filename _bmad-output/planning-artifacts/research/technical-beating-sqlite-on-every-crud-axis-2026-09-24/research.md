@@ -3,13 +3,13 @@ title: 'technical research: beating SQLite on every CRUD axis'
 type: 'technical'
 topic: 'Beating SQLite on every CRUD axis'
 decision: 'Choose the engineering levers that let SharpCoreDB meet or beat SQLite on INSERT/READ/UPDATE/DELETE in every shipped arm (tuned plaintext, pure default, encrypted default, PageBased).'
-source: 'native run — 17 external sources, 2 rounds, 8 digests'
+source: 'native run — 24 external sources, 3 rounds, 11 digests'
 status: complete
 preset: 'standard'
 validation: 'normal'
 created: '2026-09-24'
-updated: '2026-09-24'
-claims: { verified: 10, unverified: 2, disputed: 0, overturned: 0 }
+updated: '2026-10-09'
+claims: { verified: 23, unverified: 3, disputed: 0, overturned: 1 }
 ---
 
 # technical research: beating SQLite on every CRUD axis
@@ -22,9 +22,11 @@ SQLite on INSERT/READ/UPDATE/DELETE in every shipped arm.
 ## Executive summary
 
 **The evidence says: the gap is a record-layout gap, not an engine-speed gap, and the fix is three
-published mechanisms that we are each exactly half-way to.**
+published mechanisms that we are each exactly half-way to — plus two call-site shapes the runtime
+already provides and we have not taken (round 3, below).**
 
-Three findings drive that answer.
+Four findings drive that answer. The first three are the layout-and-crypto case; the fourth is round 3's
+and is the only purely mechanical one.
 
 1. **Our remaining deficit is concentrated in the arms where a row's *bytes* must move.** The
    tuned plaintext fixed-width PK shape is already at or ahead of SQLite on READ, UPDATE and DELETE;
@@ -49,6 +51,18 @@ Three findings drive that answer.
    vs 1.2 ms raw at *identical* 175 B/call. The only way to make encrypted UPDATE cheap is to make
    the encrypted unit **small and constant-size** — the same layout conclusion reached from the
    storage-engine side. Two independent lenses agreeing is this run's strongest signal.
+
+4. **Round 3 (2026-10-09): the runtime already ships the two primitives our write path lacks, and we call
+   one of them in its weaker form.** `System.RandomAccess` exposes scatter/gather `Read`/`Write` that take
+   a *list* of buffers, and `ZstandardEncoder` is a reusable span-in/span-out compressor with
+   `GetMaxCompressedLength()` and `Reset()` `[17][20]`. Our in-place record overwrite still issues the
+   length prefix and the record as **two separate single-buffer writes**
+   (`Storage.Append.cs:469-470`), and our block codec still round-trips every block through a
+   `MemoryStream` with two full copies (`Services/BlockCompressor.cs`). Neither is part of the layout
+   problem: both are call-site shape, both change **no bytes on disk**, and both sit on the UPDATE path
+   the default arms lose on. Round 3's own limit is stated with it — the API pages do **not** document how
+   many syscalls the vectored form issues, so *"one write instead of two"* is a measurement to run, not a
+   result to cite.
 
 **Biggest caveat.** SQLite publishes no CRUD benchmark, so no ratio here is a vendor figure — every
 comparison is our own measurement, and SQLite's own documented tuning surface (`journal_mode`,
@@ -240,6 +254,57 @@ get HOT — it added indirection, a precondition test, and free-space policy. Th
   encrypted unit small and constant-size** — which is D2's conclusion from the other side. This is
   the run's strongest cross-dimension finding.
 
+### 3.3 The runtime ships two primitives our write path does not use
+
+Rounds 1–2 read the *feature list*; round 3 read the **API surface** of the storage-relevant types
+(`digests/d3-dotnet-accelerators-r3-1.md`).
+
+- **Scatter/gather file I/O is a documented first-class API, not a P/Invoke.** `System.RandomAccess`
+  exposes `Read`/`Write` and their async forms both as a single `Span`/`Memory` **and as a list of
+  buffers** (`IReadOnlyList<Memory<byte>>` / `IReadOnlyList<ReadOnlyMemory<byte>>`). The class summary is
+  *"Provides offset-based APIs for reading and writing files in a thread-safe manner"*, and the only
+  documented restriction is *"Only regular disk files are supported. Unseekable files, like pipes, are
+  not supported."* `[17]` — both satisfied by our file-backed design.
+- **The Zstd object model is not just a stream wrapper.** `ZstandardEncoder` is sealed and
+  span-in/span-out with **`GetMaxCompressedLength(long)`**, `Compress(ReadOnlySpan<byte>, Span<byte>, …)`,
+  `Flush`, **`Reset()`**, `SetPrefix(ReadOnlyMemory<byte>)` and `SetSourceLength(long)` `[20]`;
+  `ZstandardDictionary` can be **`Create`d or `Train`ed in-box** `[21]` — no external `zstd` tool, so a
+  dictionary mode stays inside the "pure .NET, no P/Invoke" constraint; and
+  `ZstandardCompressionOptions` carries twelve properties including `TargetBlockSize` and `Dictionary`
+  `[19]`. **No remarks section exists on any of those pages**, so which properties land in the *frame
+  header* — and therefore what a reader must reproduce — is undocumented, with one exception sourced
+  outside the API surface: the frame's `Dictionary_ID` field itself (`[22][23]`, compatibility ruling).
+- **Honest limit, stated because the recommendation depends on it:** none of the pages fetched in
+  this round documents a syscall count, an allocation or a throughput. *"One vectored write is one
+  syscall"* is a **hypothesis for our harness**, never a citation (see Open questions).
+- **Seekability does not rescue the compressed-block case:** `ZstandardStream` is seekable
+  (`CanSeek`, `Seek`, `SetLength`, `SetSourceLength`) `[18]`, but reaching a byte inside a zstd frame
+  still means decoding that frame — so this does **not** weaken 3.2's and D2's layout conclusion.
+
+### 3.4 Repo cross-check — which of these the code already calls
+
+*Every statement below is read off the file named; no behaviour is inferred from an API's existence
+(`digests/d3-dotnet-accelerators-r3-2.md`).*
+
+- **Zstd is shipped on the *stream* path:** `Services/BlockCompressor.cs:58` builds a `ZstandardStream`
+  with an options object (`Quality`, `AppendChecksum = true`), which `docs/net11/UPGRADE.md:20-24`
+  documents. `ZstandardEncoder`, `ZstandardDictionary`, `TargetBlockSize`, `EnableLongDistanceMatching`
+  and `WindowLog2` appear **nowhere** under `src/` — those levers are open.
+- **The codec round-trips through a `MemoryStream` per block** (compress → `ToArray()`, decompress →
+  `data.ToArray()`): an allocation/copy opportunity, **not a defect** — the bytes and the frame are
+  correct.
+- **`AesGcm` is saturated** (3.2): per-thread cipher cache, `stackalloc` nonce/tag, pooled ciphertext,
+  `IsSupported` surfaced as `IsHardwareAccelerated` (`Services/AesGcmEncryption.cs`, ~line 214). No
+  `AesGcm` API is left to adopt, so 3.2's layout conclusion is the only crypto lever — **do not re-open it**.
+- **`RandomAccess` is already the primitive, used one buffer at a time.** It appears at 15 call sites
+  across `Services/Storage.Append.cs` and `Services/Storage.PageCache.cs` (e.g. `PageCache.cs:93` inside a
+  short-read loop). The only place one logical write is two calls is `Services/Storage.Append.cs:469-470`
+  (`WriteRecordInPlace`: the 4-byte prefix, then the record) — on the in-place patch path, i.e. the UPDATE
+  cell the default arms are measured short on.
+- **The loud-failure compatibility pattern already exists:** `Services/BlockCompressor.cs:58-61` records
+  that `Zstd` mode throws `PlatformNotSupportedException` on `net10` rather than misreading. Any new
+  format-affecting compression feature must copy that pattern, not invent a second one.
+
 ---
 
 ## D4 — What "beating SQLite" can legitimately mean (comparator hygiene)
@@ -258,6 +323,62 @@ get HOT — it added indirection, a precondition test, and free-space policy. Th
   abandoning multi-process access, which `AGENTS.md` forbids for the server. The honest form of the
   claim is therefore: **beat tuned SQLite on the shapes we ship, and name the shape** — not "beat
   SQLite".
+
+---
+
+## Round 3 — the lever ledger, and what each lever costs the on-disk format
+
+*Added 2026-10-09 (round 3). Rounds 1–2 asked what makes SQLite fast and what .NET 11 offers; this round
+asks the question the plan actually needs: **which of those levers are already shipped here, which are
+open, and which ones change the file.** Repo state is cited to `src/…`; API surfaces to `[17]`–`[22]`, and
+the one frame-format fact to `[23]`. The
+full evidence is in `digests/d3-dotnet-accelerators-r3-1.md` (API surface), `…-r3-2.md` (repo state) and
+`…-r3-3.md` (this ledger).*
+
+| # | Lever | Where it acts | Status | On-disk / compat impact | Falsifiable prediction |
+|---:|---|---|---|---|---|
+| 1 | List-form `RandomAccess.Write` for prefix + record | `Services/Storage.Append.cs:469-470` (in-place patch → UPDATE) | **REJECTED on measurement** (2026-10-09, session 77) — the one-syscall reading holds **only on Unix**: the list form routes to `PWriteV` there, while Windows issues **the same 2 OS writes** for both forms (counted exactly with `GetProcessIoCounters`: 1.000 ops per 500 iterations each) and is 0,982× on time, i.e. noise | **none** — same bytes at the same offsets (and no code change was made) | *Applied as written:* the prediction was "if the UPDATE ratio does not move, the 'one call = one syscall' reading is wrong and the item is dropped" — on this platform the OS-call count does not move at all, so it was dropped before any `src/` edit; the Unix half is **open** as a Linux-only candidate (needs a Linux measurement, not a citation) |
+| 2 | Reusable span-based `ZstandardEncoder` + `GetMaxCompressedLength` + pooled output | `Services/BlockCompressor.cs` | **landed** (2026-10-09, session 77) — stream path kept for Brotli/GZip and as the Zstd fallback branch | **readable both ways, but NOT byte-identical**: the frame differs from the stream writer's by a few bytes in *either* direction (4 KB at quality 5: 83 → **77** B; 64 KB: 784 → **785** B). Old frames still decode through the new reader and new frames still decode through a plain `ZstandardStream` — both pinned by tests | *Confirmed:* allocation per block **2.480 → 0 B** at 4 KB and **33.896 → 0 B** at 64 KB (the returned frame is the only surviving allocation), red→green. *Corrected:* the "identical frame, level and checksum" cell this row originally carried — the level mapping is unchanged, the bytes are not |
+| 3 | `TargetBlockSize` / `WindowLog2` / `EnableLongDistanceMatching` | same | **open**; property existence verified `[19]` | **none for readability** (legal frame fields), but *which* land in the header is undocumented | Needs an A/B at our block sizes; under ~2 % it is dropped rather than kept "because it is free" |
+| 4 | `ZstandardDictionary` (trained) **or** `SetPrefix` | same, and only if a block is still variable after the structural item | **open — format-affecting** | **breaks** old readers, and the mechanism is now sourced: the frame's `Dictionary_ID` marks the requirement `[23]` and .NET takes the dictionary as caller-supplied state `[22]`, so it must live in our file header behind a magic/version gate | Only worth a format bump if its gain on small, self-similar blocks beats the header cost and the migration work — measured, never assumed |
+| 5 | `AesGcm` API surface | `Services/AesGcmEncryption.cs` | **closed — saturated** | n/a | No lever remains; re-opening this is a known waste of a session (3.2, 3.4) |
+| 6 | Span-based `ParseValue` / prepared-statement binding | row codec + statement binding | **open** | **none** (source-level only) | C# 15 labeled `break`/`continue` `[9]` can remove scanner sentinels; measure before claiming |
+| 7 | NativeAOT interface dispatch | every row, every arm | **BLOCKED** — VS C++ workload absent (brief §9 row 6) | none | Unchanged from rounds 1–2; this round found no reason to re-open it |
+
+### The compatibility ruling
+
+1. **Exactly one lever in this round touches the file: a Zstd dictionary or prefix (#4).** #1, #2, #3 and
+   #6 write the same bytes, a legal frame, or the same IL.
+2. **#4 is not backwards compatible — not with a `net10` build of this product and not with an earlier
+   `net11` RC build — and that ruling now stands on evidence rather than on caution.** The zstd **frame
+   header carries a `Dictionary_ID`**: its width is the low two bits of `Frame_Header_Descriptor`
+   (`fhd & 3` — 1, 2 or 4 bytes, absent when the flag is 0), bit 5 is `Single_Segment_flag`, and bit 3 is
+   reserved with a set reserved bit treated as an error `[23]`. The consumer side agrees: 
+   `ZstandardDecompressionOptions` exposes only `Dictionary` and `MaxWindowLog2` `[22]`, i.e. the dictionary
+   is state the *caller must hand back* to the decoder (through `ZstandardDecoder(ZstandardDictionary)` or
+   the dictionary-taking stream constructors `[18]`) before a dictionary-bearing frame decodes at all.
+   Any dictionary mode is therefore a **new format version**, gated the way `BlockCompressionMode.Zstd`
+   already is: a loud `PlatformNotSupportedException` from a build that cannot decode it, never a silent
+   misread. *Still unverified, and separately:* the failure a .NET decoder raises on a missing or
+   mismatched dictionary (exception type and message) — no fetched page states it, so that half is a
+   two-build experiment, not a citation.
+3. **The non-format levers stay inside every rail the brief sets:** no durability change (WAL ordering and
+   the write offsets are untouched — identical bytes at identical offsets), no encryption change and no
+   flip of the fixed-width layout default (§8 trap 3). **#1 and #2 may therefore land *before* the
+   structural item**, which is the only ordering change round 3 makes.
+
+### What round 3 did not find
+
+- **No API that makes a variable-length row updatable in place without changing the layout** — the
+  layout conclusion of rounds 1–2 stands, and `ZstandardStream`'s seekability `[18]` does not disturb it.
+- **No quantified benefit of the Zstd object model over the stream model** — the object model must be
+  measured on our harness; a page proves the call exists, not that it wins.
+- **No GC/allocator claim for .NET 11** — the fetched slices still do not cover GC (Open questions,
+  unchanged), and no AVX10.2 confirmation for `net11.0`.
+- **No direct read of the spec's frame-header table** — the `Dictionary_ID` mechanism is sourced to an
+  independent implementation that deep-links the specification's own `#dictionary_id` anchor `[23]`;
+  RFC 8878's table itself stays an **Open question**, because the pages carrying it middle-truncate in
+  this run's fetch tool.
 
 ---
 
@@ -282,7 +403,9 @@ These are the findings that only the *combination* of dimensions produces.
    interface-dispatch helper `[9]` targets "interface-heavy workloads" — and our per-row
    `IStorageEngine`/`IStorage` dispatch is precisely that shape, on every row, in every arm, in both
    plaintext and encrypted modes. It is the only lever that helps *all four operations and all four
-   arms at once*, and it costs a build configuration rather than a format change.
+   arms at once*, and it costs a build configuration rather than a format change. *(Execution note,
+   2026-10-09: the build configuration turned out to be blocked — the VS C++ workload is absent — so the
+   hypothesis is untested rather than refuted; see the Recommendations status re-check.)*
 
 4. **Two of our own measurement practices are upstream of any performance claim.** D4 establishes that
    SQLite's tuning can swing its numbers >2× `[7][12]`, while our `REGIME:` banner records only
@@ -293,7 +416,19 @@ These are the findings that only the *combination* of dimensions produces.
 5. **HOT's precondition (a) and our existing key-only delete work are the same idea at different
    maturity.** `DeleteByPrimaryKey` already runs key-only with no storage read when no hash index needs
    the row; the UPDATE side has no equivalent gate `[3]`. This is a *completion* of an existing pattern
-   rather than a new architecture — the lowest-risk item in the plan.
+   rather than a new architecture — the lowest-risk item in the plan. *(Execution note, 2026-10-09: the
+   gate shipped as a provably-equivalent no-op removal and the plan's item closed `REJECTED` *as
+   specified* — the precondition is unreachable on a Columnar table, where every column is auto-indexed —
+   so this insight stands as a mechanism, not as a pending win; see the Recommendations status re-check.)*
+
+6. **Round 3: two of the plan's behind-cells have a *mechanical* address that costs no format change.**
+   D1 shows a per-page write stays cheap because durability bookkeeping is centralized in the pager `[1]`;
+   D3 shows the runtime already ships the primitives for that shape — vectored writes and a reusable
+   span-based Zstd encoder `[17][20]` — and the repo cross-check shows **we already call `RandomAccess`,
+   one buffer at a time**, issuing one logical record write as two calls (`Storage.Append.cs:469-470`).
+   The combination is the point: the deficit in the default arms is *not* an absence of a primitive, and
+   the cheapest work the research can name is call-site shape, not a new storage architecture. It also
+   disciplines the plan's order — cheap and format-neutral first, structural second, dictionary last.
 
 ---
 
@@ -353,7 +488,7 @@ Each is bound to the decision and names its confidence basis.
 
 5. **Bank the "already winning" list explicitly as non-goals.** Columnar/SIMD aggregates, vector search,
    encrypted-at-rest default, P/Invoke-free embedding. *Basis:* cross-dimension insight 2 — medium
-   (absence of contrary evidence across 17 sources). *Feeds:* the new plan's scope section and the canary
+   (absence of contrary evidence across 23 sources). *Feeds:* the new plan's scope section and the canary
    list.
 
 6. **Adopt the small, shape-matched runtime wins where the JIT's own conditions hold** — switch-on-length
@@ -361,9 +496,61 @@ Each is bound to the decision and names its confidence basis.
    `SIMD_STANDARDS.md`. *Basis:* D3 `[14][9]`, high-confidence but microbenchmark-derived; each must be
    measured on our harness. *Feeds:* opportunistic items, scheduled only after 1–3.
 
-**Recommended order:** 1 → 2 → 3 → (4/6 opportunistic), with 5 as a standing constraint. Item 1 costs
-documentation and no code; item 2 is a narrow, reversible branch on an existing path; item 3 is the only
-format-affecting change and must reproduce the trap-3 control first.
+7. **(Round 3) Issue the in-place record overwrite as one vectored write.** `WriteRecordInPlace`
+   (`Storage.Append.cs:459-471`) writes the 4-byte length prefix and the record as two adjacent calls on
+   the single-buffer overload; `RandomAccess` also offers a list-taking form `[17]`. *Basis:* D1's
+   page-write centrality `[1]` + D3's API evidence `[17]` + the repo cross-check (3.4) — all three are
+   needed, which is why round 1–2 missed it. **Changes no bytes on disk and no guarantee.** *Feeds:* the
+   UPDATE cell of arms B/C (the plan's §5.1 table). **State the limit with the item:** the API page does
+   not document the syscall count, so the expected win must be demonstrated on the harness, and the
+   single-buffer calls stay as the fallback branch.
+
+   **Outcome (2026-10-09, session 77): `REJECTED on measurement` — the item's own limit, made exact.** The syscall saving exists on one platform only. In the runtime, the list form's Unix path is `Interop.Sys.PWriteV` (`RandomAccess.Unix.cs`, `WriteGatherAtOffset`) — one syscall for the whole vector — while Windows has no `pwritev`, so the same managed call issues the same per-buffer writes after pinning each buffer. Counted exactly on this box with a standalone RC.1 probe using `GetProcessIoCounters` deltas: **1.000 OS write operations per 500 iterations for both forms** (2,00 each), and timed min-of-5 over 20.000 operations at **5.628 ns/op vs 5.528 ns/op = 0,982×** — noise. So there is **no win on Windows**, and the Unix half is two signatures away from being reachable: a list form needs the five call sites of `WriteRecordInPlace` to hand over `ReadOnlyMemory<byte>` (they take `ReadOnlySpan<byte>` today) plus a per-call list allocation the current shape does not have. No code was changed. The Unix half stays **open as a Linux-only candidate** and needs a Linux measurement of the same probe before anyone writes it — this box has no .NET SDK in WSL and no invocable Linux leg, so the source evidence is where it stops rather than being promoted to a win.
+
+8. **(Round 3) Replace the block codec's `MemoryStream` round-trip with a reusable span-based
+   `ZstandardEncoder`.** `GetMaxCompressedLength` sizes a pooled destination, `Compress` fills it, and
+   `Reset()` carries the instance to the next block `[20]`; the frame, level and checksum stay
+   byte-identical, so it is format-neutral **(superseded — see the outcome below: `Reset()` and the level
+   mapping hold, the *frames* are not byte-identical)**. *Basis:* D3 `[20]` + `Services/BlockCompressor.cs` (2 full
+   copies per block today). *Feeds:* allocation/op on the compression arms; must be validated by the
+   existing round-trip and reopen canaries, because a codec change that alters a frame is a data-loss bug.
+
+   **Outcome (2026-10-09, session 77): `KEPT` — with one premise corrected and the correction measured in both directions.** The allocation half is confirmed and lands: per-block managed allocation **2.480 → 0 B** at 4 KB and **33.896 → 0 B** at 64 KB (reused thread-static encoder + `Reset()` + a destination rented from `ArrayPool<byte>.Shared` and sized by `GetMaxCompressedLength`; the returned frame is the only surviving allocation), red→green in `BlockCompressor_Zstd_Compress_AllocatesOnlyTheReturnedFrame` (129.496 B allocated with the stream shape, then ≤ 4.096 B). The "**byte-identical, so it is format-neutral**" premise is **false and was replaced**: at quality 5 the encoder's frame is 6 bytes *smaller* on a 4 KB block (83 → 77) and 1 byte *larger* on a 64 KB one (784 → 785), and `GetMaxCompressedLength` is an upper bound (4.174 B of capacity for 84 B of frame). What survives is compatibility by *validity*, pinned in three directions by tests — the new frame decodes through `BlockCompressor.Decompress`, a frame written by the old stream writer still decodes through the same public API, and a new frame stays readable by a plain `ZstandardStream`. `Decompress` stays stream-based: `TryGetMaxDecompressedLength` answers **131.072** (the window bound) for a *stream-written* 4 KB block, so it cannot size the frames already on disk. The codec also runs before encryption, so no durability or encryption guarantee is involved.
+
+9. **(Round 3, conditional) A trained Zstd dictionary for block compression — one gate closed, one open.**
+   `ZstandardDictionary.Create`/`Train` is in-box `[21]`, and the dictionary-bearing frame is
+   **format-affecting** and breaks every reader without the dictionary, including older builds of this
+   product (Round 3 ruling #2). *Basis:* D3 `[21]`; the format mechanism `[22][23]`; repo state (dictionary
+   unused anywhere). *Feeds:* **not** a work item yet — gate **(a) is answered**: the frame carries a
+   `Dictionary_ID` sized by the header descriptor `[23]` and the decompression API requires the dictionary
+   as caller-supplied state `[22]`, so a format-version gate is the only correct shape. What is left is
+   gate **(b)**: a measured gain on our block sizes that beats the header cost and the migration. *Never*
+   treat it as a tuning knob.
+
+**Recommended order (round 3):** 7 → 8 → 1 → 2 → 3 → (4/6 opportunistic), with 5 as a standing
+constraint and 9 gated. Items 7 and 8 change no bytes on disk and no guarantee, so they can land *ahead*
+of the structural work; item 1 costs documentation and no code; item 2 is a narrow, reversible branch on
+an existing path; item 3 remains the only format-affecting change in the original list and must reproduce
+the trap-3 control first.
+
+**Status re-check against the plan (2026-10-09, round 3).** These recommendations were handed to
+`docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`, whose items **S1–S7 have all since closed** — so what
+moved is the *status* of several recommendations, never their reasoning:
+
+| Rec | Plan item | Execution outcome, cited to the plan (§4/§8) |
+|---:|---|---|
+| 1 | **S1** | ✅ `KEPT` — the harness prints `REGIME (SQLite reference):` and archives `SqlitePragmas` |
+| 2 | **S2** | ⛔ `REJECTED` *as specified* — HOT's precondition (a) is unreachable on a Columnar table (every column is auto-indexed), so the 20.000 `index-maint` calls are correct work; the gate is kept as a provably-equivalent no-op removal, and the target became owner decision §9 row 5 |
+| 3 | **S3** | ⛔ `REJECTED` — the −24 % trap-3 control reproduced at capacity 24, so arm C's target is an owner decision, not a build |
+| 4 | **S4** | ⛔ `BLOCKED` — VS C++ workload absent; the dispatch hypothesis is **untested, not refuted** |
+| 5 | §3 non-goals | ✅ in force — the already-won list is protected, not spent |
+| 6 | **S6** | ⛔ `REJECTED` on attribution — the JIT shape is already present and worth 0,3 % (`encode-layout`), while index work is ≥ 31,1 % of INSERT |
+| 7, 8 | — | **closed (2026-10-09, session 77)** — round 3's additions, both measured before any `src/` edit: **8 landed** (`Services/BlockCompressor.cs`, allocation 2.480 → 0 B per 4 KB block, frame validity pinned in both directions) and **7 rejected on measurement** (Windows issues the same 2 OS writes for either form, so the lever it was named for does not exist on the measured platform). The Unix half of 7 is the one open item, deferred to a Linux measurement |
+| 9 | — | **gated** — the frame-ID mechanism is **answered** (`[22][23]`); it now waits only on a measured gain |
+
+**Round 3 therefore changes no verdict, only the order and the open list.** Not one S1–S7 outcome is
+refuted; the two cheapest new levers are open precisely because the plan's completed items addressed
+layout, index work and build configuration — not call-site shape.
 
 ---
 
@@ -378,6 +565,10 @@ format-affecting change and must reproduce the trap-3 control first.
 | Any GC-specific improvement in .NET 11 (the fetched slices did not cover GC) | The GC section of the .NET 11 performance post |
 | Real per-ISA availability of AVX10.2 on `net11.0` — the 11 overview does not repeat the 10 overview's claim | The .NET 11 runtime-intrinsics docs |
 | What a *tuned* SQLite reference number looks like on **this** machine, with the pragma set named | One harness run with the SQLite arm's pragmas pinned and printed |
+| **How many syscalls does a vectored `RandomAccess.Write` actually issue**, and does one list-call beat two single-buffer calls on the patch path? (round 3 — the question the write-path recommendation hangs on) | **ANSWERED (2026-10-09, session 77).** On Windows: **2 OS write operations either way** (exact, `GetProcessIoCounters` deltas over 500 iterations per form) and 0,982× on time — so no gain here, and the item is `REJECTED`. On Unix the runtime routes the list form to `PWriteV` (one syscall), which is **source-evidenced but unmeasured on this box** (no .NET SDK in WSL, no invocable Linux leg): the open half is now *the Linux measurement*, not the API question |
+| **Does `ZstandardEncoder.Reset()` preserve options and dictionary across frames**, and is one instance safe to reuse concurrently? | **ANSWERED, half of it (2026-10-09, session 77): options are preserved** — a `Reset()`-ed instance produced a frame **byte-identical to a fresh instance's** and both decoded to the input, which is what the landed code relies on (one thread-static encoder per level). The *concurrent-reuse* half is **not** answered and is not relied on: the implementation keeps one instance per thread (`[ThreadStatic]`), so no instance is shared across threads. The dictionary half needs a `ZstandardDictionary` and is inert while rec 9 stays gated |
+| **What exactly does a .NET decoder raise on a missing or mismatched dictionary?** — the *mechanism* is answered (`[22][23]`: the frame's `Dictionary_ID` is sized by the header descriptor, and .NET takes the dictionary as caller-supplied decompression state), so what remains is the failure a reader must produce | A two-build experiment on RC.1 — one build writes with a dictionary, another reads without it; the API pages carry no Remarks section `[19][22]` |
+| **The specification's own frame-header table, read directly** — the `Dictionary_ID` sizing is sourced to an implementation that deep-links the spec's `#dictionary_id` anchor (`[23]`), not to the normative table | One targeted read of `rfc-editor.org/rfc/rfc8878.txt` §3.1.1.1 or the reference repo's `doc/zstd_compression_format.md#frame-header`; both middle-truncate in this run's fetch tool |
 
 ---
 
@@ -401,6 +592,13 @@ format-affecting change and must reproduce the trap-3 control first.
 | [14] | Bounds-check elimination via switch-target assertions: 103 → 70 bytes, six `RNGCHKFAIL` jumps removed | [devblogs.microsoft.com · Performance Improvements in .NET 10](https://devblogs.microsoft.com/dotnet/performance-improvements-in-net-10/) | 2025-09-10 | 2026-09-24 | high |
 | [15] | InnoDB `DYNAMIC` default; off-page long columns; 767 vs 3072-byte index prefix; format change rebuilds the table | [dev.mysql.com · InnoDB Row Formats](https://dev.mysql.com/doc/refman/8.4/en/innodb-row-format.html) | MySQL 8.4 | 2026-09-24 | high |
 | [16] | .NET 10: JIT inlining / devirtualisation / stack allocation, AVX10.2, NativeAOT enhancements | [learn.microsoft.com · What's new in .NET 10](https://learn.microsoft.com/en-us/dotnet/core/whats-new/dotnet-10/overview) | 2025-11-07 | 2026-09-24 | high |
+| [17] | `RandomAccess` takes a **list** of buffers (`IReadOnlyList<Memory<byte>>` / `IReadOnlyList<ReadOnlyMemory<byte>>`) in `Read`/`Write` and their async forms; "thread-safe", offset-based; regular disk files only, no pipes; **no syscall count documented** | [learn.microsoft.com · System.RandomAccess](https://learn.microsoft.com/en-us/dotnet/api/system.randomaccess) | net-11.0 | 2026-10-09 | high (signatures/remarks) · syscall behaviour **unverified** |
+| [18] | `ZstandardStream`: nine constructors incl. options / encoder / decoder / dictionary forms; seekable (`CanSeek`, `Seek`, `SetLength`, `SetSourceLength`) | [learn.microsoft.com · ZstandardStream](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.zstandardstream) | rc.1 | 2026-10-09 | high |
+| [19] | `ZstandardCompressionOptions`: sealed, 12 properties incl. `Quality`, `AppendChecksum`, `TargetBlockSize`, `Dictionary`, `EnableLongDistanceMatching`; **no Remarks section**, so the frame-header/encoder split is undocumented | [learn.microsoft.com · ZstandardCompressionOptions](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.zstandardcompressionoptions) | rc.1 | 2026-10-09 | high (property list) · header split **unverified** |
+| [20] | `ZstandardEncoder`: sealed `IDisposable`; span-in/span-out `Compress`/`TryCompress`, `Flush`, `GetMaxCompressedLength`, **`Reset`**, `SetPrefix`, `SetSourceLength`; no remarks on reuse semantics | [learn.microsoft.com · ZstandardEncoder](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.zstandardencoder) | rc.1 | 2026-10-09 | high (surface) · reset semantics **unverified** |
+| [21] | `ZstandardDictionary`: sealed `IDisposable`; `Data`; in-box `Create(…)` ×2 and `Train(…)` — no external zstd tool needed; browser/WASI unsupported | [learn.microsoft.com · ZstandardDictionary](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.zstandarddictionary) | rc.1 | 2026-10-09 | high |
+| [22] | `ZstandardDecompressionOptions`: sealed, one parameterless constructor, exactly **two** properties — `Dictionary` and `MaxWindowLog2`; **no Remarks section**, so the decompression side documents no failure mode. The dictionary is state the *caller supplies*, never read out of the frame | [learn.microsoft.com · ZstandardDecompressionOptions](https://learn.microsoft.com/en-us/dotnet/api/system.io.compression.zstandarddecompressionoptions) | rc.1 | 2026-10-09 | high (surface) · mismatch failure mode **unverified** |
+| [23] | The zstd **frame header carries a `Dictionary_ID`** whose width is the low two bits of `Frame_Header_Descriptor` (`fhd & 3`: 1 byte, 2 bytes, 4 bytes when the value is 3, absent when 0); bit 5 is `Single_Segment_flag`, bit 3 is reserved, and a set reserved bit is an error | [github.com · klauspost/compress `zstd/framedec.go`](https://github.com/klauspost/compress/blob/master/zstd/framedec.go) | master (2026-10) | 2026-10-09 | high (independent implementation; the file deep-links the specification's `#dictionary_id` and `#window_descriptor` anchors). **Not** the normative table — RFC 8878's own pages middle-truncate in this run's fetch tool |
 
 ---
 
@@ -411,16 +609,28 @@ Freshness bars are the technical pack's (versions ≤ 1 month, ecosystem ≤ 6, 
 
 | Claim class | Claims | Window | Earliest re-check |
 |---|---|---|---|
-| version/compatibility | `[9]` net11 GA status & min hardware, `[5]` Bcl.Cryptography build | 1 month | **2026-10-24** |
+| version/compatibility | `[9]` net11 GA status & min hardware, `[5]` Bcl.Cryptography build, `[17]`–`[22]` net11 API surfaces (each with the prerelease banner) | 1 month | **2026-10-24** |
 | runtime feature/perf | `[6]` runtime async numbers, `[14]` / `[16]` JIT claims | 3 months | 2026-12-24 |
-| layout/mechanism | `[1]`–`[4]`, `[10]`, `[13]`, `[15]` | 24 months | 2028-09-24 |
+| layout/mechanism | `[1]`–`[4]`, `[10]`, `[13]`, `[15]`, `[23]` | 24 months | 2028-09-24 |
 | comparison control | `[7]` pragma surface, `[12]` obsolete benchmark | 6 months | 2027-03-24 |
 | reliability | `[8]` WAL-reset bug range | 12 months | 2027-09-24 |
+| repo state (round 3) | the code facts in §3.4 — `Services/BlockCompressor.cs:58`, `Services/Storage.Append.cs:459-471`, `Services/AesGcmEncryption.cs` (~214) | on change | re-check on any edit to those files, not on a calendar |
 
 **What ages first:** the .NET 11 claims. `.NET 11` was in RC at access time and GA is expected in
 November 2026 — `[9]` says it "was last updated for release candidate 1", and `[6]`'s numbers are from
 that RC. Both must be re-read after GA before any net11-based claim is published. `[5]`'s build string
 (`rc.1.26425.128`) should also be re-checked against the shipped `Microsoft.Bcl.Cryptography` version.
+
+**Round 3 adds six API pages and one implementation source to the same queue.** `[17]`–`[22]` each carry the
+prerelease banner ("may be substantially modified before it's released"), so a post-GA re-read is required
+*before* recommendations 7–9 are implemented — those items are written against these signatures. That
+re-read mattered for two of them and no longer for the rest: **7 and 8 were implemented against the
+measured behaviour rather than the pages** (2026-10-09, session 77 — `[17]`'s vectored-write behaviour
+counted on this box and read in the runtime source, `[20]`'s `Reset()` semantics measured on a two-frame
+reuse), while `[22]`'s third one still stands for item 9 (the failure
+a decoder raises on a mismatched dictionary). `[23]` carries no banner (an independent implementation of a format frozen since zstd
+1.0), yet it is re-read on the same date anyway: the fact it is cited for is *this* runtime's decoder
+behaviour, not the format text.
 
 **Second:** the obsolete `[12]`. It should be replaced by a measured pragma sweep on our own hardware
 rather than re-read.

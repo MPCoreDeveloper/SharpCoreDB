@@ -4,8 +4,8 @@
 **Mission it extends:** `INSERT_UPDATE_PERFORMANCE_PLAN.md` (single source of truth for the INSERT/UPDATE
 campaign, now largely closed) and `AUTONOMOUS_AGENT_BRIEF.md` (session protocol).
 **Evidence base:** `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/research.md`
-— a bmad-deep-recon *technical* run, 17 external sources, 12 claims in the ledger (10 verified). Cited as
-`[n]` against that report's source appendix. **External sources support the *mechanisms* only; every
+— a bmad-deep-recon *technical* run, 23 external sources, 26 claims in the ledger (21 verified), 3 rounds
+and 11 digests. Cited as `[n]` against that report's source appendix. **External sources support the *mechanisms* only; every
 SharpCoreDB number in this plan comes from this repository's own harness and is cited to the file it
 lives in.**
 **Reporting channel:** `WORKLOG.md` only (append-only).
@@ -1024,12 +1024,28 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 ## 10. Provenance
 
 - **Research artifact:** `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/`
-  — `research.md` (report, citation-checked clean), `digests/` (8 digests), `.memlog.md` (31 entries:
-  16 sources, 12 claims — 10 verified, 2 unverified), `imports/` (empty: a native run, nothing imported).
-- **Method:** bmad-deep-recon, `technical` type, 2 rounds, inline (no subagent harness), `validation=normal`
-  (load-bearing claims spot-checked; 10 of 12 verified by a second source or by the publisher's own
+  — `research.md` (report, citation-checked clean: 23 sources, all referenced, none dangling), `digests/`
+  (11 digests), `.memlog.md` (54 entries:
+  23 sources, 26 claims — 21 verified, 5 unverified), `imports/` (empty: a native run, nothing imported).
+- **Method:** bmad-deep-recon, `technical` type, 3 rounds, inline (no subagent harness), `validation=normal`
+  (load-bearing claims spot-checked; 21 of 26 verified by a second source or by the publisher's own
   primary enumeration). Red-team pass not run (`red_team=off`); contrary evidence is quoted from the
   purchased sources themselves.
+- **Round 3 (2026-10-09) — cross-checked against §4/§8, and it reopens nothing.** The round-3 material
+  (`research.md` §3.3/§3.4 plus the lever ledger) contributes 7 sources, 14 claims and 3 digests. Its
+  verdict on this plan: **S1–S7 all stand.** None of the seven items is refuted or superseded — the new
+  levers are *call-site shapes* (a list-form `RandomAccess.Write` at `Services/Storage.Append.cs:469-470`, a
+  reusable span-based `ZstandardEncoder` in `Services/BlockCompressor.cs`), and the plan's items were about
+  layout, index work and build configuration. Two alignments are worth recording: S6's rejection is
+  consistent with the new evidence (S6 was refuted because `encode-layout` is 0,3 % — the round-3 codec
+  lever targets block-codec allocation and copies, not `encode-layout`), and the round-3 write-path lever
+  is the first candidate this research names for the **UPDATE deficit that §8 still carries** (the plan's
+  own most useful open output). Its ordering rule is unchanged and reinforced: format-neutral levers first,
+  the format-affecting one (a Zstd dictionary) **gated** on a measured gain — the frame-ID half of that gate
+  is now **answered** by the same-day follow-up (`[22]` the decompression options, `[23]` an independent
+  implementation's frame-header parse: the frame carries a `Dictionary_ID` sized by its header descriptor,
+  and .NET requires the dictionary to be handed back to the decoder) — exactly the "format-affecting last"
+  principle of §4.
 - **External sources support mechanisms only.** Every SharpCoreDB figure in this plan is cited to this
   repository (`INSERT_UPDATE_PERFORMANCE_PLAN.md` §0.1/§8e, `WORKLOG.md`, `AGENTS.md`, or a source file
   and line). The research firewall was honoured: project material shaped the questions, never the
