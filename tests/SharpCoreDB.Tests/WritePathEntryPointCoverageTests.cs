@@ -19,6 +19,7 @@ namespace SharpCoreDB.Tests;
 /// caller's per-statement cost was invisible. Each entry point is measured on its own here, so a failure
 /// names the one that fell out of coverage.
 /// </summary>
+[Collection("WritePathProfilerTests")] // process-wide counters — see WritePathProfilerTestCollection
 public sealed class WritePathEntryPointCoverageTests : IDisposable
 {
     private readonly DatabaseFactory _factory;
@@ -141,5 +142,38 @@ public sealed class WritePathEntryPointCoverageTests : IDisposable
         Assert.True(
             Calls("commit") >= 1,
             $"expected the async commit to be attributed, got {Calls("commit")}");
+    }
+
+    /// <summary>
+    /// The dictionary-free SQL batch-INSERT fast path — <c>Database.InsertBatch(table, rows, columns)</c> →
+    /// <c>Table.InsertBatch(object[][], columnOrder)</c>, the shape the SQL batch parser's INSERT and the
+    /// harness's batch arms use — must be attributed on *every* stage its dictionary sibling records.
+    /// Session 80 found it recorded none of them: the 2026-09-15 sweep stamped the dictionary overload and
+    /// its helper, and the array overload (added later, for <c>PreparedInsertStatement</c>) was never
+    /// stamped, which is the same duplicated-block gap the two entry points above close. The evidence is
+    /// <c>artifacts/s80-probe-array-insert.txt</c>: the array shape's INSERT profile attributed 344,7 ms of a
+    /// 560 ms pass (62 %) with no <c>validate</c>, <c>validate-only</c> or <c>encode</c> row, so
+    /// <c>index-maint</c> looked like 43,6 % of the whole path when it was 43,6 % of the attributed part.
+    /// </summary>
+    [Fact]
+    public async Task DictionaryFreeBatchInsertPath_IsAttributedOnEveryStage()
+    {
+        await using IDatabase db = _factory.Create(
+            _dir, "pw", isReadOnly: false, config: new DatabaseConfig { NoEncryptMode = true });
+
+        db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+
+        List<object[]> rows = [[1, "a", 1.5], [2, "b", 2.5], [3, "c", 3.5]];
+        List<string> columns = ["id", "name", "score"];
+
+        WritePathProfiler.Reset();
+        WritePathProfiler.Enable();
+        ((Database)db).InsertBatch("docs", rows, columns);
+        WritePathProfiler.Disable();
+
+        Assert.True(Calls("validate") >= 1, "the dictionary-free batch INSERT did not reach the validate stage");
+        Assert.True(Calls("validate-only") >= 1, "validation and serialization are not separated on this path");
+        Assert.True(Calls("encode") >= 1, "the dictionary-free batch INSERT did not reach the encode stage");
+        Assert.True(Calls("row-locate") >= 1, "the upfront primary-key check on this path is not attributed");
     }
 }

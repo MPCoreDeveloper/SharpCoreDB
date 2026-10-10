@@ -448,8 +448,19 @@ public partial class Table
         // transaction has to start before it. See RunInStorageTransaction.
         return RunInStorageTransaction(() =>
         {
+            // §5.5 instrumentation (2026-10-10, session 80): this overload — the one the SQL batch-INSERT
+            // parser uses — carried NO stage stamps at all, so the array/`SHARPCOREDB_BATCH_DML` shape's
+            // profile attributed 344,7 ms of a 560 ms pass (62 %) and showed `index-maint` 43,6 % with no
+            // `validate`/`encode` row beside it (`artifacts/s80-probe-array-insert.txt`). The dictionary
+            // overload was stamped in 2026-09-15 for exactly this reason; these mirror it, and the helper
+            // below splits validation from serialization the same way.
+            long validateStart = Diagnostics.WritePathProfiler.Stamp();
             var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
+
+            long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
             ValidateBatchPrimaryKeysUpfront(validatedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
 
             this.rwLock.EnterWriteLock();
             try
@@ -485,17 +496,27 @@ public partial class Table
             columnIndexMap[c] = tableIdx;
         }
 
+        // §5.5 instrumentation (2026-10-10, session 80): splits validation from serialization on this shape too.
+        // The caller's `validate` stamp covers both halves, so without these two the array profile could not say
+        // which half of the SQL batch-INSERT path carries the cost — the same gap the dictionary overload's
+        // helper had closed on 2026-09-15.
+        long validateOnlyStart = Diagnostics.WritePathProfiler.Stamp();
+
         var normalizedRows = new object[rows.Length][];
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
             normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, rowIdx);
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.ValidateOnly, validateOnlyStart);
+
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var serializedRows = new List<byte[]>(rows.Length);
         foreach (var row in normalizedRows)
         {
             serializedRows.Add(SerializeRowExact(row));
         }
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
         return (serializedRows, normalizedRows);
     }
