@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`2.1.0-RC.3` — net11.0 / C# 15 preview on `master`; the v2.0 net10.0 stable line is parked on `release/v2.0`)
+**Status:** Active documentation set (`2.1.0` — net11.0 / C# 15 preview on `master`; the v2.0 net10.0 stable line is parked on `release/v2.0`)
 
 ## 0. Manual (start here)
 

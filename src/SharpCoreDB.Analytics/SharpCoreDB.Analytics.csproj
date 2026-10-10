@@ -4,7 +4,7 @@
     <TargetFramework>net11.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2.1.0-RC.3</Version>
+    <Version>2.1.0</Version>
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.Analytics</PackageId>

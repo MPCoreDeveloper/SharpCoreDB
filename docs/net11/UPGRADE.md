@@ -1,6 +1,6 @@
 # SharpCoreDB v2.1 RC — .NET 11 / C# 15
 
-> Branch: `master` · Package version: `2.1.0-RC.3`
+> Branch: `master` · Package version: `2.1.0`
 
 ## What this is
 

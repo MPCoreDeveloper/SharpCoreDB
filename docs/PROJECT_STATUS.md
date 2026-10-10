@@ -1,17 +1,18 @@
 # SharpCoreDB Project Status
 
-**Version:** 2.1.0-RC.3 (pre-release, `release/v2.1.0.0-RC.3`, net11.0 / C# 15 preview) · 2.0.0.2 (stable, `master`)
-**Status:** ✅ Release candidate for the v2.1 line · ✅ v2.0 stable shipped · ✅ Performance-first line
-**Last Updated:** September 17, 2026
+**Version:** 2.1.0 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
+**Status:** ✅ v2.1.0 promoted to the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
+**Last Updated:** October 10, 2026
 
 ## Current Status
 
-The **v2.1 release candidate line (`2.1.0-RC.3`)** is validated and packaged: **2,897 tests across 16
+The **v2.1 line (`2.1.0`)** is validated and packaged, and was promoted to `master` on **2026-10-10**
+(see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md)): **2,897 tests across 16
 suites — 0 failed, 0 errors, 16 skipped** (core 1,916), the write-path regression gate **passed**, and
 the full benchmark arm set (comparative, fair-PK, pure-default, PageBased, multi-row INSERT) measured
 in the product-default regime. Release notes: [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
 
-The **v2.0 stable packages (`2.0.0.2`)** remain the net10.0 / C# 14 line on `master`, including:
+The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on `release/v2.0`, including:
 
 - `SharpCoreDB` (embedded engine — v2.0 performance release)
 - `SharpCoreDB.Server` / `SharpCoreDB.Client`

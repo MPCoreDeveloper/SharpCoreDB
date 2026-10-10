@@ -27,8 +27,8 @@ Use it when you need:
 - A production-focused stack validated by a **1,916-test core suite** (0 failed; **2,897 tests across
   16 suites** in total) and **backward compatibility**
 
-> **🚧 Current pre-release: v2.1.0-RC.3 (2026-09-17) — the .NET 11 / C# 15 preview line.** **Published on
-> NuGet.org** (all 27 packages, pre-release) from the `release/v2.1.0.0-RC.3` branch, `net11.0` only. Highlights: the fixed-width inline capacity
+> **Current release: v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
+> NuGet.org** (all 27 packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
 > ships at 16 by default on both storage paths (+12–19 % on the batched multi-row INSERT shape, per
 > the tracked measurement), the overflow arena appends a row's payloads in one call instead of one
 > file open per value, and in-place UPDATE/DELETE with deferred index maintenance put the
@@ -37,9 +37,11 @@ Use it when you need:
 > gate (PASSED). Honest caveats: INSERT is still ~1.4× behind SQLite on the fair-PK shape, the
 > PageBased engine's UPDATE is 4.9× behind, and the pure default (encrypted) config is 1.3–1.6×
 > behind the `NoEncryptMode` raw-speed posture. Full notes:
-> [`docs/2.1.0-RC.3_WHAT_CHANGED.md`](docs/2.1.0-RC.3_WHAT_CHANGED.md).
+> [`docs/2.1.0-RC.3_WHAT_CHANGED.md`](docs/2.1.0-RC.3_WHAT_CHANGED.md) — the RC.3 validation record;
+> the promotion itself re-verified the core suite at **1995 / 0 failed** and is documented in
+> [`docs/net11/PROMOTION_TO_MAIN.md`](docs/net11/PROMOTION_TO_MAIN.md).
 
-> **Current stable release: v2.0.0.2 (2026-09-04)** — the v2.x engine line: fixed-width record layout is the
+> **Previous line — net10.0 / C# 14 stable, parked on `release/v2.0`: v2.0.0.3 (2026-09-12)** — the v2.x engine line: fixed-width record layout is the
 > default for new PK tables, UPDATE/DELETE run in-place with commit-time tombstones, and a reopen
 > data-integrity hardening batch closed silent-data-loss edge cases (empty-value overflow reload,
 > single-file fixed-width arena markers, legacy 1.x delete-after-update purge).
@@ -129,7 +131,7 @@ Headline changes:
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0.2
+dotnet add package SharpCoreDB --version 2.0.0.3
 ```
 
 ```csharp
@@ -166,8 +168,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.0.0.2
-dotnet add package SharpCoreDB.Client --version 2.0.0.2
+dotnet add package SharpCoreDB.Server.Core --version 2.0.0.3
+dotnet add package SharpCoreDB.Client --version 2.0.0.3
 ```
 
 > The server host is a standalone executable (`src/SharpCoreDB.Server`), distributed as the
@@ -190,38 +192,38 @@ dotnet add package SharpCoreDB.Client --version 2.0.0.2
 
 ## Available NuGet packages
 
-### v2.1.0-RC.3 — pre-release (`release/v2.1.0.0-RC.3`, net11.0 / C# 15 preview)
+### v2.1.0 — current release (`master`, net11.0 / C# 15 preview)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.1.0-RC.3
+dotnet add package SharpCoreDB --version 2.1.0
 
 # Server/client
-dotnet add package SharpCoreDB.Server.Core --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Client --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Server.Core --version 2.1.0
+dotnet add package SharpCoreDB.Client --version 2.1.0
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Search --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.HybridSearch --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Graph --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Distributed --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Provider.Sync --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Extensions --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Analytics --version 2.1.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.0
+dotnet add package SharpCoreDB.Search --version 2.1.0
+dotnet add package SharpCoreDB.HybridSearch --version 2.1.0
+dotnet add package SharpCoreDB.Graph --version 2.1.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0
+dotnet add package SharpCoreDB.Distributed --version 2.1.0
+dotnet add package SharpCoreDB.Provider.Sync --version 2.1.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.0
+dotnet add package SharpCoreDB.Extensions --version 2.1.0
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Projections --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.CQRS --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.0
+dotnet add package SharpCoreDB.Projections --version 2.1.0
+dotnet add package SharpCoreDB.CQRS --version 2.1.0
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Functional --version 2.1.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0
 ```
 
 > Pre-release versions are **not** selected by default — request the version explicitly (as above) or
@@ -236,32 +238,32 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0-RC.3
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.0.0.2
+dotnet add package SharpCoreDB --version 2.0.0.3
 
 # Server/client
-dotnet add package SharpCoreDB.Server.Core --version 2.0.0.2
-dotnet add package SharpCoreDB.Client --version 2.0.0.2
+dotnet add package SharpCoreDB.Server.Core --version 2.0.0.3
+dotnet add package SharpCoreDB.Client --version 2.0.0.3
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.0.0.2
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.2
-dotnet add package SharpCoreDB.Graph --version 2.0.0.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.2
-dotnet add package SharpCoreDB.Distributed --version 2.0.0.2
-dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.2
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.2
-dotnet add package SharpCoreDB.Extensions --version 2.0.0.2
+dotnet add package SharpCoreDB.Analytics --version 2.0.0.3
+dotnet add package SharpCoreDB.VectorSearch --version 2.0.0.3
+dotnet add package SharpCoreDB.Graph --version 2.0.0.3
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.0.0.3
+dotnet add package SharpCoreDB.Distributed --version 2.0.0.3
+dotnet add package SharpCoreDB.Provider.Sync --version 2.0.0.3
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.0.0.3
+dotnet add package SharpCoreDB.Extensions --version 2.0.0.3
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.0.0.2
-dotnet add package SharpCoreDB.Projections --version 2.0.0.2
-dotnet add package SharpCoreDB.CQRS --version 2.0.0.2
+dotnet add package SharpCoreDB.EventSourcing --version 2.0.0.3
+dotnet add package SharpCoreDB.Projections --version 2.0.0.3
+dotnet add package SharpCoreDB.CQRS --version 2.0.0.3
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.2
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.2
+dotnet add package SharpCoreDB.Functional --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.0.0.3
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.3
 ```
 
 ---
