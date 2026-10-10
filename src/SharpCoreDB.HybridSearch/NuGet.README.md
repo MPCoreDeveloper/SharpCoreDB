@@ -12,7 +12,7 @@ distinguishable.
 
 ## Target
 
-`net11.0` only, with C# 15 preview — the v2.1 RC line.
+`net11.0` only, with C# 15 preview — the 2.1.0 line.
 
 ## License
 

@@ -1,15 +1,18 @@
-# SharpCoreDB Feature Matrix (v2.0.0)
+# SharpCoreDB Feature Matrix (2.1.0)
 
-> Consolidated feature coverage by package, current for **v2.0.0**.
-> Status: **2,412 tests / 0 failures** across all 15 test projects · Native AOT smoke verified (exit 0).
+> Consolidated feature coverage by package, current for **2.1.0** (`master`, net11.0 / C# 15 preview);
+> the v2.0.x record is the parked net10.0 / C# 14 line on `release/v2.0`.
+> Status at 2.1.0: **2,383 tests / 0 failures** across the four CI suites (core 1,995 · VectorSearch 248 ·
+> EF Core 116 · linq2db 24) · Native AOT smoke verified (exit 0).
 >
-> **v2.1 release candidate (`2.1.0-RC.3`, `release/v2.1.0.0-RC.3`, net11.0 / C# 15 preview):**
-> **2,897 tests across 16 suites — 0 failed, 0 errors, 16 skipped**, the write-path regression gate
-> passed, and the package set is packed at `2.1.0-RC.3`. Highlights: the fixed-width inline capacity
+> **2.1.0 (`master`, net11.0 / C# 15 preview):** **2,897 tests across 16 suites — 0 failed, 0 errors,
+> 16 skipped** in the RC.3 validation record (the promotion to 2.1.0 changed version metadata and
+> documentation only), the write-path regression gate passed, and the package set is packed at `2.1.0`.
+> Highlights: the fixed-width inline capacity
 > ships at 16 by default on both storage paths, `SharpCoreDB.Search` (BM25) and
 > `SharpCoreDB.HybridSearch` (rank fusion) are new packages on this line, and the fixed-width fair-PK
 > layout is ahead of SQLite on UPDATE/DELETE. Full notes:
-> [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
+> [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md) (the RC.3 validation record).
 >
 > ⚠️ **Single-file mode SQL limitations**: `.scdb` single-file mode does **not** support JOIN,
 > GROUP BY, subqueries, aggregates, DELETE without WHERE, and other advanced SQL. Full matrix:
@@ -101,7 +104,7 @@
 - **2,412 tests / 0 failures** across all 15 test projects (+ JS/Python suites)
 - **Native AOT smoke test** publishes and runs successfully (CREATE/INSERT/query/StructRow/reopen, exit 0)
 - v2.0 is **drop-in backward compatible** with v1.9.x — no public API breaking changes
-- .NET 10 / C# 14 toolchain (locked for v2.0.x); **.NET 11 / C# 15 is in release candidate** on `release/v2.1.0.0-RC.3` (`2.1.0-RC.3`)
+- .NET 10 / C# 14 toolchain (the parked v2.0.x line on `release/v2.0`); **.NET 11 / C# 15 is the 2.1.0 line on `master`**
 
 ## Related docs
 

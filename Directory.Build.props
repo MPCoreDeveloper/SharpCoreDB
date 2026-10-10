@@ -29,8 +29,8 @@
     <NoWarn>$(NoWarn);CS8629;CA1416;CS0649</NoWarn>
   </PropertyGroup>
 
-  <!-- v2.1 RC branch uses net11.0 + C# 15 preview across the whole suite.
-       (The net10.0 / C# 14 line is the v2.0 stable packages on master.) -->
+  <!-- The 2.1.0 line (master) uses net11.0 + C# 15 preview across the whole suite.
+       (The net10.0 / C# 14 line is the v2.0 stable packages, now parked on release/v2.0.) -->
   <PropertyGroup>
     <LangVersion>preview</LangVersion>
   </PropertyGroup>

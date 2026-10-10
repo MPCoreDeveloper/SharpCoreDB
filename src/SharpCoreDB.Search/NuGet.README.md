@@ -15,7 +15,7 @@ implemented as pure managed C# 15 / .NET 11:
 
 ## Target
 
-`net11.0` only, with C# 15 preview — the v2.1 RC line. The net10.0 / C# 14 line lives on `master`.
+`net11.0` only, with C# 15 preview — the 2.1.0 line. The net10.0 / C# 14 line is the v2.0 stable line, parked on `release/v2.0`.
 
 ## License
 

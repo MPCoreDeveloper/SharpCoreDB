@@ -1,4 +1,4 @@
-# DISKANN SQL DDL — Munarium-Inspired High-Recall Vector Indexing (v2.1 RC)
+# DISKANN SQL DDL — Munarium-Inspired High-Recall Vector Indexing (2.1.0)
 
 **Status**: ✅ **Implemented** (Phase 6 + tests complete)
 
@@ -95,7 +95,7 @@ See also:
 - `src/SharpCoreDB.VectorSearch/Index/DiskAnnIndex.cs`
 - `src/SharpCoreDB.VectorSearch/Artifacts/BuildResult.cs`
 
-**Ready for production RAG and large-scale semantic search in v2.1 RC.**
+**Ready for production RAG and large-scale semantic search in 2.1.0.**
 ```
 
 **De SQL DDL is nu live en gedocumenteerd.**

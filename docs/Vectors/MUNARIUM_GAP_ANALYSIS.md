@@ -11,7 +11,7 @@
 
 ## 0. Headline
 
-The v2.1 RC "munarium-inspired" work is real but **narrow**: it reproduced the *names and the
+The 2.1.0 "munarium-inspired" work is real but **narrow**: it reproduced the *names and the
 idea* of three concepts (content-verified artifacts, DiskANN index type, hybrid-fusion weight),
 not their mechanics. In particular:
 

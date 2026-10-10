@@ -84,11 +84,11 @@ them in dependency layers (core → dependents → mid-level → top-level → r
 5. Click **"Run workflow"**
 6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
    dependency layers (core → dependents → mid-level → top-level).
-7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — `2.1.0-RC.3` should appear (`2.1.0-rc.3`
-   normalized). Other packages in the family should show the same version.
+7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — `2.1.0` should appear, and every other
+   package in the family should show the same version.
 
-> The v2.1 RC line is **pre-release**: NuGet will not select `2.1.0-RC.3` unless a consumer asks for it
-> explicitly or ticks *Include prerelease*.
+> `2.1.0` is a **normal release**: NuGet resolves it without *Include prerelease*. The `2.1.0-RC.3`
+> packages published on 2026-09-17 stay on NuGet.org as pre-release versions.
 
 ### Scenario B3: Publishing only the core package (quick path)
 
@@ -133,14 +133,14 @@ from the `<Version>` tags in `.csproj` files, but the **single source of truth f
 package family is `<SharpCoreDBVersion>` in `Directory.Packages.props`** (used by all central package
 references).
 
-**Current line state (2026-09-17):**
+**Current line state (2026-10-10):**
 
 | Line | Branch | Version | Latest published |
 |---|---|---|---|
-| v2.1 RC (net11.0 / C# 15 preview) | `release/v2.1.0.0-RC.3` | `2.1.0-RC.3` | `2.1.0-rc.1` (RC.3 not yet pushed) |
-| v2.0 stable (net10.0 / C# 14) | `master` | `2.0.0.3` | `2.0.0.3` |
+| 2.1.0 (net11.0 / C# 15 preview) | `master` | `2.1.0` | `2.1.0-RC.3` (2026-09-17) |
+| v2.0 stable (net10.0 / C# 14, parked) | `release/v2.0` | `2.0.0.3` | `2.0.0.3` |
 
-Every one of the **46 `.csproj` files on the v2.1 RC branch** carries the same `<Version>` — the
+Every one of the **46 `.csproj` files on the 2.1.0 line** carries the same `<Version>` — the
 release checklist is `git grep "<Version>" -- '*.csproj'` and it must return exactly one distinct value.
 
 Each packable project file carries the same version:

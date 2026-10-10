@@ -12,8 +12,8 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Identity</Product>
-    <Description>Lightweight native identity services for SharpCoreDB encrypted single-file databases on .NET 10.</Description>
-    <PackageTags>sharpcoredb;identity;authentication;authorization;pbkdf2;net10;csharp14</PackageTags>
+    <Description>Lightweight native identity services for SharpCoreDB encrypted single-file databases on .NET 11.</Description>
+    <PackageTags>sharpcoredb;identity;authentication;authorization;pbkdf2;net11;csharp15</PackageTags>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
     <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>

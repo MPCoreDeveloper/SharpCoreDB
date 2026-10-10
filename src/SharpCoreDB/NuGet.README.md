@@ -1,10 +1,10 @@
-# SharpCoreDB v2.1.0-RC.3 — Performance-First Database Engine
+# SharpCoreDB 2.1.0 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
 
-> **This is the v2.1 release candidate line** — `2.1.0-RC.3` targets **net11.0 only** with
-> **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages remain the v2.0 stable
-> line on `master`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
+> **This is the 2.1.0 release line** — it targets **net11.0 only** with
+> **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages are the v2.0 stable
+> line, parked on `release/v2.0`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
 SharpCoreDB is a modern, encrypted, file-based database engine with SQL support, built for production applications. Now available as both embedded database and network server.
 
@@ -14,7 +14,7 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
 
-## What's New in 2.1.0-RC.3
+## What's New in 2.1.0
 
 - **The fixed-width inline capacity now ships at 16 by default on both storage paths.** A
   fixed-width record used to keep *every* variable-length value in the overflow arena; short values
@@ -34,10 +34,12 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 - **`INSERT` remains the open column.** The batched multi-row shape converts to a measured win,
   the single-row statement path does not (the residual is the SQL/engine path plus per-value
   write-through durability, not the I/O). Recorded rather than glossed.
-- **Validation for this release:** **2,897 tests across 16 suites, 0 failed, 0 errors, 16 skipped**
-  (core 1,916), plus the comparative / fair-PK / pure-default / PageBased / multi-row harness
-  arms and the write-path regression gate (PASSED).
-- Full report: `docs/2.1.0-RC.3_WHAT_CHANGED.md` and `docs/CHANGELOG.md`.
+- **Validation:** the RC.3 record carried into 2.1.0 unchanged — **2,897 tests across 16 suites, 0 failed,
+  0 errors, 16 skipped** (core 1,916), plus the comparative / fair-PK / pure-default / PageBased /
+  multi-row harness arms and the write-path regression gate (PASSED). Re-verified on the 2.1.0 tree:
+  build 0 errors and **2,383 tests / 0 failed** across the four CI suites (core 1,995 · VectorSearch 248 ·
+  EF Core 116 · linq2db 24).
+- Full report: `docs/CHANGELOG.md`; RC.3 validation record: `docs/2.1.0-RC.3_WHAT_CHANGED.md`.
 
 ## What's New in 2.0.0.2
 
@@ -228,16 +230,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.0-RC.3
+dotnet add package SharpCoreDB --version 2.1.0
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Functional --version 2.1.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -265,10 +267,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.1.0-RC.3 (September 2026)  
+**Latest Version:** 2.1.0 (October 2026)  
 **Target:** .NET 11 / C# 15 (preview)  
 **Tests:** 2,897 across 16 suites (0 failed, 16 skipped)  
-**Status:** ✅ Release candidate — v2.1 (net11.0-only) performance line  
+**Status:** ✅ Released — 2.1.0 (net11.0-only performance line)  
 **Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 

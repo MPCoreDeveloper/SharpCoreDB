@@ -1,4 +1,4 @@
-# Munarium-Datastore Inspiration — Implementation Record (SharpCoreDB v2.1 RC)
+# Munarium-Datastore Inspiration — Implementation Record (SharpCoreDB 2.1.0)
 
 **Status:** ✅ Shipped in **2.1.0-RC.3** — net11.0 / C# 15 preview only  
 **Branch:** `release/v2.1.0.0-RC.3`  

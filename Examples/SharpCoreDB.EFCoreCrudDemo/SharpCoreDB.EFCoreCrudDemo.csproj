@@ -12,7 +12,7 @@
     <ProjectReference Include="..\..\src\SharpCoreDB.EntityFrameworkCore\SharpCoreDB.EntityFrameworkCore.csproj" />
   </ItemGroup>
 
-  <!-- System.Text.Json is included in .NET 10, no explicit reference needed -->
+  <!-- System.Text.Json is included in .NET 11, no explicit reference needed -->
 
   <ItemGroup>
     <None Update="companies.vacancies.seed.json">
