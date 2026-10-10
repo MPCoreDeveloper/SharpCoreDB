@@ -149,6 +149,16 @@ parked line only publishes when `SharpCoreDBVersion` is bumped, and **every late
 re-runs the publish job** — harmless for an unchanged version, but a `master` push is never a private
 operation.
 
+### Local validation note, and one unidentified failure
+
+Re-running the four CI suites on the owner's box to validate this record (a **documentation-only**
+change) turned up one failure that could not be identified. A core-suite run reported
+`Total: 1995, Errors: 0, Failed: 1`; the four runs after it — and `CI/CD Pipeline` on all three
+platforms — reported 1995 / 0 / 0, TRX-verified. That red run was started without `-result-trx`, so the
+failing test cannot be named, and no file differs between it and the green runs. The four suites on this
+tree are green (core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24). Local runs now always pass
+`-result-trx`, so a recurrence names itself instead of leaving a bare count behind.
+
 ## GA checklist (around 2026-11-10 — the only outstanding work this decision creates)
 
 1. `global.json`: `11.0.100-rc.1.26425.128` → `11.0.100`; drop `allowPrerelease`.
