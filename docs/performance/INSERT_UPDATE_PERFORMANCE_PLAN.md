@@ -1435,6 +1435,59 @@ SQLite's 133.7–145.1K, and WP14's batch fast path already bought +80%. The rem
 StructRow INSERT clearly ahead. Every ladder and provider is in scope (§0.1-5), so the `object[]`
 fast path, the bulk APIs and the provider materialization paths all have to reach the same target.
 
+### 5a. The dictionary-free batch arm: attribution closed, and the first INSERT lever it named *(2026-10-10, session 80)*
+
+**The arm that had no attribution at all.** `Database.InsertBatch(table, rows, columns)` →
+`Table.InsertBatch(object[][], columnOrder)` — the overload `PreparedInsertStatement` and the
+`SHARPCOREDB_BATCH_DML` benchmark arm take — carried **no** `WritePathProfiler` stamps, so its profile
+accounted for **344,7 ms of a 560 ms pass (62 %)** and showed `index-maint` at 43,6 % with no
+`validate`/`encode` row beside it. The dictionary overload was stamped on 2026-09-15 "for exactly this
+reason"; the array overload now mirrors it (`Validate` and `RowLocate`, with `ValidateOnly` and `Encode`
+inside its helper). Cost of the four extra `Stamp`/`Add` pairs — four per *batch call*, not per row:
+**none**, interleaved 4-run A/B (0,59 / 0,50 s before against 0,53 / 0,54 s after), with the attributed
+total moving 344,7 → **632,2 ms** precisely because the previously invisible stages are now measured. The
+attributed total exceeding the pass is **pre-existing nesting in `Report()`**, not a double count
+introduced here — the dictionary arm reads 740,6 ms over a 0,66 s pass — and `validate` decomposes as
+`validate-only` + `encode` (153,1 = 58,8 + 92,8 + 1,5 ms).
+
+**The lever that closed attribution named.** With the stages visible, the second-largest writer of
+allocation on the arm was `hash-index` at **461 B/row** — against **345 B/row for the dictionary-ordered
+arm at the same two indexes**, whose `AddBatch` path has no capacity hint. Reading the two paths gave the
+cause: `HashIndex.AddBatchKeys` pre-sized its map with `EnsureCapacity(Count + keys.Length)` on **every**
+call, and a hint computed from the growing count leaves zero headroom, so the next batch of the same size
+reallocated the entry and bucket pair again — ten 10.000-key batches meant ten grow-and-rehash passes,
+~12,6 MB of garbage per index per 100.000 rows, i.e. **O(total keys) of copying per call, quadratic across
+a batched insert loop**. The hint and its helper are gone; `Dictionary`'s amortised doubling applies.
+
+| run — 100.000 rows, 10 batches, 3 interleaved reps per binary | `hash-index` B/call | `index-maint` B/call | pass B/row | INSERT ops/s |
+|---|---:|---:|---:|---|
+| before (exact hint) | 4.611.244 / 4.611.240 / 4.611.325 | 5.425.083 | 1.438,3 | 183.592 / 194.118 / 196.957 |
+| intermediate (geometric hint) — **rejected** | 3.817.030 / 3.817.027 | 4.631.491 | 1.358 | 186.513 / 187.511 |
+| after (no hint) | **3.530.478 / 3.530.478 / 3.530.480** | **4.344.239** | **1.330,2** | 174.149 / 191.082 / 194.005 |
+
+Allocation reproduces to a few bytes between runs of the same binary, which is why it carries the verdict
+on this box. The residue against the dictionary arm is now exactly that arm's key-slice array
+(80.016 B = 8 B/row), which is what closed the array arm's 116 B/row gap to it. **No throughput claim:**
+the three paired comparisons sit inside the noise band (medians 194,1 K against 191,1 K ops/s, per-binary
+rep spread 7–11 %), so this is an allocation win with no measured time regression — and the geometric
+variant was dropped on the same column, not on time.
+
+**What it does and does not move.** It moves *allocation* on the array/DSL arm, and it removes a quadratic
+term from every batched insert loop that maintains a hash index. It does **not** move a published ratio: no
+SQLite comparison was run for this lever, and no ratio is claimed. It is relevant to BEAT §9 row 5 all the
+same — the index set's cost is the reason arm B/C INSERT reads below 1,0×, and this is the first
+measurement that takes any of that cost out without touching what the indexes are for.
+
+**Validation.** Core suite through the MTP exe with CI's filter: **1995 / 0 failed / 0 errors / 0 skipped,
+78,5 s**; the canary filter (the eight named canaries + `WritePathEntryPointCoverageTests`) **60 / 0**, three
+times; `--gate` **one run, INCONCLUSIVE (exit 2)**, reps disagreeing **3,13×** with each arm's first rep at
+92–117 K against 168–195 K later — the documented ramp condition on this box, not a `REGRESSED` verdict. One
+pre-existing **flaky** canary was found and fixed in the same session: `WritePathProfilerTests` and
+`WritePathEntryPointCoverageTests` both toggle the profiler's process-wide counters, so in a mixed parallel
+run one class's `Disable()` landed inside the other's measured window and the workload read **0**
+`in-place-patch` calls; they now share an xunit collection (and *not* `DisableParallelization = true`, which
+cost the whole suite its parallelism — 78,5 s → 1017,7 s on 1995 identical tests).
+
 ---
 
 ## 6. Phase 4 — PageBased engine to UPDATE/DELETE parity *(decided: parity)*
