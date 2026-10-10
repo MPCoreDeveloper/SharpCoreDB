@@ -3,7 +3,7 @@
 # that uses an outdated actions/component-detection-dependency-submission-action@374343e SHA.
 #
 # Uses the actively maintained advanced-security/component-detection-dependency-submission-action
-# (upstream of the abandoned actions/ fork) which properly supports .NET 10 and Node.js 24.
+# (upstream of the abandoned actions/ fork) which properly supports .NET 11 and Node.js 24.
 #
 # IMPORTANT: After adding this workflow, disable the system-managed
 # "Automatic Dependency Submission" in GitHub Settings:
@@ -28,10 +28,12 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v7
 
-    - name: Setup .NET
+    # The solution it submits is net11.0; this pin matches global.json until the GA SDK ships (2026-11-10).
+    - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '10.0.x'
+        dotnet-version: '11.0.100-rc.1.26425.128'
+        include-prerelease: true
 
     - name: Submit dependencies
       uses: advanced-security/component-detection-dependency-submission-action@v0.1.6

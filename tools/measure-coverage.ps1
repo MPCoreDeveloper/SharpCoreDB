@@ -37,7 +37,7 @@
         3  no measurement possible (no report, no product assembly, collector unavailable)
 
     Slow by nature: it runs the suites a second time under instrumentation. Keep it in the dedicated
-    coverage job (see .github/workflows/ci-net11.yml), never in the build matrix on every commit.
+    coverage job (see .github/workflows/ci.yml), never in the build matrix on every commit.
 
 .PARAMETER Floor
     Minimum acceptable line rate as a fraction: 0.18 is 18%. Default 0.18, the floor in codecov.yml.
