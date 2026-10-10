@@ -169,7 +169,8 @@ pwsh -NoProfile -File tools/check-banned-simd-api.ps1 -SelfTest # prove the dete
 `tools/check-banned-simd-api.ps1` scans `src/**/*.cs` (never `obj/` or `bin/`) for `Vector<T>`,
 `Vector.<member>` and their `System.Numerics`-qualified forms, and exits non-zero when it finds one, so
 a portable `Vector<T>` now fails the build instead of relying on a reviewer noticing it. Both
-`ci.yml` and `ci-net11.yml` run the self-test and the scan. The checker is comment- and string-aware,
+`ci.yml` (the primary pipeline on `master`, net11.0) and `ci-net10.yml` (the parked net10.0 line on
+`release/v2.0`) run the self-test and the scan. The checker is comment- and string-aware,
 which is why this file's own examples and the ban annotations in the sources do not trip it; anything
 it suppresses is still printed as a `note:` line with the reason, so a suppressed line stays visible in
 the log. `using System.Numerics;` itself stays legal — `BitOperations` lives there and is part of the

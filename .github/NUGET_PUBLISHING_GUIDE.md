@@ -92,8 +92,8 @@ them in dependency layers (core → dependents → mid-level → top-level → r
 
 ### Scenario B3: Publishing only the core package (quick path)
 
-The branch workflow `.github/workflows/ci-net11.yml` triggers on `release/v2.1.0.0-*` and has a
-`workflow_dispatch` **publish** job that packs and pushes **only** `src/SharpCoreDB/SharpCoreDB.csproj`
+The primary workflow `.github/workflows/ci.yml` (triggered on `master` and manually) has a
+`workflow_dispatch` **publish-core** job that packs and pushes **only** `src/SharpCoreDB/SharpCoreDB.csproj`
 at its declared version. Use it when only the core package changed; use Scenario B2 for a full release.
 
 ### Scenario B4: Publishing the 2.0.0.2 release (click-by-click)

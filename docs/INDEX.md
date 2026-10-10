@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`2.1.0-RC.3`, branch `release/v2.1.0.0-RC.3` — net11.0 / C# 15 preview; the v2.0 stable line lives on `master`)
+**Status:** Active documentation set (`2.1.0-RC.3` — net11.0 / C# 15 preview on `master`; the v2.0 net10.0 stable line is parked on `release/v2.0`)
 
 ## 0. Manual (start here)
 
@@ -26,6 +26,8 @@ guide explaining when SharpCoreDB is fastest.
 - `2.1.0-RC.3_WHAT_CHANGED.md` — **what's new in 2.1.0-RC.3** (net11.0 / C# 15 preview RC: the
   inline-capacity default, the overflow-arena write path, the fair-PK UPDATE/DELETE position, plus
   the full validation table and the honest remaining gaps)
+- `2.0.0.3_WHAT_CHANGED.md` — **what's new in 2.0.0.3** (maintenance: cognitive-complexity
+  refactors + NuGet dependency updates, no API/format changes)
 - `2.0.0.2_WHAT_CHANGED.md` — **what's new in 2.0.0.2** (2.x-vs-1.9.x major steps + the hardening
   and data-integrity batch)
 - `2.0.0.0_WHAT_CHANGED.md` — **what's new in v2.0 vs v1.9** (features + benchmarks vs SQLite/LiteDB)
@@ -111,6 +113,8 @@ guide explaining when SharpCoreDB is fastest.
 - `scdb/PRODUCTION_GUIDE.md`
 - `serialization/README.md`
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
+- `storage/QUICK_REFERENCE_v1.7.0.md`
+- `storage/METADATA_IMPROVEMENTS_v1.7.0.md`
 - `storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 
 ## 6. Engine Implementation Notes
@@ -142,8 +146,10 @@ guide explaining when SharpCoreDB is fastest.
 - `../src/SharpCoreDB.HybridSearch/NuGet.README.md` — lexical + vector fused by reciprocal-rank fusion
 - `performance/graphrag-performance-tuning.md`
 
-## 7b. .NET 11 / C# 15 (v2.1 RC)
+## 7b. .NET 11 / C# 15 (the `master` line since the 2026-10-10 promotion)
 
+- `net11/PROMOTION_TO_MAIN.md` — ⭐ **how the net11 line was promoted to `master`** and the net10 line
+  parked on `release/v2.0`: the prepared commit series, the flip procedure, the GA checklist
 - `net11/UPGRADE.md` — what .NET 11 consumers get (Zstd, Runtime Async, `SharpCoreDB.Net11`)
 - `net11/UNION_TYPES_DESIGN.md` — union-types blueprint (deferred to .NET 11 GA)
 
@@ -153,6 +159,8 @@ guide explaining when SharpCoreDB is fastest.
 - `sync/README.md`
 - `migration/README.md`
 - `migration/MIGRATION_GUIDE.md`
+- `migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`
+- `migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`
 
 ## 9. Functional Programming & Null Safety
 

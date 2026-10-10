@@ -7,8 +7,9 @@ Embedded + networked database engine for .NET with AES-256-GCM encryption, a gRP
 package family spanning ADO.NET, EF Core, Dapper, linq2DB, YesSql, Sync, Analytics, VectorSearch,
 Graph, EventSourcing, CQRS and Projections. C#/.NET, `LangVersion=preview`. Deep documentation lives
 in `docs/` (start at `docs/INDEX.md`); the live performance mission is
-`docs/performance/AUTONOMOUS_AGENT_BRIEF.md`. This branch (`perf/*`, v2.1 RC line) is `net11.0` /
-C# 15 preview; `master` holds the net10.0 / C# 14 stable packages.
+`docs/performance/AUTONOMOUS_AGENT_BRIEF.md`. `master` is the `net11.0` / C# 15 preview line (2.1.0 — the
+former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14 stable line is parked on
+`release/v2.0` for 2.0.x servicing and is built by `ci-net10.yml`.
 
 ## Policy
 

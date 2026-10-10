@@ -1,6 +1,6 @@
 # SharpCoreDB v2.1 RC — .NET 11 / C# 15
 
-> Branch: `release/v2.1.0.0-RC.3` · Package version: `2.1.0-RC.3`
+> Branch: `master` · Package version: `2.1.0-RC.3`
 
 ## What this is
 
@@ -11,8 +11,9 @@ The v2.1 RC line is **net11.0-only**, built with **C# 15 preview**:
 <LangVersion>preview</LangVersion>
 ```
 
-- The **net10.0 / C# 14** line is the **v2.0 stable packages on `master`** (e.g. `SharpCoreDB` 2.0.0.3).
-- The two lines are maintained on separate branches. The v2.1 branch never carries a net10.0 target, so
+- The **net10.0 / C# 14** line is the **v2.0 stable packages**, parked on `release/v2.0` (e.g.
+  `SharpCoreDB` 2.0.0.3) since the 2026-10-10 promotion — see `PROMOTION_TO_MAIN.md` in this folder.
+- The two lines are maintained on separate branches. The net11 line never carries a net10.0 target, so
   there is no multi-targeting and no per-target `#if` drift in the shipped assemblies.
 
 ## What .NET 11 consumers get
@@ -62,10 +63,10 @@ These members are source-gated (`#if NET11_0_OR_GREATER`) and compiled only for 
 ## Consuming the RC
 
 ```
-git fetch origin release/v2.1.0.0-RC.3
-git checkout release/v2.1.0.0-RC.3
+git fetch origin master
+git checkout master
 dotnet pack src/SharpCoreDB/SharpCoreDB.csproj -c Release
 ```
 
 The `.nupkg` carries **only `net11.0` assets** (plus the per-RID assemblies). A project that targets
-net10.0 must stay on the `master` 2.0 packages.
+net10.0 must stay on the `release/v2.0` 2.0 packages.
