@@ -1,0 +1,338 @@
+# CI for the parked net10.0 / C# 14 line. This copy lives on `release/v2.0` itself, because GitHub
+# loads a workflow from the ref being pushed: the same file on `master` can never run for a release/v2.0
+# push or a `v2.0*` tag. No .NET 11 SDK pin is needed here - the parked line has no global.json.
+name: CI v2.0 legacy (.NET 10)
+
+on:
+  push:
+    branches: [ 'release/v2.0' ]
+    tags: [ 'v2.0*' ]
+  pull_request:
+    branches: [ 'release/v2.0' ]
+
+permissions:
+  contents: read
+  packages: write
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  CI_TEST_FILTER: 'Category!=Debug&Category!=Manual&Category!=Performance'
+
+jobs:
+  build:
+    name: Build and Test
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ ubuntu-latest, windows-latest, macos-latest ]
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Display .NET info
+      run: dotnet --info
+
+    - name: Restore dependencies
+      run: dotnet restore SharpCoreDB.CI.slnf --configfile NuGet.Config /p:UseLocalProjectReferences=true
+
+    - name: Fail on deprecated NuGet packages
+      shell: pwsh
+      run: |
+        $output = dotnet list SharpCoreDB.CI.slnf package --deprecated --configfile NuGet.Config
+        $outputText = $output | Out-String
+        Write-Host $outputText
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to evaluate deprecated packages."
+          exit $LASTEXITCODE
+        }
+
+        if ($outputText -match "has the following deprecated packages") {
+          Write-Error "Deprecated NuGet packages detected. CI is configured to fail."
+          exit 1
+        }
+
+        Write-Host "No deprecated NuGet packages detected."
+
+    - name: Fail on vulnerable NuGet packages
+      shell: pwsh
+      run: |
+        $output = dotnet list SharpCoreDB.CI.slnf package --vulnerable --configfile NuGet.Config
+        $outputText = $output | Out-String
+        Write-Host $outputText
+
+        if ($LASTEXITCODE -ne 0) {
+          Write-Error "Failed to evaluate vulnerable packages."
+          exit $LASTEXITCODE
+        }
+
+        if ($outputText -match "has the following vulnerable packages") {
+          Write-Error "Vulnerable NuGet packages detected. CI is configured to fail."
+          exit 1
+        }
+
+        Write-Host "No vulnerable NuGet packages detected."
+
+    # The banned-portable-SIMD gate (tools/check-banned-simd-api.ps1, added on the net11.0 line) is NOT
+    # part of this copy: the net10.0 line still carries 33 banned usages (src/SharpCoreDB/Query/SimdFilter.cs,
+    # mostly Vector<double>), so the checker exits 1 against this tree - measured 2026-10-10. Adding the step
+    # would fail this job and, since pack/publish depends on it, block 2.0.x servicing. Owner decision: either
+    # cherry-pick the net11 intrinsics port (.github/SIMD_STANDARDS.md) and add the step back, or ship the
+    # parked line without the gate. Recorded in docs/net11/PROMOTION_TO_MAIN.md.
+
+    - name: Build
+      run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true
+
+    # MTP (xunit.v3) test hosts on .NET 10 no longer support `dotnet test`'s VSTest flags
+    # (e.g. --collect "XPlat Code Coverage", --logger trx, --blame-hang). CI runs the MTP
+    # executable directly, which understands the same VSTest filter expression and writes TRX.
+    - name: Test SharpCoreDB.Tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.Tests
+        tests/SharpCoreDB.Tests/bin/Release/net10.0/SharpCoreDB.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.Tests/SharpCoreDB.Tests.trx"
+      timeout-minutes: 30
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
+    - name: Test SharpCoreDB.VectorSearch.Tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.VectorSearch.Tests
+        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net10.0/SharpCoreDB.VectorSearch.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.trx"
+      timeout-minutes: 15
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
+    - name: Test SharpCoreDB.EntityFrameworkCore.Tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests
+        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net10.0/SharpCoreDB.EntityFrameworkCore.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.trx"
+      timeout-minutes: 15
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
+    - name: Test SharpCoreDB.Functional.Linq2DB.Tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests
+        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net10.0/SharpCoreDB.Functional.Linq2DB.Tests \
+          -filterVSTest "${{ env.CI_TEST_FILTER }}" \
+          -result-trx "./TestResults/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.trx"
+      timeout-minutes: 10
+      env:
+        CI: "true"
+        GITHUB_ACTIONS: "true"
+
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-results-${{ matrix.os }}
+        path: '**/TestResults/**/*.trx'
+        if-no-files-found: ignore
+
+  pack:
+    name: Pack NuGet Packages
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release/v2.0'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Discover packable projects
+      id: discover-packable
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        projects=()
+        while IFS= read -r -d '' project; do
+          is_packable="$(dotnet msbuild "$project" -nologo -getProperty:IsPackable | tr -d '\r')"
+          package_id="$(dotnet msbuild "$project" -nologo -getProperty:PackageId | tr -d '\r')"
+
+          if [ "$is_packable" = "true" ] && [ -n "$package_id" ]; then
+            projects+=("$project")
+            echo "Packable: $project ($package_id)"
+          else
+            echo "Skipped: $project (IsPackable=$is_packable, PackageId=$package_id)"
+          fi
+        done < <(find ./src -name '*.csproj' -print0)
+
+        if [ ${#projects[@]} -eq 0 ]; then
+          echo "No packable projects found under ./src"
+          exit 1
+        fi
+
+        {
+          echo "packable_projects<<EOF"
+          printf '%s\n' "${projects[@]}"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+        echo "Discovered ${#projects[@]} packable project(s)."
+
+    - name: Pack NuGet packages
+      shell: bash
+      run: |
+        set -euo pipefail
+
+        mkdir -p ./artifacts
+
+        while IFS= read -r project; do
+          [ -n "$project" ] || continue
+          echo "Packing $project"
+          dotnet pack "$project" \
+            --configuration Release \
+            --output ./artifacts \
+            /p:ContinuousIntegrationBuild=true \
+            /p:UseLocalProjectReferences=true \
+            --configfile NuGet.Config
+        done <<< "${{ steps.discover-packable.outputs.packable_projects }}"
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages
+        path: ./artifacts/*.nupkg
+        retention-days: 30
+
+  publish:
+    name: Publish to NuGet.org
+    runs-on: ubuntu-latest
+    needs: pack
+    if: github.event_name == 'push' && github.ref == 'refs/heads/release/v2.0'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 10
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '10.0.x'
+
+    - name: Download NuGet packages
+      uses: actions/download-artifact@v4
+      with:
+        name: nuget-packages
+        path: ./artifacts
+
+    - name: Publish packages in dependency order
+      shell: bash
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+        NUGET_SOURCE: https://api.nuget.org/v3/index.json
+      run: |
+        set -euo pipefail
+
+        push_layer() {
+          local layer_name="$1"
+          shift
+          local found_any=false
+
+          echo "::group::Publishing $layer_name"
+          for pattern in "$@"; do
+            for pkg in ./artifacts/${pattern}; do
+              [ -f "$pkg" ] || continue
+              found_any=true
+              echo "  Publishing $(basename "$pkg")"
+              dotnet nuget push "$pkg" \
+                --api-key "$NUGET_API_KEY" \
+                --source "$NUGET_SOURCE" \
+                --skip-duplicate
+            done
+          done
+          echo "::endgroup::"
+
+          if [ "$found_any" = true ]; then
+            echo "Waiting 30s for NuGet.org to index $layer_name..."
+            sleep 30
+          fi
+        }
+
+        push_layer "Layer 0 (core)" \
+          "SharpCoreDB.[0-9]*.nupkg" \
+          "SharpCoreDB.Aspire.Hosting.*.nupkg" \
+          "SharpCoreDB.Client.Protocol.*.nupkg" \
+          "SharpCoreDB.Server.Protocol.*.nupkg"
+
+        push_layer "Layer 1 (core dependents)" \
+          "SharpCoreDB.Graph.[0-9]*.nupkg" \
+          "SharpCoreDB.VectorSearch.*.nupkg" \
+          "SharpCoreDB.Functional.[0-9]*.nupkg" \
+          "SharpCoreDB.EventSourcing.*.nupkg" \
+          "SharpCoreDB.Analytics.*.nupkg" \
+          "SharpCoreDB.Distributed.*.nupkg" \
+          "SharpCoreDB.Identity.*.nupkg" \
+          "SharpCoreDB.Serilog.Sinks.*.nupkg"
+
+        push_layer "Layer 2 (mid-level)" \
+          "SharpCoreDB.Client.[0-9]*.nupkg" \
+          "SharpCoreDB.EntityFrameworkCore.[0-9]*.nupkg" \
+          "SharpCoreDB.Extensions.*.nupkg" \
+          "SharpCoreDB.Data.Provider.*.nupkg" \
+          "SharpCoreDB.Server.Core.*.nupkg" \
+          "SharpCoreDB.CQRS.*.nupkg" \
+          "SharpCoreDB.Projections.*.nupkg"
+
+        push_layer "Layer 3 (top-level)" \
+          "SharpCoreDB.Server.[0-9]*.nupkg" \
+          "SharpCoreDB.Graph.Advanced.*.nupkg" \
+          "SharpCoreDB.Provider.Sync.*.nupkg" \
+          "SharpCoreDB.Provider.YesSql.*.nupkg" \
+          "SharpCoreDB.Functional.Dapper.*.nupkg" \
+          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
+          "SharpCoreDB.Functional.Linq2DB.*.nupkg"
+
+        push_layer "Remaining packages" \
+          "*.nupkg"
+
+        echo "All packages published in dependency order."
+
+    - name: Create release summary
+      run: |
+        echo "## NuGet Packages Published (Dependency-Ordered)" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "Published $(ls -1 ./artifacts/*.nupkg | wc -l) package(s) to NuGet.org" >> $GITHUB_STEP_SUMMARY
+        echo "" >> $GITHUB_STEP_SUMMARY
+        echo "### Packages" >> $GITHUB_STEP_SUMMARY
+        ls -1 ./artifacts/*.nupkg | xargs -I {} basename {} >> $GITHUB_STEP_SUMMARY
