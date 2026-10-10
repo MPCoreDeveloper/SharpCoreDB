@@ -15,6 +15,7 @@ namespace SharpCoreDB.Tests;
 /// attribute time to stages when enabled — that is the whole point of the write-path plan
 /// (docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §2).
 /// </summary>
+[Collection("WritePathProfilerTests")] // process-wide counters — see WritePathProfilerTestCollection
 public sealed class WritePathProfilerTests : IDisposable
 {
     private readonly DatabaseFactory _factory;
