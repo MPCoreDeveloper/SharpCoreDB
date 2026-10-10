@@ -369,6 +369,66 @@ would be dead code the moment the workload is installed. **The deliverable cavea
 point:** NativeAOT requires the VS C++ workload on the build machine, which belongs beside `net11`'s
 raised minimum hardware requirements in any future AOT recommendation.
 
+**Re-opened and closed by measurement 2026-10-09 (worklog session 78) — `REJECTED`.** The blocker above
+was the *toolchain*, not the hypothesis, and it dissolved on its own: the half-installed VS Community
+instance finished completing itself during worklog session 59 — `vswhere -all -prerelease -products *
+-requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath` went from empty
+to `C:\Program Files\Microsoft Visual Studio\18\Community` — so the **stock**
+`dotnet publish -r win-x64 -p:PublishAot=true` now works with no override, and the published binary runs
+the whole harness. Session 78 therefore measured both runtimes on this workload: fresh processes each
+(JIT ×3 and AOT ×2 on the warm protocol, JIT ×5 and AOT ×5 on the pre-fix one), identical options, same
+machine, same 16 cells, per-cell ratio as the **median of the paired ratios** (the harness also prints
+the raw pair range):
+
+| arm (4 operations each) | AOT/JIT median-of-pairs | single-pair range |
+|---|---|---|
+| legacy plaintext (tuned) | 1,00 · 0,95 · 0,88 · **1,25** | 0,82–1,38 |
+| fixed-width plaintext (tuned) | 0,96 · 0,98 · 0,93 · 1,08 | 0,81–1,34 |
+| fixed-width at rest (encrypted) | 0,99 · 0,90 · 0,89 · 0,92 | 0,83–1,03 |
+| **SQLite (control, same rig)** | 1,01 · 0,98 · 0,99 · 0,99 | 0,95–1,04 |
+
+**12 of the 16 cells sit strictly below 1,00, one at 1,00 and three above** — NativeAOT is at or behind
+the JIT on this workload, not ahead of it. The control is what makes that readable: the same rig resolves
+AOT vs JIT on SQLite itself to 0,98–1,01, so the **2–12 % deficits on READ and UPDATE** (and the whole
+encrypted at-rest arm, 0,89–1,00) are outside the rig's own noise, while the one apparent win is not:
+legacy DELETE's median-of-pairs is 1,25 but its pairs run 0,92–1,38, i.e. one of the pairs is *slower*
+under AOT, and at n=2 AOT processes that is not grounds for an AOT recommendation. So the vendor
+statement above is **refuted as a lever for this workload**, and the deliverable caveat narrows to what it
+always really was: the C++ workload is a genuine build-machine requirement for anyone who chooses to
+publish AOT, but it buys nothing measurable here, so no AOT recommendation is warranted on dispatch grounds.
+
+**How the refutation nearly went the other way — the defect that made AOT look 1,85× faster on UPDATE.**
+The first AOT runs read like a win, and only in one arm. Pre-fix, the *first-measured* arm's legacy cells
+compared JIT 263.575 → AOT 488.605 on UPDATE (**1,85×**, and the AOT side is flat: its first measured rep is
+507.251 against its own median of 502.479), **1,21×** on READ and **1,56×** on DELETE; the three later arms
+were already sane (FW 0,80–1,13, encrypted at-rest 0,86–0,96, and the SQLite control 0,94–0,98 — where AOT
+is marginally *behind* in both protocols, i.e. the rig is not biased toward AOT). That asymmetry is the
+defect: `--pk` was the only measuring path in the harness that sampled straight from process start, so arm
+1's five published reps **were** the ramp — UPDATE rep-by-rep 104.566 → 231.050 → 275.494 → 601.041 →
+263.575, a **5,7×** spread inside the window whose median is published. The shared warm-up resolver moves the
+ramp out of that window, which is what discarded reps are for: the same cell's measured reps become 431.931
+→ 527.264 → 483.416 → 448.490 → 409.990 (**1,29×**), median 263.575 → **448.490** (JIT +70 %), while AOT's
+own value barely moves (488.605 → 447.202, and at n=2 that −8 % is not separable from box state) — so the
+ranking inverts to AOT **0,85–0,88 of JIT on UPDATE** (0,85 ratio-of-medians, 0,88 median-of-pairs in the
+table above) and **0,93–0,95 on READ**, and the arm-level 1,85× win is gone.
+The honest limit of that fix travels with it: a control process run with `WARMUP_REPS=0` on a settled box
+measured the *same* ramping window (148.704 → 402.011 → 549.302 → 671.005 → 530.028) yet landed its median
+at 530.028, so on a settled box the un-warmed protocol can read hot as well — the discarded reps make that
+outcome the rule instead of a coin-flip, and what the fix guarantees is that the published row is measured
+the way every other mode in the harness is measured. The second defect found here was fatal rather than
+silent: every AOT run measured all four arms, printed its whole table and *then* died on the archive write
+— `Unhandled exception. System.InvalidOperationException: Reflection-based serialization has been disabled
+for this application.` — because the harness project relied on reflection-based `System.Text.Json`
+serialisation, which the AOT profile removes (the publish says so at every archive site: IL2026 + IL3050).
+Pinned open with `<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>`
+in the harness `.csproj`, and reproducible rather than remembered: `artifacts/s78-aot-json-red.txt` is the
+same publish with that switch explicitly off (exit 0xC0000409, AOT fail-fast, full table printed first) and
+`artifacts/s78-aot-json-green.txt` is the shipped switch (exit 0, `Results saved to: …pk_comparative_*.json`);
+`artifacts/s78-json-defect-{red,green}.txt` flip the same switch on the JIT binary alone, which isolates the
+cause from AOT itself (red exits 0xE0434352 with the stack ending at `Program.cs:4014`). Both defects and
+their evidence are in worklog session 78 (`artifacts/s78-warmup-defect.{ps1,txt}`,
+`artifacts/s78-ratio.{ps1,txt}`); neither touches `src/`.
+
 ### S5 — A fair non-PK shape, so arm C is a comparison and not an artefact — **timebox 1 session**
 
 **Why.** Arm C's 0,24×/0,31× is partly a *comparison* defect, not a product defect: the default job's
@@ -469,8 +529,8 @@ cannot produce an asymmetry in which one engine is stable and the other is wild 
 pairs, so **the campaign's recurring 3–4× spreads and `--gate` `INCONCLUSIVE` verdicts are at least
 partly engine-side** — which is a different problem from the one session 16 solved (the Defender/IO
 filter is a real per-I/O cost, but it is not what makes *our* numbers move 3,7× and SQLite's 1 %). This
-is **upstream of every measure-first item**, including S4: measuring an AOT build with a 3,7× noise floor
-would repeat session 15's mistake at larger cost.
+is **upstream of every measure-first item**, including S4 (then still blocked): measuring an AOT build with a
+3,7× noise floor would have repeated session 15's mistake at larger cost.
 
 **Prime suspect, named and falsifiable.** `DatabaseConfig.ColumnarAutoCompactionThreshold` defaults to
 **1000** (`DatabaseConfig.cs:827`) and each arm performs 10.000 updates + 10.000 deletes — ~20 threshold
@@ -712,9 +772,9 @@ named here.
 3. **PageBased fixes arm B's INSERT and READ outright** (0,83× → **1,72×**; 1,10× → **4,58×**, correctness
    checked on a 200-key sample) and is worse on DELETE — so UPDATE/DELETE being behind in *both* engines is
    **not an engine property**. The engine swap is the A/B that rules the storage engine out.
-4. **All seven work items are closed** (§8): S1 ✅, S5 ✅, S7 ⚖️, S3/S2/S6 ⛔ — and three of the four rejections
-   refuted their own hypothesis *before* a speculative change shipped. S4 is ⛔ `BLOCKED`, so its hypothesis is
-   **untested, not refuted**.
+4. **All seven work items are closed** (§8): S1 ✅, S5 ✅, S7 ⚖️, S3/S2/S4/S6 ⛔ — and **five of the five
+   rejections refuted their own hypothesis *before* a speculative change shipped** (S4's toolchain blocker
+   dissolved in session 59, and its hypothesis was then measured and refuted in session 78).
 5. **The absolute floors stay met**: UPDATE ≥ 120K, DELETE ≥ 150K, INSERT ≥ 150K ops/s.
 
 **Why the two mission arms are still short — per cell, with the evidence that decides it:**
@@ -736,8 +796,9 @@ named here.
   statistic that decides it (**§9 row 7**). `D:\scdb-bench-tmp\quiet-gate-run.ps1` is the decisive experiment
   the moment the owner clears the box (one elevated command; the agent shell has no elevation).
 
-**Not levers — measured, and not to be re-opened:** NativeAOT dispatch (S4 *untested*, blocked on the VS C++
-workload, §9 row 6) · compaction · shape-matched JIT/SIMD (0,3 % available) · the dictionary-free op shape
+**Not levers — measured, and not to be re-opened:** NativeAOT dispatch (S4 **measured and refuted**,
+worklog session 78: at or behind the JIT on 12 of 16 cells, 0,85–0,88 on its best-looking cell) ·
+compaction · shape-matched JIT/SIMD (0,3 % available) · the dictionary-free op shape
 (measured *ceiling* 1,1–3,0 %) · the no-PK delete's dead per-key row decode (moved 0,14× by nothing) · the B3
 structured predicate for UPDATE (cancelled by measurement, session 36) · "narrow the auto-index default"
 (§9 row 5, refuted in the direction it was proposed).
@@ -971,13 +1032,13 @@ arbitrate. Record it as `INCONCLUSIVE` with the measured spread, re-run once, an
 | 3 | **S5** fair non-PK indexed arm | 1 | no | ✅ `KEPT` (`d8c7da1b`, `e686727d`); INSERT/READ/DELETE confirmed on the corrected protocol, **UPDATE withdrawn — 0,80× behind (session 29)** | turns arm C from an artefact into a comparison — and it did |
 | 4 | **S2** HOT index gate | 2 | yes | ⛔ `REJECTED` as specified (`2a93e5cf`) | narrow and reversible; the gate is kept, the target was unreachable |
 | 5 | **S7** engine-side variance | 2 | no (diagnostic switch only) | ⚖️ **split**: compaction ⛔ `REJECTED`, JIT tiering ✅ `KEPT` (`6c44ff3e`); warm-up rep landed session 23 | found the campaign's dominant measurement error |
-| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ **`BLOCKED`** on the missing VS C++ workload (§9 row 6) | hypothesis **untested, not refuted** — see the entry |
+| 6 | **S4** NativeAOT dispatch, measured | 1 | build cfg | ⛔ `REJECTED` (worklog session 78); the toolchain was `BLOCKED` only until session 59 | hypothesis **measured and refuted** — AOT is at or behind the JIT on 12 of 16 cells and no AOT recommendation ships |
 | 7 | **S6** shape-matched JIT/SIMD | 1 | yes | ⛔ `REJECTED` on attribution (session 26) | the target is already taken and worth 0,3 %; index work is ≥ 31,1 % |
 
-**All seven items are closed.** Final tally: **S1 ✅ · S3 ⛔ · S5 ✅ · S2 ⛔ · S7 ⚖️ · S4 ⛔ `BLOCKED` · S6 ⛔** —
-two `KEPT`, four `REJECTED`, one `BLOCKED`, and **not one of the four rejections was a failure**: each
-refuted its own hypothesis with a measurement, and three of them (S2, S5, S6) did so *before* a speculative
-change shipped. The campaign's result is **three of four operations ahead on the fair shape** — INSERT **1,56× (1,36–1,71)** ·
+**All seven items are closed.** Final tally: **S1 ✅ · S3 ⛔ · S5 ✅ · S2 ⛔ · S7 ⚖️ · S4 ⛔ · S6 ⛔** —
+two `KEPT`, five `REJECTED`, **none left `BLOCKED`**, and **not one of the five rejections was a failure**:
+each refuted its own hypothesis with a measurement, and three of them (S2, S5, S6) did so *before* a
+speculative change shipped. The campaign's result is **three of four operations ahead on the fair shape** — INSERT **1,56× (1,36–1,71)** ·
 READ **1,74× (1,18–2,05)** · DELETE **6,33× (4,99–6,77)** on the session-29 corrected protocol — against the
 default job's no-PK arm of 0,67 / 0,76 / 0,24 / 0,31. **UPDATE is behind at 0,80× (0,68–0,91×)**, because the
 1,78–1,87× reported in session 25 was substantially the SQLite arm's own client-side overhead. The three wins
@@ -986,9 +1047,10 @@ measurement (S7) — and the UPDATE finding is the campaign's most useful output
 engine target rather than a measurement artefact. What remains is the §9 owner review **plus the UPDATE
 deficit**.
 
-*Closing note on the timebox: **11 sessions were budgeted and ~10 were used** — one or two per item, plus
-the extra sessions that S7's two verdicts and the warm-up count required. **No item overran its own
-timebox**, which is the §5 rule the campaign was built around.*
+*Closing note on the timebox: **11 sessions were budgeted and ~11 were used** — one or two per item, plus
+the extra sessions that S7's two verdicts and the warm-up count required, and S4's single session, which
+arrived late because the toolchain blocker recorded in session 24 dissolved on its own in session 59.
+**No item overran its own timebox**, which is the §5 rule the campaign was built around.*
 
 S3, S5 and S7 all sit before a *build* deliberately: each is a measurement that decides whether the build
 is worth making, and each has now paid for itself — S3 refuted a hypothesis, S2 refuted its own target
@@ -1012,7 +1074,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 | 3 | **A numeric floor for arm B.** Decision 10 lists this as its one open sub-decision. | §1.2's recorded band | Keep the no-regression-against-its-own-values rule until a floor is chosen |
 | 4 | **PageBased UPDATE (arm D).** Decision 1 says parity; the research adds no PageBased-specific mechanism. | §1.4; decision 1 | Keep PageBased opt-in and out of Auto; fix as a separate campaign |
 | 5 | **Does a Columnar table still auto-create a hash index on *every* column?** `SqlParser.DDL.cs:430-436` does, so the `docs` table carries **5** hash indexes while the workload uses **1** (`name`, via an explicit `CREATE INDEX`). Every UPDATE that changes any column therefore pays a hash remove+add (measured: 20.000 `index-maint` calls per 10.000 updates, 43 B/call) — and it is *correct* work, not waste, precisely because the index exists. | S2's verdict (worklog session 19); §2.1 | **Keep the current default** until the owner decides: narrowing it is a behaviour change for every equality query on a non-PK column, so it needs a measured comparison of READ cost against UPDATE cost, not a unilateral edit. **⚠️ S5 (session 20) now argues *against* narrowing it:** on a matched index set (`--fair-ni`) our hash indexes beat SQLite's B-trees on DELETE **4,07×**, so the per-column indexes may be an asset on the fair shape rather than the cost they looked like on the unfair one. Measure before acting on this row.<br>**✅ MEASURED BOTH SIDES (sessions 42/49/50/51).** *Cost:* the set is ~**30–45 % of INSERT** — with `SHARPCOREDB_HASH_INDEXES=0` the INSERT cell reads **0,95× → 1,60× (1,38–1,78)** on arm B and **0,90× → 1,38× / 1,41×** on arm C, reproduced in two runs per arm, with the dial as the only variable (both of our arms move, SQLite's reference does not). *Benefit:* without it, equality queries on columns the user did not explicitly index degrade **32×–7.298×** (`--auto-index-benefit`, 20.000 rows: `email` **940×**, `age` **32×**, `score` **7.298×**; the explicitly indexed control reads **1,07×** and the row counts agree exactly). **So "narrow the default" is the wrong lever** — it trades a bounded per-row cost for up to three orders of magnitude on a class of user queries. Lazy/on-demand creation, or a rule by column class, are the live options and both now have their numbers. `HashIndexAutoCreationGateTests` pins the gate so the experiment stays askable.<br>**✅ DECIDED BY THE OWNER 2026-09-26 (session 69): lazy/on-demand creation, default on**, to be measured on **both** sides next session — INSERT on arms B/C *and* the equality-query benefit.<br>**The mechanism, read rather than inferred (session 69), because this row's wording pointed at the wrong layer.** *Building* is already lazy: `Table.EnsureIndexLoaded` builds an index on first use (`Table.Indexing.cs:240-302`). What is eager is the **registration** — `SqlParser.DDL.cs:421-436` registers one index per column — and `Table.EnsureAllRegisteredIndexesLoaded()` then loads **every registered index before any write** on the append/Columnar engines (`Table.Indexing.cs:326-340`), which is precisely why a write maintains five indexes where the workload uses one (the measured 20.000 `index-maint` calls per 10.000 updates). So the lever is *registration on demand*, at the one place that already knows the filtered column: the `WHERE`-plan path (`SqlParser.DML.cs:858-867`). Constraints the implementation must satisfy, each with its file: (a) on-demand creation goes through the same loader — the fixed-width build once parsed records with the variable-length walk and silently produced a near-empty index (`Table.Indexing.cs:262-270`), so `FixedWidth*` canaries and `HashIndexBuildTests` stand guard; (b) PageBased keeps its pre-load exemption (`Table.Indexing.cs:331-332`); (c) the registered set becomes query-history dependent and is **not** persisted, so `information_schema.indexes` (`GetIndexCatalogSnapshot`, `Table.Indexing.cs:355`) must report what is actually registered and a reopen must recreate on demand; (d) `HashIndexAutoCreationGateTests`' current contract ("one index per column by default") is exactly what the owner changed, so it is **rewritten to the new contract** — PK eagerly, others on first filtered query, none with the dial off — not loosened; (e) the benefit probe must report the **first** equality query (one table build) separately from the repeated one, because a blended number would hide the build it now pays.<br>**✅ IMPLEMENTED AND MEASURED (session 71).** The gate was read out of the code rather than assumed, and it is one method: `Table.EnsureAutoHashIndexRegistered` (Columnar + `DatabaseConfig.EnableHashIndexes`, registering the column the moment an operation filters on it) is now what every lookup path calls instead of testing `registeredIndexes.ContainsKey` — the read path, the position-aware update locate, both delete cores, the parallel scan, both struct-scan fast paths and structured DML. `SqlParser.DDL.cs` registers only a *user-declared* primary key; the hidden `_rowid` fallback is deliberately not registered (the PK B-tree already serves its point lookups and no user query filters on it). Constraint (a) is met by reusing `EnsureIndexLoaded` unchanged; (b) PageBased still has no automatic hash index at all and keeps its pre-load exemption; (c) `information_schema.indexes` reads `GetIndexCatalogSnapshot()`, i.e. the registered set, so it reports reality by construction, and a reopen rebuilds the PK registration and re-registers per filtered operation; (d) `HashIndexAutoCreationGateTests` was **rewritten to this contract** (6 facts: PK only at `CREATE TABLE`, nothing for a PK-less table, the filtered column registered and loaded by the first query with the unfiltered read still complete, nothing with the dial off, and the two late-build regressions); (e) the probe prints the first query on its own. **Measured:** INSERT vs SQLite on this build, `--pk-default-batch` / `--docs-batch`, median (per-rep range) — **arm B batch 1,60× (1,05–1,92) and SQL 1,05× (0,94–1,26); arm C batch 1,26× (1,19–1,54) and SQL 0,98× (0,98–1,29)** — against the recorded eager-set baselines (arm B 0,95× / 0,83×, arm C 0,90×) and with the same-build `SHARPCOREDB_HASH_INDEXES=0` runs as the day's ceiling (arm B 1,68× batch / 1,31× SQL, arm C 1,25× batch / 0,95× SQL): the lever captured 95 % of the remaining arm-B batch margin and essentially all of arm C's, and what is left is the eagerly registered declared-PK index. The SQL arms' ranges straddle 1,00, so those two cells are "not slower and direction unsettled", not a quoted win. **Query side** (`--auto-index-benefit`, two runs): the **first** filtered query on a previously-unfiltered column now costs **35,5–71,0 ms** because it is where the index is created and built, and the warm queries after it cost **4,7–14,1 µs** on `email`/`score` against **4,8–5,0 ms** with the dial off — **354×–988×** and **3.106×–7.656×** (session 51 measured 940× / 7.298× under the old protocol), `age` **31,6×–33,0×** at 962–1.087 µs (334 rows per key), the explicitly indexed control unchanged (63–68 µs first, 5,9–6,3 µs repeated) and the row counts identical in every configuration. **Two defects were found while implementing and are fixed with red→green tests** (see `docs/CHANGELOG.md` and the `NEXT:` line): a hash index built *after* a length-changing UPDATE indexed the superseded record (it answered `WHERE v = 'old1'` with 1 row where SQLite returns 0 — fixed by sharing `Table.IsCurrentRecordVersion` between the scan and the rebuild), and the single-row UPDATE's append fallback left entries of unnamed columns pointing at the abandoned record, which became a ghost row once that column's value changed (4 entries for 3 rows; fixed by `CaptureHashKeysAt`). **Verification:** core suite **1952 / 0 failed / 0 errors** (`artifacts/s71-suite.txt`), `--gate` **PASSED**, 8/8 metrics `ok`, all eight ahead of the recorded baseline (`artifacts/s71-gate.txt`); raw output for every arm/probe run is in `artifacts/s71-*.txt`. **Nothing was pushed, no baseline was re-recorded, and row 7 stays the owner's one elevated command.** |
-| 6 | **Install the Visual Studio C++ workload to unblock NativeAOT (S4).** `...\VC\Tools\MSVC\14.51.36231\` has `bin` and `lib\onecore` only — no `include`, no `lib\x64`, no `msvcrt.lib` — and `vcvarsall.bat` is absent, so `link.exe` cannot link. | S4's verdict (worklog session 24), with the directory listing and the `vswhere -requires` result | **VS Installer → Modify → Desktop development for C++** (`Microsoft.VisualStudio.Component.VC.Tools.x86.x64`). After that, plain `dotnet publish -r win-x64 -p:PublishAot=true` needs no override. Until then S4 stays `BLOCKED` and its hypothesis is *untested*, not refuted. |
+| 6 | **Install the Visual Studio C++ workload to unblock NativeAOT (S4).** `...\VC\Tools\MSVC\14.51.36231\` has `bin` and `lib\onecore` only — no `include`, no `lib\x64`, no `msvcrt.lib` — and `vcvarsall.bat` is absent, so `link.exe` cannot link. | S4's verdict (worklog session 24), with the directory listing and the `vswhere -requires` result | **✅ RESOLVED — no owner action needed (worklog sessions 59 and 78).** The workload installed itself when the half-finished VS Community instance completed: `vswhere -all -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath` now returns `C:\Program Files\Microsoft Visual Studio\18\Community`, so plain `dotnet publish -r win-x64 -p:PublishAot=true` works **with no override** and the published binary ran the whole harness in session 78. S4's hypothesis was measured there and **refuted** (AOT at or behind the JIT on 12 of 16 cells, 0,85–0,88 on the legacy UPDATE cell, 0,89–1,00 on the encrypted arm), so no AOT recommendation ships. What remains from this row is the build-machine requirement itself (the C++ workload), which applies only to someone who chooses to publish AOT. |
 | 7 | **May the gate discard a warm-up rep?** `RunRegressionGate` runs its 3 measured reps and nothing else, while every other mode in the same harness discards `SHARPCOREDB_WARMUP_REPS` rep(s) first (default 3); the verdict is the max rep spread against 2,50×, so the cold first rep sits inside the statistic that decides it. Measured (session 52): the default arm's UPDATE ran **58.653 → 142.819 → 174.354 ops/sec** across the three reps — a monotone 2,97× rise that *was* the printed worst spread, and the shape of a cold process rather than of load. This is one non-load mechanism for the ≥ 6 `INCONCLUSIVE` verdicts recorded in sessions 19–32, four of them straddling the limit with docs-only commits behind them. | Session 52 (worklog): four measured runs (3,43× / 2,97× / 3,24× / 3,11×), the code path at `Program.cs:4741-4846`, and the warm-up call sites at `:2388`, `:2511`, `:2664` | **The protocol half is DONE (2026-09-26) and the box is not the blocker for the rest.** `97fb2651` gave the gate the same discarded warm-ups every other mode has (`ResolveWarmupReps()`, default **8**, `Program.cs:4801-4818`), and that commit's own run was **exit 0, eight of eight metrics `ok`, worst rep spread 2,23×** — three sessions of exit-2 runs carried a rep-1 ramp inside the statistic that no longer sits there. Its message states **no baseline re-recorded**, so the comparison's two sides came from *different* protocols; whether that *loosens* the guard is **not** established by reasoning (the compared statistic is a median, `MedianOf(raw)` vs the recorded median, and the cold rep is the minimum of three) — what is established is the provenance mismatch, which is why re-recording is still the clean end state. That step wants `--write-baseline` on a script-verified `QUIET` box: `pwsh scripts/quiet-machine.ps1 -Apply -StopServices -BenchTempDir D:\scdb-bench-tmp` — **one elevated command**, i.e. a privilege limit, not a machine limit (session 18 already returned `QUIET`; and gate *verdicts* pass here with `WSearch` running: attempts 9/10, sessions 64/65/66-rerun/67). It stays an **owner call**, because it moves the reference the guard measures against. Meanwhile the gate prints each arm's per-rep sequence and classifies it (`cold-start` / `load` / `mixed`), so every verdict states the shape it can see instead of asserting load; thresholds, medians and exit codes are unchanged. **✅ DONE (2026-09-27, session 72 — owner GO) · RE-RECORDED:** `--write-baseline` returned **exit 0 on the first attempt** (worst rep spread **1,86×** against the 2,50× limit, both arms `mixed`, on a script-verified `QUIET` box — the stop applied immediately before the run, since that stop is per-session and `WSearch` was back four minutes later), so the guard compares today's build against the post-fix code — and against a **stricter** reference than 2026-09-15's, because every median rose: raw I 140.440 → **210.263**, R 104.216 → **191.192**, U 107.082 → **257.141**, D 204.393 → **556.715**; default I 123.493 → **184.922**, R 81.198 → **145.486**, U 77.823 → **181.222**, D 98.725 → **165.296** ops/s. No tolerance, threshold, `--gate-factor` or warm-up count moved. The first gate run after the record was `INCONCLUSIVE` (UPDATE cells only, both arms `mixed`) and is recorded as such rather than retried — evidence in WORKLOG session 72. |
 | 8 | **Is `release/v2.1.0.0-RC.3` the landing target for campaign work, rather than a `perf/*` branch?** The owner, 2026-09-25 (session 53): **yes** — RC.3 becomes the future main line and carries all the .NET 11 / C# 15 optimizations, so the campaign's work is fast-forwarded onto it. This **overrides brief §9's "do not commit to `release/*`" for this branch only**; every other rail in §11 stands, and `Never push` was *not* part of the override. | Session 53 (worklog): `84b79dbf` (= `origin/release/v2.1.0.0-RC.3`) is **114 behind / 0 ahead** of the campaign head, `git merge-base --is-ancestor` exits 0, `git merge-tree --write-tree` reports no conflict, and the range is 394 files / +40.924, with **28 commits touching `src/`** | **Fast-forward only** (`git merge --ff-only`), never a merge commit and never a hand-merged file; the agent does not push, and the released **`v2.1.0-RC.3` tag is untouched** because it sits one commit behind the branch head (`d5924420`) and a fast-forward cannot move it. |
 | 9 | **How do the two lines coexist once RC.3 is the main line?** The owner, 2026-09-25 (session 53): `master` (net10.0 / C# 14, `ci.yml`, `DOTNET_VERSION: 10.0.x`) stays the **maintenance line for the currently released framework**, and `release/v2.1.0.0-RC.3` (net11.0 / C# 15 preview, `ci-net11.yml`, .NET 11 SDK pin) is the **forward line** that becomes the default. **Fixes flow `master` → net11 line, never the reverse.** | `ci.yml` triggers `branches: [master, develop]` and `tags: ['v*', '!v2.1*']` with pack/publish master-only; `ci-net11.yml` triggers `release/v2.1.0.0-*`; the lines diverge in `global.json`, `Directory.Build.props` and `Directory.Packages.props` (69 changed lines); csproj says `net11.0`/`preview` on the forward line vs `net10.0`/`14.0` on master; `ls-remote --symref` shows GitHub's default is still `master` | **Promote the net11 branch by default-branch *pointer*, not by rename** — a rename stops `ci-net11.yml` matching *and* hands the net11 commits to the net10 pipeline in one move. Forward-port with `git cherry-pick -x`, resolving conflicts in `global.json` / `Directory.Build.props` / `Directory.Packages.props` in favour of the **net11 build config** (take the fix, never the config). Never `git merge` the net11 line into `master`: net11-only API and C# 15 syntax would land in a net10/C#14 line that cannot compile it. Agent sessions never rename branches, change the default branch, edit `global.json`, or move version metadata. |

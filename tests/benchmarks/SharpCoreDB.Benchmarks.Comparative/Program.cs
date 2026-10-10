@@ -612,8 +612,11 @@ class Program
 
     /// <summary>
     /// How many <b>discarded</b> warm-up reps to run before the measured ones (plan §6 rule 10, from S7's
-    /// verdict). Default <b>3</b>; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables it, which is what makes this a
-    /// protocol change rather than a hidden behaviour.
+    /// verdict). Default <b>8</b> — the code's own value, and the paragraph below records why it was raised
+    /// from 3 (session 40; the `Default 3` this line carried until session 78 was stale in the same file as
+    /// the paragraph proving it so). An explicit <c>SHARPCOREDB_WARMUP_REPS</c> value is used verbatim and
+    /// only an <em>unparseable</em> one falls back to 3; <c>=0</c> disables the protocol, which is what makes
+    /// this a protocol change rather than a hidden behaviour.
     /// <para>
     /// The reason is measured, not assumed. In two independent 5-rep runs our per-rep numbers improved
     /// <em>monotonically</em> from rep 1 to rep 5 while SQLite's stayed flat, and because every rep builds a
@@ -649,6 +652,23 @@ class Program
     /// at ~355k and ~420k), so a range's extremes can still be single-rep artefacts. The <b>median</b> is
     /// robust to them — arm B's UPDATE median moved only 0,39 → 0,37 → 0,36 across three protocols — which is
     /// why the median is the published cell and the range is the gate on whether it may be quoted at all.
+    /// </para>
+    /// <para>
+    /// <b>Session 78 correction to the paragraph above:</b> <c>DOTNET_TieredCompilation=0</c> collapsing the
+    /// spread on the <em>fair</em> arm does not generalise into "the ramp is tiering". On <c>--pk</c>'s legacy
+    /// arm — the one this session's defect was in — <em>neither</em> dial removes a cold first rep: with
+    /// <c>DOTNET_TieredCompilation=0</c> rep 1 read UPDATE 101.681 against its own median of 522.392, and with
+    /// <c>DOTNET_TieredPGO=0</c> 145.932 against 543.711 (artifacts <c>s78-aot-jitnotc-r1.txt</c>,
+    /// <c>s78-aot-jitpgo0-r1.txt</c>). So on this arm the ramp is not a tiering artefact alone — first-use JIT
+    /// of not-yet-called paths and first-touch data-file costs look the same in the rep list. That is exactly
+    /// why the fix is a <b>warm-up</b> rather than a runtime switch: discarded reps absorb every cause, while a
+    /// switch would only absorb the one it names. What the dials actually changed is worth stating, because it
+    /// is easy to assume otherwise: this Exe's own <c>runtimeconfig.json</c> declares <em>neither</em>
+    /// <c>TieredPGO</c> nor <c>TieredCompilation</c> (so both sit at the runtime's defaults — dynamic PGO has
+    /// been on by default since .NET 8), and <c>src/SharpCoreDB</c>'s <c>&lt;TieredPGO&gt;true&lt;/TieredPGO&gt;</c>
+    /// cannot flow across a <c>ProjectReference</c> into it, since only the entry assembly's runtimeconfig
+    /// governs. The dials therefore reach this process only as <c>DOTNET_*</c> environment variables, which is
+    /// how they were run.
     /// </para>
     /// </summary>
     static int ResolveWarmupReps()
@@ -3801,6 +3821,14 @@ class Program
     /// <summary>
     /// D1: runs a fair-PK arm several times and reports the per-phase median time so the printed
     /// ops/s is robust to run-to-run noise (single-shot arms fluctuated by roughly ±30%).
+    /// <para>
+    /// Session 78: the measured set is preceded by <see cref="ResolveWarmupReps"/> discarded reps, the
+    /// protocol every other measuring mode in this harness already used. Without it this was the only
+    /// mode that measured straight from process start, so the value of the first arm of a <c>--pk</c>
+    /// process (the legacy row of the published table, whose position in the arm order is fixed)
+    /// depended on where its own ramp happened to leave the median. The measured size of that defect,
+    /// and the honest limit of the explanation, are on the warm-up call below.
+    /// </para>
     /// </summary>
     private static BenchmarkResult RunPkMedian(Func<BenchmarkResult> arm, int reps = 3)
     {
@@ -3808,6 +3836,43 @@ class Program
         if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
         {
             reps = envReps;
+        }
+
+        // Harness defect (found while measuring S4, 2026-10-09 session 78; no plan section owns it —
+        // `--pk` is the measurement path, not a plan item): this helper was the only
+        // measuring mode in the harness that sampled straight from process start, ignoring
+        // SHARPCOREDB_WARMUP_REPS and discarding nothing. The first arm of a --pk process is always the
+        // legacy row of the published fair-PK table (the arm order in RunPkComparison is fixed), so that
+        // row — and only that row — was measured on/in the process's ramp. Measured over five --pk
+        // processes, its published UPDATE window was the ramp itself: reps 94.883 … 590.182, i.e. a
+        // 5,32×–6,22× spread *inside the window whose median is published*, median 232.275–344.778
+        // (median of medians 263.575). NativeAOT carries no such ramp — its first measured rep is already
+        // at its own median (507.251 vs 502.479 in r1) — so S4 was comparing a ramp against a plateau, and
+        // the first AOT run duly looked 1,85× faster on UPDATE.
+        //
+        // What the fix does, measured. It removes the ramp from the published window by construction: the
+        // same cell's window becomes 431.931 527.264 483.416 448.490 409.990 (spread 1,29×, median
+        // 448.490) and 504.385 … 587.440 over three processes (spreads 1,16×–1,29×, medians
+        // 448.490–529.134), with the discarded reps carrying the whole ramp (118.306 → 453.479 across the
+        // eight). Every other arm in the same comparison moved by no more than ~11% between the two
+        // protocols (FW 0,89–1,04, encrypted at-rest 0,98–1,09, SQLite control 0,91–0,96) while this row's
+        // cells moved 1,04×–2,01× — i.e. the defect was confined to the row measured first, which is what
+        // the mechanism predicts. The 1,85× AOT "win" on that row is gone: AOT now reads 0,85–0,88 of JIT
+        // on UPDATE (0,85 ratio-of-medians, 0,88 median-of-pairs) and 0,93–0,95 on READ.
+        //
+        // The honest limit, named rather than hidden: discarded reps do not make a *slow* ramp impossible,
+        // they make a slow ramp harmless. The control process artifacts/s78-pkwarm0-jit-r1.txt ran this
+        // same cell with WARMUP_REPS=0 on a settled box, measured a window that still ramps
+        // (148.704 → 402.011 → 549.302 → 671.005 → 530.028, spread 4,51×) and still landed its median hot
+        // at 530.028. So the pre-fix reading was not *guaranteed* to be low — on a settled box it could
+        // read hot too — and the fix's guarantee is that the published window no longer contains a segment
+        // of the ramp at all, whichever way the box is behaving. That is why this uses the shared resolver
+        // instead of inventing a sixth warm-up policy; the per-process rep lists, the arm medians and the
+        // derivation are in artifacts/s78-warmup-defect.{ps1,txt} and artifacts/s78-ratio.{ps1,txt}.
+        int warmupReps = ResolveWarmupReps();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            arm();
         }
 
         var runs = new List<BenchmarkResult>(reps);
@@ -3917,7 +3982,7 @@ class Program
         Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
-        Console.WriteLine("(fair-PK arms run 3x; median time per phase is reported)");
+        Console.WriteLine($"(fair-PK arms: {ResolveWarmupReps()} discarded warm-up rep(s) each, then the measured reps — median time per phase is reported)");
 
         Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length, plaintext) ━━━");
         var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType));
@@ -5083,9 +5148,19 @@ class Program
 
     /// <summary>
     /// Classifies an arm's rep-by-rep behaviour by asking the one question the spread cannot answer:
-    /// <b>is the first measured rep the slowest one?</b> That is the signature of a cold process, and it
-    /// is the mechanism this gate can actually produce, because — unlike every other mode in this harness
-    /// (they start with <see cref="ResolveWarmupReps"/> rep(s), default 3) — it discards no warm-up rep.
+    /// <b>is the first measured rep the slowest one?</b> That is the signature of a cold process. Every
+    /// measuring mode in this harness now discards <see cref="ResolveWarmupReps"/> rep(s) before its
+    /// measured set (default 8; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables them), so this shape means the
+    /// ramp <em>outlasted</em> that budget rather than that no budget was set — and the gate's own
+    /// inconclusive message prints which of the two it is.
+    /// <para>
+    /// Session 78 correction: this comment used to read "unlike every other mode in this harness (they
+    /// start with ResolveWarmupReps reps, default 3) — it discards no warm-up rep". It was wrong in both
+    /// directions by the time it was read. The gate had already been given warm-up reps (session 77), and
+    /// <c>--pk</c>'s <c>RunPkMedian</c> — the mode behind the published fair-PK table, and the only
+    /// measuring helper that never called this resolver — was the one mode it did not describe. That
+    /// defect is fixed in the same session that found it; the measured evidence is on <c>RunPkMedian</c>.
+    /// </para>
     /// <list type="bullet">
     /// <item><c>cold-start</c> — every disagreeing metric bottoms out at rep 1: the disagreement is
     /// explained by warm-up, whether or not the rise is strictly monotone.</item>
