@@ -69,6 +69,12 @@ git diff --stat promote/net11-main-20261010    # only the follow-up commit's fil
 # 3. Verify on master itself, then tag and push (never force).
 git tag -a v2.1.0 -m "SharpCoreDB 2.1.0 - .NET 11 / C# 15 line"
 git push origin master v2.1.0
+
+# 4. That push IS the release, not a rehearsal: `ci.yml`'s `publish` job is gated on
+#    `github.ref == 'refs/heads/master'`, so a master push packs and pushes every packable project to
+#    NuGet.org. The v2.1.0 tag adds the Docker image run and the gates only (the publish job is skipped
+#    for a tag ref). The parked line publishes on a push to its own branch (`ci-net10.yml`,
+#    `--skip-duplicate`). Evidence for the 2026-10-10 run: "Outcome" below.
 ```
 
 ### After the flip (2026-10-10)
@@ -114,6 +120,34 @@ clean and the banned-SIMD guard clean.
   never the config.
 - The net11-only API surface stays what `docs/net11/UPGRADE.md` documents: native Zstandard, Runtime Async,
   and the source-gated `SharpCoreDB.Net11` members. Nothing in the shipped storage format changes.
+
+## Outcome (2026-10-10, after the push)
+
+The owner pushed all three refs the same day. What each push triggered, read from the workflow runs
+rather than assumed:
+
+| Push | Workflow | Result |
+| --- | --- | --- |
+| `master` `58f297e9` | `CI/CD Pipeline` (`ci.yml`, run `38066545672`) | **success** — 3-OS build + tests, coverage, `pack`, `publish` |
+| tag `v2.1.0` | `CI/CD Pipeline` (`38066540443`) and `Docker` | **success** — the gates and the image; `publish` skipped for a tag ref |
+| `release/v2.0` `c13405df` | `CI v2.0 legacy (.NET 10)` (`ci-net10.yml`, run `38066546526`) | **success** — its **first ever run**: 3-OS build + tests, `pack`, `publish` |
+
+The parked line's run is the direct proof that the `ci-net10.yml` fix above works: the workflow now
+exists on the ref that is pushed, so a `release/v2.0` push produces a run instead of nothing.
+
+**Publication**, verified against the NuGet API: of the 26 `SharpCoreDB.*` ids in
+`Directory.Packages.props`, **25 answer at `2.1.0`** on nuget.org, and `2.1.0` is the newest version of
+`sharpcoredb` (after `2.1.0-rc.3`). The 26th, `SharpCoreDB.Server`, has
+`<IsPackable>false</IsPackable>` in its `.csproj`, so the pack job's discovery skips it and it has never
+been on nuget.org (flat container HTTP 404, search hits 0) — it ships as the server image plus
+`SharpCoreDB.Server.Core`. That is pre-existing and deliberate, not a defect this promotion introduced;
+the `SharpCoreDB.Server.[0-9]*` pattern in the publish job's layer 3 is simply inert.
+
+A re-push of an existing version is a no-op because the publish step passes `--skip-duplicate`, which
+is why the parked line's `2.0.0.3` run published nothing new. Two consequences worth remembering: the
+parked line only publishes when `SharpCoreDBVersion` is bumped, and **every later push to `master`
+re-runs the publish job** — harmless for an unchanged version, but a `master` push is never a private
+operation.
 
 ## GA checklist (around 2026-11-10 — the only outstanding work this decision creates)
 

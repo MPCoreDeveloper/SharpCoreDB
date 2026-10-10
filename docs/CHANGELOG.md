@@ -74,7 +74,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > `2.1.0-RC.3` — what changed is the release identity and the metadata that ships with it. Procedure and
 > gates: [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md). Verified on the promoted tree:
 > build 0 errors and **2,383 tests / 0 failed / 0 errors / 0 skipped** across the four CI suites
-> (core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24).
+> (core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24). **Published to NuGet.org on 2026-10-10**:
+> the `master` push published **25 packages at 2.1.0** — every project that is packable (the `v2.1.0`
+> tag added the container image and the gates; its `publish` job is skipped for a tag ref);
+> `SharpCoreDB.Server` ships as the server image (`<IsPackable>false</IsPackable>`) and has
+> never been a package. The same push produced the parked line's first pipeline run; see
+> [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md) §Outcome.
 
 ### Changed
 
