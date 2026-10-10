@@ -1334,14 +1334,14 @@ public partial class Database
         /// has always taken (non-empty <c>Where</c>, key fields null).
         /// </para>
         /// </summary>
-        public Dictionary<string, List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>> UpdatesByTable { get; } = [];
+        public Dictionary<string, BatchOperationList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>> UpdatesByTable { get; } = [];
 
         /// <summary>
         /// Gets the DELETE operations, grouped per table. Canonical statements carry the pre-parsed column
         /// and raw literal instead of a WHERE clause, so the table layer can skip the per-statement WHERE
         /// rebuild and re-parse (B3); Where stays empty for those.
         /// </summary>
-        public Dictionary<string, List<(string Where, string? Column, string? Literal)>> DeletesByTable { get; } = [];
+        public Dictionary<string, BatchOperationList<(string Where, string? Column, string? Literal)>> DeletesByTable { get; } = [];
 
         /// <summary>Gets the statements no batch fast path claimed; the shared parser runs them.</summary>
         public List<string> NonInserts { get; } = [];
@@ -1396,7 +1396,9 @@ public partial class Database
             {
                 if (!batch.UpdatesByTable.TryGetValue(updTableName, out var updList))
                 {
-                    updList = [];
+                    // Capacity hint = the batch's statement count: this table's bucket can never hold more,
+                    // and on a homogeneous batch it is exactly what the bucket ends up needing (session 79).
+                    updList = new BatchOperationList<(string, string?, object?, string?, Dictionary<string, object>)>(statements.Length);
                     batch.UpdatesByTable[updTableName] = updList;
                 }
 
@@ -1406,7 +1408,7 @@ public partial class Database
             {
                 if (!batch.DeletesByTable.TryGetValue(delTableName, out var delList))
                 {
-                    delList = [];
+                    delList = new BatchOperationList<(string, string?, string?)>(statements.Length);
                     batch.DeletesByTable[delTableName] = delList;
                 }
 
@@ -1457,53 +1459,70 @@ public partial class Database
         // ✅ PERF: Batch UPDATE — single lock per table instead of per-statement
         foreach (var (tableName, ops) in batch.UpdatesByTable)
         {
-            if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
+            try
             {
-                // The classifier already builds the core's operation shape and resolves a canonical
-                // statement's key, so the list is handed straight over: no re-listing, no WHERE rebuild and
-                // no second parse of a predicate the classifier had already split (session 76).
-                concreteUpdate.UpdateMultiplePrepared(ops);
+                if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteUpdate)
+                {
+                    // The classifier already builds the core's operation shape and resolves a canonical
+                    // statement's key, so the list is handed straight over: no re-listing, no WHERE rebuild and
+                    // no second parse of a predicate the classifier had already split (session 76).
+                    concreteUpdate.UpdateMultiplePrepared(ops);
+                }
+            }
+            finally
+            {
+                // The bucket is ArrayPool-backed (session 79): it goes back even when the table lookup
+                // failed or the update threw, or the pool would keep this batch's operations alive.
+                ops.Release();
             }
         }
 
         // ✅ PERF: Batch DELETE — single lock per table instead of per-statement
         foreach (var (tableName, deletes) in batch.DeletesByTable)
         {
-            if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
+            try
             {
-                // Canonical batches go through the structured path (no WHERE rebuild or re-parse).
-                // NOSONAR:S125 - prose description: any non-canonical statement forces the
-                // string form for the whole table, not commented-out code.
-                bool allCanonical = true;
-                foreach (var (_, column, _) in deletes)
+                if (tables.TryGetValue(tableName, out var tbl) && tbl is DataStructures.Table concreteDelete)
                 {
-                    if (column is null)
+                    // Canonical batches go through the structured path (no WHERE rebuild or re-parse).
+                    // NOSONAR:S125 - prose description: any non-canonical statement forces the
+                    // string form for the whole table, not commented-out code.
+                    bool allCanonical = true;
+                    foreach (var (_, column, _) in deletes)
                     {
-                        allCanonical = false;
-                        break;
-                    }
-                }
-
-                if (allCanonical)
-                {
-                    var keys = new List<(string Column, string Literal)>(deletes.Count);
-                    foreach (var (_, column, literal) in deletes)
-                    {
-                        keys.Add((column!, literal!));
+                        if (column is null)
+                        {
+                            allCanonical = false;
+                            break;
+                        }
                     }
 
-                    concreteDelete.DeleteMultipleKeys(keys);
-                }
-                else
-                {
-                    var wheres = new List<string>(deletes.Count);
-                    foreach (var (where, column, literal) in deletes)
+                    if (allCanonical)
                     {
-                        wheres.Add(where.Length > 0 ? where : column + " = " + literal);
-                    }
+                        var keys = new List<(string Column, string Literal)>(deletes.Count);
+                        foreach (var (_, column, literal) in deletes)
+                        {
+                            keys.Add((column!, literal!));
+                        }
 
-                    concreteDelete.DeleteMultiple(wheres);
+                        concreteDelete.DeleteMultipleKeys(keys);
+                    }
+                    else
+                    {
+                        var wheres = new List<string>(deletes.Count);
+                        foreach (var (where, column, literal) in deletes)
+                        {
+                            wheres.Add(where.Length > 0 ? where : column + " = " + literal);
+                        }
+
+                        concreteDelete.DeleteMultiple(wheres);
+                    }
                 }
+            }
+            finally
+            {
+                // ArrayPool-backed bucket (session 79) — returned even when the table lookup failed.
+                deletes.Release();
             }
         }
 

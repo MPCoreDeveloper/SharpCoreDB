@@ -139,6 +139,14 @@ then the median of N runs and prints its min–max spread, which is what keeps a
    already carry their own median-of-3/5 and their own same-run SQLite reference; §5.4's ladders now match that.
 1. Clean shell with **no** `SHARPCOREDB_*` vars set, unless a specific experiment requires one —
    then record it in the worklog. The harness prints a `REGIME:` banner; check it on every run.
+   **⚠️ This box injects two of them process-scope into every shell** — `SHARPCOREDB_WARMUP_REPS=0` and
+   `SHARPCOREDB_BENCH_REPS=2` (found 2026-10-09, session 79; user *and* machine scope are empty, so they
+   arrive with the shell, from an earlier session's AOT arms). `WARMUP_REPS=0` disables the write-path
+   gate's warm-up reps and makes `--gate` come out `INCONCLUSIVE` **naming that variable as its cause**;
+   it had silently governed every run of that session until the gate caught it. Clear both before the
+   first measurement — `Remove-Item Env:\SHARPCOREDB_WARMUP_REPS`, `Remove-Item Env:\SHARPCOREDB_BENCH_REPS`
+   (`artifacts/s79-ab.ps1` does it for the A/B, and its clean-regime numbers agree cell for cell with the
+   pre-clear pass).
 2. Release config only. Median-of-3 (median-of-5 for `--multirowinsert`).
 3. One benchmark at a time; nothing else on the CPU; redirect output to a file; a detached process
    is preferred.
@@ -514,6 +522,20 @@ place below, with the commit or the artifact that carries its evidence:
    inside a caller's transaction threw on the async arm. Both async SQL entry points also validate now
    (`SqlQueryValidator`), which was the owner-gated half of session 73's NEXT line. Plan §7 carries the table.
 
+   **Its residual is now attributed and its cheap half is closed — 2026-10-09 (session 79).** Session 76
+   removed the duplicate predicate parse but left the classification at **571 B/statement**; session 79
+   stamped the stage apart — **scan 167 + per-statement updates dictionary 240 + per-table bucket doubling
+   131 + key unquote 31 + lookup 0 = 571 B/statement** (`artifacts/s79-probe-split-pagebased.txt`) — and
+   removed the two *container* pieces: the bucket is an `ArrayPool`-backed `BatchOperationList<T>` with a
+   capacity hint (released in the executor's `finally`), and `Table.UnquoteSqlLiteral` returns the caller's
+   own instance when the trim removed nothing. Result on both `--pk` engines: **571 → 473 B/statement**
+   (12 of 12 reps, no overlap), with **270 → 231 B/call** on the DELETE arm (`artifacts/s79-ab-summary.txt`;
+   core suite 1992 / 0). What is left is the **240 B updates dictionary**: removing it means carrying a
+   single assignment through the UPDATE core's ~15 signatures — the binding/prepared-statement route, i.e.
+   a feature, now **sized** by that probe. An identifier memo was **rejected on measurement** (13–21 ns per
+   hit against the 11 ns `ToString` it replaces). Timebox: the 0,5-session budget with a hard stop of 1 was
+   spent in sessions 73/75/76, so this pass was bounded to the cheap half on purpose.
+
 3. ~~**The two PageBased per-row regions §5.2 delegated here**~~ — **CLOSED 2026-09-27 (session 74)**: the
    2026-09-21 line numbers were re-verified (they now point at the batch entry and the structured wrapper, not at
    the locate), and reading the code showed the arm's *route* changed since that entry — the SQL batch dispatcher
@@ -603,6 +625,13 @@ Add stamps only where needed to answer 5.1/5.3.
   re-run showing the verdict).
 - Commit **locally** to a feature branch (e.g. `perf/autonomous-YYYYMMDD`). **Do not push.** **Do not
   commit to `release/*` or `master`.**
+- **`git` works on this box — commit every session.** Sessions 77 and 78 recorded "`git` invocations hang on
+  this repository" and left their work (and session 79's, before it was re-measured) uncommitted on that
+  basis. **The claim is false**: re-measured 2026-10-10 (session 79) through this harness' own shell, inline
+  *and* in a child process, on `perf/autonomous-20260921` — `status --porcelain` **94 ms**, `log --oneline -6`
+  **54 ms**, `diff --stat` **95 ms**, `rev-parse` **72 ms** (`git 2.51.0.windows.1`). If a `git` invocation
+  should ever really stall, record the *exact* command and its timing before writing "git is broken" in the
+  log, because that sentence stops the next session from committing.
 - Commit message: imperative, cite the plan section (e.g. `perf(insert): … (plan §5.1)`), state the
   change and the measured before/after **ratio** + regime.
 - Re-recording the baseline is explicit and reviewable — always state why in the commit message.

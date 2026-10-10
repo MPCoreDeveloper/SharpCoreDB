@@ -2360,7 +2360,7 @@ public partial class Table
     /// <returns>The number of rows matched and updated.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal int UpdateMultiplePrepared(
-        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         ArgumentNullException.ThrowIfNull(operations);
         if (operations.Count == 0) return 0;
@@ -2430,7 +2430,7 @@ public partial class Table
     /// <returns>The number of rows matched and updated.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private int UpdateMultipleCore(
-        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
         if (operations.Count == 0) return 0;
@@ -3082,7 +3082,7 @@ public partial class Table
     /// </summary>
     private bool TryBulkUpdateContiguousFixedWidth(
         IStorageEngine engine,
-        List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         int count = operations.Count;
         if (count < 2)
@@ -4388,7 +4388,14 @@ public partial class Table
     /// </summary>
     internal static string UnquoteSqlLiteral(string raw)
     {
-        return raw.AsSpan().Trim().Trim("'\"".AsSpan()).ToString();
+        // Session 79 (plan §5.5 (ii) residual): return the caller's own instance when the trim removed
+        // nothing. The trim is always a *subspan* of `raw`, so equal lengths prove the raw string already
+        // was the trimmed value — content-identical, and it stops the per-statement second copy a numeric
+        // predicate literal ("id = 5000" → "5000") used to pay. Measured at 32 B/statement on the fair-PK
+        // arm before this change.
+        var trimmed = raw.AsSpan().Trim();
+        var unquoted = trimmed.Trim("'\"".AsSpan());
+        return unquoted.Length == raw.Length ? raw : unquoted.ToString();
     }
 
     /// <summary>

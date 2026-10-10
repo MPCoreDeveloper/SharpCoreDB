@@ -286,5 +286,68 @@ public sealed class BatchCanonicalParseTests : IDisposable
             (db as IDisposable)?.Dispose();
         }
     }
+
+    [Fact]
+    public void UnquoteSqlLiteral_AlreadyNormalizedLiteral_ReturnsTheCallerInstance()
+    {
+        // Session 79 (plan §5.5 (ii) residual): the classifier hands the UPDATE core the normalized key
+        // value, and the shared normalizer used to build a second, identical string for every numeric
+        // predicate literal ("id = 5000" → "5000") — measured at 32 B/statement on the fair-PK arm. The
+        // contract stays content equality; this pins the removed allocation (the identity) as well as the
+        // normalization the shapes that DO need work must keep.
+        const string alreadyNormalized = "5000";
+        Assert.Same(alreadyNormalized, Table.UnquoteSqlLiteral(alreadyNormalized));
+
+        Assert.Equal("5000", Table.UnquoteSqlLiteral(" 5000 "));
+        Assert.Equal("User9", Table.UnquoteSqlLiteral("'User9'"));
+        Assert.Equal("User9", Table.UnquoteSqlLiteral("\"User9\""));
+        Assert.NotSame("5000", Table.UnquoteSqlLiteral("5000 "));
+    }
+
+    [Fact]
+    public void CanonicalNumericKeyBatch_UpdatesEveryRow_AfterTheNormalizerChange()
+    {
+        // The arm whose second copy the normalizer no longer allocates: a numeric key on the PK
+        // (`WHERE id = <n>`) must still resolve to the right row on both engines' structured route.
+        var db = _factory.Create(_dirPath, "pw");
+        try
+        {
+            db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("INSERT INTO t VALUES (1, 'a', 0.1)");
+            db.ExecuteSQL("INSERT INTO t VALUES (2, 'b', 0.2)");
+
+            var table = TableOf(db, "t");
+            long structuredBefore = table.StructuredUpdateOperations;
+            long contiguousBefore = table.BulkContiguousUpdateBatches;
+
+            db.ExecuteBatchSQL(
+            [
+                "UPDATE t SET score = 11.1 WHERE id = 1",
+                "UPDATE t SET score = 22.2 WHERE id = 2",
+            ]);
+
+            // Values first — the routing counters are diagnostic (see below) and the values are the
+            // contract the normalizer change must not touch.
+            Assert.Equal(11.1, Num(db, "SELECT score FROM t WHERE id = 1", "score"));
+            Assert.Equal(22.2, Num(db, "SELECT score FROM t WHERE id = 2", "score"));
+
+            // A canonical PK-keyed batch is claimed by *a* structured route, and the two routes publish
+            // counters in different units: the per-op loop publishes StructuredUpdateOperations (one per
+            // operation, and only from its own branch) while the contiguous pass publishes
+            // BulkContiguousUpdateBatches (one per batch) and returns before the per-op publish. So the
+            // assertion is "some structured route claimed this batch", not a sum — summing them would add
+            // operations to batches. The PageBased fact above pins the per-op counter on its own, because
+            // PageBased cannot take the contiguous pass.
+            long structuredDelta = table.StructuredUpdateOperations - structuredBefore;
+            long contiguousDelta = table.BulkContiguousUpdateBatches - contiguousBefore;
+            Assert.True(
+                structuredDelta > 0 || contiguousDelta > 0,
+                $"expected a structured route to claim the batch (structured ops={structuredDelta}, contiguous batches={contiguousDelta})");
+        }
+        finally
+        {
+            (db as IDisposable)?.Dispose();
+        }
+    }
 }
 

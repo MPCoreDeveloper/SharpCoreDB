@@ -1610,7 +1610,14 @@ instrumentation added here stays: it covers real entry points that other shapes 
 > (`parse`: 19,7 ms / 10.000 calls / 500 B/op on PageBased, 22,2 ms on AppendOnly — `TryParseUpdateForBatch`,
 > `Database.Batch.cs:1048` — the reference read `:1234`, which is the *call site* the shared classifier moved to
 > `:1338`; `:1048` is the definition and was already the definition when the earlier entry was written —), which
-> is §5 item 2's territory, not this item's. The same session's back-to-back
+> is §5 item 2's territory, not this item's. **Measured 2026-10-09 (session 79):** the stage now stands at
+> **571 B/statement** (session 76's re-route widened the bucket element) and is attributed by sub-stamps —
+> scan **167** + per-statement updates dictionary **240** + per-table bucket doubling **131** + key unquote
+> **31** + lookup **0**. The two container pieces were fixed the same session: an `ArrayPool`-backed
+> `BatchOperationList<T>` with a capacity hint, and `UnquoteSqlLiteral` returning the caller's own instance
+> when the trim removed nothing — **571 → 473 B/statement on both `--pk` engines** (DELETE arm 270 → 231
+> B/call), no throughput claim; the remaining 240 B is the binding/prepared-statement feature (worklog
+> session 79, `artifacts/s79-ab-summary.txt`). The same session's back-to-back
 > passes read PageBased **8,68 µs/update (115.148 ops/s)** against AppendOnly **8,72 µs/update (114.742 ops/s)**
 > — parity, where this section opened at a 3,4× trap. Quote that as a same-session pair, never as an absolute.
 
@@ -2803,7 +2810,11 @@ and a capacity hint in `HashIndex`), for 6,189 → **5,893 B/row** with wall tim
 5. **Coverage — CLOSED 2026-09-27 (session 74); all three gaps accounted for.** The statement-level half was
    wired in session 73 (the second batch-dispatcher path, the four remaining statement-level entry points and
    the parameterized tokenisation; the coverage note in §7 carries the **1,57×** async/sync measurement that
-   wiring made possible). Session 74 closed the other two:
+   wiring made possible). **Session 79 then used that coverage and closed its cheap half:** the surviving
+   per-statement cost — the classifier's `parse` stage, **571 B/statement**, attributed by sub-stamps as
+   scan 167 + updates dictionary 240 + bucket doubling 131 + key unquote 31 — is now **473 B/statement** on
+   both `--pk` engines (DELETE arm 270 → 231 B/call), with the remaining 240 B named as the
+   binding/prepared-statement feature (§6's PageBased block carries the numbers; worklog session 79). Session 74 closed the other two:
    - **The StructRow ladder arm's UPDATE/DELETE phases** are *deliberately* not run — they are the same
      `ExecuteBatchSQL` call path as the Direct API row — and the defect was the ambiguous printed `0`, fixed in
      session 69 (`390afb87`: `UpdateMeasured`/`DeleteMeasured`, `n/a` in the summary table with a footnote,
