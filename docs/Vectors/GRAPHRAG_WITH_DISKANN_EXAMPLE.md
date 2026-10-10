@@ -1,12 +1,12 @@
-# Voorbeeld GraphRAG Workflow met DISKANN (v2.1 RC)
+# Example GraphRAG workflow with DISKANN (2.1.0)
 
 **Munarium-inspired high-recall vector indexing + hybrid fusion + content-verified artifacts**
 
-Dit voorbeeld toont een complete **GraphRAG** workflow met de nieuwe `DISKANN` index. Het combineert:
-- `DiskAnnIndex` (hoge recall ANN uit munarium `vector_diskann.rs`).
-- Content-verificatie (`ArtifactManifest` + `BuildResult` union).
+This example shows a complete **GraphRAG** workflow with the new `DISKANN` index. It combines:
+- `DiskAnnIndex` (high-recall ANN from munarium `vector_diskann.rs`).
+- Content verification (`ArtifactManifest` + the `BuildResult` union).
 - Hybrid fusion (`HybridFusionAlpha`).
-- Je bestaande `SharpCoreDB.EventSourcing` (conditional appends voor immutable event streams).
+- `SharpCoreDB.EventSourcing` (conditional appends for immutable event streams).
 
 ## 1. Setup (C# — .NET 11 RC)
 
@@ -41,7 +41,7 @@ db.AddSharpCoreDBGraphRagSql(options =>
 });
 ```
 
-## 2. Maak tabellen + DISKANN index (SQL DDL)
+## 2. Create the tables and the DISKANN index (SQL DDL)
 
 ```sql
 -- Graph table for relationships (EventSourcing compatible)
@@ -66,12 +66,12 @@ USING DISKANN WITH (
 CREATE INDEX idx_content ON knowledge_graph(content);
 ```
 
-## 3. Ingest data met EventSourcing (conditional appends)
+## 3. Ingest data through EventSourcing (conditional appends)
 
 ```csharp
 var eventStore = new SharpCoreDbEventStore(db, "graph_events");
 
-// Conditional append (your RC feature)
+// Conditional append (optimistic concurrency)
 var appendResult = await eventStore.TryAppendEventsAsync(
     streamId: "graph_build_001",
     expectedVersion: 5,                    // optimistic concurrency
@@ -92,7 +92,7 @@ var projection = new GraphRagProjection(db);
 await projection.ApplyEventsAsync(appendResult.Results);
 ```
 
-## 4. GraphRAG Query met DISKANN + Hybrid Fusion
+## 4. GraphRAG query with DISKANN + hybrid fusion
 
 ```csharp
 var graphRagEngine = new GraphRagEngine(db, "knowledge_graph", "node_embeddings", 1536);
@@ -126,19 +126,25 @@ verifyResult switch
 };
 ```
 
-## Voordelen van deze workflow
-- **Hoge recall** dankzij DiskANN (beter dan standaard HNSW op grote corpora).
-- **Hybrid fusion** (lexical + vector) via `HybridFusionAlpha`.
-- **Immutable & verifiable** artifacts (canonical SHA256 + `BuildResult` union) — perfect voor EventSourcing projections en caching.
-- **Conditional appends** uit je RC zorgen voor veilige, concurrent writes naar de graph events.
-- Volledig native C# 15 / .NET 11, geen Rust.
+## Why this workflow
 
-Zie ook:
+- **High recall** thanks to DiskANN (better than plain HNSW on large corpora).
+- **Hybrid fusion** (lexical + vector) through `HybridFusionAlpha`.
+- **Immutable and verifiable** artifacts (canonical SHA256 + the `BuildResult` union) — a good fit for
+  EventSourcing projections and caching.
+- **Conditional appends** make concurrent writes to the graph event stream safe.
+- Fully native C# 15 / .NET 11, no Rust.
+
+See also:
 - `docs/Vectors/DISKANN_SQL_DDL.md`
 - `docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md`
 - `src/SharpCoreDB.VectorSearch/Index/DiskAnnIndex.cs`
 - `src/SharpCoreDB.Graph.Advanced/GraphRAG/VectorSearchIntegration.cs`
 
-Deze voorbeeldworkflow is direct kopieerbaar en werkt met je huidige EventSourcing RC. 
+This example workflow is copy-paste ready and works with the current EventSourcing package.
 
-Wil je dat ik dit voorbeeld uitbreid tot een volledig runnable demo (met echte embedding call), de EventSourcing RC verder afmaak (bijv. snapshotting, upcasting, of performance optimalisatie), of iets anders?
+## Next steps
+
+The example is deliberately minimal. Natural extensions: a fully runnable demo with a real embedding call,
+EventSourcing snapshotting / upcasting, and the write-path work tracked in
+`docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md`.

@@ -1,10 +1,10 @@
-# SharpCoreDB v2.1 RC — .NET 11 / C# 15
+# SharpCoreDB 2.1.0 — .NET 11 / C# 15
 
 > Branch: `master` · Package version: `2.1.0`
 
 ## What this is
 
-The v2.1 RC line is **net11.0-only**, built with **C# 15 preview**:
+The 2.1.0 line is **net11.0-only**, built with **C# 15 preview**:
 
 ```xml
 <TargetFramework>net11.0</TargetFramework>

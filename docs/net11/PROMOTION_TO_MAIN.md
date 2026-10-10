@@ -5,8 +5,13 @@
 > 2026-09-25 decision recorded in `docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md` §9 row 9, which kept
 > `master` as the net10.0 maintenance line. That row is updated in the same session.
 >
-> The work is prepared on `promote/net11-main-20261010`. The merge into `master`, the tag and the push are
-> **the owner's steps** — the prepared series is local only and has never been pushed.
+> Prepared on `promote/net11-main-20261010` and **merged into `master` on 2026-10-10**: `master` was first
+> fast-forwarded to `origin/master` (`0e51fc55`, 12 commits) and then merged with `--no-ff`, so `master`'s
+> tree is byte-identical to the validated promote tip. The tag and the push remain **the owner's steps** —
+> everything is local and has never been pushed.
+>
+> One defect was found by the post-flip full check and fixed the same day: see
+> [After the flip (2026-10-10)](#after-the-flip-2026-10-10).
 
 ## Timing: what "now" costs
 
@@ -56,18 +61,52 @@
 git fetch origin
 git rev-parse --verify release/v2.0            # 0e51fc55 - the 2.0.0.3 line
 
-# 2. Merge the prepared series into master (no rename, no default-branch pointer change).
-git switch master
-git merge --no-ff promote/net11-main-20261010
+# 2. The merge is already done (2026-10-10). master was fast-forwarded to origin/master and then merged
+#    with --no-ff; verify rather than repeat:
+git log --oneline --graph -3                   # the flip merge + the post-flip follow-up
+git diff --stat promote/net11-main-20261010    # only the follow-up commit's files
 
-# 3. Verify on master itself: build, core suite, canaries. Then tag and push (never force).
+# 3. Verify on master itself, then tag and push (never force).
 git tag -a v2.1.0 -m "SharpCoreDB 2.1.0 - .NET 11 / C# 15 line"
 git push origin master v2.1.0
 ```
 
-- `release/v2.0` keeps `ci-net10.yml` for 2.0.x servicing; forward-port fixes with `git cherry-pick -x` the
-  way §9 row 9 prescribes, resolving `global.json` / `Directory.Build.props` / `Directory.Packages.props`
-  in favour of the net11 build config — take the fix, never the config.
+### After the flip (2026-10-10)
+
+The post-flip full check (CI-shaped `SharpCoreDB.CI.slnf` build, the four CI test hosts, the deprecated /
+vulnerable package gates, the banned-SIMD guard, the metadata sweep and the workflow parse) was run on
+`master` and found one **functional** defect plus a set of release-metadata inconsistencies. All of them
+are fixed in the follow-up commit on this series:
+
+- **`ci-net10.yml` could never run for the parked line.** GitHub loads a workflow from the ref being
+  pushed, so a copy that exists only on `master` produces *no* run for a `release/v2.0` push or a `v2.0*`
+  tag — this document claimed the opposite. The parked branch's own `ci.yml` still covers servicing tags
+  (`tags: ['v*']`), but branch pushes and PRs to `release/v2.0` had no pipeline at all. The ready fix
+  lives on **`fix/net10-parked-ci`** (branched from `release/v2.0`), which adds that branch's own
+  `ci-net10.yml` — with the `Fail on banned portable SIMD API` step omitted, because the parked line
+  still carries one `System.Numerics.Vector<T>` usage and the checker that enforces the standard was
+  added on the net11 line. Merge it with `git switch release/v2.0 && git merge --ff-only fix/net10-parked-ci`.
+- **Release metadata that ships to NuGet.org still described the release candidate**: 22
+  `<PackageReleaseNotes>` stamped `v2.1.0-RC.3` (17 linking to the `release/v2.1.0.0-RC.3` branch) and 21
+  packed `NuGet.README.md` files, whose `dotnet add package --version 2.1.0-RC.3` lines are what a reader
+  copies from the package page. Both now name 2.1.0 and link to `master`.
+- **~20 `.csproj` advertised the wrong toolchain** in `<Description>` / `<PackageTags>`
+  (`.NET 10` / `C# 14` / `net10` / `csharp14`), and one EF Core description still claimed compatibility
+  with SharpCoreDB 1.7.1.
+- **A dead generated file and two dead references**: `package_inventory.json` (an old
+  `dotnet list package --include-transitive` dump with absolute `D:/source/...` paths, the whole family at
+  `net10.0`) referenced by nothing, and two inert `net10.0` / `net8.0` -conditioned `PackageReference`s in
+  `SharpCoreDB.Provider.YesSql`.
+- **Docs that called the line a release candidate** (`FEATURE_MATRIX.md`, `Vectors/README.md`,
+  `graphrag/README.md`, `PROJECT_STATUS.md`) or pointed at the deleted `ci-net11.yml` (`CHANGELOG.md`).
+
+Verified after the fixes on the same tree: CI-shaped build 0 errors, the four CI suites green
+(core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24), the deprecated / vulnerable package gates
+clean and the banned-SIMD guard clean.
+
+- Forward-port fixes with `git cherry-pick -x` the way §9 row 9 prescribes, resolving `global.json` /
+  `Directory.Build.props` / `Directory.Packages.props` in favour of the net11 build config — take the fix,
+  never the config.
 - The net11-only API surface stays what `docs/net11/UPGRADE.md` documents: native Zstandard, Runtime Async,
   and the source-gated `SharpCoreDB.Net11` members. Nothing in the shipped storage format changes.
 
@@ -80,7 +119,10 @@ git push origin master v2.1.0
    (`docs/net11/UNION_TYPES_DESIGN.md`), still never retrofitted onto existing result types.
 4. Re-run the write-path regression gate on the GA runtime and record a fresh baseline; rebuild the Docker
    image once `sdk:11.0` / `aspnet:11.0` resolve to the GA images.
-5. Cut the `2.1.0` release notes and refresh the README / `PROJECT_STATUS.md` release text.
+5. The shipped `2.1.0` metadata is already refreshed — version fields, `<PackageReleaseNotes>`,
+   `NuGet.README.md`, descriptions and tags (see [After the flip](#after-the-flip-2026-10-10)); what
+   remains is the release *narrative*: the announcement text and the `README.md` / `PROJECT_STATUS.md`
+   release text for the tag.
 
 ## What must not be done
 

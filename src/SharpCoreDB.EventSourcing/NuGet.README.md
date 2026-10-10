@@ -1,8 +1,8 @@
-# SharpCoreDB.EventSourcing v2.1.0-RC.3
+# SharpCoreDB.EventSourcing 2.1.0
 Event store primitives for `SharpCoreDB`.
 
 
-## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
+## Patch updates in v1.9.5 (archived; current release 2.1.0)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -28,7 +28,7 @@ Event store primitives for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.0
 ```
 
 ## Documentation

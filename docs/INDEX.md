@@ -140,7 +140,7 @@ guide explaining when SharpCoreDB is fastest.
 - `Vectors/PERFORMANCE_NOTES.md` — measured vector-search numbers + open performance work
 - `performance/INSERT_UPDATE_PERFORMANCE_PLAN.md` — ⭐ **Insert & Update Performance Plan** (write-path phased plan: measurement protocol, encryption-tax removal, in-place records, targets, owner decisions)
 
-## 7c. Lexical & hybrid search (v2.1 RC)
+## 7c. Lexical & hybrid search (2.1.0)
 
 - `../src/SharpCoreDB.Search/NuGet.README.md` — BM25 full-text index, classifying tokenizer, word-only stemmer
 - `../src/SharpCoreDB.HybridSearch/NuGet.README.md` — lexical + vector fused by reciprocal-rank fusion

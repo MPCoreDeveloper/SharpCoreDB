@@ -21,7 +21,7 @@ The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on
 - `SharpCoreDB.Analytics`, `SharpCoreDB.VectorSearch`, `SharpCoreDB.Graph`, `SharpCoreDB.Graph.Advanced`
 - Optional Event Sourcing, Projections, CQRS, Distributed, Functional family packages
 
-## v2.1.0-RC.3 Release Status
+## v2.1.0 Release Status
 
 - ✅ **Storage default changed and validated** — the fixed-width inline capacity ships at 16 on both
   storage paths (+12–19 % on the tracked batched multi-row INSERT shape)
@@ -31,9 +31,12 @@ The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on
 - ⚠️ **INSERT still ~1.4× behind SQLite** on the fair-PK shape (1.9× on the pure default config)
 - ⚠️ **PageBased UPDATE still 4.9× behind** (instrumented, not yet fixed)
 - ✅ **Backward compatible**: existing databases open unchanged; the layout change is upgrade-only
-- ✅ **Published to NuGet.org (2026-09-17)** — all 27 packages at `2.1.0-RC.3` from
+- ✅ **The RC.3 line was published to NuGet.org (2026-09-17)** — all 27 packages at `2.1.0-RC.3` from
   `release/v2.1.0.0-RC.3` (`Manual NuGet Publish` run 35244818191); `SharpCoreDB.Search`,
   `SharpCoreDB.HybridSearch` and `SharpCoreDB.Aspire.Hosting` ship on this line for the first time
+- ⏳ **2.1.0 is prepared on `master` and not yet tagged or pushed** — the owner's flip (`git tag -a v2.1.0`
+  + `git push`) is what publishes the 27 packages at `2.1.0`; version metadata, CI and the shipped
+  package documentation are already aligned for it (see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md))
 - ✅ **Linux/macOS data-integrity defect fixed** — the AES-GCM cipher caches were shared across threads,
   which is only safe on Windows (dotnet/runtime#53320); they are thread-affine now, so concurrent
   encryption cannot corrupt a cipher's native state or repeat a nonce off Windows

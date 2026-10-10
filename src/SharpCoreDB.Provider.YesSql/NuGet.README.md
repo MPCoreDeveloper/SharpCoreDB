@@ -1,10 +1,10 @@
-# SharpCoreDB.Provider.YesSql v2.1.0-RC.3
+# SharpCoreDB.Provider.YesSql 2.1.0
 **YesSql Provider for SharpCoreDB**
 
 YesSql ORM integration with SharpCoreDB's encryption and performance for document-oriented patterns.
 
 
-## Patch updates in v1.9.5 (archived; current release v2.1.0-RC.3)
+## Patch updates in v1.9.5 (archived; current release 2.1.0)
 
 - ✅ **Parameterized query binding fixed** (Issue #336): named-parameter binding is token-aware, so parameter names that are prefixes of others (e.g. `@t` vs `@tid`) no longer corrupt the SQL.
 - ✅ **Server parameter pass-through fixed** (Issue #337): `request.Parameters` are forwarded on gRPC, the binary (PostgreSQL) protocol and WebSocket.
@@ -36,7 +36,7 @@ YesSql ORM integration with SharpCoreDB's encryption and performance for documen
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+, YesSql.Core v5.4.7+

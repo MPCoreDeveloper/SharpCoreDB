@@ -13,7 +13,7 @@
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.Provider.Sync</Product>
-    <Description>Dotmim.Sync provider for SharpCoreDB — enables bidirectional synchronization between SharpCoreDB and any Dotmim.Sync-supported database (PostgreSQL, SQL Server, SQLite, MySQL). Supports multi-tenant filtering for local-first AI agent architectures. Built for .NET 10 with C# 14.</Description>
+    <Description>Dotmim.Sync provider for SharpCoreDB — enables bidirectional synchronization between SharpCoreDB and any Dotmim.Sync-supported database (PostgreSQL, SQL Server, SQLite, MySQL). Supports multi-tenant filtering for local-first AI agent architectures. Built for .NET 11 with C# 15.</Description>
     <Copyright>Copyright (c) 2025-2026 MPCoreDeveloper</Copyright>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
     <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>

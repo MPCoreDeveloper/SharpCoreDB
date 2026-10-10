@@ -18,9 +18,10 @@ area the owner wants addressed **before** any new C# 15 / net11 release decision
 configuration, across the SQL, Direct and StructRow API ladders.
 
 **Explicitly out of scope for the plan's work items:** the GA decision, and any change to the plan's
-non-negotiable constraints (§0.1). The branch is the **`2.1.0-RC.3`** line; the owner authorised the
-RC.3 release on **2026-09-17**, so the release mechanics — version and package metadata, documentation,
-packaging — now run, and **§8d** records the verification run they are based on.
+non-negotiable constraints (§0.1). The line is the **`2.1.0`** one: the RC.3 branch was promoted to
+`master` on **2026-10-10** (see `docs/net11/PROMOTION_TO_MAIN.md`), so the release mechanics — version and
+package metadata, documentation, packaging — are tracked there, and **§8d** records the RC.3 verification
+run the numbers are based on.
 
 **Non-negotiable constraints** (they decide what a "fix" may look like):
 

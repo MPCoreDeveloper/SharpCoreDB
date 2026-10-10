@@ -1,13 +1,13 @@
 # 🔍 SharpCoreDB Vector Search & Storage
 
-> **Status:** ✅ **PRODUCTION READY** — v2.1 RC (`2.1.0-RC.3`, branch `release/v2.1.0.0-RC.3`)  
+> **Status:** ✅ **PRODUCTION READY** — v2.1.0 (`master`, net11.0 / C# 15 preview)  
 > **Module:** `SharpCoreDB.VectorSearch` (optional, separate NuGet)  
 > **Features:** HNSW + DiskANN indexes, quantization, distance metrics, hybrid fusion, content-verified artifacts, GraphRAG integration paths  
 > **Performance:** 50-100x faster than SQLite vector search  
 > **Requirements:** .NET 11 (RC), C# 15 preview  
-> **Breaking Changes:** None — all v2.1 features are opt-in; net11.0-only line (net10.0 lives on `master`)
+> **Breaking Changes:** None — all v2.1 features are opt-in; net11.0-only line (the net10.0 / C# 14 line is parked on `release/v2.0`)
 
-## v2.1 RC changes (munarium-inspired)
+## 2.1.0 changes (munarium-inspired)
 
 - `DiskAnnIndex` + `DiskAnnConfig` — high-recall ANN index, crossover-tested against the exact `FlatIndex`.
 - `ArtifactManifest` + canonical SHA-256 `ArtifactId` + `IVerifiableIndex.Verify()` — immutable, content-verified index artifacts.
@@ -76,10 +76,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 2.1.0-RC.3
+dotnet add package SharpCoreDB --version 2.1.0
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.0
 ```
 
 ### 2. Register Vector Search
@@ -223,7 +223,7 @@ CREATE INDEX idx_vectors_flat ON table_name(vector_col)
 USING FLAT;  -- Good for <100K vectors
 ```
 
-#### DiskANN (Vamana graph — munarium-inspired, v2.1 RC)
+#### DiskANN (Vamana graph — munarium-inspired, 2.1.0)
 ```sql
 CREATE VECTOR INDEX idx_vectors_diskann ON table_name(vector_col)
 USING DISKANN;
@@ -253,7 +253,7 @@ point) is in [`PERFORMANCE_NOTES.md`](PERFORMANCE_NOTES.md).
 
 ## Configuration
 
-### VectorSearchOptions (updated for v2.1 RC)
+### VectorSearchOptions (updated for 2.1.0)
 
 New properties (munarium-inspired):
 

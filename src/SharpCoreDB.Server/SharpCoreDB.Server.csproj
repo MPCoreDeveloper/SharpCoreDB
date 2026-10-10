@@ -10,7 +10,7 @@
     <ServerGarbageCollection>true</ServerGarbageCollection>
     <ConcurrentGarbageCollection>true</ConcurrentGarbageCollection>
     
-    <!-- Server optimizations (C# 14 / .NET 10) -->
+    <!-- Server optimizations (C# 15 / .NET 11) -->
     <TieredPGO>true</TieredPGO>
     <TieredCompilation>true</TieredCompilation>
     <PublishTrimmed>false</PublishTrimmed>
@@ -26,7 +26,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- gRPC Server (latest stable for .NET 10) -->
+    <!-- gRPC Server (latest stable for .NET 11) -->
     <PackageReference Include="Grpc.AspNetCore" />
     <PackageReference Include="Grpc.AspNetCore.Server.Reflection" />
 
@@ -37,7 +37,7 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Authentication/JWT (latest stable for .NET 10) -->
+    <!-- Authentication/JWT (latest stable for .NET 11) -->
     <PackageReference Include="Microsoft.AspNetCore.Authentication.JwtBearer" />
     <PackageReference Include="Microsoft.AspNetCore.Authentication.Certificate" />
     <PackageReference Include="System.IdentityModel.Tokens.Jwt" />

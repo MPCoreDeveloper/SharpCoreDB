@@ -1,4 +1,4 @@
-# Vector Search — Performance Notes (v2.1 RC)
+# Vector Search — Performance Notes (2.1.0)
 
 **Branch:** `release/v2.1.0.0-RC.3` · **Measured:** 2026-09-13, single dev machine, Release build
 **Method:** one process, warm-up query excluded, `Stopwatch` around the query loop, recall via

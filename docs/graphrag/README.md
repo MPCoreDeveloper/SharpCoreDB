@@ -1,6 +1,6 @@
 # GraphRAG — Advanced Graph Analytics for SharpCoreDB
 
-**Status:** ✅ Production Ready — v2.1 RC (`2.1.0-RC.3`, net11.0 / C# 15 preview)  
+**Status:** ✅ Production Ready — v2.1.0 (`master`, net11.0 / C# 15 preview)  
 **Primary package:** `SharpCoreDB.Graph.Advanced`  
 **Companion packages:** `SharpCoreDB.Graph`, `SharpCoreDB.VectorSearch`
 
