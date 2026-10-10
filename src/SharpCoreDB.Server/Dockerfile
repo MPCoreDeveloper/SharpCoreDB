@@ -1,9 +1,11 @@
 # ── SharpCoreDB Server ──
-# Multi-stage build for .NET 10 production container
+# Multi-stage build for .NET 11 production container
 # Image: ghcr.io/mpcoredeveloper/sharpcoredb-server
 
 # ── Stage 1: Build ──
-FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
+# The image's own .NET 11 SDK is used on purpose: global.json is deliberately NOT copied in, so the
+# repo's SDK pin (an RC until 2026-11-10) can never fail the container build on a missing SDK.
+FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 
 # Copy solution-level files first for layer caching
@@ -36,7 +38,7 @@ RUN dotnet publish src/SharpCoreDB.Server/SharpCoreDB.Server.csproj \
     --no-restore
 
 # ── Stage 2: Runtime ──
-FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
+FROM mcr.microsoft.com/dotnet/aspnet:11.0 AS runtime
 ARG VERSION=2.0.0.3
 WORKDIR /app
 
