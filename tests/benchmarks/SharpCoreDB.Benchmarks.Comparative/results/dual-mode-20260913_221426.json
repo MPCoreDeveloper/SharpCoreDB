@@ -1,0 +1,69 @@
+{
+  "timestamp": "2026-09-13T20:14:26.6608888Z",
+  "engine": "AppendOnly",
+  "reps": 3,
+  "inserts": 100000,
+  "reads": 10000,
+  "updates": 10000,
+  "deletes": 10000,
+  "raw": [
+    {
+      "InsertOpsPerSec": 147541,
+      "ReadOpsPerSec": 128554,
+      "UpdateOpsPerSec": 110556,
+      "DeleteOpsPerSec": 93200
+    },
+    {
+      "InsertOpsPerSec": 132252,
+      "ReadOpsPerSec": 130586,
+      "UpdateOpsPerSec": 153289,
+      "DeleteOpsPerSec": 138266
+    },
+    {
+      "InsertOpsPerSec": 151468,
+      "ReadOpsPerSec": 133279,
+      "UpdateOpsPerSec": 87132,
+      "DeleteOpsPerSec": 141427
+    }
+  ],
+  "default": [
+    {
+      "InsertOpsPerSec": 102282,
+      "ReadOpsPerSec": 75231,
+      "UpdateOpsPerSec": 49758,
+      "DeleteOpsPerSec": 65008
+    },
+    {
+      "InsertOpsPerSec": 163197,
+      "ReadOpsPerSec": 129414,
+      "UpdateOpsPerSec": 154864,
+      "DeleteOpsPerSec": 94732
+    },
+    {
+      "InsertOpsPerSec": 142747,
+      "ReadOpsPerSec": 140619,
+      "UpdateOpsPerSec": 151717,
+      "DeleteOpsPerSec": 156270
+    }
+  ],
+  "atRest": [
+    {
+      "InsertOpsPerSec": 98079,
+      "ReadOpsPerSec": 9294,
+      "UpdateOpsPerSec": 9627,
+      "DeleteOpsPerSec": 10642
+    },
+    {
+      "InsertOpsPerSec": 128424,
+      "ReadOpsPerSec": 11185,
+      "UpdateOpsPerSec": 10370,
+      "DeleteOpsPerSec": 10792
+    },
+    {
+      "InsertOpsPerSec": 122374,
+      "ReadOpsPerSec": 11380,
+      "UpdateOpsPerSec": 10413,
+      "DeleteOpsPerSec": 10829
+    }
+  ]
+}

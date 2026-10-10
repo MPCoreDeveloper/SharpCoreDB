@@ -108,6 +108,10 @@ public static class LoggerConfigurationExtensions
             PageCacheCapacity = 1024,
             UseGroupCommitWal = true,
             WalDurabilityMode = DurabilityMode.Async,
+            // This sink is the append-only shape buffered appends were designed for — logs are written and not
+            // read back in the hot path — so it opts in explicitly, which is the only way to get buffering
+            // since 2026-09-16 (Async no longer implies it).
+            EnableBufferedAppends = true,
             WalMaxBatchSize = batchPostingLimit,
             WalMaxBatchDelayMs = (int)period.GetValueOrDefault(DefaultPeriod).TotalMilliseconds
         };

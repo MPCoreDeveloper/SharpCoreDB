@@ -12,36 +12,33 @@
 - Validate issue status claims against current open issues and actively work through unresolved issues, ensuring they are not considered done prematurely.
 
 ## Testing Policy
-- All test projects in SharpCoreDB must use **xUnit v3** (`xunit.v3` NuGet package, currently 3.2.2+). **Never** use `xunit` v2 (package id `xunit`). The old v2 package is incompatible with .NET 10 / C# 14.
-- Use `xunit.runner.visualstudio` 3.1.5+ for test discovery.
+- All test projects in SharpCoreDB must use **xUnit v3** (`xunit.v3` NuGet package, currently 4.0.0). **Never** use `xunit` v2 (package id `xunit`). The old v2 package is incompatible with .NET 11 / C# 15.
+- Use `xunit.runner.visualstudio` 4.0.0+ for test discovery.
 - If you encounter any project referencing `xunit` (without `.v3`), migrate it to `xunit.v3` immediately.
-- Test runner: `Microsoft.NET.Test.Sdk` 18.3.0+ (latest stable for .NET 10).
+- Test runner: `Microsoft.NET.Test.Sdk` 18.9.0+ (latest stable for .NET 11).
+- `dotnet test` no longer works here: Microsoft.Testing.Platform (xunit.v3) rejects the VSTest target on .NET 10 SDK and later. Run the MTP test host directly, e.g. `tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "FullyQualifiedName~MyTestClass"`.
 - Prefer targeted, fast test runs instead of broad/long-running full-suite test execution during iterative work. Query failed tests directly instead of performing broad test scans, especially when a single hanging test is the bottleneck.
 
 ## Code Style
-- Use specific formatting rules.
-- Follow naming conventions.
-- Use only modern C# 14 code patterns in this repository.
-- Use native .NET 10 code and C# 14 across SharpCoreDB; do not suggest downgrading framework or assuming pre-.NET 10 context.
+- Formatting follows `.editorconfig` (4-space C# indent, UTF-8, final newline). Change whitespace with `dotnet format`, never by hand.
+- Use only modern C# 15 preview code patterns in this repository (`LangVersion=preview`, `net11.0` on the v2.1 line).
+- Use native .NET 11 code and C# 15 across SharpCoreDB; do not suggest downgrading framework or assuming pre-.NET 11 context.
 
 ## Package Policy
-- Prefer latest stable released NuGet packages and package versions.
+- All package versions are declared centrally in `Directory.Packages.props` (central package management is on). Never add a `Version` attribute to an individual `.csproj`; CI fails the build on deprecated packages.
 - Prefer Microsoft-backed packages by default.
 - If a non-Microsoft package is used (e.g., Serilog), keep it on latest stable and avoid deprecated versions.
-- Avoid prerelease packages unless explicitly requested.
+- Avoid prerelease packages unless explicitly requested — the deliberately pinned .NET 11 RC SDK in `global.json` is a standing exception, not a precedent for dependencies.
 - Favor modular package design with production dependencies flowing through transitive NuGet references to core packages.
 
 ## Project-Specific Rules
-- Custom requirement A.
-- Custom requirement B.
 - Require full SQLite compatibility: SharpCoreDB sync and provider must support all SQLite syntax/features users could use, never less; extra capabilities are fine.
 - SharpCoreDB Server must support multiple databases and system databases, and must enforce HTTPS/TLS (minimum TLS 1.2) with no plain HTTP endpoints.
 - New SharpCoreDB features must remain optional; event sourcing must be delivered as a separate NuGet package, and issue-driven user features should be prioritized ahead of server mode work.
 - Event sourcing must support both persistent storage and the existing in-memory option; provide an additional demo example specifically for persistent storage.
 - Prioritize gRPC as the flagship protocol for SharpCoreDB.Server; binary/HTTP are secondary.
-- SharpCoreDB roadmap priority: make Event Sourcing first-class, add native snapshots, then projection engine; keep ES/CQRS optional packages, .NET 10-native, zero external deps in core, and gRPC-first networked server integration.
-- The graphical UI (formerly SharpCoreDB.WebViewer / SharpCoreDB.Viewer) lives in the standalone repo MPCoreDeveloper/SCDMS. Keep it secure-by-default and, when integrating SafeWebCore, use the strict A+ settings/profile. Support both local database connections and network SharpCoreDB server connections, aiming to expose broad feature coverage from available SharpCoreDB NuGet capabilities.
-- For the table designer, provide a typed dropdown with all types supported by SharpCoreDB, explicitly including ULID and GUID.
+- Keep optional packages (ES/CQRS and the rest) .NET 11-native, and keep zero external dependencies in the core package.
+- The graphical UI (formerly SharpCoreDB.WebViewer / SharpCoreDB.Viewer), including the table designer's type dropdown (ULID and GUID included), lives in the standalone repo MPCoreDeveloper/SCDMS. Keep it secure-by-default and, when integrating SafeWebCore, use the strict A+ settings/profile. Support both local database connections and network SharpCoreDB server connections, aiming to expose broad feature coverage from available SharpCoreDB NuGet capabilities.
 - Distinguish native SharpCoreDB syntax from PostgreSQL syntax and SQLite syntax; only apply SQLite-specific engine restrictions when SQLite syntax is explicitly relevant.
 - Use the full SqlParser for DDL in SingleFileDatabase to support advanced features like those in FluentMigrator.
 

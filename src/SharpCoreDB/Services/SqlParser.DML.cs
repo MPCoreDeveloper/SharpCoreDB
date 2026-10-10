@@ -22,7 +22,11 @@ public partial class SqlParser
 {
     private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
-    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    // The WHERE clause is OPTIONAL (2026-09-27, session 73): SQLite accepts `DELETE FROM t` and removes every
+    // row, and the table layer already reads a null/empty WHERE that way (Table.CRUD.cs — the full-scan filter
+    // is `string.IsNullOrEmpty(where) || EvaluateSimpleWhere(...)`). This regex required a WHERE, so the
+    // statement threw "Invalid DELETE syntax" instead of deleting all rows.
+    private static readonly Regex DeleteRegex = new(@"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?(?:\s+WHERE\s+(.*))?", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     /// <summary>
     /// v2: Pre-compiled regex used to detect subqueries in SELECT routing.
@@ -100,17 +104,21 @@ public partial class SqlParser
         if (HasActualParameters(sql))
             return true;
 
+        // §11 instrumentation (2026-09-16): the full-statement ToUpperInvariant below is one of the three uppercased
+        // copies per statement still left in the parser — the same defect Database.Core.cs already removed from
+        // IsSchemaChangingCommand, there for exactly this reason. Stamped before changing it.
+        long classifyStart = Diagnostics.WritePathProfiler.Stamp();
         var upper = sql.ToUpperInvariant();
 
         // Only route true complex constructs (subqueries, set ops). Plain JOINs handled by legacy path.
-        if (upper.Contains(" UNION ") || upper.Contains(" INTERSECT ") || upper.Contains(" EXCEPT "))
-            return true;
+        var needsAst = upper.Contains(" UNION ") || upper.Contains(" INTERSECT ") || upper.Contains(" EXCEPT ");
 
         // Derived table / subquery - must be (SELECT...), not a function call like UNIXEPOCH(...)
-        if (upper.Contains("(SELECT") || upper.Contains("( SELECT"))
-            return true;
+        if (!needsAst && (upper.Contains("(SELECT") || upper.Contains("( SELECT")))
+            needsAst = true;
 
-        return false;
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
+        return needsAst;
     }
 
     /// <summary>
@@ -127,9 +135,14 @@ public partial class SqlParser
         if (parts.Length == 0)
             throw new InvalidOperationException("SQL statement is empty");
 
+        // §11 instrumentation (2026-09-16): the two uppercased word copies the dispatch switch needs.
+        long classifyStart = Diagnostics.WritePathProfiler.Stamp();
+
         // ✅ C# 14: Use pattern matching with ordinal string comparison
         var firstWord = parts[0].ToUpperInvariant();
         var secondWord = parts.Length > 1 ? parts[1].ToUpperInvariant() : string.Empty;
+
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
 
         // Route to appropriate handler based on command type using modern switch
         // ✅ C# 14: Tuple pattern matching for SQL command dispatch
@@ -320,20 +333,69 @@ public partial class SqlParser
             _totalChanges += insertedFromSelect.Count;
             if (insertedFromSelect.Count > 0) _lastInsertRowId++;
             if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedFromSelect, returningColumns);
+            // §2 instrumentation: the INSERT … SELECT branch's per-statement WAL call, stamped like the
+            // VALUES path's so the two cannot disagree about what wal-append costs.
+            long walSelectStart = Diagnostics.WritePathProfiler.Stamp();
             wal?.Log(sqlWithoutReturning);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalAppend, walSelectStart);
             return;
         }
         // ──────────────────────────────────────────────────────────────────
         var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
         var valuesRest = rest[valuesStart..].Trim();
+        // §2 instrumentation (2026-09-15): the statement text had no attribution on this path at all. This
+        // covers the one-pass VALUES scan; the per-row, per-column literal conversion is RowBuild.
+        long parseStart = Diagnostics.WritePathProfiler.Stamp();
         List<List<string>> allRowValues = ParseMultiRowInsertValues(valuesRest);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Parse, parseStart);
         var tableAsTable = table as Table;
         bool skipInternalRowId = tableAsTable is { HasInternalRowId: true }
             && (insertColumns is null || !insertColumns.Contains(Constants.PersistenceConstants.InternalRowIdColumnName, StringComparer.OrdinalIgnoreCase));
-        var insertedRows = new List<Dictionary<string, object>>();
-        foreach (var rowValues in allRowValues)
+        // A per-row dictionary snapshot is only needed for RETURNING; the common INSERT without that
+        // clause used to copy every inserted row into a second dictionary (pure overhead — the row was
+        // just built and handed to table.Insert).
+        var needsReturning = returningColumns is not null;
+        List<Dictionary<string, object>>? returningRows = needsReturning ? [] : null;
+        int insertedCount = 0;
+        Dictionary<string, object>? lastInsertedRow = null;
+
+        // SQLite compatibility: last_insert_rowid reports the first INTEGER/Long column of the last
+        // inserted row. Resolve that column once per statement instead of a LINQ projection per call.
+        int firstIntColIdx = -1;
+        for (int i = 0; i < table.ColumnTypes.Count; i++)
         {
-            var row = new Dictionary<string, object>();
+            if (table.ColumnTypes[i] is DataType.Integer or DataType.Long)
+            {
+                firstIntColIdx = i;
+                break;
+            }
+        }
+        // Column mapping resolved once per statement. The previous form ran table.Columns.IndexOf(col) for
+        // every value of every row — a list scan per value — and the profiler measured this stage at
+        // 536 B/row and 7.4% of the pass.
+        int[]? insertColumnIndexes = null;
+        if (insertColumns is not null)
+        {
+            insertColumnIndexes = new int[insertColumns.Count];
+            for (int i = 0; i < insertColumns.Count; i++)
+            {
+                insertColumnIndexes[i] = table.Columns.IndexOf(insertColumns[i]);
+            }
+        }
+
+        // Build one row from one VALUES tuple. Shared by the per-row loop and the batched fast path below so
+        // the two cannot drift apart on value parsing, column mapping or internal-_rowid skipping.
+        Dictionary<string, object> BuildRowFromValues(List<string> rowValues)
+        {
+            // §2 instrumentation (2026-09-15): the literal → typed-value conversion plus the dictionary
+            // writes — the per-row, per-column cost of the SQL path that the direct batch API never pays,
+            // since it is handed native values. Stamped here so it can be told apart from the text scan.
+            long buildStart = Diagnostics.WritePathProfiler.Stamp();
+
+            // Sized exactly rather than left at the default: the profiler attributed 536 B/row to this
+            // stage, and an unsized dictionary grew its bucket and entry arrays three times for a 6-value
+            // row. Capacity is a hint only — the comparer and every observable behaviour are unchanged.
+            var row = new Dictionary<string, object>(insertColumns?.Count ?? table.Columns.Count);
             if (insertColumns is null)
             {
                 int valueIdx = 0;
@@ -350,62 +412,216 @@ public partial class SqlParser
             {
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
-                    var col = insertColumns[i];
-                    var idx = table.Columns.IndexOf(col);
-                    row[col] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
+                    var idx = insertColumnIndexes![i];
+                    row[insertColumns[i]] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
                 }
             }
+
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowBuild, buildStart);
+            return row;
+        }
+
+        // ─── Batched INSERT … VALUES ─────────────────────────────────────────
+        // One statement carrying N value tuples is a single write unit, but the per-row loop below pays a
+        // whole standalone append per row: Storage.AppendBytes opens the file and writes through per record
+        // (measured 477.97 µs/record, against 0.43 µs/record once rows share one append and one engine
+        // transaction). Handing the statement to Table.InsertBatch buys exactly that — one transaction, one
+        // batched append, batched PK/hash-index maintenance.
+        //
+        // It is only taken when nothing needs the per-row loop: no INSERT trigger (a BEFORE trigger may
+        // rewrite the row being inserted and an AFTER trigger must observe it), and — via
+        // Table.CanUseBatchedInsert — no CHECK constraint and no unique secondary index, neither of which
+        // the batch core validates.
+        //
+        // ⚠️ The floor is MEASURED, not decorative. Batching opens an engine transaction, so it only pays
+        // once the per-row append it removes outweighs that fixed cost: the per-row path costs one arena
+        // append per variable-length value PLUS one write-through table append per row, while the batched
+        // path costs the arena appends and one batched append for the whole statement.
+        //
+        // Measured (`--multirowinsert`, 20,000 rows, `SHARPCOREDB_MULTIROW_REPS=1`, same machine):
+        //
+        //   rows/statement  statements  path     total     µs/row
+        //   2,000           10          batched  29.65 s   1,483
+        //   1,000           20          batched  28.56 s   1,428
+        //   500             40          loop     41.52 s   2,076
+        //   100             200         loop     40.46 s   2,023
+        //
+        // Per-row cost is flat in the statement size on both paths — the loop costs ~2.0 µs/row and the
+        // batched path ~1.43, i.e. the ~0.5 ms write-through table append per row that batching removes —
+        // so the win does not depend on statement length and only the transaction argues for a floor. Two
+        // rows is the smallest statement for which the transaction is amortised.
+        //
+        // ⚠️ History worth keeping: an earlier run of this work reported "200 statements of 100 rows did not
+        // finish inside 300 s" and that single point was used to justify a 1,000-row floor, on the theory
+        // that per-statement work scaled with table size. Re-measured in isolation it is 40.5 s — the 300 s
+        // reading was machine contention, not the code. The floor was lowered accordingly, because a floor
+        // that high silently withholds the win from ordinary statements.
+        //
+        // One observable difference when the fast path applies: a failure part-way through inserts NOTHING,
+        // because the batch core validates every row before writing any. The per-row loop leaves the rows it
+        // had already written in place. That matches SQLite, where one multi-row INSERT is one atomic unit.
+        const int MinRowsForBatchedInsert = 2;
+        bool useBatchedInsert = allRowValues.Count >= MinRowsForBatchedInsert
+            && tableAsTable is { CanUseBatchedInsert: true }
+            && !HasTriggersFor(tableName, TriggerEvent.Insert);
+        List<Dictionary<string, object>>? batchedRows = useBatchedInsert
+            ? new List<Dictionary<string, object>>(allRowValues.Count)
+            : null;
+
+        foreach (var rowValues in allRowValues)
+        {
+            var row = BuildRowFromValues(rowValues);
+
+            if (batchedRows is not null)
+            {
+                batchedRows.Add(row);
+                continue;
+            }
+
             FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: row);
 
             table.Insert(row);
 
             FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: row);
-            insertedRows.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+            insertedCount++;
+            lastInsertedRow = row;
+            if (needsReturning)
+            {
+                returningRows!.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+            }
         }
-        _lastChanges = insertedRows.Count;
-        _totalChanges += insertedRows.Count;
-        if (insertedRows.Count > 0)
+
+        if (batchedRows is not null)
+        {
+            // §2 instrumentation (2026-09-16): the table-side envelope for one statement. Its children — encode,
+            // index-maint, engine-write, commit, row-locate, hash-index and the arena stages — are stamped deeper,
+            // so the delta between this and the sum of them is the table's own glue: lock acquisition, the batch
+            // PK probe, the positions array, the cached-row-count update. That residual and the statement-glue
+            // residual (dispatch minus its children) are the last unattributed third of a multi-row pass
+            // (plan §9 priority 2), and they need different fixes, so they are separated here rather than argued.
+            long tableBatchStart = Diagnostics.WritePathProfiler.Stamp();
+            tableAsTable!.InsertBatch(batchedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.TableBatch, tableBatchStart);
+            insertedCount = batchedRows.Count;
+            lastInsertedRow = batchedRows[^1];
+
+            // Table.InsertBatch's critical section leaves the last storage POSITION in the database
+            // (Table.CRUD.cs:715), whereas every per-row Insert leaves the row's primary key. Re-point it at
+            // the same value the per-row loop would have left, so IDatabase.GetLastInsertRowId() cannot
+            // quietly change meaning for this one statement shape. The no-PK case needs nothing — the
+            // position is exactly what Insert records there too.
+            int pkColIdx = tableAsTable.PrimaryKeyIndex;
+            if (pkColIdx >= 0
+                && lastInsertedRow.TryGetValue(table.Columns[pkColIdx], out var pkRowIdVal)
+                && pkRowIdVal is not null and not DBNull)
+            {
+                long? pkRowId = pkRowIdVal switch
+                {
+                    int i => i,
+                    long l => l,
+                    _ => null
+                };
+
+                if (pkRowId.HasValue)
+                {
+                    Database?.SetLastInsertRowId(pkRowId.Value);
+                }
+            }
+
+            if (needsReturning)
+            {
+                // Same shape as the per-row loop: the copy is taken after the insert, so the defaults the
+                // batch core filled into the dictionaries are visible to RETURNING.
+                foreach (var row in batchedRows)
+                {
+                    returningRows!.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+                }
+            }
+        }
+        _lastChanges = insertedCount;
+        _totalChanges += insertedCount;
+        if (insertedCount > 0)
         {
             // SQLite compatibility: last_insert_rowid returns the first INTEGER column value
-            var lastRow = insertedRows[^1];
-            var firstIntCol = table.Columns
-                .Select((col, i) => (col, type: table.ColumnTypes[i]))
-                .FirstOrDefault(c => c.type == DataType.Integer || c.type == DataType.Long);
-            if (firstIntCol.col is not null && lastRow.TryGetValue(firstIntCol.col, out var idVal) && idVal is not null and not DBNull)
+            if (firstIntColIdx >= 0
+                && lastInsertedRow!.TryGetValue(table.Columns[firstIntColIdx], out var idVal)
+                && idVal is not null and not DBNull)
+            {
                 _lastInsertRowId = Convert.ToInt64(idVal);
+            }
             else
+            {
                 _lastInsertRowId++;
+            }
         }
-        if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedRows, returningColumns);
+        if (needsReturning) _pendingQueryResults = ProjectReturningRows(returningRows!, returningColumns!);
+
+        // §2 instrumentation (2026-09-15): `wal-append` existed in the stage enum with NO writer anywhere in
+        // the codebase, which is why a standalone-statement run left most of its per-statement cost
+        // unattributed while the storage write measured well under 1 µs. This is the per-statement WAL call
+        // on the SQL path.
+        long walAppendStart = Diagnostics.WritePathProfiler.Stamp();
         wal?.Log(sqlWithoutReturning);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalAppend, walAppendStart);
     }
 
     /// <summary>
     /// ✅ NEW: Parses multi-row INSERT VALUES clause.
     /// Handles: (1, 'a'), (2, 'b'), (3, 'c')
     /// Returns list of row value lists.
+    /// <para>
+    /// Single pass over the statement text. The previous form re-sliced the *remainder* for every tuple
+    /// (<c>remaining = remaining[(closeParenIdx + 1)..].Trim()</c>), which copies the whole tail each time:
+    /// a 1,000-tuple statement copies roughly 45 MB, and the same total text costs ~100× more copying whether
+    /// it arrives as 20 long statements or 200 short ones. Measured cost of that: the SQL multi-row path
+    /// spent **47.74 µs/row** against **33.72 µs/row** for the same 20,000 rows in 100-row statements, and
+    /// against the direct batch API's **9.3 µs/row** on the same table — i.e. the statement-length cost was
+    /// the last large INSERT overhead that was not storage.
+    /// </para>
+    /// The tuple text is parsed straight out of the statement (<see cref="ParseInsertValues(ReadOnlySpan{char})"/>
+    /// takes a span), so nothing is copied per tuple beyond the values themselves.
     /// </summary>
     private static List<List<string>> ParseMultiRowInsertValues(string valuesRest)
     {
         List<List<string>> allRows = [];
-        var remaining = valuesRest.Trim();
 
-        // Parse multiple rows: (val1, val2), (val3, val4), ...
-        while (remaining.Length > 0 && remaining[0] == '(')
+        int index = 0;
+        int length = valuesRest.Length;
+
+        while (true)
         {
-            int closeParenIdx = FindMatchingCloseParen(remaining, 0);
+            // Whitespace, then at most ONE separator comma, then whitespace again. This is deliberately as
+            // permissive as the previous form and no more: skipping repeated commas here would silently
+            // accept malformed input that the old parser used to truncate at.
+            while (index < length && char.IsWhiteSpace(valuesRest[index]))
+            {
+                index++;
+            }
+
+            if (index < length && valuesRest[index] == ',')
+            {
+                index++;
+
+                while (index < length && char.IsWhiteSpace(valuesRest[index]))
+                {
+                    index++;
+                }
+            }
+
+            if (index >= length || valuesRest[index] != '(')
+            {
+                break;
+            }
+
+            int closeParenIdx = FindMatchingCloseParen(valuesRest, index);
             if (closeParenIdx < 0)
+            {
                 throw new InvalidOperationException("Mismatched parentheses in VALUES clause");
+            }
 
-            var rowStr = remaining[1..closeParenIdx]; // Extract content between parens
-            var rowValues = ParseInsertValues(rowStr);
-            allRows.Add(rowValues);
+            allRows.Add(ParseInsertValues(valuesRest.AsSpan(index + 1, closeParenIdx - index - 1)));
 
-            remaining = remaining[(closeParenIdx + 1)..].Trim();
-
-            // Skip comma if present
-            if (remaining.StartsWith(','))
-                remaining = remaining[1..].Trim();
+            index = closeParenIdx + 1;
         }
 
         return allRows;
@@ -451,32 +667,128 @@ public partial class SqlParser
     private static List<string> ParseInsertValues(ReadOnlySpan<char> valuesStr)
     {
         List<string> values = [];
-        var currentValue = new StringBuilder();
-        bool inQuotes = false;
 
-        foreach (char c in valuesStr)
+        // (2026-09-16, plan §9 priority 2 lever 1) Literals are sliced out of the statement instead of being
+        // appended to a StringBuilder one character at a time. Measured, that per-character build is the parse
+        // stage's dominant cost on the 1,000-row-statement shape (3.33 µs/row, ~1 KB/row allocated).
+        //
+        // The four rules reproduced here are pinned by InsertValuesParsingTests:
+        //   1. a quote toggles and is DROPPED, unless the previously *appended* character was a backslash — the
+        //      check is against the accumulated content, not the source text, so a dropped quote does not update it;
+        //   2. a comma splits only outside quotes;
+        //   3. every literal is Trimmed;
+        //   4. a literal whose content is empty is not emitted at all, so `(1,)` yields one value while `(1, )`
+        //      yields an empty one.
+        //
+        // A literal is slice-expressible exactly when at most one quote pair toggles inside it. An interior
+        // toggling quote — `'it''s'` → `its` — is *dropped* by rule 1, which no contiguous slice can express, so
+        // such a literal falls back to the character loop this method used to run for everything. That loop is
+        // kept below as the reference; it is the slow path, not a second interpretation of the rules.
+        int index = 0;
+        int length = valuesStr.Length;
+
+        while (index < length)
         {
-            if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
+            int literalStart = index;
+            int contentStart = index;
+            int contentEnd = -1;
+            int toggles = 0;
+            bool inQuotes = false;
+            char lastAppended = '\0';
+            bool terminatedByComma = false;
+
+            while (index < length)
             {
-                inQuotes = !inQuotes;
-                continue;  // Skip quote character itself
+                char c = valuesStr[index];
+
+                if (c == '\'' && lastAppended != '\\')
+                {
+                    toggles++;
+                    if (toggles == 1) { contentStart = index + 1; inQuotes = true; }
+                    else if (toggles == 2) { contentEnd = index; inQuotes = false; }
+
+                    index++;
+                    continue;   // a dropped quote must not become the last appended character
+                }
+
+                if (c == ',' && !inQuotes)
+                {
+                    terminatedByComma = true;
+                    break;
+                }
+
+                lastAppended = c;
+                index++;
             }
 
-            if (c == ',' && !inQuotes)
+            // Rule 4, corrected by the suites: an interior literal is emitted **unconditionally** at its comma —
+            // `('', 2)` stores an empty string — and only the *trailing* literal is suppressed when it has no text
+            // at all. So `(1,)` yields one value, `(1, )` yields an empty one, and `('')` as the last literal
+            // yields none while `('', 2)` yields an empty string.
+            // The flag is set where the comma is *seen*; deriving it afterwards from `index < length` was wrong,
+            // because a literal whose closing quote is the tuple's last character also ends with index == length.
+
+            if (toggles == 0)
             {
-                values.Add(currentValue.ToString().Trim());
-                currentValue.Clear();
+                var literal = valuesStr[literalStart..index];
+                if (literal.Length > 0 || terminatedByComma)
+                {
+                    values.Add(literal.Trim().ToString());
+                }
+            }
+            else if (toggles == 2 && contentEnd >= contentStart)
+            {
+                var literal = valuesStr[contentStart..contentEnd];
+                if (literal.Length > 0 || terminatedByComma)
+                {
+                    values.Add(literal.Trim().ToString());
+                }
             }
             else
             {
-                currentValue.Append(c);
+                var fallback = BuildLiteralByAppending(valuesStr[literalStart..index], terminatedByComma);
+                if (fallback is not null)
+                {
+                    values.Add(fallback);
+                }
+            }
+
+            if (index < length)
+            {
+                index++;    // step over the separating comma
             }
         }
 
-        if (currentValue.Length > 0)
-            values.Add(currentValue.ToString().Trim());
-
         return values;
+
+        // The reference implementation, used only for literals a slice cannot express: one with an interior
+        // toggling quote, or an unterminated one. It is byte-for-byte the behaviour this method had before the
+        // fast path existed, including emitting nothing when the accumulated content is empty.
+        static string? BuildLiteralByAppending(ReadOnlySpan<char> text, bool terminatedByComma)
+        {
+            var currentValue = new StringBuilder();
+            bool inQuotes = false;
+
+            foreach (char c in text)
+            {
+                if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
+                {
+                    inQuotes = !inQuotes;
+                    continue;
+                }
+
+                if (c == ',' && !inQuotes)
+                {
+                    break;
+                }
+
+                currentValue.Append(c);
+            }
+
+            // Emitted whenever the literal ended at a comma, even with nothing accumulated (an empty string);
+            // suppressed only for an empty trailing literal.
+            return currentValue.Length == 0 && !terminatedByComma ? null : currentValue.ToString().Trim();
+        }
     }
 
     /// <summary>
@@ -597,6 +909,15 @@ public partial class SqlParser
         if (sql.Contains("sqlite_master", StringComparison.OrdinalIgnoreCase))
         {
             return ExecuteSqliteMasterQuery(sql);
+        }
+
+        // information_schema metadata views — engine-level, so the embedded API, REST, WebSocket and
+        // binary protocols all receive the same rows. The ordinal pre-check keeps the SELECT fast
+        // path free of regex work for statements that never mention the metadata schema.
+        if (sql.Contains(InformationSchemaSchemaName, StringComparison.OrdinalIgnoreCase)
+            && InformationSchemaSourceRegex.Match(sql) is { Success: true } informationSchemaMatch)
+        {
+            return ExecuteInformationSchemaQuery(sql, informationSchemaMatch.Groups["view"].Value);
         }
 
         // ✅ Route GRAPH_RAG queries through EnhancedSqlParser before regex-based parsing
@@ -1586,7 +1907,7 @@ public partial class SqlParser
         if (!tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
-        var whereClause = deleteMatch.Groups[2].Value.Trim();
+        var whereClause = deleteMatch.Groups[2].Success ? deleteMatch.Groups[2].Value.Trim() : string.Empty;
 
         // Issue #8: single-pass delete — DeleteAffectedRows deletes AND returns the affected rows,
         // so RETURNING + affected-count no longer need a separate full Select pass (the old code

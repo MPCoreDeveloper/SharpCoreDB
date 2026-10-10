@@ -23,4 +23,11 @@ public enum VectorIndexType
     /// Time complexity: O(log N × D) per query.
     /// </summary>
     Hnsw,
+
+    /// <summary>
+    /// Munarium-inspired DiskANN-style graph index (on-disk hierarchical graph with high-recall ANN).
+    /// Combines memory-mapped layers with selective disk reads. Excellent for >10M vectors.
+    /// Added in v2.1 RC inspired by munarium-datastore/vector_diskann.rs.
+    /// </summary>
+    DiskAnn,
 }

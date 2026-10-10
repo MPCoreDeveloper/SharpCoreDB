@@ -209,7 +209,9 @@ foreach (var row in rows)
 Run the dedicated functional SQL tests:
 
 ```bash
-dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~FunctionalSqlSyntaxTests" --verbosity normal
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Functional.Tests/bin/Release/net11.0/SharpCoreDB.Functional.Tests.exe -filterVSTest "FullyQualifiedName~FunctionalSqlSyntaxTests"
 ```
 
 Test source:
@@ -266,7 +268,9 @@ All claims above are backed by **14 passing tests** you can run right now.
 ### Run the Tests
 
 ```bash
-dotnet test tests/SharpCoreDB.Functional.Tests --filter "FullyQualifiedName~NullSafetyComparisonTests" --verbosity normal
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Functional.Tests/SharpCoreDB.Functional.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Functional.Tests/bin/Release/net11.0/SharpCoreDB.Functional.Tests.exe -filterVSTest "FullyQualifiedName~NullSafetyComparisonTests"
 ```
 
 ### Test Source Code

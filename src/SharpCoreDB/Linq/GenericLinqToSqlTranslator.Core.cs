@@ -175,9 +175,17 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
             return constant.Value;
         }
 
-        // Compile and execute the expression
-        var lambda = Expression.Lambda(expression);
-        return lambda.Compile().DynamicInvoke();
+        // Compile and execute the expression. Expression compilation is a JIT-only capability, so it is behind an
+        // explicit guard: the AOT analyzer then sees that the call cannot be reached where dynamic code is
+        // missing, and the fallback names the cause instead of surfacing from inside the compiler.
+        if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+        {
+            var lambda = Expression.Lambda(expression);
+            return lambda.Compile().DynamicInvoke();
+        }
+
+        throw new NotSupportedException(
+            "Evaluating a non-constant LINQ expression requires expression-tree compilation, which is not supported under Native AOT.");
     }
 
     /// <summary>

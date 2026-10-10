@@ -199,6 +199,24 @@ public sealed class TestServerFixture : IAsyncLifetime
     }
 
     /// <summary>
+    /// Creates a <see cref="BinaryProtocolHandler"/> that reports into <paramref name="logger"/> instead of
+    /// the DI logger, so tests can assert on what the handler logs for a given connection outcome.
+    /// </summary>
+    public BinaryProtocolHandler CreateBinaryProtocolHandler(ILogger<BinaryProtocolHandler> logger)
+    {
+        ArgumentNullException.ThrowIfNull(logger);
+
+        return new BinaryProtocolHandler(
+            DatabaseRegistry!,
+            SessionManager!,
+            _serviceProvider!.GetRequiredService<UserAuthenticationService>(),
+            _serviceProvider!.GetRequiredService<TenantAuthorizationPolicyService>(),
+            _serviceProvider!.GetRequiredService<PgCatalogService>(),
+            _serviceProvider!.GetRequiredService<MetricsCollector>(),
+            logger);
+    }
+
+    /// <summary>
     /// Creates a new test session for the specified database.
     /// </summary>
     public async Task<string> CreateSessionAsync(string databaseName = "testdb")

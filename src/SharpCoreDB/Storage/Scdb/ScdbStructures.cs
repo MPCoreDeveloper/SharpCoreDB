@@ -922,8 +922,18 @@ public struct TableMetadataEntry
     /// <summary>Last modification timestamp</summary>
     public ulong ModifiedTime;       // 0x86: Last modified timestamp
     
+    /// <summary>
+    /// Inline capacity of the fixed-width record layout (§4b): how many payload bytes a variable-length column may
+    /// store in its slot instead of writing them to the overflow arena. <b>Carved out of the entry's reserved area</b>
+    /// (4 of the 26 bytes), so <see cref="SIZE"/> and every offset above it are unchanged and a file written before
+    /// this field existed reads 0 here — which is exactly the historical layout those records were written with. That
+    /// is what keeps this an <b>upgrade-only</b> format change with no version bump: a reopened table decodes with the
+    /// capacity it was written with, never with whatever the opening config happens to say.
+    /// </summary>
+    public int FixedWidthInlineValueBytes;   // 0x8E: §4b inline capacity (was part of Reserved)
+
     /// <summary>Reserved for future use</summary>
-    public unsafe fixed byte Reserved[26];  // 0x8E: Reserved
+    public unsafe fixed byte Reserved[22];  // 0x92: Reserved
 
     /// <summary>Structure size in bytes</summary>
     public const int SIZE = 256;

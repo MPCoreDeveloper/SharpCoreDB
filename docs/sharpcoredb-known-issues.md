@@ -10,18 +10,22 @@ SharpCoreDB repository: <https://github.com/MPCoreDeveloper/SharpCoreDB/issues>
 ## 1. 🔴 Table data is NOT encrypted even with `EnableBatchEncryption=true`
 
 > ✅ **RESOLVED (opt-in).** Storage now supports per-record AES-256-GCM at-rest encryption
-> behind `DatabaseConfig.EnableAtRestRecordEncryption` (default `false` for full backward
-> compatibility — existing databases and `NoEncryptMode` configurations remain byte-for-byte
-> unchanged). When enabled, new table data files carry an 8-byte magic header
+> behind `DatabaseConfig.EnableAtRestRecordEncryption` — **default `true` since the v2.1 flip
+> (2026-09-13)**. This note read "default `false` for full backward compatibility" until
+> 2026-09-15, by which point that described no shipped configuration; `NoEncryptMode=true` is the
+> documented raw-speed opt-out. The layout is decided **per file**, so existing plaintext
+> databases keep theirs and nothing is rewritten behind a caller's back. New table data files
+> carry an 8-byte magic header
 > (`PersistenceConstants.EncryptedTableMagic`) followed by per-record ciphertext, and all
 > read paths (point-reads, full scans, PK index rebuild, compaction) decrypt transparently.
 > Legacy plaintext files, empty DDL-created files and `NoEncryptMode=true` presets keep their
 > original plaintext layout; mixing is prevented per file. See `Storage.Append.cs`,
 > `Storage.ReadWrite.cs`, `IStorage.ReadAllRecords` and `RebuildPrimaryKeyIndexFromDisk`.
 >
-> **Why opt-in:** the default page-based/columnar engines treat `.dat` as plaintext records;
-> silently changing that layout on-disk would break existing databases and older tooling.
-> Enable the flag only for new databases whose tables are created/opened with the same flag.
+> **Why it is per file rather than global:** the default page-based/columnar engines used to treat
+> `.dat` as plaintext records; rewriting that layout in place would break existing databases and
+> older tooling. New files are encrypted by default, existing files keep their layout, and mixing
+> is prevented within a file.
 >
 > **Migration path:** open the legacy DB (no flag) and rewrite/compact each table so the data
 > file is regenerated with the header + ciphertext under the flag, then reopen with the flag.

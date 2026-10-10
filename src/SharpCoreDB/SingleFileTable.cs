@@ -62,6 +62,28 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     // config flag only selects the format for NEW tables and triggers JSON → binary migration.
     private bool _fixedWidthRecords;
     private FixedWidthRecordLayout? _fixedWidthLayout;
+
+    /// <summary>
+    /// Inline payload capacity for variable-length slots (plan §4b). Like the fixed-width flag above this is part of
+    /// the *record layout*, and this class is the one a reopened table is built as
+    /// (<c>DatabaseExtensions.LoadTables</c>), so it must be forwarded there too — otherwise a table written with an
+    /// inline layout is read with 5-byte slots and an inline slot decodes as an arena offset.
+    /// </summary>
+    private int _fixedWidthInlineValueBytes;
+
+    /// <summary>Sets the inline payload capacity and invalidates the cached layout, which depends on it.</summary>
+    internal void SetFixedWidthInlineValueBytes(int inlineValueBytes)
+    {
+        _fixedWidthInlineValueBytes = Math.Max(0, inlineValueBytes);
+        _fixedWidthLayout = null;
+    }
+
+    /// <summary>
+    /// Exposes the capacity to <see cref="ITable"/> so the table directory can persist it into the metadata entry when
+    /// the table is created (see <c>TableDirectoryManager.CreateTable</c>). Read-only deliberately: the value is part of
+    /// the record layout, so it is set once, by the constructors or by the reopen path.
+    /// </summary>
+    int ITable.FixedWidthInlineValueBytes => _fixedWidthInlineValueBytes;
     private SingleFileOverflowArena? _overflowArena;
 
     // Issue A1: primary-key hash index for O(1) point lookups (FindByPrimaryKey /
@@ -108,6 +130,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     {
         _config = config;
         _fixedWidthRecords = config?.FixedWidthRecordLayout ?? false;
+        _fixedWidthInlineValueBytes = config?.FixedWidthInlineValueBytes ?? 0;
     }
 
     /// <summary>
@@ -737,13 +760,15 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (!_fixedWidthRecords)
         {
             // Legacy JSON row format (write using WriteBlockAsync to properly track data length).
-            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(serializableRows, JsonOptions);
+            var jsonBytes = JsonSerializer.SerializeToUtf8Bytes(
+                serializableRows,
+                JsonOptions.GetTypeInfo<List<Dictionary<string, object?>>>());
             _storageProvider.WriteBlockAsync(_dataBlockName, jsonBytes).GetAwaiter().GetResult();
             return;
         }
 
         // B6: binary fixed-width records + out-of-line overflow arena.
-        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         var arena = _overflowArena ??= new SingleFileOverflowArena();
 
         var records = new List<byte[]>(rowsToWrite.Count);
@@ -911,6 +936,47 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         }
     }
 
+    /// <summary>
+    /// Plan §8c for the single-file (<c>.scdb</c>) path: raises this table's inline capacity and rewrites every cached
+    /// row through the new layout. The setter drops the cached layout, the flush re-serialises all rows and sweeps the
+    /// arena's now-unreferenced blocks (a value that becomes inline leaves its old block free), and the new capacity is
+    /// persisted in the table-directory entry so the next reopen reads with it instead of migrating again.
+    /// Returns the number of rows rewritten, or <c>0</c> when there is nothing to raise.
+    /// </summary>
+    internal int MigrateToInlineCapacity(int newCapacity)
+    {
+        lock (_tableLock)
+        {
+            EnsureCacheLoaded();
+            newCapacity = Math.Max(0, newCapacity);
+            if (newCapacity <= _fixedWidthInlineValueBytes)
+            {
+                return 0;
+            }
+
+            SetFixedWidthInlineValueBytes(newCapacity);
+            _isDirty = true;
+            FlushCache();
+            RebuildPkIndex();
+
+            if (_storageProvider is SingleFileStorageProvider provider)
+            {
+                provider.TableDirectoryManager.UpdateTableMetadata(
+                    Name, entry => UpdateEntryCapacity(entry, newCapacity));
+                provider.TableDirectoryManager.Flush();
+            }
+
+            return _rowCache.Count;
+        }
+    }
+
+    /// <summary>The metadata update applied after an inline-capacity migration; extracted so it reads as one step.</summary>
+    private static TableMetadataEntry UpdateEntryCapacity(TableMetadataEntry entry, int capacity)
+    {
+        entry.FixedWidthInlineValueBytes = capacity;
+        return entry;
+    }
+
     private readonly Dictionary<string, long> _columnUsage = new(StringComparer.OrdinalIgnoreCase);
 
     private void EnsureCacheLoaded() // NOSONAR:S3776 - row-cache warm-up with per-region schema guards; must stay sequential to keep the JSON parse inside one lock
@@ -951,7 +1017,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 _fixedWidthRecords = true;
                 var overflowBytes = _storageProvider.ReadBlockAsync(_overflowBlockName, CancellationToken.None).GetAwaiter().GetResult();
                 _overflowArena = SingleFileOverflowArena.Deserialize(overflowBytes);
-                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+                var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
                 var binaryRows = new List<Dictionary<string, object>>();
 
                 long position = 0;
@@ -988,7 +1054,9 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
                 }
 
                 var trimmedJsonBytes = dataBytes.AsSpan(0, endIndex);
-                var rows = JsonSerializer.Deserialize<List<Dictionary<string, object?>>>(trimmedJsonBytes, JsonOptions);
+                var rows = JsonSerializer.Deserialize(
+                    trimmedJsonBytes,
+                    JsonOptions.GetTypeInfo<List<Dictionary<string, object?>>>());
                 _rowCache = rows?.Select(FromSerializableRow).ToList() ?? [];
 
                 // Config opts into fixed-width: convert the in-memory rows to binary on next flush.
@@ -1015,7 +1083,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             return false;
         }
 
-        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        var layout = _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         long position = 0;
         bool any = false;
 
@@ -1521,28 +1589,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
     private readonly Dictionary<string, object> _metadata = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>
+    /// Resolves the engine type for a declared SQL type name (single-file ALTER TABLE ADD COLUMN).
+    /// ✅ FIX (Known Issue 6): honours <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/> and
+    /// SQLite's affinity rules through <see cref="SqlTypeAffinity.Resolve"/>, the single
+    /// implementation every DDL path shares — this used to be a third, drifting copy of the map.
+    /// </summary>
     private DataType ParseDataType(string typeName)
-    {
-        var upper = typeName.ToUpperInvariant();
-
-        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
-        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
-        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
-
-        return upper switch
-        {
-            "INT" or "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-            "LONG" or "BIGINT" => DataType.Long,
-            "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-            "DECIMAL" or "NUMERIC" => DataType.Decimal,
-            "DATETIME" or "DATE" => DataType.DateTime,
-            "BOOL" or "BOOLEAN" => DataType.Boolean,
-            "BLOB" => DataType.Blob,
-            "GUID" => DataType.Guid,
-            "ULID" => DataType.Ulid,
-            _ => DataType.String
-        };
-    }
+        => SqlTypeAffinity.Resolve(typeName, _config?.UseSqliteIntegerAffinity ?? false);
 
     private static string GetColumnName(ColumnDefinitionEntry entry)
     {

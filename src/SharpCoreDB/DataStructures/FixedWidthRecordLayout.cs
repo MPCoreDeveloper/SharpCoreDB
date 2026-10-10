@@ -33,25 +33,42 @@ public sealed class FixedWidthRecordLayout
     public int ColumnCount => Offsets.Length;
 
     /// <summary>
-    /// Computes the fixed-width record layout for the given column types. Always succeeds — every
-    /// supported column type maps to either an inline fixed slot or a 5-byte overflow reference.
+    /// Gets the inline payload capacity of each variable-length slot (plan §4b). Zero means the historical layout:
+    /// a variable slot is exactly <c>[null-flag(1)][overflow offset(4)]</c>. Above zero a slot additionally carries
+    /// <c>[inline length(2)][inline payload(N)]</c>, and a payload that fits is stored in the record itself with
+    /// <c>null-flag = 2</c> instead of being written to the overflow arena. The record stays constant-size per
+    /// schema, which is what keeps every in-place update and delete fast path valid.
     /// </summary>
-    public static FixedWidthRecordLayout Compute(IReadOnlyList<DataType> columnTypes)
+    public int InlineValueBytes { get; init; }
+
+    /// <summary>
+    /// Computes the fixed-width record layout for the given column types. Always succeeds — every
+    /// supported column type maps to either an inline fixed slot or an overflow reference.
+    /// </summary>
+    /// <param name="columnTypes">The table's column types, in column order.</param>
+    /// <param name="inlineValueBytes">
+    /// Inline capacity for variable-length columns; 0 (the default) keeps the historical 5-byte slot and therefore
+    /// the byte-identical layout every existing file was written with.
+    /// </param>
+    public static FixedWidthRecordLayout Compute(IReadOnlyList<DataType> columnTypes, int inlineValueBytes = 0)
     {
         var count = columnTypes.Count;
         var offsets = new int[count];
         var sizes = new int[count];
         var isVariable = new bool[count];
 
+        int inline = Math.Max(0, inlineValueBytes);
         int offset = 0;
         for (int i = 0; i < count; i++)
         {
             int fixedSize = GetFixedEncodedSize(columnTypes[i]);
             if (fixedSize < 0)
             {
-                // Variable-length column: [null-flag(1)][overflow offset(4)].
+                // Variable-length column: [null-flag(1)][overflow offset(4)] plus, when enabled, the inline
+                // capacity [length(2)][payload(inline)] appended after it. The 5-byte prefix is untouched so NULL
+                // and overflow slots keep the encoding and offsets existing readers already understand.
                 isVariable[i] = true;
-                sizes[i] = 5;
+                sizes[i] = inline > 0 ? 5 + 2 + inline : 5;
             }
             else
             {
@@ -69,7 +86,8 @@ public sealed class FixedWidthRecordLayout
             Offsets = offsets,
             SlotSizes = sizes,
             IsVariable = isVariable,
-            FixedSize = offset
+            FixedSize = offset,
+            InlineValueBytes = inline
         };
     }
 

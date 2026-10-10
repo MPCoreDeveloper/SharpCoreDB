@@ -36,7 +36,6 @@ See [Data Modeling](data-modeling.md) and [`docs/serialization/README.md`](../se
 - **Joins** (INNER/LEFT/RIGHT/FULL/CROSS), **subqueries** (derived tables, CTEs with `WITH RECURSIVE`)
 - **Parameterized queries** via `@name`, `:name`, or positional `?` placeholders
 
-See [Querying](query.md), [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md), and
 [`docs/internals/OPTIMIZER_GUIDE.md`](../internals/OPTIMIZER_GUIDE.md).
 
 ## 2.4 Indexing

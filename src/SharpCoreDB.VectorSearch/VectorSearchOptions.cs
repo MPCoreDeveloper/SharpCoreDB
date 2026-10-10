@@ -44,6 +44,21 @@ public sealed class VectorSearchOptions
     public int MaxMemoryMB { get; set; } = 256;
 
     /// <summary>
+    /// Munarium-inspired: Enable content-verified immutable artifacts for indexes.
+    /// When true, every built index gets a canonical manifest + SHA256 artifact_id.
+    /// Supports verify-before-use and reproducible RAG caches. (v2.1 RC)
+    /// Default: false (opt-in for backward compatibility).
+    /// </summary>
+    public bool UseContentVerifiedArtifacts { get; set; } = false;
+
+    /// <summary>
+    /// Munarium-inspired: Hybrid fusion weight for lexical vs vector scores.
+    /// 0.0 = pure vector, 1.0 = pure lexical, 0.5 = balanced (default).
+    /// Used in hybrid search when both lexical and vector indexes exist.
+    /// </summary>
+    public float HybridFusionAlpha { get; set; } = 0.5f;
+
+    /// <summary>
     /// Load HNSW index into memory only on first vector query.
     /// Saves startup memory when vector queries are infrequent.
     /// Default: true.
@@ -82,5 +97,7 @@ public sealed class VectorSearchOptions
         LazyIndexLoading = false,
         EvictIndexOnMemoryPressure = false,
         MaxDimensions = 4096,
+        UseContentVerifiedArtifacts = true,
+        HybridFusionAlpha = 0.6f,
     };
 }

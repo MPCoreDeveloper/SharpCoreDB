@@ -146,7 +146,10 @@ public partial class Storage
             var effectiveNoEncrypt = noEncrypt || this.noEncryption;
             
             byte[] result;
-            if (effectiveNoEncrypt)
+            // Plaintext page, or a path already known to be plaintext: one copy and no decrypt
+            // attempt. The old shape copied the page, tried to decrypt it, and copied it again —
+            // paying an exception — on every page read of a plaintext file.
+            if (effectiveNoEncrypt || !ShouldAttemptLegacyDecrypt(path))
             {
                 result = new byte[bytesRead];
                 bufferSpan[..bytesRead].CopyTo(result);
@@ -157,10 +160,13 @@ public partial class Storage
                 {
                     var dataToDecrypt = new byte[bytesRead];
                     bufferSpan[..bytesRead].CopyTo(dataToDecrypt);
-                    result = this.crypto.Decrypt(this.key, dataToDecrypt);
+                    byte[] decrypted = this.crypto.Decrypt(this.key, dataToDecrypt);
+                    RememberLegacyEncryption(path, encrypted: true);
+                    result = decrypted;
                 }
                 catch
                 {
+                    RememberLegacyEncryption(path, encrypted: false);
                     result = new byte[bytesRead];
                     bufferSpan[..bytesRead].CopyTo(result);
                 }

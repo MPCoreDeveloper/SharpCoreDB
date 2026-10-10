@@ -43,9 +43,11 @@ public partial class Table
             return false;
         }
 
-        // Handle: column = value (must contain exactly one '=' like the old Split('=', 2) behavior)
+        // Handle: column = value (must contain exactly one '=' like the old Split('=', 2) behavior).
+        // The value half is judged by the same helper the SQL batch classifier uses, so "what this
+        // resolver accepts" has one definition rather than two that can drift (session 76).
         int eq = span.IndexOf('=');
-        if (eq <= 0 || span[(eq + 1)..].IndexOf('=') >= 0)
+        if (eq <= 0 || !IsSimpleWhereValueSpan(span[(eq + 1)..]))
         {
             return false;
         }
@@ -70,6 +72,37 @@ public partial class Table
         column = colSpan.ToString();
         value = valSpan.ToString();
         return true;
+    }
+
+    /// <summary>
+    /// The acceptance rules this class applies to the <b>value half</b> of a simple <c>column = value</c>
+    /// predicate: it must be non-empty, carry no further <c>'='</c> (one predicate holds one) and no
+    /// space-delimited <c>AND</c>/<c>OR</c> token (a compound expression must not be mistaken for a value).
+    /// <para>
+    /// Shared on purpose (session 76): <see cref="TryParseSimpleWhereClause"/> calls it on the text it was
+    /// handed, and the SQL batch classifier calls it on the literal of a canonical
+    /// <c>UPDATE … WHERE &lt;col&gt; = &lt;literal&gt;</c> statement before it claims that literal as a
+    /// structured key. The classifier's two spans are the same halves the text path would have split,
+    /// so both callers accept exactly the same predicates — and a statement the text resolver would have
+    /// rejected keeps the text route instead of silently taking a different one.
+    /// </para>
+    /// </summary>
+    /// <param name="valSpan">The value half, quoted and/or untrimmed as the caller holds it.</param>
+    /// <returns>True when a simple-predicate value may be taken from this span.</returns>
+    internal static bool IsSimpleWhereValueSpan(ReadOnlySpan<char> valSpan)
+    {
+        if (valSpan.IsEmpty)
+        {
+            return false;
+        }
+
+        if (valSpan.IndexOf('=') >= 0)
+        {
+            return false;
+        }
+
+        return !valSpan.Contains(" AND ", StringComparison.OrdinalIgnoreCase) &&
+            !valSpan.Contains(" OR ", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

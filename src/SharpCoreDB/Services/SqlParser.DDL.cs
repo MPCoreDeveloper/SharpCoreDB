@@ -139,8 +139,17 @@ public partial class SqlParser
             }
 
             var partsDef = def.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (partsDef.Length == 0)
+            {
+                continue; // an empty definition cannot declare a column
+            }
+
             var colName = partsDef[0];
-            var typeStr = partsDef[1].ToUpper();
+
+            // ✅ SQLite affinity: the whole declared type decides the column type, so a size argument
+            // is stripped (VARCHAR(255) → VARCHAR) and multi-word types (DOUBLE PRECISION,
+            // UNSIGNED BIG INT) stay intact. No type token at all is legal in SQLite.
+            var declaredType = SqlTypeAffinity.ExtractDeclaredType(partsDef);
 
             var isPrimary = defUpper.Contains("PRIMARY") && defUpper.Contains("KEY");
             var isAutoGen = defUpper.Contains("AUTO");
@@ -160,35 +169,13 @@ public partial class SqlParser
             
             columns.Add(colName);
 
-            // Handle parameterized types like VECTOR(1536)
-            DataType colType;
-            if (typeStr.StartsWith("VECTOR"))
-            {
-                colType = DataType.Vector;
-            }
-            else
-            {
-                // ✅ FIX (Known Issue 6): Optionally map INTEGER to Int64 (SQLite affinity).
-                // Default (UseSqliteIntegerAffinity = false) keeps INTEGER → Int32 for full
-                // backward compatibility with existing databases and consumer code.
-                var useSqliteAffinity = this.config?.UseSqliteIntegerAffinity ?? false;
-                colType = typeStr switch
-                {
-                    "INTEGER" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-                    "BIGINT" => DataType.Long,
-                    "TEXT" => DataType.String,
-                    "REAL" => DataType.Real,
-                    "BLOB" => DataType.Blob,
-                    "BOOLEAN" => DataType.Boolean,
-                    "DATETIME" => DataType.DateTime,
-                    "LONG" => DataType.Long,
-                    "DECIMAL" => DataType.Decimal,
-                    "ULID" => DataType.Ulid,
-                    "GUID" => DataType.Guid,
-                    "ROWREF" => DataType.RowRef,
-                    _ => DataType.String,
-                };
-            }
+            // ✅ FIX: one shared affinity resolver for every declared type (see SqlTypeAffinity).
+            // This used to be a local map that recognised canonical names only, so DOUBLE/FLOAT
+            // (SQLite: REAL affinity) and INT/SMALLINT (SQLite: INTEGER affinity) became TEXT columns.
+            // ✅ Known Issue 6: the opt-in UseSqliteIntegerAffinity still maps the INTEGER affinity
+            // bucket to Int64 instead of Int32; the default keeps the historical Int32 mapping.
+            var useSqliteAffinity = this.config?.UseSqliteIntegerAffinity ?? false;
+            var colType = SqlTypeAffinity.Resolve(declaredType, useSqliteAffinity);
 
             // Parse inline CHECK constraint: e.g. "price REAL CHECK (price > 0)"
             string? colCheckExpr = null;
@@ -307,12 +294,14 @@ public partial class SqlParser
                     {
                         try
                         {
-                            // ✅ VALIDATION: Verify file is not locked by opening exclusively first
-                            // This confirms the file handle is truly released by Dispose()
+                            // ✅ VALIDATION: verify the file can still be opened with the sharing a delete
+                            // needs — deliberately NOT FileShare.None (see the DROP TABLE path below: an
+                            // exclusive open is refused by any live handle, including SharpCoreDB's own
+                            // cached at-rest read handle, while File.Delete would succeed).
                             using (var testStream = new FileStream(
-                                fileToDelete, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                                fileToDelete, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete))
                             {
-                                // If we can open exclusively, file is not locked
+                                // If we can open it with delete sharing, the delete below can proceed.
                             }
                             
                             File.Delete(fileToDelete);
@@ -417,20 +406,36 @@ public partial class SqlParser
         wal?.Log(sql);
         
         // ✅ NEW: Only create indexes for columnar mode (page-based uses B-trees)
-        if (storageMode == StorageMode.Columnar)
+        // ⚠️ GATED (2026-09-24, session 42). This block ran UNCONDITIONALLY, which made
+        // DatabaseConfig.EnableHashIndexes a **dead property**: declared at DatabaseConfig.cs:337, set to
+        // `true` in six presets, in four test files, and by the benchmark harness's own
+        // `SHARPCOREDB_HASH_INDEXES` override (Program.cs:1267) — and **read by nobody**. Setting it to
+        // `false` changed nothing, so a session had already built the dial and the dial was inert.
+        //
+        // Why it matters beyond tidiness: auto-creating a hash index on EVERY column is what makes a
+        // `SET <any column> = …` pay a hash-index remove + add per row (Table.CRUD.cs:2546-2574) and what
+        // makes a row DELETE maintain an index per column — on a Columnar table where SQLite has no such
+        // indexes at all. That is the one lever the measurements point at for the UPDATE and DELETE
+        // deficits, and until this gate existed there was no way to measure it. `null`/`true` is the
+        // product default, so no existing caller changes behaviour.
+        if (storageMode == StorageMode.Columnar && (this.config?.EnableHashIndexes ?? true))
         {
-            // Auto-create hash indexes (will be built lazily on first query)
-            if (primaryKeyIndex >= 0)
+            // ✅ §9 row 5 (owner-decided 2026-09-26, implemented 2026-09-26/session 71): registration is
+            // ON DEMAND. Only a user-declared PRIMARY KEY is registered up front — it is the canonical
+            // point-lookup key. Every other column registers itself the first time an operation actually
+            // filters on it (Table.EnsureAutoHashIndexRegistered, called by every lookup gate), and that is
+            // what stops a write from maintaining an index per column the workload never filters on:
+            // EnsureAllRegisteredIndexesLoaded (Table.Indexing.cs) loads every REGISTERED index before a
+            // write on the append/Columnar engines, so the previous eager set was the measured 20.000
+            // index-maint calls per 10.000 updates on the five-column `docs` shape.
+            //
+            // The hidden `_rowid` fallback is deliberately NOT registered here: only PK-less tables get it,
+            // the PK B-tree already serves its point lookups (TrySelectIndexedPointLookup routes PK columns
+            // there), and no user query filters on it — so registering it would be per-write cost with no
+            // lookup benefit.
+            if (primaryKeyIndex >= 0 && !hasInternalRowId)
             {
-                table.CreateHashIndex(table.Columns[primaryKeyIndex]);
-            }
-            
-            for (int i = 0; i < columns.Count; i++)
-            {
-                if (i != primaryKeyIndex)
-                {
-                    table.CreateHashIndex(columns[i]);
-                }
+                table.EnsureAutoHashIndexRegistered(table.Columns[primaryKeyIndex]);
             }
         }
     }
@@ -614,7 +619,12 @@ public partial class SqlParser
         
         var table = this.tables[tableName];
         var dataFile = table.DataFile;
-        
+
+        // ✅ Buffered append mode: the data file is deleted below, so any row still in the append buffer
+        // must be on disk first — otherwise the buffer would flush later and RECREATE a file the user
+        // just dropped. Flushing a table that is about to disappear is harmless. (No-op by default.)
+        table.Flush();
+
         // 🔥 CRITICAL: Clear ALL indexes FIRST to prevent any references to data
         table.ClearAllIndexes();
         
@@ -637,12 +647,16 @@ public partial class SqlParser
             {
                 try
                 {
-                    // ✅ VALIDATION: Verify file is not locked by opening exclusively first
-                    // This confirms the file handle is truly released by Dispose()
+                    // ✅ VALIDATION: verify the file can still be opened with the sharing a delete needs.
+                    // Deliberately NOT FileShare.None: on Windows any live handle — including the read
+                    // handle SharpCoreDB itself caches for at-rest record files — refuses an exclusive
+                    // open, so the probe failed for the DEFAULT configuration (encrypted records) with
+                    // "file is being used by another process" even though File.Delete below succeeds.
+                    // Genuine locks still throw here and are retried by the loop below.
                     using (var testStream = new FileStream(
-                        dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.None))
+                        dataFile, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite | FileShare.Delete))
                     {
-                        // If we can open exclusively, file is not locked
+                        // If we can open it with delete sharing, the delete below can proceed.
                     }
                     
                     File.Delete(dataFile);
@@ -1077,10 +1091,10 @@ public partial class SqlParser
         if (this.isReadOnly)
             throw new InvalidOperationException("Cannot create vector index in readonly mode");
 
-        // Expected: CREATE VECTOR INDEX idx_name ON table(column) [USING type[(params)]]
+        // Expected: CREATE VECTOR INDEX idx_name ON table(column) [USING FLAT|HNSW|DISKANN[(params)]]
         // parts[0]=CREATE, parts[1]=VECTOR, parts[2]=INDEX, parts[3]=idx_name
         if (parts.Length < 6)
-            throw new InvalidOperationException("CREATE VECTOR INDEX requires: CREATE VECTOR INDEX name ON table(column) [USING FLAT|HNSW]");
+            throw new InvalidOperationException("CREATE VECTOR INDEX requires: CREATE VECTOR INDEX name ON table(column) [USING FLAT|HNSW|DISKANN]");
 
         var indexName = parts[3];
 
@@ -1132,6 +1146,8 @@ public partial class SqlParser
                 indexType = "HNSW";
             else if (afterUsing.StartsWith("FLAT", StringComparison.OrdinalIgnoreCase))
                 indexType = "FLAT";
+            else if (afterUsing.StartsWith("DISKANN", StringComparison.OrdinalIgnoreCase))
+                indexType = "DISKANN";
         }
 
         // Store vector index metadata on the table for the extension module to consume
@@ -1140,6 +1156,7 @@ public partial class SqlParser
         table.SetMetadata($"vector_index:{columnName}:sql", sql);
 
         // Phase 5.4: Build live in-memory index if optimizer is registered
+        // Supports DISKANN via VectorIndexManager / DiskAnnIndex
         SqlParser.VectorQueryOptimizer?.BuildIndex(table, tableName, columnName, indexType);
 
         wal?.Log(sql);

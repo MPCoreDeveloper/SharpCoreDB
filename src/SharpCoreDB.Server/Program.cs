@@ -339,21 +339,30 @@ if (serverConfig.EnableWebAdmin)
 builder.Services.Configure<ServerConfiguration>(
     builder.Configuration.GetSection("Server"));
 
+// One resolver for both master-database repositories: the tenant catalog and the database grants must
+// serve the same database, and a misconfiguration has to fail once with the locator's diagnostic instead
+// of differing per copy.
+static DatabaseInstance ResolveMasterDatabase(IServiceProvider serviceProvider)
+{
+    var config = serviceProvider.GetRequiredService<IOptions<ServerConfiguration>>().Value;
+    var registry = serviceProvider.GetRequiredService<DatabaseRegistry>();
+
+    return MasterDatabaseLocator.TryResolve(
+            registry,
+            config.SystemDatabases.MasterDatabaseName,
+            config.DefaultDatabase)
+        ?? throw new InvalidOperationException(MasterDatabaseLocator.DescribeUnresolved(
+            registry,
+            config.SystemDatabases.MasterDatabaseName,
+            config.DefaultDatabase));
+}
+
 // Add core services
 builder.Services.AddSingleton<NetworkServer>();
 builder.Services.AddSingleton<DatabaseRegistry>();
-builder.Services.AddSingleton(sp =>
-{
-    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
-    var registry = sp.GetRequiredService<DatabaseRegistry>();
-    var logger = sp.GetRequiredService<ILogger<TenantCatalogRepository>>();
-
-    var catalogDatabase = registry.GetDatabase(config.SystemDatabases.MasterDatabaseName)
-        ?? registry.GetDatabase(config.DefaultDatabase)
-        ?? throw new InvalidOperationException("Unable to resolve master database for tenant catalog repository.");
-
-    return new TenantCatalogRepository(catalogDatabase, logger);
-});
+builder.Services.AddSingleton(sp => new TenantCatalogRepository(
+    ResolveMasterDatabase(sp),
+    sp.GetRequiredService<ILogger<TenantCatalogRepository>>()));
 builder.Services.AddSingleton<TenantProvisioningService>();
 builder.Services.AddSingleton<TenantQuotaEnforcementService>();
 builder.Services.AddSingleton<TenantBackupRestoreService>();
@@ -387,19 +396,10 @@ builder.Services.AddHealthChecks();
 // Add DatabaseService to DI
 builder.Services.AddSingleton<DatabaseService>();
 builder.Services.AddTransient<WebSocketHandler>();
-builder.Services.AddSingleton(sp =>
-{
-    var config = sp.GetRequiredService<IOptions<ServerConfiguration>>().Value;
-    var registry = sp.GetRequiredService<DatabaseRegistry>();
-    var auditService = sp.GetRequiredService<TenantSecurityAuditService>();
-    var logger = sp.GetRequiredService<ILogger<DatabaseGrantsRepository>>();
-
-    var grantsDatabase = registry.GetDatabase(config.SystemDatabases.MasterDatabaseName)
-        ?? registry.GetDatabase(config.DefaultDatabase)
-        ?? throw new InvalidOperationException("Unable to resolve master database for database grants repository.");
-
-    return new DatabaseGrantsRepository(grantsDatabase, auditService, logger);
-});
+builder.Services.AddSingleton(sp => new DatabaseGrantsRepository(
+    ResolveMasterDatabase(sp),
+    sp.GetRequiredService<TenantSecurityAuditService>(),
+    sp.GetRequiredService<ILogger<DatabaseGrantsRepository>>()));
 builder.Services.AddSingleton<DatabaseAuthorizationService>();
 
 TryConfigureProjectionRuntime(builder.Services, serverConfig);
@@ -538,13 +538,25 @@ try
 {
     var startupState = app.Services.GetRequiredService<StartupState>();
 
-    await app.StartAsync(app.Lifetime.ApplicationStopping);
-
+    // Initialize the databases and resolve the master-database repositories BEFORE Kestrel starts
+    // listening. Controller construction resolves these singletons, so with the previous order a
+    // request that arrived between app.StartAsync and the registry initialization (or after a
+    // misconfigured master database name) was answered with an unhandled 500 from the
+    // tenant-catalog factory — the anonymous readiness endpoint /api/v1/health included, which can
+    // therefore never return its documented 503 "starting". Resolving the repositories here turns
+    // that into one clear startup failure instead of a 500 on every request. The binary-protocol
+    // listener opens inside NetworkServer.StartAsync and is authenticated, so it may open first.
     var databaseRegistry = app.Services.GetRequiredService<DatabaseRegistry>();
     await databaseRegistry.InitializeAsync(app.Lifetime.ApplicationStopping);
 
     var networkServer = app.Services.GetRequiredService<NetworkServer>();
     await networkServer.StartAsync(app.Lifetime.ApplicationStopping);
+
+    _ = app.Services.GetRequiredService<TenantCatalogRepository>();
+    _ = app.Services.GetRequiredService<DatabaseGrantsRepository>();
+
+    // Only now do the HTTPS API, gRPC and WebSocket endpoints accept connections.
+    await app.StartAsync(app.Lifetime.ApplicationStopping);
 
     startupState.MarkReady();
     await app.WaitForShutdownAsync(app.Lifetime.ApplicationStopping);
@@ -553,6 +565,9 @@ catch (InvalidOperationException ex)
 {
     app.Services.GetRequiredService<StartupState>().MarkFailed(ex.Message);
     Log.Fatal(ex, "SharpCoreDB Server failed startup validation");
+
+    // A failed startup must be visible to service managers, scripts and CI, not only in the log.
+    Environment.ExitCode = 1;
 }
 finally
 {

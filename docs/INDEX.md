@@ -1,6 +1,6 @@
 # SharpCoreDB Documentation Index
 
-**Status:** Active documentation set (`2.0.0.3`)
+**Status:** Active documentation set (`2.1.0` — net11.0 / C# 15 preview on `master`; the v2.0 net10.0 stable line is parked on `release/v2.0`)
 
 ## 0. Manual (start here)
 
@@ -23,6 +23,9 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 0b. Release notes
 
+- `2.1.0-RC.3_WHAT_CHANGED.md` — **what's new in 2.1.0-RC.3** (net11.0 / C# 15 preview RC: the
+  inline-capacity default, the overflow-arena write path, the fair-PK UPDATE/DELETE position, plus
+  the full validation table and the honest remaining gaps)
 - `2.0.0.3_WHAT_CHANGED.md` — **what's new in 2.0.0.3** (maintenance: cognitive-complexity
   refactors + NuGet dependency updates, no API/format changes)
 - `2.0.0.2_WHAT_CHANGED.md` — **what's new in 2.0.0.2** (2.x-vs-1.9.x major steps + the hardening
@@ -131,7 +134,24 @@ guide explaining when SharpCoreDB is fastest.
 - `graphrag/METRICS_AND_OBSERVABILITY_GUIDE.md`
 - `analytics/README.md`
 - `Vectors/README.md`
+- `Vectors/DISKANN_SQL_DDL.md` — `CREATE VECTOR INDEX … USING DISKANN` SQL DDL
+- `Vectors/MUNARIUM_INSPIRATION_PLAN.md` — munarium-inspired implementation record + phase status
+- `Vectors/MUNARIUM_GAP_ANALYSIS.md` — verified module-by-module gaps + borrowed-goodies backlog
+- `Vectors/PERFORMANCE_NOTES.md` — measured vector-search numbers + open performance work
+- `performance/INSERT_UPDATE_PERFORMANCE_PLAN.md` — ⭐ **Insert & Update Performance Plan** (write-path phased plan: measurement protocol, encryption-tax removal, in-place records, targets, owner decisions)
+
+## 7c. Lexical & hybrid search (v2.1 RC)
+
+- `../src/SharpCoreDB.Search/NuGet.README.md` — BM25 full-text index, classifying tokenizer, word-only stemmer
+- `../src/SharpCoreDB.HybridSearch/NuGet.README.md` — lexical + vector fused by reciprocal-rank fusion
 - `performance/graphrag-performance-tuning.md`
+
+## 7b. .NET 11 / C# 15 (the `master` line since the 2026-10-10 promotion)
+
+- `net11/PROMOTION_TO_MAIN.md` — ⭐ **how the net11 line was promoted to `master`** and the net10 line
+  parked on `release/v2.0`: the prepared commit series, the flip procedure, the GA checklist
+- `net11/UPGRADE.md` — what .NET 11 consumers get (Zstd, Runtime Async, `SharpCoreDB.Net11`)
+- `net11/UNION_TYPES_DESIGN.md` — union-types blueprint (deferred to .NET 11 GA)
 
 ## 8. Distributed, Sync, and Migration
 
@@ -149,6 +169,9 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 10. Benchmarks & Performance
 
+- `2.1.0-RC.3_WHAT_CHANGED.md` — ⭐ **release notes (2.1.0-RC.3)**: the validation table (2,897 tests /
+  16 suites), the comparative / fair-PK / pure-default / PageBased / multi-row arms measured
+  2026-09-17, and the remaining gaps
 - `2.0.0.2_WHAT_CHANGED.md` — ⭐ **release notes (2.0.0.2)**: the 2.x-vs-1.9.x major steps + the
   2.0.0.2 hardening/perf batch
 - `CHANGELOG.md` — full per-version change log (`[2.0.0.2]`, new `[Unreleased]` on top)
@@ -170,7 +193,7 @@ guide explaining when SharpCoreDB is fastest.
 
 ## 11. Developer Standards
 
-- `../.github/CODING_STANDARDS_CSHARP14.md`
+- `../.github/CODING_STANDARDS.md`
 - `../.github/SIMD_STANDARDS.md`
 
 ## Documentation Governance

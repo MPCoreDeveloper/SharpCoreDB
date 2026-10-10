@@ -39,16 +39,13 @@ See [`docs/server/INSTALLATION.md`](../server/INSTALLATION.md).
 
 - Per-tenant databases and shared-schema tenancy with RLS
 - Tenant-scoped backup/restore and operations runbook
-- Reference + threat model:
-  [`docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md`](../server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md) ·
-  [`docs/server/MULTITENANT_THREAT_MODEL_v1.7.0.md`](../server/MULTITENANT_THREAT_MODEL_v1.7.0.md)
+- Reference: `../server/README.md`, `../server/SECURITY.md`.
 
 ## 9.5 Observability
 
 - Prometheus-compatible metrics endpoint, health checks
 - OpenTelemetry-ready projection metrics
 - Structured logs; setup guide:
-  [`docs/server/OBSERVABILITY_SETUP_v1.7.0.md`](../server/OBSERVABILITY_SETUP_v1.7.0.md)
 
 ## 9.6 Client access
 

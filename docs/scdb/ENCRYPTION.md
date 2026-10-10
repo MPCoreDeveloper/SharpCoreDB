@@ -280,7 +280,7 @@ Encrypted regions use the in-place page cipher (`[nonce(12)][ciphertext][tag(16)
   reflection, no `dynamic`, no `Expression` compilation**. The `tools/SharpCoreDB.AotSmoke`
   console app publishes with `PublishAot=true` and exercises the encrypted single-file path
   (password mode, insert, password change, DEK rotation, reopen, full VACUUM) with exit code 0.
-- **SonarClean.** New code follows the repository's `CODING_STANDARDS_CSHARP14.md` conventions:
+- **SonarClean.** New code follows the repository's `CODING_STANDARDS.md` conventions:
   XML docs on all public members, no `#region` misuse, no magic numbers (constants in
   `CryptoConstants` / `ScdbFileHeader`), no commented-out code, no unused fields/usings.
 

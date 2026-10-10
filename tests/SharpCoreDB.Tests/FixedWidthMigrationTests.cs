@@ -40,13 +40,20 @@ public sealed class FixedWidthMigrationTests : IDisposable
         // AutoFixedWidthRecords defaults to true since B7+; this fixture deliberately simulates a
         // pre-fixed-width (1.x / variable-length records) database, so it opts out.
         AutoFixedWidthRecords = false,
+        // §4b: and it pins the historical inline capacity, because the migration assertions downstream compare against
+        // the historical record layout. A real 1.x database carries no capacity in its metadata, so 0 is also what it
+        // actually has; the product default of 16 applies to tables created from now on.
+        FixedWidthInlineValueBytes = 0,
     });
 
     private IDatabase CreateFixedWidthDb() => _factory.Create(
-        _dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { FixedWidthRecordLayout = true });
+        // §4b: this fixture exercises the HISTORICAL capacity-0 layout on purpose — its arena free-list, no-growth and
+        // reopen assertions are all about values going to the overflow arena, which a non-zero inline capacity stops
+        // doing for short values. The product default became 16 on 2026-09-16, so 0 is pinned explicitly here.
+        _dirPath, "pw", isReadOnly: false, config: new DatabaseConfig { FixedWidthRecordLayout = true, FixedWidthInlineValueBytes = 0 });
 
     private IDatabase CreateReadOnlyFixedWidthDb() => _factory.Create(
-        _dirPath, "pw", isReadOnly: true, config: new DatabaseConfig { FixedWidthRecordLayout = true });
+        _dirPath, "pw", isReadOnly: true, config: new DatabaseConfig { FixedWidthRecordLayout = true, FixedWidthInlineValueBytes = 0 });
 
     private static bool IsFixedWidth(IDatabase db, string tableName)
         => db.TryGetTable(tableName, out var t) && t.IsFixedWidthRecords;

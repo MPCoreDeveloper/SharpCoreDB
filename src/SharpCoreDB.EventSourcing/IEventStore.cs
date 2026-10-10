@@ -88,4 +88,47 @@ public interface IEventStore
         EventStreamId streamId,
         long maxVersion = long.MaxValue,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Appends multiple events to a stream only when the stream's current length
+    /// equals <paramref name="expectedVersion"/>, as one atomic compare-and-set.
+    /// </summary>
+    /// <param name="streamId">The stream identifier.</param>
+    /// <param name="expectedVersion">
+    /// The expected current stream length. Use <see cref="ExpectedVersion.NoStream"/>
+    /// for a new stream, or <see cref="ExpectedVersion.Any"/> to skip the check.
+    /// </param>
+    /// <param name="entries">The event append entries.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// A <see cref="ConditionalAppendResult"/>. On a version mismatch nothing is
+    /// written and <see cref="ConditionalAppendResult.Success"/> is <see langword="false"/>.
+    /// </returns>
+    Task<ConditionalAppendResult> TryAppendEventsAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        IEnumerable<EventAppendEntry> entries,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Appends a single event to a stream only when the stream's current length
+    /// equals <paramref name="expectedVersion"/>, as one atomic compare-and-set.
+    /// </summary>
+    /// <param name="streamId">The stream identifier.</param>
+    /// <param name="expectedVersion">
+    /// The expected current stream length. Use <see cref="ExpectedVersion.NoStream"/>
+    /// for a new stream, or <see cref="ExpectedVersion.Any"/> to skip the check.
+    /// </param>
+    /// <param name="entry">The event append entry.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>
+    /// A <see cref="ConditionalAppendResult"/>. On a version mismatch nothing is
+    /// written and <see cref="ConditionalAppendResult.Success"/> is <see langword="false"/>.
+    /// </returns>
+    Task<ConditionalAppendResult> TryAppendEventAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        EventAppendEntry entry,
+        CancellationToken cancellationToken = default) =>
+        TryAppendEventsAsync(streamId, expectedVersion, [entry], cancellationToken);
 }

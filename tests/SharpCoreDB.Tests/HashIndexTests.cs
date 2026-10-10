@@ -210,4 +210,82 @@ public class HashIndexTests
         index.Add(row3, 0);
         Assert.Single(index.LookupPositions(date));
     }
+
+    [Fact]
+    public void AddBatchKeys_EqualSizedBatches_DoNotRebuildTheKeyMapPerBatch()
+    {
+        // §5.1 (2026-10-10, session 80): `AddBatchKeys` used to greet every batch with a capacity hint of
+        // `Count + keys.Length`. Because that hint is computed from the *growing* count and re-runs on each call,
+        // it makes the map rebuild its entry/bucket pair on every batch — ten 10.000-key batches meant ten
+        // grow-and-rehash passes, ~12,6 MB of garbage per index per 100.000 rows, and O(total keys) of copying
+        // per call, i.e. quadratic across a batched INSERT loop. The hint is gone, so `Dictionary`'s own
+        // amortised doubling applies and a batch that still fits the capacity an earlier growth created must not
+        // reallocate at all.
+        //
+        // Measured on the 100.000-row INSERT arm (`artifacts/s80-nohint-{1,2}.txt` against the pre-change
+        // `artifacts/s80-hint-before-{1,2}.txt`): `hash-index` 3.530.483 B per call instead of 4.611.244,
+        // 1.330 B/row instead of 1.438, and 191-194 K ops/s instead of 181-188 K in three interleaved pairs.
+        //
+        // After four 2.000-key batches, the growth that carried the third batch (~10.949 entries) already covers
+        // the fourth, so the fourth allocates its keys and nothing else; with the hint every one of the four paid
+        // a full grow-and-rehash, which made the last two calls allocate about the same amount (measured
+        // pre-change: 372.416 B for the third against 411.784 B for the fourth — see
+        // `artifacts/s80-hashindex-hint-red.txt`).
+        using var index = new HashIndex("t", "k", CollationType.Binary);
+        const int batchSize = 2000;
+        var allocations = new long[4];
+
+        for (int batch = 0; batch < 4; batch++)
+        {
+            var keys = new object?[batchSize];
+            var positions = new long[batchSize];
+            int start = batch * batchSize;
+            for (int i = 0; i < batchSize; i++)
+            {
+                keys[i] = $"k{start + i}"; // distinct keys — the INSERT arm's shape
+                positions[i] = start + i;
+            }
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            index.AddBatchKeys(keys, positions);
+            allocations[batch] = GC.GetAllocatedBytesForCurrentThread() - before;
+        }
+
+        Assert.Equal(4 * batchSize, index.Count);
+        Assert.True(
+            allocations[3] < allocations[2] * 3 / 4,
+            $"the fourth batch should fit the headroom an earlier growth created, but it allocated "
+            + $"{allocations[3]} B against the third batch's {allocations[2]} B (all four: "
+            + $"{string.Join(", ", allocations)} B)");
+    }
+
+    [Fact]
+    public void AddBatchKeys_RepeatedBatches_KeepEveryKeyQueryable()
+    {
+        // Behaviour pin for the capacity-policy change above: what the index answers must not move.
+        using var index = new HashIndex("t", "k", CollationType.Binary);
+        var keys = new object?[500];
+        var positions = new long[500];
+        for (int i = 0; i < 500; i++)
+        {
+            keys[i] = $"k{i}";
+            positions[i] = i;
+        }
+
+        for (int batch = 0; batch < 6; batch++)
+        {
+            for (int i = 0; i < 500; i++)
+            {
+                keys[i] = $"b{batch}-k{i}";
+                positions[i] = (batch * 500) + i;
+            }
+
+            index.AddBatchKeys(keys, positions);
+        }
+
+        Assert.Equal(3000, index.Count);
+        Assert.Equal(new long[] { 1234L }, index.LookupPositions("b2-k234"));
+        Assert.Equal(new long[] { 2999L }, index.LookupPositions("b5-k499"));
+        Assert.Empty(index.LookupPositions("b6-k0"));
+    }
 }

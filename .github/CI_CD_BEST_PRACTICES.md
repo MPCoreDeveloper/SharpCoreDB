@@ -1,5 +1,12 @@
 # CI/CD Best Practices for SharpCoreDB Publishing
 
+> ⚠️ **`dotnet test` is not supported in this repository.** xUnit v3 runs on Microsoft.Testing.Platform, which rejects the VSTest target on .NET 10 SDK and later. Wherever the snippets below say "test locally", build first and then run the MTP test host directly:
+>
+> ```bash
+> dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+> tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
+> ```
+
 ## 🎯 Core Principles
 
 ### 1. Automated Everything
@@ -31,8 +38,9 @@
 # 1. Create feature branch
 git checkout -b feature/new-feature
 
-# 2. Make changes and test locally
-dotnet test tests/SharpCoreDB.Tests
+# 2. Make changes and test locally (MTP host -- `dotnet test` is not supported here; see the note at the top)
+dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # 3. Commit (DO NOT PUSH YET)
 git commit -m "Add new feature"
@@ -68,11 +76,11 @@ grep -r "<Version>" src/ --include="*.csproj"
 # OLD: <Version>X.Y.Z</Version>
 # NEW: <Version>1.9.5</Version>
 
-# STEP 3: Test Everything Locally
+# STEP 3: Test Everything Locally (MTP host -- see the note at the top)
 dotnet clean
 dotnet restore
 dotnet build --configuration Release
-dotnet test --configuration Release --no-build
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # STEP 4: Commit & Push
 git add .
@@ -97,14 +105,15 @@ gh release create v1.9.5 \
 Before pushing to `master`, verify:
 
 ```bash
-# 1. Tests pass locally
-dotnet test -c Release
+# 1. Tests pass locally (MTP host -- see the note at the top)
+dotnet build tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # 2. No warnings/errors
 dotnet build -c Release /warnaserror
 
-# 3. Code coverage acceptable
-dotnet test -c Release --collect:"XPlat Code Coverage"
+# 3. Code coverage acceptable -- the collector is configured in
+#    tests/SharpCoreDB.Tests/test.runsettings; the CI floor is 18% (codecov.yml)
 
 # 4. No deprecated packages
 dotnet list package --deprecated
@@ -250,8 +259,8 @@ git checkout -b hotfix/critical-bug origin/master
 # OLD: <Version>1.7.0</Version>
 # NEW: <Version>1.7.1</Version>
 
-# 4. Test thoroughly
-dotnet test -c Release
+# 4. Test thoroughly (MTP host)
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
 # 5. Push (triggers auto-publish)
 git push origin hotfix/critical-bug
@@ -371,7 +380,7 @@ git commit -m "Changes"
 git push  # Oops, tests fail in CI!
 
 # RIGHT
-dotnet test -c Release  # Test first
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"  # Test first (MTP host, not `dotnet test`)
 git push  # Only after passing locally
 ```
 
@@ -408,8 +417,8 @@ echo "*.key" >> .gitignore
 # Result: Publishing is blocked by build failures
 
 # RIGHT
-# Fix locally first
-dotnet test -c Release
+# Fix locally first (MTP host, not `dotnet test`)
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 # Get all tests passing before push
 git push
 ```

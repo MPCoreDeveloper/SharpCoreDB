@@ -358,7 +358,14 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         {
             try
             {
-                compiledPlan = QueryCompiler.Compile(sql);
+                // Expression-tree compilation (Lambda.Compile) does not exist under Native AOT, and
+                // QueryCompiler.Compile says so with [RequiresDynamicCode]. The guard is both what the AOT
+                // analyzer needs to see and the truth of the path: where dynamic code is unsupported the
+                // non-compiled query execution is used, which is exactly what Compile falls back to anyway.
+                if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                {
+                    compiledPlan = QueryCompiler.Compile(sql);
+                }
             }
             catch
             {
@@ -861,6 +868,24 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
                 // table opened with FixedWidthRecordLayout is auto-migrated on first load. (The
                 // on-disk binary format is still authoritative for reading regardless of config.)
                 table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
+                // §4b: the inline capacity is part of the record layout, and the STORED value is authoritative — it is
+                // persisted in the table metadata entry (carved out of the entry's reserved area, so a file written
+                // before the field existed reads 0 there, which is the layout its records actually have). Taking it
+                // from `_options.DatabaseConfig` instead is what broke singlefile-fixedwidth reopen: a
+                // config-vs-records disagreement makes IsFixedWidthDataBlock's record-length test fail, the block is
+                // then treated as legacy JSON and EnsureCacheLoaded throws on a binary record.
+                table.SetFixedWidthInlineValueBytes(metadata.Value.FixedWidthInlineValueBytes);
+                // §8c (2026-09-22): the auto-upgrade the multi-file path does beside its format migration — an
+                // existing table stored at a LOWER capacity than the caller configured is rewritten once, here, on a
+                // writable open, and the new capacity lands in this entry so the next open finds nothing to do. A
+                // read-only database never rewrites, and a config asking for a lower capacity never rewrites either.
+                if (!_options.IsReadOnly
+                    && _options.DatabaseConfig is { FixedWidthInlineValueBytes: var configuredCapacity }
+                    && metadata.Value.FixedWidthInlineValueBytes < configuredCapacity)
+                {
+                    table.MigrateToInlineCapacity(configuredCapacity);
+                }
+
                 _tables[tableName] = table;
             }
         }
@@ -1036,19 +1061,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var typeStr = parts[1].ToUpperInvariant();
 
             columns.Add(colName);
-            columnTypes.Add(typeStr switch
-            {
-                "INT" or "INTEGER" => DataType.Integer,
-                "BIGINT" or "LONG" => DataType.Long,
-                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
-                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-                "DECIMAL" or "NUMERIC" => DataType.Decimal,
-                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
-                "BLOB" => DataType.Blob,
-                "BOOLEAN" or "BOOL" => DataType.Boolean,
-                "GUID" or "UUID" => DataType.Guid,
-                _ => DataType.String
-            });
+
+            // ✅ One shared affinity resolver (see SqlTypeAffinity) instead of a local copy: DOUBLE and
+            // FLOAT resolve to REAL and INT/SMALLINT to INTEGER, as SQLite's affinity rules require.
+            // This legacy path never read the UseSqliteIntegerAffinity opt-in, so integer affinity
+            // keeps its historical Int32 mapping here.
+            columnTypes.Add(SqlTypeAffinity.Resolve(typeStr, useSqliteIntegerAffinity: false));
 
             // Parse column constraints from the full definition string
             var isPrimary = upper.Contains("PRIMARY") && upper.Contains("KEY");
@@ -1113,6 +1131,12 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         // B6: forward the database config's fixed-width flag so new single-file tables store
         // binary fixed-width records (with the overflow block) instead of JSON rows.
         table.SetFixedWidthRecords(_options.DatabaseConfig?.FixedWidthRecordLayout ?? false);
+        // §4b/§8c (2026-09-22): and the inline capacity WITH it. Until now this construction site — the one a SQL
+        // `CREATE TABLE` goes through — forwarded only the fixed-width flag, so a new single-file table always started
+        // at the historical capacity 0 and stored that in its directory entry: this storage mode never got the inline
+        // layout, and therefore never the 20–33 % INSERT win it buys, no matter what the caller configured. The
+        // multi-file path has taken the capacity from the config all along, so this also makes the two modes agree.
+        table.SetFixedWidthInlineValueBytes(_options.DatabaseConfig?.FixedWidthInlineValueBytes ?? 0);
         _tables[tableName] = table;
 
         // Register table schema with the directory manager so it persists on disk
@@ -1337,19 +1361,11 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
             var tableName = addCol.Groups[1].Value;
             var colName = addCol.Groups[2].Value;
             var typeStr = addCol.Groups[3].Value.ToUpperInvariant();
-            var dataType = typeStr switch
-            {
-                "INT" or "INTEGER" => DataType.Integer,
-                "BIGINT" or "LONG" => DataType.Long,
-                "TEXT" or "VARCHAR" or "CHAR" or "NVARCHAR" => DataType.String,
-                "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-                "DECIMAL" or "NUMERIC" => DataType.Decimal,
-                "DATETIME" or "DATE" or "TIMESTAMP" => DataType.DateTime,
-                "BLOB" => DataType.Blob,
-                "BOOLEAN" or "BOOL" => DataType.Boolean,
-                "GUID" or "UUID" => DataType.Guid,
-                _ => DataType.String
-            };
+
+            // ✅ One shared affinity resolver (see SqlTypeAffinity) instead of a local copy. This legacy
+            // path never read the UseSqliteIntegerAffinity opt-in, so integer affinity keeps its
+            // historical Int32 mapping here.
+            var dataType = SqlTypeAffinity.Resolve(typeStr, useSqliteIntegerAffinity: false);
             if (_tables.TryGetValue(tableName, out var tbl))
             {
                 tbl.AddColumn(new ColumnDefinition { Name = colName, DataType = dataType.ToString() });
@@ -1432,8 +1448,10 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
     private void ExecuteDeleteInternal(string sql)
     {
+        // WHERE is optional here too (2026-09-27, session 73), matching the live parser DeleteRegex. This
+        // method has no caller anywhere in the repository at that date, so it is fixed for consistency.
         var regex = new Regex(
-            @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?\s+WHERE\s+(.*)",
+            @"DELETE\s+FROM\s+[""'`\[]?(\w+)[""'`\]]?(?:\s+WHERE\s+(.*))?",
             RegexOptions.IgnoreCase | RegexOptions.Singleline, TimeSpan.FromSeconds(1));
         
         var match = regex.Match(sql);
@@ -1443,7 +1461,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         }
 
         var tableName = match.Groups[1].Value.Trim();
-        var whereClause = match.Groups[2].Value.Trim();
+        var whereClause = match.Groups[2].Success ? match.Groups[2].Value.Trim() : string.Empty;
         
         if (!_tables.TryGetValue(tableName, out var table))
         {

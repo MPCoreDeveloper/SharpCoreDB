@@ -6,6 +6,7 @@ namespace SharpCoreDB.Linq;
 
 using SharpCoreDB.MVCC;
 using System.Collections;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq.Expressions;
 
 /// <summary>
@@ -115,6 +116,18 @@ internal sealed class MvccQueryProvider<TKey, TData> : IQueryProvider
     }
 
     /// <inheritdoc/>
+    // The two JIT-only calls in here are the SQL translator (diagnostics) and Queryable.AsQueryable (the
+    // execution path). Both are expression-tree compilation, which Native AOT does not have, so this MVCC LINQ
+    // provider is JIT-only by design: it is stated here rather than guarded, because Queryable.AsQueryable's
+    // [RequiresUnreferencedCode] requirement has no runtime switch to test — trimming is not a runtime feature.
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2026",
+        Justification = "Queryable.AsQueryable requires the queryable members to survive trimming; this MVCC LINQ provider executes through expression compilation and is JIT-only by design (see the worklog entry for session 56).")]
+    [UnconditionalSuppressMessage(
+        "AOT",
+        "IL3050",
+        Justification = "The MVCC LINQ provider calls expression-tree compilation (translator diagnostics + Queryable.AsQueryable), which does not exist under Native AOT; the provider is documented as JIT-only.")]
     public TResult Execute<TResult>(Expression expression)
     {
         // Translate LINQ expression to SQL (kept for diagnostics / parity).

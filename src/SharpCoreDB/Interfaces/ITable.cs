@@ -59,6 +59,13 @@ public interface ITable
     bool IsFixedWidthRecords => false;
 
     /// <summary>
+    /// Gets the inline capacity of the fixed-width record layout (§4b) this table was written with. Persisted with the
+    /// table's metadata so a reopened database decodes with the capacity its records were written with rather than with
+    /// the opening config; 0 is the historical layout (every variable-length value goes to the overflow arena).
+    /// </summary>
+    int FixedWidthInlineValueBytes => 0;
+
+    /// <summary>
     /// Gets whether columns are auto-generated.
     /// </summary>
     List<bool> IsAuto { get; }
@@ -302,6 +309,15 @@ public interface ITable
     /// <param name="columnName">The column name.</param>
     /// <returns>True if index exists.</returns>
     bool HasHashIndex(string columnName);
+
+    /// <summary>
+    /// Registers the automatic hash index for <paramref name="columnName"/> the first time an operation
+    /// filters on that column, and reports whether a hash index can serve such a lookup (§9 row 5).
+    /// Implementations without automatic hash indexes (the single-file table) answer <c>false</c>.
+    /// </summary>
+    /// <param name="columnName">The column a filtered operation targets.</param>
+    /// <returns>True when a hash index serves this column — already registered, or just registered.</returns>
+    bool EnsureAutoHashIndexRegistered(string columnName) => false;
 
     /// <summary>
     /// Gets hash index statistics for a column.

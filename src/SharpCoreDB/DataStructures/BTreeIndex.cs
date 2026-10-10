@@ -27,7 +27,7 @@ using System.Runtime.CompilerServices;
 /// </summary>
 /// <typeparam name="TKey">The type of the index key (must be comparable).</typeparam>
 /// <param name="columnName">The column name this index is for.</param>
-public sealed class BTreeIndex<TKey>(string columnName) : IGenericIndex<TKey>
+public sealed class BTreeIndex<TKey>(string columnName) : IGenericIndex<TKey>, ITypeErasedIndex
     where TKey : notnull, IComparable<TKey>, IEquatable<TKey>
 {
     private readonly BTree<TKey, List<long>> _btree = new();
@@ -88,6 +88,20 @@ public sealed class BTreeIndex<TKey>(string columnName) : IGenericIndex<TKey>
             }
         }
     }
+
+    /// <summary>
+    /// Adds a key/position pair through the non-generic index view
+    /// (see <see cref="ITypeErasedIndex"/>), keeping the typed <see cref="Add(TKey, long)"/> as the API
+    /// for callers that know the key type.
+    /// </summary>
+    void ITypeErasedIndex.Add(object? key, long position) => Add((TKey)key!, position);
+
+    /// <summary>
+    /// Runs a range scan through the non-generic index view
+    /// (see <see cref="ITypeErasedIndex"/>).
+    /// </summary>
+    IEnumerable<long> ITypeErasedIndex.FindRange(object? start, object? end) =>
+        FindRange((TKey)start!, (TKey)end!);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

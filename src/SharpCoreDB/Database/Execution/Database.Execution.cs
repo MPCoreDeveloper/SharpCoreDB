@@ -79,11 +79,17 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
+        // §2 instrumentation (2026-09-15): on the standalone-statement shape the storage write measures 0.8 µs
+        // and the WAL 0.02 µs, so ~75 % of a warm ~60 µs/statement is unattributed and lives in the statement
+        // machinery below the table. This is one of the two phases that had no stamp at all.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         SqlQueryValidator.ValidateQuery(
             sql, 
             null, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
 
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
@@ -99,27 +105,36 @@ public partial class Database
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-15): this block warmed the plan cache for DML
+        // (`GetOrAddPlan(sql, null, SqlCommandType.INSERT/UPDATE/DELETE)`) and was pure waste on this path. Two
+        // facts, both verified rather than assumed:
+        //   * the return value is DISCARDED here, and nothing anywhere reads a DML plan entry — `CachedPlan` is
+        //     consumed in exactly two places (`Database.Core.cs:939`, the struct-query path, and `ExecuteQuery`
+        //     below), both SELECT paths, and the only reader, `TryGetCachedPlan`, has no callers at all;
+        //   * the key is built from the normalized SQL *including literal values* (`GetNormalizedSql` collapses
+        //     whitespace only), so statements that differ just in their literals — a benchmark of 20,000 distinct
+        //     INSERTs, or any application that inlines values — miss every time regardless.
+        // So every statement paid a normalized copy, a cache key, a `Split` of the whole statement, a
+        // `CachedQueryPlan`, a cache insert and `DateTime.UtcNow` for a plan nothing reads, while the cache
+        // accumulated one unusable entry per distinct statement. Measured at **~21 µs of a warm
+        // 59.64 µs statement** (`--multirowinsert`, 1 row/statement, median of 5), attributed by the write-path
+        // profiler as `parse`. The statement classification that fed it is gone with it — it had no other use.
+        // The SELECT path keeps its cache, which is consumed and does hit (`Database.Core.cs:934`). Making DML
+        // plans *useful* would be a feature, not this change: the DML path would have to accept a plan argument,
+        // because `sqlParser.Execute(sql, …)` takes raw SQL.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §2 instrumentation (2026-09-15): outer stamp for the last unattributed bucket on this shape — lock
+        // acquisition, the shared-parser fetch and the hand-off. `parse` nests inside, so the delta is the cost.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
@@ -143,11 +158,17 @@ public partial class Database
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
 
+        // §5.5 instrumentation (2026-09-27, session 72): this overload and the two async siblings share the
+        // single-argument shape but carried no stamp, so a caller that binds parameters paid a per-statement
+        // cost no column showed. Same two stages, same nesting as ExecuteSQL(string) -- comparable shapes.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         SqlQueryValidator.ValidateQuery(
             sql, 
             parameters, 
             config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
             config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
 
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
@@ -163,27 +184,21 @@ public partial class Database
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-15): the identical dead plan-cache warm-up for DML — same discarded return, same
+        // absence of any reader of DML plan entries (full reasoning in the non-parameterized overload above).
+        // Repeated parameterized DML would have hit this cache, but nothing reads the entries, so the whole
+        // chain was cost without effect.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
@@ -224,33 +239,49 @@ public partial class Database
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
 
+        // §5.5 (ii) follow-up (2026-09-27, session 75): the sync sibling has validated its statement since
+        // 2026-09-15 and this overload never called the validator at all — so a caller that reached the
+        // database asynchronously (ADO.NET async, EF Core, the Serilog sink) bypassed a security check its
+        // own sync twin enforced, and the two disagreed about which SQL is acceptable. Same call, same
+        // arguments, same position as `ExecuteSQL(string)`: before the SELECT branch, so the entry points
+        // stay comparable column for column.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+        SqlQueryValidator.ValidateQuery(
+            sql,
+            null,
+            config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
+            config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
+
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, null, cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, null, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-24): the DML plan-cache warming was still here, and it is the same block that was
+        // removed from `ExecuteSQL(string)` on 2026-09-15 as measured pure waste — see the full note in that
+        // method. The 2026-09-15 sweep missed this overload and the parameterized async one below because it
+        // only touched the single-argument entry point. The return value is discarded, nothing reads a DML plan
+        // entry (`TryGetCachedPlan` has no callers at all; `CachedPlan` is consumed only on the two SELECT
+        // paths), and the key includes literal values, so a caller using distinct literals missed every time.
+        // Every such statement paid a normalised copy, a cache key, a `Split` of the whole statement, a
+        // `CachedQueryPlan`, a cache insert and `DateTime.UtcNow` for a plan nothing reads — measured at ~21 µs
+        // of a warm ~60 µs statement on the sibling path.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §5.5 instrumentation (2026-09-27): the async twin of ExecuteSQL(string) — both of its stages now,
+        // `stmt-validate` (added 2026-09-27, session 75) and this Dispatch envelope.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {
@@ -276,33 +307,43 @@ public partial class Database
         ArgumentException.ThrowIfNullOrWhiteSpace(sql);
         ArgumentNullException.ThrowIfNull(parameters);
 
+        // §5.5 (ii) follow-up (2026-09-27, session 75): the parameterized sync sibling validates the
+        // statement *and* the parameter set (`StrictParameterValidation`); this overload did neither, so the
+        // async entry point ADO.NET-shaped callers reach accepted a statement whose named parameters do not
+        // match the SQL where the sync one threw. Same call, same arguments, same position as
+        // `ExecuteSQL(sql, parameters)`.
+        long statementValidateStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+        SqlQueryValidator.ValidateQuery(
+            sql,
+            parameters,
+            config?.SqlValidationMode ?? SqlQueryValidator.ValidationMode.Lenient,
+            config?.StrictParameterValidation ?? true);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StatementValidate, statementValidateStart);
+
         if (FirstToken(sql).Equals(SqlConstants.SELECT.AsSpan(), StringComparison.OrdinalIgnoreCase))
         {
             await ExecuteSelectQueryAsync(sql, parameters, cancellationToken).ConfigureAwait(false);
             return;
         }
 
-        // ✅ Cache plans for DML: INSERT, UPDATE, DELETE
-        if (FirstToken(sql).Equals(SqlConstants.INSERT.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.INSERT);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.UPDATE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.UPDATE);
-        }
-        else if (FirstToken(sql).Equals(SqlConstants.DELETE.AsSpan(), StringComparison.OrdinalIgnoreCase))
-        {
-            GetOrAddPlan(sql, parameters, SqlCommandType.DELETE);
-        }
+        // ⚠️ REMOVED (2026-09-24): same block, same verdict — see the note in `ExecuteSQL(string)`. This is the
+        // parameterized *async* entry point, which is what ADO.NET-style callers reach, so the waste was not
+        // only on an unused corner: it sat directly on a user-facing path. Nothing reads a DML plan entry, and
+        // the cache key includes parameter names *and* the literal-bearing SQL, so distinct calls still missed.
 
         // ✅ UNIFIED: Use IStorageEngine for all DML operations
         // StorageEngine handles WAL, transactions, and batching consistently
         // No more separate GroupCommitWAL logic - it's integrated into the engine
+        // §5.5 instrumentation (2026-09-27): the parameterized async entry point ADO.NET-shaped callers
+        // reach. It carries `stmt-validate` too since session 75, like its sync sibling.
+        long dispatchStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         lock (_walLock)
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
             if (!isReadOnly && IsSchemaChangingCommand(sql))
             {

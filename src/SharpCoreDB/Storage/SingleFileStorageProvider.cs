@@ -150,8 +150,10 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         // ✅ Dynamic metadata (issue #345): the FSM is a named block (sys:fsm) whose location is
         // resolved from the block registry instead of a fixed header offset.
         _freeSpaceManager = _blockRegistry.TryGetBlock(ScdbFileHeader.FSM_BLOCK_NAME, out var fsmEntry)
-            ? new FreeSpaceManager(this, fsmEntry.Offset, fsmEntry.Length, header.PageSize)
-            : new FreeSpaceManager(this, 0, 0, header.PageSize);
+            ? new FreeSpaceManager(this, fsmEntry.Offset, fsmEntry.Length, header.PageSize,
+                options.DatabaseConfig?.SingleFileMinExtensionBytes ?? 0)
+            : new FreeSpaceManager(this, 0, 0, header.PageSize,
+                options.DatabaseConfig?.SingleFileMinExtensionBytes ?? 0);
         _walManager = new WalManager(this, header.WalOffset, header.WalLength, options.WalBufferSizePages);
         _tableDirectoryManager = new TableDirectoryManager(this, header.TableDirOffset, header.TableDirLength);
         
@@ -861,16 +863,20 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 }
                 else
                 {
-                    // Need more space: free old, allocate new
+                    // Need more space: free old, allocate new. A zero-length payload — the single-file overflow block
+                    // of a table whose values all fit inline (plan §8c / decision 8) — needs no pages at all:
+                    // allocating zero throws, and the old pages are freed rather than kept, because the block no
+                    // longer stores anything.
                     _freeSpaceManager.FreePages(existingEntry.Offset, (int)existingPages);
-                    offset = _freeSpaceManager.AllocatePages(requiredPages);
+                    offset = requiredPages > 0 ? _freeSpaceManager.AllocatePages(requiredPages) : 0UL;
                     entry = existingEntry with { Offset = offset, Length = (ulong)data.Length, Flags = updatedFlags };
                 }
             }
             else
             {
-                // New block
-                offset = _freeSpaceManager.AllocatePages(requiredPages);
+                // New block. A zero-length payload allocates no pages (see the branch above) and keeps offset 0, which
+                // no reader ever dereferences: every read path honours the entry's Length.
+                offset = requiredPages > 0 ? _freeSpaceManager.AllocatePages(requiredPages) : 0UL;
 
                 // Defensive guard (addresses CI-only first-allocation collision with BlockRegistry area under Release+coverage+Linux).
                 // If FSM (for any reason: load timing, bitmap deserialize edge, Release opts, coverage-induced slowdown of init writes)
@@ -881,7 +887,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
                 // FSM as allocated. If the FSM ever returns an offset inside the metadata area,
                 // force the data to a safe location after the FSM block.
                 var registryEnd = _freeSpaceManager.FsmBlockEnd;
-                if (offset < registryEnd)
+                if (requiredPages > 0 && offset < registryEnd)
                 {
                     offset = registryEnd;
                 }

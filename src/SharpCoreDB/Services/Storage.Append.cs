@@ -46,6 +46,22 @@ public partial class Storage
     private readonly Dictionary<string, List<(byte[] data, long position)>> bufferedAppends = new();
     private readonly Dictionary<string, long> cachedFileLengths = new();  // ✅ NEW: Cache file lengths
 
+    /// <summary>
+    /// Position → payload index over the rows currently in <see cref="bufferedAppends"/>, so a point
+    /// lookup that arrives before the flush returns the buffered row instead of reading past the end of
+    /// the file. Kept beside the ordered list (which the flush writes in append order) and lock-free for
+    /// readers, mirroring <c>bufferedOverwrites</c>. Mutated under <c>appendLock</c>.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, ConcurrentDictionary<long, byte[]>> bufferedAppendLookup =
+        new(StringComparer.Ordinal);
+
+    // Bytes buffered since the last flush, and when the current buffer first grew. Together with
+    // DatabaseConfig.AppendBufferFlushThresholdBytes / AppendBufferFlushIntervalMs these bound the
+    // durability window and the memory footprint of the opt-in mode. Guarded by appendLock.
+    private long pendingAppendBytes;
+    private long appendBufferSinceTimestamp;
+
+
     // ✅ B7: Write-behind log for in-place overwrites made inside a transaction. The original
     // bytes stay on disk until commit (nothing is overwritten early), so rollback is simply
     // dropping this buffer — no undo data needs to be stored. On commit the buffered records
@@ -121,7 +137,7 @@ public partial class Storage
             return true; // Brand-new file → write the magic header + encrypted records.
         }
 
-        if (FileHasEncryptedHeader(path))
+        if (HeaderProbeForWriteDecision(path))
         {
             return true; // Existing encrypted per-record file → keep encrypting.
         }
@@ -136,6 +152,35 @@ public partial class Storage
 
         legacyPlaintextFiles.Add(path);
         return false; // Legacy plaintext file → never mix encrypted records into it.
+    }
+
+    /// <summary>
+    /// Same probe as <see cref="FileHasEncryptedHeader"/> but with a SHORT-LIVED open. Used only for the
+    /// once-per-path write decision (<see cref="DecideEncryptWrites"/>), never on a per-record path.
+    /// </summary>
+    /// <remarks>
+    /// The cached read handle that <see cref="FileHasEncryptedHeader"/> keeps would otherwise be created by
+    /// the first INSERT and then held for the lifetime of the Storage — and on Windows a live handle on a
+    /// data file makes the DROP TABLE path fail: its pre-delete probe opens the file with
+    /// <c>FileShare.None</c>, which cannot succeed while any other handle (even a read handle that permits
+    /// deletion) is open. The decision is memoised per path, so the extra open costs nothing per record,
+    /// while the per-record read probe still uses the cached handle it needs.
+    /// </remarks>
+    private static bool HeaderProbeForWriteDecision(string path)
+    {
+        try
+        {
+            using var fs = new FileStream(
+                path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+            Span<byte> header = stackalloc byte[PersistenceConstants.EncryptedTableMagicLength];
+            return fs.Read(header) == header.Length &&
+                header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
+        }
+        catch
+        {
+            // Missing/short/locked → not an encrypted table file (same answer as FileHasEncryptedHeader).
+            return false;
+        }
     }
 
     /// <summary>
@@ -169,34 +214,141 @@ public partial class Storage
         }
     }
 
+    /// <inheritdoc />
+    public byte[]? DecryptRecordPayload(byte[] payload) => DecryptRecord(payload);
+
+    /// <inheritdoc />
+    public byte[]? DecryptRecordPayload(byte[] buffer, int offset, int length)
+    {
+        ArgumentNullException.ThrowIfNull(buffer);
+        if (offset < 0 || length <= 0 || offset + length > buffer.Length)
+        {
+            return null;
+        }
+
+        if (!UseRecordEncryption)
+        {
+            // Same contract as the array overload: not encrypted → the caller's bytes, as a fresh array
+            // (the caller may hold the buffer, so it must not be handed out).
+            var plaintext = new byte[length];
+            Buffer.BlockCopy(buffer, offset, plaintext, 0, length);
+            return plaintext;
+        }
+
+        try
+        {
+            return crypto.Decrypt(key, buffer.AsSpan(offset, length));
+        }
+        catch
+        {
+            // Corrupt or legacy data — surface null so readers treat it as an invalid record.
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Looks up a not-yet-flushed buffered append by its physical position. Lock-free (the index is a
+    /// <see cref="ConcurrentDictionary{TKey,TValue}"/>), mirroring how buffered overwrites are read.
+    /// </summary>
+    [MethodImpl(MethodImplOptions.AggressiveInlining)]
+    private bool TryGetBufferedAppend(string path, long offset, out byte[] payload)
+    {
+        if (bufferedAppendLookup.IsEmpty ||
+            !bufferedAppendLookup.TryGetValue(path, out var byOffset) ||
+            !byOffset.TryGetValue(offset, out payload!))
+        {
+            payload = null!;
+            return false;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Returns the caller-owned plaintext of a buffered append. The buffer stores exactly what the flush
+    /// will write — ciphertext when this path encrypts writes (encrypt-then-buffer, same order as
+    /// <see cref="AppendBytes"/>) — so an encrypted file must be decrypted here.
+    /// </summary>
+    /// <remarks>
+    /// The on-disk magic-header probe is deliberately not used: a brand-new encrypted file may not exist
+    /// yet while its first records are buffered, so the probe would answer "plaintext" and hand out raw
+    /// ciphertext. The memoised per-file write decision answers the same question and is correct for a
+    /// file that does not exist yet (it will be created with the header on the flush).
+    /// </remarks>
+    private byte[]? DecryptBufferedAppendPayload(string path, byte[] payload)
+    {
+        if (UseRecordEncryption && ShouldEncryptWrites(path))
+        {
+            return DecryptRecord(payload);
+        }
+
+        // Copy: the buffer owns this array, and the caller owns the result (fast paths patch it in place).
+        var plaintext = new byte[payload.Length];
+        Buffer.BlockCopy(payload, 0, plaintext, 0, payload.Length);
+        return plaintext;
+    }
+
+    /// <summary>
+    /// Yields the not-yet-flushed buffered appends for <paramref name="path"/> in physical offset order,
+    /// decrypted for encrypted files. Empty when nothing is buffered — i.e. always, by default.
+    /// </summary>
+    private IEnumerable<(long RecordOffset, byte[] Data)> ReadBufferedAppends(string path)
+    {
+        if (bufferedAppendLookup.IsEmpty ||
+            !bufferedAppendLookup.TryGetValue(path, out var byOffset) ||
+            byOffset.IsEmpty)
+        {
+            yield break;
+        }
+
+        // Order by position: the index is a hash map, and callers (index rebuild, compaction, arena
+        // reload) depend on the same file order the flush will produce.
+        foreach (var offset in byOffset.Keys.OrderBy(static offset => offset))
+        {
+            if (byOffset.TryGetValue(offset, out var payload))
+            {
+                byte[]? record = DecryptBufferedAppendPayload(path, payload);
+                if (record is not null)
+                {
+                    yield return (offset, record);
+                }
+            }
+        }
+    }
+
     /// <summary>
     /// Detects whether <paramref name="path"/> is an encrypted per-record table file by
     /// checking for the 8-byte magic header. Missing/empty/short files → false.
     /// </summary>
-    private static bool FileHasEncryptedHeader(string path)
+    /// <remarks>
+    /// PERF: this probe runs on EVERY per-record read once record encryption is on
+    /// (<c>ReadBytesFrom</c>/<c>ReadAllRecords</c>), so it must not do more than one cached-handle read:
+    /// it used to open a <see cref="FileStream"/> per call, and even a <c>File.Exists</c> +
+    /// <c>FileInfo.Length</c> pair costs two metadata syscalls per read. The measured effect of those
+    /// syscalls on the two-arm <c>--dual-mode</c> harness was ~11× slower READ/UPDATE/DELETE for the
+    /// encrypted default versus <c>NoEncryptMode=true</c>, whose short-circuit skips the probe.
+    /// A short read is the same answer the removed length check gave, and the handle open failure the
+    /// same answer <c>File.Exists</c> gave.
+    /// </remarks>
+    private bool FileHasEncryptedHeader(string path)
     {
         try
         {
-            if (!File.Exists(path))
-            {
-                return false;
-            }
-
-            var info = new FileInfo(path);
-            if (info.Length < PersistenceConstants.EncryptedTableMagicLength)
-            {
-                return false;
-            }
-
             Span<byte> header = stackalloc byte[PersistenceConstants.EncryptedTableMagicLength];
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
-            int read = fs.Read(header);
-            if (read < PersistenceConstants.EncryptedTableMagicLength)
+            int read;
+            try
             {
-                return false;
+                read = RandomAccess.Read(GetOrOpenReadHandle(path), header, 0);
+            }
+            catch
+            {
+                // Stale cache entry (file replaced/removed) — evict and retry once, like ReadBytesRange.
+                _readHandleCache.TryRemove(path, out _);
+                read = RandomAccess.Read(GetOrOpenReadHandle(path), header, 0);
             }
 
-            return header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
+            return read == header.Length &&
+                header.SequenceEqual(PersistenceConstants.EncryptedTableMagic);
         }
         catch
         {
@@ -300,25 +452,22 @@ public partial class Storage
                 FileOptions.None));
 
     /// <summary>
-    /// B7: performs an in-place overwrite of a length-prefixed record. Table files (.dat) use the
-    /// cached write handle; overflow-arena files (.ovf) open a short-lived stream because the
-    /// arena owns its own append/reuse streams and a lingering handle would conflict with them.
+    /// B7: performs an in-place overwrite of a length-prefixed record through the cached write handle
+    /// (table data files and the overflow arena alike — the older .ovf branch opened a stream per
+    /// overwrite, see plan §4a).
     /// </summary>
     private void WriteRecordInPlace(string path, long offset, ReadOnlySpan<byte> lengthPrefix, ReadOnlySpan<byte> record)
     {
-        if (path.EndsWith(".ovf", StringComparison.OrdinalIgnoreCase))
-        {
-            using var fs = new FileStream(path, FileMode.Open, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.None);
-            fs.Position = offset;
-            fs.Write(lengthPrefix);
-            fs.Write(record);
-        }
-        else
-        {
-            SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
-            RandomAccess.Write(writeHandle, lengthPrefix, offset);
-            RandomAccess.Write(writeHandle, record, offset + 4);
-        }
+        // PERF: one cached write handle for every table file, INCLUDING the overflow arena. The .ovf
+        // branch used to open (and close) a FileStream per overwrite, which made a same-length TEXT
+        // update — the shape that reuses a freed arena block instead of appending — ~8x slower than the
+        // different-length one (123 us vs 16 us per row; plan §4a). A cached handle for .ovf is safe now
+        // that whole-file replacement drops handles (IStorage.InvalidateFileHandles, called by the arena
+        // compaction, the table compaction and the fixed-width migration), which is what the special case
+        // was presumably guarding against.
+        SafeFileHandle writeHandle = GetOrOpenWriteHandle(path);
+        RandomAccess.Write(writeHandle, lengthPrefix, offset);
+        RandomAccess.Write(writeHandle, record, offset + 4);
     }
 
     /// <summary>
@@ -353,6 +502,20 @@ public partial class Storage
     }
 
     /// <inheritdoc />
+    public void InvalidateFileHandles(string path)
+    {
+        if (_readHandleCache.TryRemove(path, out var readHandle))
+        {
+            readHandle.Dispose();
+        }
+
+        if (_writeHandleCache.TryRemove(path, out var writeHandle))
+        {
+            writeHandle.Dispose();
+        }
+    }
+
+    /// <inheritdoc />
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public long AppendBytes(string path, byte[] data)
     {
@@ -365,30 +528,67 @@ public partial class Storage
         int recordLength = record.Length;
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER the append!
-        if (IsInTransaction)
+        // ✅ Buffered append mode: the SAME buffer serves single-row appends outside a transaction — one
+        // open/write/close per flush boundary instead of a write-through open/close per row (~512 µs →
+        // ~4.5 µs per 64-byte row for the write itself). Engaged by DatabaseConfig.EnableBufferedAppends
+        // (explicit opt-in) and by nothing else: `WalDurabilityMode = Async` no longer implies it, reversed
+        // 2026-09-16 after a one-variable A/B showed buffering costs 22-54 % on every phase of a workload that
+        // reads between appends. See BuffersAppends for the contract and the numbers.
+        if (IsInTransaction || BuffersAppends)
         {
+            long futurePosition;
             lock (appendLock)
             {
+                bool bufferWasEmpty = bufferedAppends.Count == 0;
+
                 EnsureAppendInitialized(path, encryptWrites);
 
                 // ✅ OPTIMIZED: Use cached file length instead of recalculating
                 long currentFileLength = cachedFileLengths[path];
 
                 // This is where this data WILL be written when we flush
-                long futurePosition = currentFileLength;
+                futurePosition = currentFileLength;
 
                 // Buffer the append and update cached length
                 bufferedAppends[path].Add((record, futurePosition));
                 cachedFileLengths[path] = currentFileLength + 4 + recordLength;  // Update cache
 
-                return futurePosition;
+                // Read-your-writes: the row is not on disk yet, so the read paths must be able to find
+                // it by position (ReadBytesFrom) and in order (ReadAllRecords).
+                bufferedAppendLookup
+                    .GetOrAdd(path, static _ => new ConcurrentDictionary<long, byte[]>())
+                    [futurePosition] = record;
+
+                if (bufferWasEmpty)
+                {
+                    appendBufferSinceTimestamp = Environment.TickCount64;
+                }
+
+                pendingAppendBytes += 4 + recordLength;
+
+                // Opt-in auto-flush (byte threshold or max age) — bounds the durability window and the
+                // memory the buffer can hold. Never inside a transaction: a transaction owns its buffer
+                // until commit, and FlushTransactionBuffer() is its explicit intermediate flush.
+                if (!IsInTransaction && ShouldAutoFlushAppends())
+                {
+                    FlushBufferedAppends();
+                }
             }
+
+            return futurePosition;
         }
 
         // Normal append (not in transaction) - write immediately
         // B7: FileShare.ReadWrite|Delete so the cached in-place-overwrite write handle and the
         // append path can coexist (a FileShare.Read open would fail while the write handle is open).
+        // NOTE: a CACHED write-through append handle is not an option — see plan §5: a live write handle
+        // (access=Write) makes an ordinary reader (File.ReadAllBytes, share=Read) fail with a sharing
+        // violation, which the suite caught in 10 tests. The per-call open is what keeps the file
+        // readable by other processes, and its cost is the remaining item on the INSERT path.
+        long appendOpenStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 4096, FileOptions.WriteThrough);
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.AppendOpen, appendOpenStart);
         long position = fs.Position;
 
         // ✅ Known Issue 1 FIX: brand-new encrypted files (position 0) receive the 8-byte
@@ -400,6 +600,7 @@ public partial class Storage
         }
 
         // Write length prefix (ciphertext length for encrypted files, data length otherwise)
+        long appendWriteStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
         Span<byte> lengthBuffer = stackalloc byte[4];
         BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, recordLength);
         fs.Write(lengthBuffer);
@@ -413,6 +614,9 @@ public partial class Storage
             int pageId = ComputePageId(path, position);
             this.pageCache.EvictPage(pageId);
         }
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.AppendWrite, appendWriteStart);
 
         return position;
     }
@@ -565,6 +769,13 @@ public partial class Storage
 
         return BufferOrWriteOverwriteInPlace(path, offset, record);
     }
+
+    /// <inheritdoc />
+    public bool HasBufferedAppends(string path) =>
+        !bufferedAppendLookup.IsEmpty && bufferedAppendLookup.ContainsKey(path);
+
+    /// <inheritdoc />
+    public void FlushPendingAppends() => FlushBufferedAppends();
 
     /// <inheritdoc />
     public bool HasBufferedOverwrite(string path) =>
@@ -860,7 +1071,7 @@ public partial class Storage
             return Array.Empty<long>();
 
         // ✅ CRITICAL FIX: Check if in transaction - if so, BUFFER all appends!
-        if (IsInTransaction)
+        if (IsInTransaction || BuffersAppends)
         {
             var result = new long[dataBlocks.Count];  // ✅ FIXED: Renamed to 'result' to avoid variable name conflict
 
@@ -875,7 +1086,20 @@ public partial class Storage
         // Normal batch append (not in transaction) - write immediately
         var positions = new long[dataBlocks.Count];
 
-        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, 65536, FileOptions.WriteThrough);
+        // §11 (2026-09-16): size the write buffer to what is actually being written. A fixed 64 KiB buffer
+        // allocates 64 KiB per call whatever the payload, and the overflow arena calls this once per ROW with a
+        // single small block: measured 65,856 B allocated per call, 76,467 B per row and 244 gen0 collections
+        // per 20,000-row pass, against 4,371 B/call for the single-value path's 4 KiB buffer. The floor keeps
+        // small writes buffered and the cap preserves the coalescing that makes a genuine multi-row batch cheap.
+        long pendingBytes = 4L * (dataBlocks.Count + 1);
+        for (int i = 0; i < dataBlocks.Count; i++)
+        {
+            pendingBytes += dataBlocks[i]?.Length ?? 0;
+        }
+
+        int appendBufferSize = (int)Math.Clamp(pendingBytes, 4096L, 65536L);
+
+        using var fs = new FileStream(path, FileMode.Append, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete, appendBufferSize, FileOptions.WriteThrough);
 
         Span<byte> lengthBuffer = stackalloc byte[4];
 
@@ -971,7 +1195,36 @@ public partial class Storage
             cachedFileLengths.Clear();
             headerPendingFiles.Clear();
             bufferedFileBaseLengths.Clear();
+
+            // ✅ Buffered append mode: the rows are on disk now, so the position index and the
+            // threshold counters reset with the buffer (a brand-new file's header was written above).
+            bufferedAppendLookup.Clear();
+            pendingAppendBytes = 0;
+            appendBufferSinceTimestamp = 0;
         }
+    }
+
+    /// <summary>
+    /// True when the opt-in append buffer has reached its byte threshold, or has been pending longer
+    /// than the configured interval. Only consulted outside a transaction, and only from the append
+    /// path — the time bound is therefore "flushed by the next append", not by a timer thread. The
+    /// explicit boundaries (commit, <c>Database.Flush()</c>, every structural operation, dispose) do
+    /// not depend on it.
+    /// </summary>
+    private bool ShouldAutoFlushAppends()
+    {
+        if (!BuffersAppends || pendingAppendBytes == 0)
+        {
+            return false;
+        }
+
+        if (appendBufferFlushThresholdBytes > 0 && pendingAppendBytes >= appendBufferFlushThresholdBytes)
+        {
+            return true;
+        }
+
+        return appendBufferFlushIntervalMs > 0 &&
+            Environment.TickCount64 - appendBufferSinceTimestamp >= appendBufferFlushIntervalMs;
     }
 
     /// <summary>
@@ -984,7 +1237,15 @@ public partial class Storage
         lock (appendLock)
         {
             FlushBufferedAppends();
+
+            // Split (2026-09-21): the commit is the largest single stage on the encrypted default-job UPDATE
+            // arm, and this is the write-behind half of it — the one place a 10,000-row batch's overwrites
+            // reach the disk. Stamped separately so the batched page path can be told from the per-record
+            // fallback without guessing.
+            long overwritesStart = Diagnostics.WritePathProfiler.Stamp();
             FlushBufferedOverwrites();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwrites, overwritesStart);
+
             ApplyBufferedTombstones();
         }
     }
@@ -1063,6 +1324,9 @@ public partial class Storage
             headerPendingFiles.Clear(); // ✅ Clear pending header markers on rollback
             bufferedFileBaseLengths.Clear();
             bufferedTombstones.Clear(); // Rollback: discard pending commit-time tombstones
+            bufferedAppendLookup.Clear(); // Rollback: the buffered rows are discarded, so is the index
+            pendingAppendBytes = 0;
+            appendBufferSinceTimestamp = 0;
         }
     }
 
@@ -1139,19 +1403,34 @@ public partial class Storage
         }
 
         var entries = new (long Offset, byte[] Payload)[overwrites.Count];
+
+        // Preparation half (collect + sort + bucket). Stamped separately (2026-09-21) because the I/O half was
+        // refuted as the cost: coalescing the page writes changed 640 syscalls into 4 and moved nothing, so the
+        // per-entry work below — over 10,000 entries — is the remaining suspect. The Add sits before the early
+        // return so a no-valid-entries batch cannot leave the allocation checkpoint open.
+        long prepStart = Diagnostics.WritePathProfiler.Stamp();
         int n = CollectValidOverwriteEntries(overwrites, fileLength, entries);
 
-        if (n == 0)
-        {
-            return false;
-        }
-
-        Array.Sort(entries, 0, n, Comparer<(long Offset, byte[] Payload)>.Create(static (a, b) => a.Offset.CompareTo(b.Offset)));
+        // No sort of `entries` here (removed 2026-09-21). It used Array.Sort with a Comparer<T> delegate over
+        // ~10,000 entries — ~133,000 delegate invocations, measured at 14.4 ms of this flush's 33.8 ms — and it
+        // bought no ordering that anything downstream needs:
+        //   * BucketOverwritesByPage groups by page start and never reads the array in offset order;
+        //   * FlushOverwritePages sorts the ~320 page starts itself before touching the file;
+        //   * within one page every overwrite is a DIFFERENT record (the positions come from the index, so the
+        //     spans cannot overlap), which makes the patch order inside the page buffer irrelevant;
+        //   * `direct` (records crossing a page boundary) is written one independent record at a time.
+        // The only ordering that ever mattered is the page order, and that is established below.
 
         var pages = new Dictionary<long, List<(int RelOffset, byte[] Payload)>>();
         var pageStarts = new List<long>();
         var direct = new List<(long Offset, byte[] Payload)>();
         BucketOverwritesByPage(entries, n, pageBytes, pages, pageStarts, direct);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwritesPrep, prepStart);
+
+        if (n == 0)
+        {
+            return false;
+        }
 
         Span<byte> lengthPrefix = stackalloc byte[4];
         foreach (var (offset, payload) in direct)
@@ -1222,8 +1501,24 @@ public partial class Storage
     }
 
     /// <summary>
-    /// Flushes every patched page once: the current on-disk page bytes are read into a pooled
-    /// buffer, every page-local overwrite payload is copied in, and the page is written back.
+    /// Upper bound on one coalesced overwrite range. Bounds the rented buffer and keeps the partial-read
+    /// fallback granular; a run of consecutive pages is split into several ranges once it reaches this size.
+    /// </summary>
+    private const int MaxCoalescedOverwriteRangeBytes = 1 << 20;
+
+    /// <summary>
+    /// Flushes every patched page once: the current on-disk page bytes are read into a pooled buffer, every
+    /// overwrite payload is copied in, and the buffer is written back. Consecutive pages are coalesced into one
+    /// range, so a run costs one read and one write instead of one pair per page.
+    /// <para>
+    /// ⚠️ History, because the first verdict here was wrong and the numbers below correct it. The coalescing was
+    /// implemented, measured at 29.8 ms against 31.2 ms and reverted as "refuted" — but that comparison still
+    /// contained an unremoved ~8-14 ms offset sort, so it never isolated the I/O half. With the sort gone and the
+    /// halves stamped, the per-page form shows what the runs are for: `commit-ovw-prep` 6.1 ms +
+    /// `commit-ovw-write` 1.5 ms (315 calls, so buffered writes are cheap) leaves **~17.5 ms of page READS**,
+    /// ~55 µs per 4 KB page — the shape of real disk reads, not of the page cache. See the worklog entry for the
+    /// re-measurement.
+    /// </para>
     /// Returns false on a partial read so the caller can fall back to the idempotent per-record loop.
     /// </summary>
     private bool FlushOverwritePages(string path, long fileLength, int pageBytes, Dictionary<long, List<(int RelOffset, byte[] Payload)>> pages, List<long> pageStarts)
@@ -1233,31 +1528,70 @@ public partial class Storage
         byte[]? pageBuffer = null;
         try
         {
-            pageBuffer = ArrayPool<byte>.Shared.Rent(pageBytes);
             pageStarts.Sort();
-            foreach (long pageStart in pageStarts)
+
+            int index = 0;
+            while (index < pageStarts.Count)
             {
-                int writeLength = (int)Math.Min(pageBytes, fileLength - pageStart);
-                if (writeLength <= 0)
+                long runStart = pageStarts[index];
+
+                int runPages = 1;
+                long runBytes = Math.Min(pageBytes, fileLength - runStart);
+                while (index + runPages < pageStarts.Count &&
+                       pageStarts[index + runPages] == runStart + ((long)runPages * pageBytes) &&
+                       (runPages + 1) * (long)pageBytes <= MaxCoalescedOverwriteRangeBytes)
                 {
+                    runPages++;
+                    runBytes = Math.Min((long)runPages * pageBytes, fileLength - runStart);
+                }
+
+                if (runBytes <= 0)
+                {
+                    index += runPages;
                     continue;
                 }
 
-                if (RandomAccess.Read(readHandle, pageBuffer.AsSpan(0, writeLength), pageStart) != writeLength)
+                if (pageBuffer is null || pageBuffer.Length < (int)runBytes)
+                {
+                    if (pageBuffer is not null)
+                    {
+                        ArrayPool<byte>.Shared.Return(pageBuffer);
+                    }
+
+                    pageBuffer = ArrayPool<byte>.Shared.Rent((int)runBytes);
+                }
+
+                if (RandomAccess.Read(readHandle, pageBuffer.AsSpan(0, (int)runBytes), runStart) != runBytes)
                 {
                     return false; // partial read — fall back to the idempotent per-record loop
                 }
 
-                foreach (var (relOffset, payload) in pages[pageStart])
+                for (int p = 0; p < runPages; p++)
                 {
-                    payload.CopyTo(pageBuffer.AsSpan(relOffset, payload.Length));
+                    long pageStart = pageStarts[index + p];
+                    int pageBaseInRun = (int)(pageStart - runStart);
+                    foreach (var (relOffset, payload) in pages[pageStart])
+                    {
+                        payload.CopyTo(pageBuffer.AsSpan(pageBaseInRun + relOffset, payload.Length));
+                    }
                 }
 
-                RandomAccess.Write(writeHandle, pageBuffer.AsSpan(0, writeLength), pageStart);
+                // Write half (2026-09-21): stamped so the read half can be derived — the write handle is cached and
+                // buffered (FileOptions.None), so write-through cannot be the explanation for this loop's cost and
+                // the split has to be measured.
+                long writeHalfStart = Diagnostics.WritePathProfiler.Stamp();
+                RandomAccess.Write(writeHandle, pageBuffer.AsSpan(0, (int)runBytes), runStart);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwritesWrite, writeHalfStart);
+
                 if (this.pageCache != null)
                 {
-                    this.pageCache.EvictPage(ComputePageId(path, pageStart));
+                    for (int p = 0; p < runPages; p++)
+                    {
+                        this.pageCache.EvictPage(ComputePageId(path, pageStarts[index + p]));
+                    }
                 }
+
+                index += runPages;
             }
         }
         finally
@@ -1275,6 +1609,13 @@ public partial class Storage
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public byte[]? ReadBytesFrom(string path, long offset)
     {
+        // ✅ Buffered append mode: the row was appended in this session but not flushed yet, so its bytes
+        // exist only in the buffer — the disk read below would run past the end of the file/record.
+        if (TryGetBufferedAppend(path, offset, out var bufferedAppend))
+        {
+            return DecryptBufferedAppendPayload(path, bufferedAppend);
+        }
+
         // B7: inside a transaction, a buffered in-place overwrite takes precedence over the disk
         // version (the overwrite is written to disk only at commit). The buffer holds the payload
         // only (its length is the record's stored length).
@@ -1354,6 +1695,13 @@ public partial class Storage
     {
         if (!File.Exists(path))
         {
+            // ✅ Buffered append mode: a brand-new file has no bytes on disk while its first records are
+            // still buffered, so the buffered tail IS the whole table in that case.
+            foreach (var bufferedOnly in ReadBufferedAppends(path))
+            {
+                yield return bufferedOnly;
+            }
+
             yield break;
         }
 
@@ -1363,9 +1711,36 @@ public partial class Storage
         long position = encrypted ? PersistenceConstants.EncryptedTableMagicLength : 0;
         long fileLength = new FileInfo(path).Length;
 
+        // PERF: read the file ONCE into a buffer instead of using the per-record helpers below, which
+        // each open a FileStream — two handle open/close pairs PER RECORD. This was originally applied
+        // only to encrypted files, which left plaintext files paying ~2 file opens per record: measured
+        // ~69 µs/record (RebuildPrimaryKeyIndexFromDisk over a 20K-row plaintext table took 1380 ms,
+        // against 36 ms for the same table at rest). The buffer is now used for both layouts, capped by
+        // MaxBufferedRecordWalkBytes so an arbitrarily large file still works through the incremental
+        // walk (buffer stays null above the cap). Every caller of this method already materialises the
+        // whole file (`ReadBytesWithRecordOffsets`, `DecryptTableFileToPlaintext`, the index build and
+        // compaction), so this adds no new worst case.
+        byte[]? buffer = null;
+        if (fileLength > 0 && fileLength <= MaxBufferedRecordWalkBytes)
+        {
+            try
+            {
+                using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+                buffer = new byte[fs.Length];
+                fs.ReadExactly(buffer);
+            }
+            catch (IOException)
+            {
+                yield break;
+            }
+        }
+
         while (position + 4 <= fileLength)
         {
-            if (!TryReadInt32At(path, position, out int length))
+            bool haveLength = buffer is not null
+                ? TryReadInt32FromBuffer(buffer, position, out int length)
+                : TryReadInt32At(path, position, out length);
+            if (!haveLength)
             {
                 yield break;
             }
@@ -1400,7 +1775,10 @@ public partial class Storage
             }
 
             byte[] payload = new byte[length];
-            if (!TryReadPayloadAt(path, position + 4, payload))
+            bool havePayload = buffer is not null
+                ? TryCopyPayloadFromBuffer(buffer, position + 4, payload)
+                : TryReadPayloadAt(path, position + 4, payload);
+            if (!havePayload)
             {
                 yield break;
             }
@@ -1413,6 +1791,15 @@ public partial class Storage
 
             yield return (position, recordData);
             position += 4 + length;
+        }
+
+        // ✅ Buffered append mode: rows appended this session but not flushed yet are not on disk, so the
+        // walk above cannot see them. Their positions are strictly increasing and all above the flushed
+        // length, so appending them in offset order keeps this enumeration in file order — which the
+        // primary-key index rebuild and compaction depend on.
+        foreach (var bufferedTail in ReadBufferedAppends(path))
+        {
+            yield return bufferedTail;
         }
     }
 
@@ -1444,5 +1831,38 @@ public partial class Storage
         using var fs = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
         fs.Position = position;
         return fs.Read(payload, 0, payload.Length) == payload.Length;
+    }
+
+    /// <summary>
+    /// Upper bound for the single-read buffered record walk in <see cref="ReadAllRecords"/>; larger
+    /// at-rest files fall back to the per-record reads (the same 512 MB ceiling
+    /// <c>ReadBytesRange</c> uses). Every at-rest caller already materialises the whole file, so the
+    /// buffered walk is the normal case and the fallback exists only for very large files.
+    /// </summary>
+    private const long MaxBufferedRecordWalkBytes = 512L * 1024 * 1024;
+
+    /// <summary>Reads a 4-byte length prefix out of the buffered record walk. False past the end.</summary>
+    private static bool TryReadInt32FromBuffer(byte[] buffer, long position, out int value)
+    {
+        value = 0;
+        if (position + 4 > buffer.Length)
+        {
+            return false;
+        }
+
+        value = BinaryPrimitives.ReadInt32LittleEndian(buffer.AsSpan((int)position, 4));
+        return true;
+    }
+
+    /// <summary>Copies a record payload out of the buffered record walk. False past the end.</summary>
+    private static bool TryCopyPayloadFromBuffer(byte[] buffer, long position, byte[] payload)
+    {
+        if (position + payload.Length > buffer.Length)
+        {
+            return false;
+        }
+
+        Array.Copy(buffer, position, payload, 0, payload.Length);
+        return true;
     }
 }

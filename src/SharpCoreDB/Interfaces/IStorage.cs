@@ -88,6 +88,23 @@ public interface IStorage
     byte[]? ReadBytes(string path, bool noEncrypt);
 
     /// <summary>
+    /// Table-scan read: like <see cref="ReadBytes(string, bool)"/> but also returns the PHYSICAL file
+    /// offset of every record in the returned length-prefixed buffer, in walk order.
+    /// On a plaintext file the buffer IS the file, so <paramref name="physicalOffsets"/> comes back
+    /// null and callers use the buffer offset directly. On an at-rest file
+    /// (<see cref="AreRecordsEncrypted"/>) the buffer is a decrypted, header-stripped re-pack of the
+    /// records: a record's buffer offset is then NOT its physical offset, so any caller that matches
+    /// records against the PK index (whose values ARE physical offsets) must use this map — otherwise
+    /// every row gets misread as a superseded version and dropped. The default returns the plain
+    /// buffer with a null map (mock/alternative storages have no at-rest record layout).
+    /// </summary>
+    byte[]? ReadBytesWithRecordOffsets(string path, bool noEncrypt, out long[]? physicalOffsets)
+    {
+        physicalOffsets = null;
+        return ReadBytes(path, noEncrypt);
+    }
+
+    /// <summary>
     /// Appends binary data to a file (used for high-performance inserts).
     /// </summary>
     /// <param name="path">The file path.</param>
@@ -130,6 +147,22 @@ public interface IStorage
     bool HasBufferedOverwriteAt(string path, long offset) => false;
 
     /// <summary>
+    /// True when an append is currently buffered for <paramref name="path"/> — i.e. a position returned
+    /// by <see cref="AppendBytes"/> that is not on disk yet (opt-in buffered append mode, or inside a
+    /// transaction). Whole-file fast paths must check this before slicing a disk snapshot, exactly like
+    /// <see cref="HasBufferedOverwrite"/>. Defaults to false (buffering is opt-in).
+    /// </summary>
+    bool HasBufferedAppends(string path) => false;
+
+    /// <summary>
+    /// Writes every pending buffered append to disk. Called by structural operations that rewrite or
+    /// replace a data file (compaction, fixed-width migration, overflow-arena compaction, DROP TABLE)
+    /// because offsets handed out while buffered only stay valid on the file they were computed for.
+    /// Default is a no-op (mock/alternative storages never buffer appends).
+    /// </summary>
+    void FlushPendingAppends() { }
+
+    /// <summary>
     /// Appends multiple binary data blocks to a file in a single batch operation (used for batch inserts).
     /// </summary>
     /// <param name="path">The file path.</param>
@@ -167,17 +200,54 @@ public interface IStorage
     /// <summary>
     /// Reads a raw contiguous byte range starting at <paramref name="offset"/> using the storage
     /// layer's cached file handle (no per-call handle open). Used by the fixed-width contiguous
-    /// UPDATE fast path, which only engages on plaintext files. Implementations that cannot serve a
-    /// raw range (encrypted layouts, mocks) return null so the caller falls back to per-record reads.
+    /// UPDATE/DELETE fast paths: on a plaintext file the range holds the logical records, and on an
+    /// encrypted file (<see cref="AreRecordsEncrypted"/>) it holds their ciphertext, which the caller
+    /// repacks with <see cref="DecryptRecordPayload(byte[])"/>. Implementations that cannot serve a raw range
+    /// (mocks) return null so the caller falls back to per-record reads.
     /// </summary>
     byte[]? ReadBytesRange(string path, long offset, int length) => null;
 
     /// <summary>
     /// True when the file at <paramref name="path"/> stores per-record encrypted (ciphertext)
-    /// payloads (it carries the encrypted-table magic header). Raw range reads must never be used on
-    /// such files; the default returns false (plaintext / legacy layouts).
+    /// payloads (it carries the encrypted-table magic header). Such a file keeps a constant record
+    /// stride, so a raw range read stays usable as long as every payload is passed through
+    /// <see cref="DecryptRecordPayload(byte[])"/> before it is interpreted. The default returns false
+    /// (plaintext / legacy layouts).
     /// </summary>
     bool AreRecordsEncrypted(string path) => false;
+
+    /// <summary>
+    /// Decrypts a single per-record payload — the bytes that FOLLOW the 4-byte length prefix, i.e.
+    /// <c>[nonce(12)][cipher][tag(16)]</c> — for callers that read a raw ciphertext span directly
+    /// (the fixed-width contiguous fast paths) instead of going through the per-record read path.
+    /// Returns the payload unchanged when record encryption is not enabled by the configuration, and
+    /// <see langword="null"/> when it is corrupt or legacy. The default returns null (plaintext /
+    /// mock storage), which makes the caller fall back to per-record reads.
+    /// </summary>
+    byte[]? DecryptRecordPayload(byte[] payload) => null;
+
+    /// <summary>
+    /// Range variant of <see cref="DecryptRecordPayload(byte[])"/>: decrypts one AEAD frame that already sits
+    /// inside a larger caller-owned buffer (a whole-file snapshot, a contiguous range read) starting at
+    /// <paramref name="offset"/> and <paramref name="length"/> bytes long, so no intermediate ciphertext copy is
+    /// needed. The plaintext is still a fresh array — it is the caller's record — but the ciphertext copy that
+    /// used to precede every AEAD open is gone (one allocation per record instead of two). The default returns
+    /// <see langword="null"/> so implementations without it keep the copy-then-decrypt path.
+    /// </summary>
+    /// <param name="buffer">The buffer holding the AEAD frame.</param>
+    /// <param name="offset">The frame's start offset inside <paramref name="buffer"/>.</param>
+    /// <param name="length">The frame's length (including nonce and tag).</param>
+    byte[]? DecryptRecordPayload(byte[] buffer, int offset, int length) => null;
+
+    /// <summary>
+    /// Drops (and closes) any cached file handles for <paramref name="path"/>. Callers MUST invoke this
+    /// after a whole-file replacement — write a temp file, then move it over the target — because a
+    /// cached handle keeps reading the REPLACED file: both the record bytes and the per-record format
+    /// verdict would be stale, the latter surfacing as ciphertext being read as plaintext (this broke
+    /// the fixed-width layout migration and the arena compaction). The default is a no-op
+    /// (mock/alternative storages hold no handles).
+    /// </summary>
+    void InvalidateFileHandles(string path) { }
 
     /// <summary>
     /// Marks the record whose 4-byte length prefix sits at <paramref name="offset"/> as deleted by

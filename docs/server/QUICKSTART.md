@@ -144,8 +144,6 @@ await tx.CommitAsync();
 ## Tool Compatibility
 
 For external database client certification and known PostgreSQL-tooling gaps, see:
-- `docs/server/TOOL_COMPATIBILITY_MATRIX_v1.7.0.md`
-- `docs/server/TOOL_COMPATIBILITY_LIMITATIONS_v1.7.0.md`
 - `tests/SharpCoreDB.Server.IntegrationTests/Compatibility/ToolCompatibilitySmoke.README.md`
 
 ---
@@ -153,9 +151,6 @@ For external database client certification and known PostgreSQL-tooling gaps, se
 ## Multi-Tenant SaaS Reference
 
 For a tenant-focused onboarding and isolation validation flow, see:
-- `docs/server/MULTITENANT_SAAS_REFERENCE_v1.7.0.md`
-- `docs/server/MULTITENANT_THREAT_MODEL_v1.7.0.md`
-- `docs/server/MULTITENANT_OPERATIONS_RUNBOOK_v1.7.0.md`
 - `Examples/Server/SharpCoreDB.MultiTenantSaaSSample/`
 
 The sample includes a PowerShell isolation validation script and a REST onboarding flow.
@@ -211,7 +206,6 @@ The sample includes a PowerShell isolation validation script and a REST onboardi
 | `GET` | `/api/v1/health/detailed` | ❌ Open | Detailed diagnostics (GC, uptime, protocol/error telemetry) |
 | `GET` | `/health` | ❌ Open | ASP.NET Core health check |
 
-For Prometheus scraping and dashboard baseline queries, see `docs/server/OBSERVABILITY_SETUP_v1.7.0.md`.
 
 ### gRPC (HTTPS :5001)
 

@@ -35,4 +35,6 @@ This folder contains end-to-end and integration validation for `SharpCoreDB.Prov
 ## Run
 
 ```bash
-dotnet test tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj --filter "Integration"
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform)
+dotnet build tests/SharpCoreDB.Provider.Sync.Tests/SharpCoreDB.Provider.Sync.Tests.csproj -c Release -f net11.0
+tests/SharpCoreDB.Provider.Sync.Tests/bin/Release/net11.0/SharpCoreDB.Provider.Sync.Tests.exe -filterVSTest "Integration"

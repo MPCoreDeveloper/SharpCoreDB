@@ -1,6 +1,5 @@
 using System.Runtime.CompilerServices;
-using System.Runtime.Intrinsics;
-using System.Numerics;
+using System.Runtime.Intrinsics; // intrinsic register widths — System.Numerics.Vector<T> is banned by .github/SIMD_STANDARDS.md
 
 namespace SharpCoreDB.Platform;
 
@@ -180,6 +179,17 @@ public static class PlatformOptimizations
     }
 
     /// <summary>
+    /// Gets the widest SIMD register width this machine can actually run, in bytes
+    /// (64 = AVX-512, 32 = AVX2, 16 = SSE2/NEON, 1 = scalar fallback).
+    /// </summary>
+    public static int SimdRegisterWidthBytes =>
+        System.Runtime.Intrinsics.X86.Avx512F.IsSupported ? Vector512<byte>.Count
+        : System.Runtime.Intrinsics.X86.Avx2.IsSupported ? Vector256<byte>.Count
+        : System.Runtime.Intrinsics.Arm.AdvSimd.IsSupported ? Vector128<byte>.Count
+        : System.Runtime.Intrinsics.X86.Sse2.IsSupported ? Vector128<byte>.Count
+        : 1;
+
+    /// <summary>
     /// Gets platform optimization information for diagnostics
     /// </summary>
     public static string GetPlatformInfo()
@@ -192,7 +202,7 @@ public static class PlatformOptimizations
             SIMD Enabled: {IsSIMDEnabled}
             AVX2 Support: {IsAVX2Enabled}
             NEON Support: {IsNEONEnabled}
-            Vector Size: {Vector<byte>.Count} bytes
+            Vector Size: {SimdRegisterWidthBytes} bytes
             
             Runtime Information:
             OS: {Environment.OSVersion}

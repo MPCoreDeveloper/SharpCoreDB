@@ -36,6 +36,19 @@ public interface ICryptoService
     byte[] Decrypt(byte[] key, byte[] encryptedData);
 
     /// <summary>
+    /// Decrypts data using AES-256-GCM directly from a span, so a caller that holds the ciphertext inside a
+    /// larger buffer (a whole-file snapshot, a contiguous range read) does not have to copy the frame into a
+    /// right-sized array first. The format is the same <c>[nonce(12)][cipher][tag(16)]</c> frame as
+    /// <see cref="Decrypt(byte[], byte[])"/>; only the source changed, so the two must stay byte-compatible.
+    /// The default copies the span and delegates, which keeps implementers that only support the array
+    /// overload correct at the cost of the copy this overload exists to remove.
+    /// </summary>
+    /// <param name="key">The decryption key.</param>
+    /// <param name="encryptedData">The complete AEAD frame, as a span.</param>
+    /// <returns>The decrypted data as a byte array.</returns>
+    byte[] Decrypt(byte[] key, ReadOnlySpan<byte> encryptedData) => Decrypt(key, encryptedData.ToArray());
+
+    /// <summary>
     /// Encrypts a page using AES-256-GCM.
     /// </summary>
     /// <param name="page">The page data to encrypt (modified in place if buffer is large enough).</param>

@@ -40,7 +40,6 @@ services.AddDbContext<AppContext>(o =>
 ```
 
 Guide: [`docs/graphrag/EF_CORE_COMPLETE_GUIDE.md`](../graphrag/EF_CORE_COMPLETE_GUIDE.md) ·
-Bug documentation: [`docs/issues/efcore-guid-navigation-bug.md`](../issues/efcore-guid-navigation-bug.md)
 
 ## 10.3 Functional adapters
 
@@ -84,5 +83,3 @@ public class CreateCustomers : Migration
 }
 ```
 
-Docs: [`docs/migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md`](../migration/FLUENTMIGRATOR_EMBEDDED_MODE_v1.7.0.md) ·
-[`docs/migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md`](../migration/FLUENTMIGRATOR_SERVER_MODE_v1.7.0.md)

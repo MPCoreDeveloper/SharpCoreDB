@@ -175,11 +175,11 @@ public sealed class IndexManager : IDisposable
     public IndexStatistics? GetIndexStatistics(string tableName, string columnName)
     {
         var key = $"{tableName}.{columnName}";
-        if (_genericIndexes.TryGetValue(key, out var indexObj))
+        if (_genericIndexes.TryGetValue(key, out var indexObj) && indexObj is ITypeErasedIndex index)
         {
-            // Use reflection to call GetStatistics (works for any TKey)
-            var method = indexObj.GetType().GetMethod("GetStatistics");
-            return method?.Invoke(indexObj, null) as IndexStatistics;
+            // Both GenericHashIndex<TKey> and BTreeIndex<TKey> expose GetStatistics through the
+            // non-generic view, so no reflective method lookup is needed here.
+            return index.GetStatistics();
         }
         return null;
     }

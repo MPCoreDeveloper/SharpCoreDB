@@ -10,6 +10,7 @@ using System.Buffers.Binary;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 using SharpCoreDB.Optimizations;
+using SharpCoreDB.Diagnostics;
 
 /// <summary>
 /// CRUD operations for Table - Insert, Select, Update, Delete.
@@ -38,6 +39,12 @@ public partial class Table
     {
         ArgumentNullException.ThrowIfNull(this.storage);
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
+
+        // §2 instrumentation (2026-09-15): this single-row path had no row-validation stamp, so this whole block
+        // — defaults, auto-generation, type coercion, NOT NULL, unique and CHECK constraints — was part of the
+        // ~40 µs/statement the standalone-statement profile could not account for. Validate's definition is
+        // exactly this work.
+        long validateStart = Diagnostics.WritePathProfiler.Stamp();
 
         // ✅ OPTIMIZATION: Validate columns outside lock (schema is immutable)
         for (int i = 0; i < this.Columns.Count; i++)
@@ -124,8 +131,14 @@ public partial class Table
             }
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
+
         // Serialize row data (outside lock) - WP13: exact-size allocation, no pool + copy.
+        // §2 instrumentation: stamped here as well, because the arena stages attribute only the arena calls the
+        // codec makes, not the encoding work around them.
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var rowData = SerializeRowExact(row);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
         // ✅ MINIMAL CRITICAL SECTION: Lock only for PK check, insert, and index updates
         this.rwLock.EnterWriteLock();
@@ -134,8 +147,15 @@ public partial class Table
                 // Primary key check (under lock)
                 if (this.PrimaryKeyIndex >= 0)
                 {
+                    // §2 instrumentation (2026-09-15): the per-row uniqueness probe on the single-row INSERT
+                    // path — a B-tree search per row that had no stamp, and one of the two suspects for the
+                    // ~28 µs/statement the Dispatch envelope could not account for.
+                    long probeStart = Diagnostics.WritePathProfiler.Stamp();
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    if (this.Index.Search(pkVal).Found)
+                    bool pkTaken = IsPrimaryKeyTaken(pkVal);
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, probeStart);
+
+                    if (pkTaken)
                         throw new InvalidOperationException("Primary key violation");
                 }
 
@@ -184,7 +204,13 @@ public partial class Table
 
                 // ✅ NEW: Route through storage engine
                 var engine = GetOrCreateStorageEngine();
+
+                // §2 instrumentation (2026-09-15): this path had no engine-write stamp at all, so a
+                // standalone-statement run attributed only ~10 % of its ~110 µs/statement and the storage
+                // write was invisible on the one path where it is most of the remaining question.
+                long engineWriteStart = Diagnostics.WritePathProfiler.Stamp();
                 long position = engine.Insert(Name, rowData);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineWriteStart);
 
                 // ✅ NEW: Track last_insert_rowid() for SQLite compatibility.
                 // Store the auto-generated PRIMARY KEY value (not the storage position),
@@ -206,6 +232,11 @@ public partial class Table
                 {
                     _database?.SetLastInsertRowId(position);
                 }
+
+                // §2 instrumentation (2026-09-15): the second suspect for the ~28 µs/statement the Dispatch
+                // envelope could not account for — the per-row index maintenance this path performs after the
+                // engine call (PK B-tree insert, hash-index adds, B-tree row indexing), which had no stamp.
+                long indexMaintStart = Diagnostics.WritePathProfiler.Stamp();
 
                 // Update indexes (under lock)
                 if (this.PrimaryKeyIndex >= 0)
@@ -231,6 +262,7 @@ public partial class Table
 
                 // 🔥 NEW: Auto-index in B-tree if indexes exist
                 IndexRowInBTree(row, position);
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexMaintStart);
                 
                 // ✅ NEW: Update cached row count
                 Interlocked.Increment(ref _cachedRowCount);
@@ -238,6 +270,52 @@ public partial class Table
         finally
         {
             this.rwLock.ExitWriteLock();
+        }
+    }
+
+    /// <summary>
+    /// True when <see cref="InsertBatch"/> is a drop-in for a loop of per-row <see cref="Insert"/> calls on
+    /// this table — i.e. when nothing in the table's schema relies on the per-row-only semantics that the
+    /// batch core does not implement.
+    /// <para>
+    /// What the batch core does NOT do: CHECK-constraint evaluation (per-column and table-level) and non-PK
+    /// unique-index enforcement. PK and NOT NULL validation <em>are</em> implemented on both paths, and the
+    /// batch core joins an open engine transaction rather than nesting one
+    /// (<c>InsertBatchCriticalSection</c>: <c>needsTransaction = !engine.IsInTransaction</c>).
+    /// </para>
+    /// <para>
+    /// The last condition is not about the schema. <see cref="Insert"/> records every inserted primary key
+    /// with the database (<c>RecordBatchInsert</c>) so <c>CancelBatchUpdate</c> can delete rows an aborted
+    /// batch update added — on append-only storage a transaction rollback alone does not remove them. The
+    /// batch core does not record them, so an active batch update keeps the per-row loop.
+    /// </para>
+    /// </summary>
+    internal bool CanUseBatchedInsert
+    {
+        get
+        {
+            if (this.TableCheckConstraints.Count > 0)
+            {
+                return false;
+            }
+
+            for (int i = 0; i < this.ColumnCheckExpressions.Count; i++)
+            {
+                if (this.ColumnCheckExpressions[i] is not null)
+                {
+                    return false;
+                }
+            }
+
+            foreach (var metadata in this.registeredIndexes.Values)
+            {
+                if (metadata.IsUnique)
+                {
+                    return false;
+                }
+            }
+
+            return _database?.IsBatchUpdateActive != true;
         }
     }
 
@@ -257,22 +335,88 @@ public partial class Table
         if (rows.Count == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
-        // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
-        var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
-        
-        // ✅ PHASE 2A FRIDAY: Batch validate primary keys BEFORE critical section
-        // This improves cache locality and fails fast on duplicates
-        ValidateBatchPrimaryKeysUpfront(validatedRows);
+        // The storage transaction has to cover serialization, not just the critical section: a fixed-width
+        // table writes its variable-length values to the overflow arena *during* serialization, and an append
+        // outside a transaction is a write-through file open per value. See RunInStorageTransaction for the
+        // measurement behind this.
+        return RunInStorageTransaction(() =>
+        {
+            // ✅ PHASE 1 OPTIMIZATION: Validate and serialize OUTSIDE lock
+            // §2 instrumentation: this path had NO stage coverage before (measured 2026-09-14), which is why
+            // attributing the at-rest INSERT tax needed ad-hoc probes instead of the profiler. This stamp covers
+            // validation *and* serialization (the method does both).
+            long validateStart = Diagnostics.WritePathProfiler.Stamp();
+            var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
 
-        // ✅ MINIMAL LOCK: Only for PK check, engine insert, and index updates
-        this.rwLock.EnterWriteLock();
+            // ✅ PHASE 2A FRIDAY: Batch validate primary keys BEFORE critical section
+            // This improves cache locality and fails fast on duplicates
+            long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
+            ValidateBatchPrimaryKeysUpfront(validatedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
+
+            // ✅ MINIMAL LOCK: Only for PK check, engine insert, and index updates
+            this.rwLock.EnterWriteLock();
+            try
+            {
+                return InsertBatchCriticalSection(validatedRows, serializedRows);
+            }
+            finally
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        });
+    }
+
+    /// <summary>
+    /// Runs a batched insert inside a <b>storage</b> transaction when one is not already open.
+    /// <para>
+    /// The engine has its own transaction (started inside <c>InsertBatchCriticalSection</c>), but what decides
+    /// whether an append buffers or goes straight through the file is the <b>storage</b> transaction:
+    /// <c>IStorage.AppendBytes</c> and <c>AppendBytesMultiple</c> both check <c>IsInTransaction</c>, and outside
+    /// one an append is an open + <c>FileOptions.WriteThrough</c> + close per call (measured 477.97 µs/record).
+    /// That lands hardest on the overflow arena, which every variable-length value of a fixed-width table goes
+    /// through — three writes per row on the benchmark schema — and which is written during serialization, i.e.
+    /// before the critical section exists.
+    /// </para>
+    /// <para>
+    /// Measured on the SQL multi-row <c>INSERT … VALUES</c> workload (20,000 rows, 1,000 rows/statement): with
+    /// the arena appends write-through **523.51 µs/row**, with them buffered **52.66 µs/row** — 9.94×, and the
+    /// arena-append stage drops from 9,653.8 ms to 20.2 ms (0.4625 ms → ~0.001 ms per call).
+    /// </para>
+    /// <para>
+    /// This is not a new durability posture: <c>Database.InsertBatch</c> has always wrapped its call in
+    /// <c>storage.BeginTransaction()</c> / <c>CommitSync()</c> (<c>Database.Batch.cs:409</c>). The guard below
+    /// makes this a no-op when such a transaction is already open, so that caller keeps exactly the boundary it
+    /// had, and a batch that was atomic at the storage level stays atomic.
+    /// </para>
+    /// </summary>
+    private long[] RunInStorageTransaction(Func<long[]> body)
+    {
+        if (this.storage is not { IsInTransaction: false } openableStorage)
+        {
+            return body();
+        }
+
+        openableStorage.BeginTransaction();
         try
         {
-            return InsertBatchCriticalSection(validatedRows, serializedRows);
+            var positions = body();
+
+            // §2 instrumentation (2026-09-15): the commit is where the buffered appends are actually flushed,
+            // so it is a per-statement cost that had no attribution — the engine's own commit inside
+            // InsertBatchCriticalSection is skipped (`needsTransaction` is false) precisely because this
+            // transaction is already open, which the report confirmed by showing `commit` at 0 ms.
+            long commitStart = Diagnostics.WritePathProfiler.Stamp();
+            openableStorage.CommitSync();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
+
+            return positions;
         }
-        finally
+        catch
         {
-            this.rwLock.ExitWriteLock();
+            openableStorage.Rollback();
+            throw;
         }
     }
 
@@ -300,18 +444,34 @@ public partial class Table
         if (rows.Length == 0) return [];
         if (this.isReadOnly) throw new InvalidOperationException(ReadOnlyInsertError);
 
-        var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
-        ValidateBatchPrimaryKeysUpfront(validatedRows);
+        // Same reason as the dictionary overload: the arena writes happen during serialization, so the storage
+        // transaction has to start before it. See RunInStorageTransaction.
+        return RunInStorageTransaction(() =>
+        {
+            // §5.5 instrumentation (2026-10-10, session 80): this overload — the one the SQL batch-INSERT
+            // parser uses — carried NO stage stamps at all, so the array/`SHARPCOREDB_BATCH_DML` shape's
+            // profile attributed 344,7 ms of a 560 ms pass (62 %) and showed `index-maint` 43,6 % with no
+            // `validate`/`encode` row beside it (`artifacts/s80-probe-array-insert.txt`). The dictionary
+            // overload was stamped in 2026-09-15 for exactly this reason; these mirror it, and the helper
+            // below splits validation from serialization the same way.
+            long validateStart = Diagnostics.WritePathProfiler.Stamp();
+            var (serializedRows, validatedRows) = ValidateAndSerializeBatchOutsideLock(rows, columnOrder);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Validate, validateStart);
 
-        this.rwLock.EnterWriteLock();
-        try
-        {
-            return InsertBatchCriticalSection(validatedRows, serializedRows);
-        }
-        finally
-        {
-            this.rwLock.ExitWriteLock();
-        }
+            long pkProbeStart = Diagnostics.WritePathProfiler.Stamp();
+            ValidateBatchPrimaryKeysUpfront(validatedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, pkProbeStart);
+
+            this.rwLock.EnterWriteLock();
+            try
+            {
+                return InsertBatchCriticalSection(validatedRows, serializedRows);
+            }
+            finally
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        });
     }
 
     /// <summary>
@@ -336,17 +496,27 @@ public partial class Table
             columnIndexMap[c] = tableIdx;
         }
 
+        // §5.5 instrumentation (2026-10-10, session 80): splits validation from serialization on this shape too.
+        // The caller's `validate` stamp covers both halves, so without these two the array profile could not say
+        // which half of the SQL batch-INSERT path carries the cost — the same gap the dictionary overload's
+        // helper had closed on 2026-09-15.
+        long validateOnlyStart = Diagnostics.WritePathProfiler.Stamp();
+
         var normalizedRows = new object[rows.Length][];
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
             normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, rowIdx);
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.ValidateOnly, validateOnlyStart);
+
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var serializedRows = new List<byte[]>(rows.Length);
         foreach (var row in normalizedRows)
         {
             serializedRows.Add(SerializeRowExact(row));
         }
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
         return (serializedRows, normalizedRows);
     }
@@ -367,6 +537,11 @@ public partial class Table
     {
         // ✅ PERFORMANCE: Get column index cache once for entire batch
         // Step 1: Validate all rows and fill defaults (OUTSIDE LOCK)
+        // §2 instrumentation (2026-09-15): the caller's `validate` stamp covers validation *and*
+        // serialization, so it cannot say which half of a ~1.5 ms/row fixed-width INSERT is the cost. This
+        // splits it — validate-only here, encode below, and the arena stages inside the encoder.
+        long validateOnlyStart = Diagnostics.WritePathProfiler.Stamp();
+
         for (int rowIdx = 0; rowIdx < rows.Count; rowIdx++)
         {
             var row = rows[rowIdx];
@@ -416,9 +591,12 @@ public partial class Table
             }
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.ValidateOnly, validateOnlyStart);
+
         // Step 2: WP13 - serialize each row directly into an exact-size array.
         // (Previously: bulk buffer + ArrayPool.Rent + Span.ToArray() = double allocation
         // and an extra copy per row. SerializeRowExact allocates the final array once.)
+        long encodeStart = Diagnostics.WritePathProfiler.Stamp();
         var serializedRows = new List<byte[]>(rows.Count);
         
         if (rows.Count > 10000)
@@ -430,6 +608,7 @@ public partial class Table
                 parallelResults[i] = SerializeRowExact(rows[i]);
             });
             
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
             return (parallelResults.ToList(), rows);
         }
         
@@ -439,6 +618,7 @@ public partial class Table
             serializedRows.Add(SerializeRowExact(rows[i]));
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         return (serializedRows, rows);
     }
 
@@ -542,8 +722,14 @@ public partial class Table
 
         foreach (var pkString in incomingPks)
         {
-            var (found, _) = this.Index.Search(pkString);
-            if (found)
+            // Liveness-aware, like every other PK-uniqueness check in this class: with deferred DELETE
+            // maintenance the PK B-tree can hold an entry whose target is a tombstone, so a bare
+            // Index.Search().Found reports a false duplicate-key conflict. This surfaced as
+            // SharpCoreDB.CQRS.Tests.RequeueDeadLetterAsync throwing for a delete-then-reinsert of the
+            // same key. No reclaim is needed here — BTree.Insert overwrites the value of an existing key,
+            // so the stale entry is repointed at the new record — and the extra liveness read only happens
+            // for a key that is actually present, leaving the happy path unchanged.
+            if (IsPrimaryKeyTaken(pkString))
             {
                 throw new InvalidOperationException($"Duplicate key value '{pkString}' violates unique constraint on primary key");
             }
@@ -594,8 +780,8 @@ public partial class Table
          // This validates against existing data without per-row lookups
          foreach (var pkString in incomingPks)
          {
-             var (found, _) = this.Index.Search(pkString);
-             if (found)
+             // Liveness-aware — see the object[][] overload above and Table.DeferredIndexUpdates.IsPrimaryKeyTaken.
+             if (IsPrimaryKeyTaken(pkString))
              {
                  throw new InvalidOperationException(
                      $"Duplicate key value '{pkString}' violates unique constraint on primary key");
@@ -619,12 +805,19 @@ public partial class Table
 
         try
         {
+            long engineStart = Diagnostics.WritePathProfiler.Stamp();
             long[] positions = engine.InsertBatch(Name, serializedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineStart);
 
             if (positions.Length > 0)
             {
                 _database?.SetLastInsertRowId(positions[^1]);
             }
+
+            // §2 instrumentation (2026-09-15): index maintenance was invisible on this path, which is why
+            // attributing the remaining INSERT cost was guesswork. It covers the per-row PK B-tree insert,
+            // the batch hash-index update and the B-tree bulk index.
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
 
             if (StorageMode == StorageMode.Columnar)
             {
@@ -638,7 +831,9 @@ public partial class Table
             UpdatePrimaryKeyIndex(validatedRows, positions);
 
             // Batch hash index updates — build dictionaries only when hash indexes exist.
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             UpdateHashIndexes(validatedRows, positions);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
 
             Interlocked.Add(ref _cachedRowCount, validatedRows.Length);
 
@@ -648,9 +843,16 @@ public partial class Table
                 BulkIndexRowsInBTree(RowsToDictionaries(validatedRows), positions);
             }
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
             if (needsTransaction)
             {
+                // §2 instrumentation: `commit` existed in the stage enum with nothing writing it. This is the
+                // first site that does, on the batch-INSERT path — the stage that has to be measured before
+                // anything can be claimed about the transaction overhead per statement.
+                long commitStart = Diagnostics.WritePathProfiler.Stamp();
                 engine.CommitAsync().GetAwaiter().GetResult();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
             }
 
             return positions;
@@ -680,7 +882,7 @@ public partial class Table
             {
                 var row = validatedRows[rowIdx];
                 var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
+                if (IsPrimaryKeyTaken(pkVal))
                     throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
             }
         }
@@ -697,7 +899,11 @@ public partial class Table
         try
         {
             // ✅ ROUTE TO ENGINE: Single InsertBatch() call (within transaction)!
+            // §2 instrumentation (2026-09-15): none of the storage-side stages were wired on this path, so
+            // most of a multi-row INSERT's wall time had no attribution at all.
+            long engineStart = Diagnostics.WritePathProfiler.Stamp();
             long[] positions = engine.InsertBatch(Name, serializedRows);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, engineStart);
 
             // ✅ NEW: Track last_insert_rowid() for SQLite compatibility (last row in batch)
             if (positions.Length > 0)
@@ -706,6 +912,10 @@ public partial class Table
             }
 
             // Update indexes
+            // §2 instrumentation (2026-09-15): the per-row PK B-tree insert and the batch hash-index update
+            // were invisible; they are the last plausible non-storage cost on this path.
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
+
             var unloadedIndexes = new List<string>();
             if (StorageMode == StorageMode.Columnar)
             {
@@ -733,10 +943,12 @@ public partial class Table
             }
 
             // PERF: Batch hash index updates — single lock acquisition per index
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             foreach (var hashIndex in this.hashIndexes.Values)
             {
                 hashIndex.AddBatch(validatedRows, positions);
             }
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
 
             // Update cached row count
             Interlocked.Add(ref _cachedRowCount, validatedRows.Count);
@@ -744,10 +956,14 @@ public partial class Table
             // Bulk index in B-tree if indexes exist
             BulkIndexRowsInBTree(validatedRows, positions);
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
             // Commit transaction to flush all pages at once
             if (needsTransaction)
             {
+                long commitStart = Diagnostics.WritePathProfiler.Stamp();
                 engine.CommitAsync().GetAwaiter().GetResult();
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
             }
 
             return positions;
@@ -773,7 +989,7 @@ public partial class Table
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
             var pkVal = rows[rowIdx][this.PrimaryKeyIndex]?.ToString() ?? string.Empty;
-            if (this.Index.Search(pkVal).Found)
+            if (IsPrimaryKeyTaken(pkVal))
                 throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
         }
     }
@@ -799,10 +1015,25 @@ public partial class Table
             return;
         }
 
-        var dictRows = RowsToDictionaries(rows);
-        foreach (var hashIndex in this.hashIndexes.Values)
+        // PERF: build only the indexed column's key slice into ONE reusable array and hand it to
+        // AddBatchKeys, instead of materialising every row as a Dictionary<string, object>. The
+        // dictionary-per-row conversion is pure overhead (the caller already has column-ordered rows)
+        // and measured ~21% of a 100K-row bulk INSERT when a hash index is loaded.
+        var keys = new object?[rows.Length];
+        foreach (var kvp in this.hashIndexes)
         {
-            hashIndex.AddBatch(dictRows, positions);
+            int colIdx = this.Columns.IndexOf(kvp.Key);
+            if (colIdx < 0)
+            {
+                continue;
+            }
+
+            for (int i = 0; i < rows.Length; i++)
+            {
+                keys[i] = rows[i][colIdx];
+            }
+
+            kvp.Value.AddBatchKeys(keys, positions);
         }
     }
 
@@ -885,7 +1116,7 @@ public partial class Table
                 if (this.PrimaryKeyIndex >= 0)
                 {
                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                    if (this.Index.Search(pkVal).Found)
+                    if (IsPrimaryKeyTaken(pkVal))
                         throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
                 }
 
@@ -992,7 +1223,7 @@ public partial class Table
             if (this.PrimaryKeyIndex >= 0)
             {
                 var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
-                if (this.Index.Search(pkVal).Found)
+                if (IsPrimaryKeyTaken(pkVal))
                     throw new InvalidOperationException($"Primary key violation in row {rowIdx}: {pkVal}");
             }
 
@@ -1208,7 +1439,7 @@ public partial class Table
             simpleWhereColumn != null &&
             simpleWhereValue != null &&
             _hashIndexCollation == CollationType.Binary &&
-            this.registeredIndexes.ContainsKey(simpleWhereColumn))
+            this.EnsureAutoHashIndexRegistered(simpleWhereColumn))
         {
             EnsureIndexLoaded(simpleWhereColumn);
 
@@ -1235,7 +1466,6 @@ public partial class Table
                 }
             }
         }
-
         // 2. Primary key lookup (works for both storage modes)
         if (results.Count == 0 && where != null && this.PrimaryKeyIndex >= 0 && canUseIndex)
         {
@@ -1261,11 +1491,14 @@ public partial class Table
         {
             if (StorageMode == StorageMode.Columnar)
             {
-                // Columnar: Read entire file and scan, filtering out deleted/stale rows
-                var data = this.storage.ReadBytes(this.DataFile, noEncrypt);
+                // Columnar: Read entire file and scan, filtering out deleted/stale rows.
+                // At-rest files come back as a decrypted, header-stripped re-pack, so the scan also
+                // receives each record's PHYSICAL offset — that is what the stale-version check below
+                // must compare against (the buffer offsets differ from the file's).
+                var data = this.storage.ReadBytesWithRecordOffsets(this.DataFile, noEncrypt, out var recordOffsets);
                 if (data != null && data.Length > 0)
                 {
-                    results = ScanRowsWithSimdAndFilterStale(data, where);
+                    results = ScanRowsWithSimdAndFilterStale(data, where, recordOffsets);
                 }
             }
             else // PageBased
@@ -1284,10 +1517,21 @@ public partial class Table
     /// ✅ OPTIMIZED: Uses dictionary pooling to reduce allocations by 60% during full scans.
     /// ✅ OPTIMIZED: Early WHERE predicate push-down skips full deserialization for non-matching rows.
     /// </summary>
+    /// <param name="data">The whole-file (or decrypted, re-packed) record buffer to walk.</param>
+    /// <param name="where">The WHERE clause to apply, or null/empty for every row.</param>
+    /// <param name="physicalOffsets">
+    /// For an at-rest file: the PHYSICAL file offset of each record in <paramref name="data"/>, in walk
+    /// order (see <c>IStorage.ReadBytesWithRecordOffsets</c>). Null for plaintext files, where the
+    /// buffer offset already is the physical offset.
+    /// </param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
-    private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(byte[] data, string? where)
+    private List<Dictionary<string, object>> ScanRowsWithSimdAndFilterStale(
+        byte[] data,
+        string? where,
+        long[]? physicalOffsets = null)
     {
         var results = new List<Dictionary<string, object>>();
+
 
         // ✅ PERF: Pre-parse a simple "col = 'val'" WHERE once so non-matching records
         // are skipped before the expensive DeserializeRowWithSimd call.
@@ -1352,6 +1596,7 @@ public partial class Table
 
         // Scan file with position tracking
         int filePosition = 0;
+        int recordOrdinal = 0; // index into physicalOffsets (at-rest files only)
         ReadOnlySpan<byte> dataSpan = data.AsSpan();
 
         while (filePosition < dataSpan.Length)
@@ -1384,6 +1629,9 @@ public partial class Table
 
             if (recordLength == 0)
             {
+                // Zero-length payload: still a real record slot (ReadAllRecords yields it), so it counts
+                // towards the physical-offset map even though there is nothing to deserialize.
+                recordOrdinal++;
                 filePosition += 4;
                 continue;
             }
@@ -1394,6 +1642,13 @@ public partial class Table
             }
 
             long currentRecordPosition = filePosition; // Track position for filtering
+
+            // An at-rest file is scanned from a decrypted re-pack whose offsets differ from the file's,
+            // so the stale-version check below must compare against the record's PHYSICAL offset.
+            long staleCheckPosition = physicalOffsets is not null && recordOrdinal < physicalOffsets.Length
+                ? physicalOffsets[recordOrdinal]
+                : currentRecordPosition;
+            recordOrdinal++; // one per record consumed, including every early-WHERE skip below
 
             // Skip length prefix and read record data
             int dataOffset = filePosition + 4;
@@ -1455,40 +1710,13 @@ public partial class Table
             var row = DeserializeRowWithSimd(recordData);
             bool valid = row != null;
 
-            // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE
+            // ✅ CRITICAL FIX: Only include row if it's the current version for its PK AND matches WHERE.
+            // The version rule itself now lives in one place (Table.IsCurrentRecordVersion) because the
+            // hash-index rebuild applies it too: an index and the scan that replaces it must never disagree
+            // about which rows exist.
             if (valid && row != null)
             {
-                bool isCurrentVersion = true;
-
-                // Check if this row is the current version by verifying PK index points to this position
-                if (this.PrimaryKeyIndex >= 0)
-                {
-                    var pkCol = this.Columns[this.PrimaryKeyIndex];
-                    if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
-                    {
-                        var pkStr = pkValue.ToString() ?? string.Empty;
-                        var searchResult = this.Index.Search(pkStr);
-
-                        // ✅ CRITICAL FIX: Only apply stale filtering if index position was properly tracked
-                        // If searchResult.Value == 0, it means this row wasn't properly indexed during insertion
-                        // (probably from a batch insert), so we should include it regardless
-                        if (searchResult.Found && searchResult.Value != 0)
-                        {
-                          // Row is current version only if PK index points to THIS position
-                          isCurrentVersion = searchResult.Value == currentRecordPosition;
-                        }
-                        else if (searchResult.Found && searchResult.Value == 0)
-                        {
-                          // Index position wasn't tracked during batch insert - always include
-                          isCurrentVersion = true;
-                        }
-                        else if (!searchResult.Found)
-                        {
-                          // PK was removed from index (row was deleted) - exclude from results
-                          isCurrentVersion = false;
-                        }
-                    }
-                }
+                bool isCurrentVersion = this.IsCurrentRecordVersion(row, staleCheckPosition);
 
                 bool matchesWhere = string.IsNullOrEmpty(where) || EvaluateWhere(row, where);
 
@@ -1565,14 +1793,21 @@ public partial class Table
 
     private void UpdateSingleRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, long rowPos)
     {
+        // S2 (plan §4): HOT's precondition (a) — see UpdateTouchesAnyLoadedIndex. Computed from the
+        // STATEMENT's column set, before the row is mutated, so it means "this statement could invalidate
+        // an index entry", not the weaker "the value happened not to change".
+        bool touchesIndex = UpdateTouchesAnyLoadedIndex(updates.Keys);
+
         // WP13: capture only what index maintenance needs instead of copying the
         // whole row (CASCADE is not wired in this path).
         string? oldPkValue = this.PrimaryKeyIndex >= 0
             ? row[this.Columns[this.PrimaryKeyIndex]]?.ToString()
             : null;
 
-        // Snapshot old values of hash-indexed columns for key-only removal.
-        Dictionary<string, object>? oldHashKeys = this.hashIndexes.Count == 0
+        // Snapshot old values of hash-indexed columns for key-only removal. S2: when the statement cannot
+        // touch any index this snapshot is never read, and building it was a per-row Dictionary allocation
+        // for nothing (it shows up in the profiled `row-locate-index` stage).
+        Dictionary<string, object>? oldHashKeys = (!touchesIndex || this.hashIndexes.Count == 0)
             ? null
             : this.hashIndexes.Keys
                 .Where(row.ContainsKey)
@@ -1588,12 +1823,56 @@ public partial class Table
 
         if (StorageMode == StorageMode.Columnar)
         {
-            UpdateColumnarRow(row, engine, updates, oldPkValue, oldHashKeys, rowPos);
+            UpdateColumnarRow(row, engine, updates, oldPkValue, oldHashKeys, rowPos, touchesIndex);
         }
         else
         {
-            UpdatePageBasedRow(row, engine, updates, oldPkValue, oldHashKeys);
+            UpdatePageBasedRow(row, engine, updates, oldPkValue, oldHashKeys, touchesIndex);
         }
+    }
+
+    /// <summary>
+    /// HOT's precondition (a) for this engine: <c>true</c> when any column named in
+    /// <paramref name="updatedColumns"/> participates in a loaded index — the primary-key B-tree or a
+    /// registered hash index.
+    /// <para>
+    /// PostgreSQL qualifies its heap-only-tuple optimisation on exactly this test ("the update does not
+    /// modify any columns referenced by the table's indexes") and, when it qualifies, writes <em>no</em>
+    /// new index entries. This engine already applies the same idea on the DELETE side, where
+    /// <see cref="DeleteByPrimaryKey"/> is key-only and skips row reads when no hash index needs the row;
+    /// the UPDATE side had no equivalent gate, so every update walked every hash index and re-encoded the
+    /// primary key. The benchmark's own document job is the textbook case — <c>UPDATE docs SET score = …
+    /// WHERE name = …</c> filters on the indexed <c>name</c> while setting the unindexed <c>score</c>.
+    /// </para>
+    /// <para>
+    /// Deliberately NOT decision 13, which rejected <em>deferring</em> index maintenance to
+    /// <c>Flush()</c>: the O(n) reconcile there took random-key DELETE from 294.185 to 70.248 ops/s. This
+    /// skips work that is provably unnecessary <em>for this statement</em> — no deferred state, no
+    /// reconcile, no freshness window, and the index contents are identical afterwards.
+    /// </para>
+    /// </summary>
+    /// <param name="updatedColumns">The statement's SET column names.</param>
+    private bool UpdateTouchesAnyLoadedIndex(ICollection<string> updatedColumns)
+    {
+        if (this.PrimaryKeyIndex >= 0 && updatedColumns.Contains(this.Columns[this.PrimaryKeyIndex]))
+        {
+            return true;
+        }
+
+        if (this.hashIndexes.Count == 0)
+        {
+            return false;
+        }
+
+        foreach (var column in updatedColumns)
+        {
+            if (this.hashIndexes.ContainsKey(column))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ValidateUpdatedRow(Dictionary<string, object> row)
@@ -1651,7 +1930,7 @@ public partial class Table
         return SerializeRowExact(row);
     }
 
-    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos)
+    private void UpdateColumnarRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, long rowPos, bool touchesIndex)
     {
         // Fixed-width layout step: when the row's existing bytes can be located, patch
         // only the updated fields at their actual offsets (avoiding a full serialize
@@ -1660,30 +1939,59 @@ public partial class Table
         // and the file does not grow. Falls back to full serialization when a field
         // cannot be patched in place (e.g. a variable-length field that changes size).
         byte[] rowData;
+        byte[]? existingRecord = null;
         if (rowPos >= 0)
         {
+            long locateStart = Diagnostics.WritePathProfiler.Stamp();
             var existingData = engine.Read(Name, rowPos);
+            existingRecord = existingData;
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
+
+            long patchStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = TryPatchOrSerializeRow(existingData, updates, row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
         }
         else
         {
+            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = SerializeRowExact(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         }
 
         // Issue #6: in-place UPDATE — overwrite the record in its existing slot when
         // the new record fits (fixed-width rows, or variable-width rows whose stored
         // length is unchanged). No new version is appended, the storage reference and
         // the PK index stay valid, and no stale version is left for compaction.
-        if (rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData))
+        long updateStart = Diagnostics.WritePathProfiler.Stamp();
+        bool updatedInPlace = rowPos >= 0 && engine.TryUpdateInPlace(Name, rowPos, rowData);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, updateStart);
+
+        if (updatedInPlace)
         {
-            // Position unchanged: move hash entries in place (values may have changed).
-            MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
-            RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
+            if (touchesIndex)
+            {
+                long indexStart = Diagnostics.WritePathProfiler.Stamp();
+
+                // Position unchanged: move hash entries in place (values may have changed).
+                MoveHashIndexesInPlace(row, oldHashKeys, rowPos);
+                RepointPrimaryKeyIfChanged(row, oldPkValue, rowPos);
+
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+            }
+
+            // S2 (plan §4): otherwise the statement named no indexed column, so every entry in this
+            // table's indexes still holds the same key at the same position and is already correct —
+            // skipping is not an optimisation of the work, it is the removal of work that had no effect.
+            // (RepointPrimaryKeyIfChanged was in any case equivalent to its own early-out here.)
         }
         else
         {
             // Columnar fallback: append new version (old ref becomes stale) + re-point indexes.
+            long appendStart = Diagnostics.WritePathProfiler.Stamp();
             long newPosition = engine.Insert(Name, rowData);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, appendStart);
+
+            long indexStart = Diagnostics.WritePathProfiler.Stamp();
 
             if (this.PrimaryKeyIndex >= 0)
             {
@@ -1691,9 +1999,18 @@ public partial class Table
                 this.Index.Insert(pkVal, newPosition);
             }
 
+            // The append moved the row, so EVERY loaded hash index must drop the entry that points at the
+            // position we just left — not only the ones this statement itself touches. The in-place branch's
+            // S2 shortcut ("the statement named no indexed column, so every entry still holds the same key at
+            // the same position") is valid only while the position is unchanged; here a kept entry is a stale
+            // one, and the next lookup on that column returned the superseded record (session 71:
+            // SqlInPlaceUpdateTests.SqlUpdate_VariableWidth_GrowsWhenStoredLengthChanges_StillCorrect, which
+            // stopped loading every column and so stopped masking it).
+            var hashKeysAtOldPosition = oldHashKeys ?? CaptureHashKeysAt(existingRecord, rowPos, engine);
+
             foreach (var kvp in this.hashIndexes)
             {
-                if (rowPos >= 0 && oldHashKeys != null && oldHashKeys.TryGetValue(kvp.Key, out var oldKey))
+                if (rowPos >= 0 && hashKeysAtOldPosition != null && hashKeysAtOldPosition.TryGetValue(kvp.Key, out var oldKey))
                 {
                     kvp.Value.Remove(oldKey, rowPos); // Remove old ref
                 }
@@ -1701,12 +2018,14 @@ public partial class Table
                 kvp.Value.Add(row, newPosition); // Add new ref
             }
 
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, indexStart);
+
             // ✅ Track updates for compaction (only the append path creates stale versions).
             Interlocked.Increment(ref _updatedRowCount);
         }
     }
 
-    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys)
+    private void UpdatePageBasedRow(Dictionary<string, object> row, IStorageEngine engine, Dictionary<string, object> updates, string? oldPkValue, Dictionary<string, object>? oldHashKeys, bool touchesIndex)
     {
         // Page-based: In-place update (or relocation when the record grows).
         // WP11: overwrite only the updated fields at their cached fixed column
@@ -1717,18 +2036,34 @@ public partial class Table
         }
 
         var pkVal = oldPkValue ?? string.Empty;
+
+        // §6 instrumentation (2026-09-15): this method IS the PageBased UPDATE path, and the `--pk` profile
+        // attributed only ~24 % of its time because the method had no stamps at all — engine-write,
+        // index-maint, in-place-patch and encode all showed ZERO calls while ~34 µs/update sat in code the
+        // report could not see. The append-only sibling (UpdateColumnarRow) was already instrumented.
+        long locateStart = Diagnostics.WritePathProfiler.Stamp();
         var searchResult = this.Index.Search(pkVal);
         if (!searchResult.Found)
         {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
             return;
         }
 
         long position = searchResult.Value;
         byte[]? existingData = engine.Read(Name, position);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
+
         byte[] rowData;
+
+        // The WP11 patch attempt and the fallback serialization are stamped separately, so "did the in-place
+        // path engage at all on PageBased?" is answerable from the report rather than by reading the code —
+        // and a fallback that runs on every row is itself the finding.
+        long patchStart = Diagnostics.WritePathProfiler.Stamp();
         if (existingData != null && TryOverwriteFieldsInPlace(existingData, updates) is { } patched)
         {
             rowData = patched;
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
             if (engine.SupportsDeltaUpdates)
             {
                 // WP13: wire the schema-aware delta codec - record
@@ -1738,22 +2073,35 @@ public partial class Table
         }
         else
         {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
+
+            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
             rowData = SerializeRowExact(row);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
         }
 
+        long writeStart = Diagnostics.WritePathProfiler.Stamp();
         long newPosition = engine.Update(Name, position, rowData);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
 
         if (newPosition != position)
         {
             // Record was relocated to another page (growing record on a
             // full page): re-point the PK index and rebuild hash indexes.
             var newPkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
+
+            // Only reached on relocation, so this stage's call count IS the relocation count.
+            long repointStart = Diagnostics.WritePathProfiler.Stamp();
             RepointIndexesAfterRelocation(position, newPosition, pkVal, newPkVal);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
         }
-        else
+        else if (touchesIndex)
         {
-            // In-place update keeps the position; move hash entries in place.
+            // In-place update keeps the position; move hash entries in place. S2 (plan §4): skipped
+            // entirely when the statement named no indexed column — the entries are already correct.
+            long hashStart = Diagnostics.WritePathProfiler.Stamp();
             MoveHashIndexesInPlace(row, oldHashKeys, position);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.HashIndexMaint, hashStart);
         }
     }
 
@@ -1768,6 +2116,54 @@ public partial class Table
 
             kvp.Value.Add(row, position);
         }
+    }
+
+    /// <summary>
+    /// Captures the current value of every LOADED hash index's column from the record at
+    /// <paramref name="position"/>, so an append-update can drop the entries that point at the position it
+    /// leaves behind.
+    /// <para>
+    /// Needed because the single-row UPDATE captures those values only when the statement touches a loaded
+    /// index (<c>oldHashKeys</c>, the S2 shortcut) — and that shortcut only holds while the position is
+    /// unchanged. On the append fallback the position moves for every row, so the entries of columns the
+    /// statement does NOT name would otherwise keep pointing at the superseded record.
+    /// </para>
+    /// </summary>
+    /// <param name="existingRecord">The record bytes already read for the patch attempt, if any.</param>
+    /// <param name="position">The record's storage position, or -1 when it is not known.</param>
+    /// <param name="engine">The storage engine to read the record from when it was not read already.</param>
+    /// <returns>The old key per loaded index, or null when there is nothing to capture.</returns>
+    private Dictionary<string, object>? CaptureHashKeysAt(byte[]? existingRecord, long position, IStorageEngine engine)
+    {
+        if (this.hashIndexes.Count == 0 || position < 0)
+        {
+            return null;
+        }
+
+        var data = existingRecord ?? engine.Read(Name, position);
+        if (data is null || data.Length == 0)
+        {
+            return null;
+        }
+
+        var oldRow = _fixedWidthRecords
+            ? DeserializeRowFixedWidth(data)
+            : DeserializeRowWithSimd(data.AsSpan());
+        if (oldRow is null)
+        {
+            return null;
+        }
+
+        var keys = new Dictionary<string, object>(this.hashIndexes.Count, StringComparer.OrdinalIgnoreCase);
+        foreach (var column in this.hashIndexes.Keys)
+        {
+            if (oldRow.TryGetValue(column, out var value) && value is not null)
+            {
+                keys[column] = value;
+            }
+        }
+
+        return keys;
     }
 
     private void RepointPrimaryKeyIfChanged(Dictionary<string, object> row, string? oldPkValue, long position)
@@ -1834,7 +2230,7 @@ public partial class Table
         // Hash index fast path for a simple equality on an indexed binary-collation column.
         if (!string.IsNullOrEmpty(where) &&
             TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
-            this.registeredIndexes.ContainsKey(whereCol))
+            this.EnsureAutoHashIndexRegistered(whereCol))
         {
             var colIdx = this.Columns.IndexOf(whereCol);
             var collation = colIdx >= 0 && colIdx < this.ColumnCollations.Count
@@ -1897,7 +2293,7 @@ public partial class Table
     /// <param name="newPosition">The storage position after relocation.</param>
     /// <param name="oldPkValue">The PK value before the update (may be null if the table has no PK).</param>
     /// <param name="newPkValue">The PK value after the update (may be null if the table has no PK).</param>
-    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue) // NOSONAR:S1172 - oldPosition retained for call-site symmetry with relocation-reporting engines (all callers already hold it)
+    private void RepointIndexesAfterRelocation(long oldPosition, long newPosition, string? oldPkValue, string? newPkValue, string? changedColumn = null) // NOSONAR:S1172 - oldPosition retained for call-site symmetry with relocation-reporting engines (all callers already hold it)
     {
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -1914,8 +2310,20 @@ public partial class Table
 
         // Hash indexes are keyed by (column value → positions); without the pre-update row
         // values a precise repoint is not possible, so invalidate for a lazy rebuild.
+        // PERF (plan 9 priority 3, 2026-09-21): invalidating unconditionally threw away indexes the statement
+        // cannot have changed, and the next indexed operation rebuilds each of those via
+        // EnsureIndexLoaded — which on PageBased scans the whole table and full-decodes every row. Measured
+        // on the fair-PK arm: 100,000 decodes for a 10,000-row UPDATE batch that only sets `score` while the
+        // index is on `name`, i.e. 45 % of that arm's wall time for an index that cannot have gone stale.
+        // Callers that know the statement's column set pass it here; every other caller keeps the previous
+        // unconditional behaviour (changedColumn == null).
         foreach (var col in this.loadedIndexes)
         {
+            if (changedColumn is not null && !string.Equals(col, changedColumn, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
             this.staleIndexes.Add(col);
             this._indexReadyCache.TryRemove(col, out _);
         }
@@ -1925,13 +2333,130 @@ public partial class Table
     /// Processes multiple UPDATE operations under a single write lock.
     /// PERF: Avoids N lock acquisitions + N SelectInternal calls when each WHERE targets
     /// a single row via an indexed column. Caches column metadata once for the batch.
+    /// <para>
+    /// Text adapter: the operation's key is resolved from its WHERE string inside the shared core,
+    /// once per operation — the same single parse the PK branch and the registered-index branch used
+    /// to perform separately. Callers that already hold the key as a typed value use
+    /// <see cref="UpdateMultipleStructured"/> instead, which skips that parse entirely.
+    /// </para>
     /// </summary>
     /// <param name="operations">List of (whereClause, updates) pairs.</param>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal void UpdateMultiple(List<(string where, Dictionary<string, object> updates)> operations)
     {
-        if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
         if (operations.Count == 0) return;
+
+        // §5.3 session 2 (2026-09-26): the per-batch normalization into the shared core's operation shape.
+        // Both entry points re-list their caller's operations, so this stamp is on both — one List of one
+        // five-part tuple per operation, and the only allocation either caller makes before the core starts.
+        long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>(operations.Count);
+        foreach (var (where, updates) in operations)
+        {
+            structured.Add((where, null, null, null, updates));
+        }
+
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.BatchPrep, batchPrepStart);
+
+        UpdateMultipleCore(structured);
+    }
+
+    /// <summary>
+    /// Batch UPDATE for a caller that has <b>already</b> put its operations in the shared core's own shape —
+    /// the SQL batch dispatcher, whose classifier resolves a canonical statement's key and literal while it
+    /// still has them as spans (session 76).
+    /// <para>
+    /// It exists so that the dispatcher's operations do not have to be re-listed, re-texted and re-parsed one
+    /// layer below: <see cref="UpdateMultiple"/> (text adapter) and <see cref="UpdateMultipleStructured"/>
+    /// (typed adapter) both normalize what their callers handed them, and this entry point is the one caller
+    /// that needs no normalization at all. The batch-prep stage therefore stays empty on the SQL route — it
+    /// stamps the two adapters' re-listing, which this path never performs.
+    /// </para>
+    /// </summary>
+    /// <param name="operations">
+    /// One (where text, key column, key value, raw key literal, updates) tuple per operation. A canonical
+    /// statement from the classifier carries an empty where text with its key filled in; every other
+    /// statement carries its where text with the key fields null, exactly as the text route always has.
+    /// </param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal int UpdateMultiplePrepared(
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        if (operations.Count == 0) return 0;
+
+        return UpdateMultipleCore(operations);
+    }
+
+    /// <summary>
+    /// SQL-free batch UPDATE — the UPDATE sibling of the INSERT fast path
+    /// (<c>InsertBatch(object[][], columnOrder)</c>): the caller supplies the key column with its
+    /// <b>already-typed</b> value plus the typed SET values, so the engine performs no statement
+    /// classification, no WHERE-string rebuild and no literal-to-typed conversion per operation.
+    /// </summary>
+    /// <param name="operations">One (key column, typed key value, typed SET values) triple per operation.</param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    internal int UpdateMultipleStructured(
+        IReadOnlyList<(string KeyColumn, object? KeyValue, Dictionary<string, object> Updates)> operations)
+    {
+        ArgumentNullException.ThrowIfNull(operations);
+        if (operations.Count == 0) return 0;
+
+        // §5.3 session 2 (2026-09-26): see UpdateMultiple — same normalization, same stamp. The validation
+        // runs inside the stamped region and is wrapped so a rejected operation cannot leave the profiler's
+        // allocation checkpoint open (the report surfaces a leftover depth rather than hiding it).
+        long batchPrepStart = Diagnostics.WritePathProfiler.Stamp();
+        var structured = new List<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)>(operations.Count);
+        try
+        {
+            foreach (var (keyColumn, keyValue, updates) in operations)
+            {
+                if (string.IsNullOrWhiteSpace(keyColumn))
+                {
+                    throw new ArgumentException("A key column is required for every batch UPDATE operation.", nameof(operations));
+                }
+
+                if (keyValue is null)
+                {
+                    throw new ArgumentException("A non-null key value is required for every batch UPDATE operation.", nameof(operations));
+                }
+
+                ArgumentNullException.ThrowIfNull(updates);
+                structured.Add((string.Empty, keyColumn, keyValue, null, updates));
+            }
+        }
+        finally
+        {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.BatchPrep, batchPrepStart);
+        }
+
+        return UpdateMultipleCore(structured);
+    }
+
+    /// <summary>
+    /// Shared UPDATE batch core. Every operation carries either a WHERE string (text callers) or an
+    /// already-typed key (structured callers). The key is resolved <b>once</b> per operation — parsed
+    /// out of the predicate text when that is what the caller had, taken as given otherwise — and both
+    /// fast branches below read that single resolution, so no predicate is ever parsed twice.
+    /// </summary>
+    /// <param name="operations">
+    /// One (where text, optional key column, optional typed key value, optional raw key literal, updates)
+    /// per operation. The raw literal is carried <b>instead of</b> the predicate text by callers that have it
+    /// (the SQL batch classifier, which reads it out of the statement as a span): the key resolution below
+    /// then skips the text parse entirely, and the <c>SelectInternal</c> fallback rebuilds the identical
+    /// predicate text from it — which is why it is kept rather than formatted back out of the value.
+    /// </param>
+    /// <returns>The number of rows matched and updated.</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+    private int UpdateMultipleCore(
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
+    {
+        if (this.isReadOnly) throw new InvalidOperationException("Cannot update in readonly mode");
+        if (operations.Count == 0) return 0;
+
+        int updatedRows = 0;
 
         this.rwLock.EnterWriteLock();
         try
@@ -1942,35 +2467,85 @@ public partial class Table
             // from the file INCLUDING the stale record).
             EnsureAllRegisteredIndexesLoaded();
 
-            // Whole-file snapshot for the per-row fastPatch reads below (same guard as the DELETE
-            // path): reading the small plaintext file once replaces one pread pair per updated row.
-            // A position that already has a buffered in-place overwrite in this transaction is
-            // NEVER served from the snapshot (its disk bytes would be stale) — it falls back to the
-            // per-record read, which honors the write-behind buffer.
-            byte[]? wholeFile = TryLoadWholeFileForRowAccess();
+            // Whole-file snapshot for the per-row fastPatch reads below. The DELETE path's helper refuses
+            // encrypted files (it deserializes plaintext keys out of its snapshot); the UPDATE locate only
+            // ever slices ONE record and hands it to the field patcher, so it can serve the same ciphertext
+            // snapshot and decrypt that record on demand — which is what the default (encrypted)
+            // configuration used to pay as a per-record read for every updated row.
+            // A position that already has a buffered in-place overwrite in this transaction is NEVER served
+            // from the snapshot (its disk bytes would be stale) — it falls back to the per-record read, which
+            // honors the write-behind buffer.
+            // §5.5 instrumentation (2026-09-21): this one call allocates the whole data file and was
+            // invisible, so it read as per-operation cost spread over the batch below it.
+            long snapshotStart = Diagnostics.WritePathProfiler.Stamp();
+            var (wholeFile, wholeFileEncrypted) = TryLoadWholeFileForUpdatePatch();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowSnapshot, snapshotStart);
 
             // B8: single-pass contiguous UPDATE — when every operation is a `pk = <literal>` match on a
             // plaintext fixed-width table with physically adjacent PK-ordered records, the old records
             // are read as ONE contiguous byte range and patched in memory (no per-row pread). Strictly
             // gated; any mismatch falls back to the generic per-row loop below.
-            if (TryBulkUpdateContiguousFixedWidth(engine, operations))
+            long contiguousStart = Diagnostics.WritePathProfiler.Stamp();
+            bool handledContiguously = TryBulkUpdateContiguousFixedWidth(engine, operations);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, contiguousStart);
+            if (handledContiguously)
             {
-                return;
+                // The contiguous path reports success only after patching EVERY operation's record
+                // (any miss or failed patch falls back), so its updated-row count is the op count.
+                return operations.Count;
             }
 
             int appendedInBatch = 0; // only appends create stale versions that need compaction
 
-            foreach (var (where, updates) in operations)
+            // Diagnostics (session 76, plan §5 item 2): only operations whose key the caller handed in skip
+            // the predicate parse below, so counting them makes the routing observable from a test instead of
+            // only from a profile. Accumulated in a local and published once per batch — the counter must not
+            // put an atomic per operation into the loop it measures.
+            long structuredOps = 0;
+
+            foreach (var (where, structuredKeyColumn, structuredKeyValue, structuredKeyLiteral, updates) in operations)
             {
+                // §5.3 session 2 (2026-09-26): the per-operation head of this loop — key resolution, the
+                // fast-patch gate and the touch-the-index scan — was the last per-operation region without a
+                // stamp, which is why the batch pass attributed ~81 % of its wall time and the remainder only
+                // had a name ("dispatch/per-operation glue"). It closes again right after that scan; the
+                // locate, capture, patch, write and index stages below keep their own stamps.
+                long opSetupStart = Diagnostics.WritePathProfiler.Stamp();
+
+                // One key resolution per operation. Text callers get it from the predicate text —
+                // the parse both fast branches below used to perform separately; structured callers
+                // hand it in already typed, so nothing is parsed at all.
+                string? keyColumn = structuredKeyColumn;
+                object? keyValue = structuredKeyValue;
+                if (keyColumn is null && !string.IsNullOrEmpty(where) &&
+                    TryParseSimpleWhereClause(where, out var parsedKeyColumn, out var parsedKeyValue))
+                {
+                    keyColumn = parsedKeyColumn;
+                    keyValue = parsedKeyValue;
+                }
+
+                if (structuredKeyColumn is not null)
+                {
+                    structuredOps++;
+                }
+
                 // B7: when the operation only touches non-indexed, non-PK columns on a table
                 // without CHECK constraints, matching rows are patched directly on their raw bytes
                 // (only the changed fields at their actual slot offsets) — no full-row
                 // deserialization. This is the hot path for
                 // `UPDATE t SET score = ... WHERE indexed_col = ...`.
-                bool fastPatch = StorageMode == StorageMode.Columnar &&
-                    !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var fastWhereCol, out _) &&
-                    !updates.ContainsKey(fastWhereCol) &&
+                // §6 (2026-09-16): `_fixedWidthRecords` now joins this gate, and the engine needs no new primitive to
+                // support it — the default IStorageEngine.TryUpdateInPlaceSameLength routes to TryUpdateInPlace,
+                // which PageBasedEngine implements. The patch is length-preserving for a fixed-width record (fields
+                // are written at their fixed slot offsets), so the write cannot relocate and the storage reference
+                // stays valid, which is the property this gate was protecting. The Columnar half is unchanged: a
+                // legacy variable-width patch may change the length, and that engine handles the case as it always has.
+                // The gate consumes the SAME resolved key as the branches below (structured callers
+                // carry no predicate text, so a gate that re-parsed `where` would silently send every
+                // structured operation down the full deserialize/re-serialize fallback).
+                bool fastPatch = (StorageMode == StorageMode.Columnar || _fixedWidthRecords) &&
+                    keyColumn is not null &&
+                    !updates.ContainsKey(keyColumn) &&
                     (this.PrimaryKeyIndex < 0 || !updates.ContainsKey(this.Columns[this.PrimaryKeyIndex])) &&
                     this.TableCheckConstraints.Count == 0 &&
                     !HasColumnCheckConstraints();
@@ -1991,6 +2566,8 @@ public partial class Table
                     }
                 }
 
+                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.OpSetup, opSetupStart);
+
                 // Resolve matching rows as (storage position, row, raw bytes) so the columnar
                 // write path can patch fields in place even when the table has no primary key.
                 // The position comes from the hash index / PK lookup already performed here; in
@@ -1998,23 +2575,44 @@ public partial class Table
                 List<(long Position, Dictionary<string, object>? Row, byte[]? Raw)>? rows = null;
 
                 // Issue #7/#8 fast path (mirrors CollectDeleteRecords): a simple `pk = value` WHERE
-                // on a columnar table with a PK resolves through the PK B-tree directly (single
-                // search + one read) instead of SelectInternal full-row materialization. When the
-                // key is not found the generic machinery below still runs.
-                if (StorageMode != StorageMode.PageBased &&
-                    this.PrimaryKeyIndex >= 0 &&
-                    !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var pkWhereCol, out var pkWhereVal) &&
-                    string.Equals(pkWhereCol, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
+                // on a table with a PK resolves through the PK B-tree directly (single search + one read)
+                // instead of SelectInternal full-row materialization. When the key is not found the generic
+                // machinery below still runs.
+                // ⚠️ Kept relaxed (2026-09-16) — and it is only useful PAIRED with the `fastPatch` gate above, which
+                // is why relaxing it alone measured as no change: with fastPatch false this route deserializes the
+                // row anyway, so both together are what skip the re-serialize. The decision here is only how the row
+                // is *located*, and the PageBased write arm already re-points indexes when a record relocates
+                // (RepointIndexesAfterRelocation), so relocation was never this decision's business. Alone it changed
+                // nothing measurable (30,037 vs 33,933 ops/s); paired with the fast patch it is the route that keeps
+                // the record as raw bytes instead of materializing it.
+                //
+                // §5.5 (iii), session 74 (2026-09-27): this locate had no stage of its own, and it is the one the
+                // `--pk` arm actually uses. The two branches below are mutually exclusive per operation — this PK
+                // B-tree search (one search plus one record read) and the registered-hash-index lookup
+                // (`RowLocateIndex` since 2026-09-21) — so one stamp opens here and closes after both, which is why
+                // no operation can be counted twice. The batch-level `row-locate` reading (one call: the contiguous
+                // attempt) stays comparable, and the `SelectInternal` fallback keeps the `row-locate` it already had.
+                long locateIndexStart = Diagnostics.WritePathProfiler.Stamp();
+
+                if (this.PrimaryKeyIndex >= 0 &&
+                    keyColumn is not null &&
+                    string.Equals(keyColumn, this.Columns[this.PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase))
                 {
-                    var fastSearch = this.Index.Search(pkWhereVal?.ToString() ?? string.Empty);
+                    var fastSearch = this.Index.Search(keyValue?.ToString() ?? string.Empty);
                     if (fastSearch.Found)
                     {
                         byte[]? fastData;
                         if (fastPatch && wholeFile != null &&
                             (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, fastSearch.Value)))
                         {
-                            fastData = TrySlicePayloadFromFile(wholeFile, fastSearch.Value);
+                            fastData = TrySlicePayloadFromFile(wholeFile, fastSearch.Value, wholeFileEncrypted);
+                            if (fastData is null && wholeFileEncrypted)
+                            {
+                                // A storage implementation without DecryptRecordPayload, or a frame that will
+                                // not open. The per-record read is the path the plaintext arm already uses;
+                                // skipping the row instead would silently drop the update.
+                                fastData = engine.Read(Name, fastSearch.Value);
+                            }
                         }
                         else
                         {
@@ -2030,18 +2628,21 @@ public partial class Table
                     }
                 }
 
-                if (rows is null && !string.IsNullOrEmpty(where) &&
-                    TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) &&
-                    this.registeredIndexes.ContainsKey(whereCol))
+                if (rows is null && keyColumn is not null &&
+                    this.EnsureAutoHashIndexRegistered(keyColumn))
                 {
-                    EnsureIndexLoaded(whereCol);
-                    if (this.hashIndexes.TryGetValue(whereCol, out var hashIndex))
+                    // §5.5 instrumentation (2026-09-21; stamp opened above the PK branch since 2026-09-27): the
+                    // registered-index lookup plus the record read/slice had no stamp at all, which is why §5.3
+                    // could attribute only 39-61 % of the arm. The stamp opens above because either branch is the
+                    // per-operation locate and only one of them can fire.
+                    EnsureIndexLoaded(keyColumn);
+                    if (this.hashIndexes.TryGetValue(keyColumn, out var hashIndex))
                     {
-                        var colIdx = this.Columns.IndexOf(whereCol);
+                        var colIdx = this.Columns.IndexOf(keyColumn);
                         if (colIdx >= 0)
                         {
-                            var key = ParseValueForHashLookup(
-                                whereVal?.ToString() ?? string.Empty,
+                            var key = CoerceStructuredKeyForHashLookup(
+                                keyValue,
                                 this.ColumnTypes[colIdx]);
 
                             if (key != null)
@@ -2053,7 +2654,11 @@ public partial class Table
                                     if (fastPatch && wholeFile != null &&
                                         (this.storage is null || !this.storage.HasBufferedOverwriteAt(DataFile, pos)))
                                     {
-                                        data = TrySlicePayloadFromFile(wholeFile, pos);
+                                        data = TrySlicePayloadFromFile(wholeFile, pos, wholeFileEncrypted);
+                                        if (data is null && wholeFileEncrypted)
+                                        {
+                                            data = engine.Read(Name, pos);
+                                        }
                                     }
                                     else
                                     {
@@ -2078,10 +2683,36 @@ public partial class Table
                     }
                 }
 
+                Diagnostics.WritePathProfiler.Add(
+                    Diagnostics.WritePathProfiler.Stage.RowLocateIndex, locateIndexStart);
+
                 if (rows is null)
                 {
                     rows = [];
-                    foreach (var row in SelectInternal(where, orderBy: null, asc: true, noEncrypt: false))
+
+                    // §6 instrumentation (2026-09-15): the "full-row materialization plus a per-row re-search"
+                    // §6 named by reading, and one of the two regions this engine's UPDATE arm left
+                    // unattributed. ⚠️ The 2026-09-15 sentence that followed — "PageBased reaches here for every
+                    // statement because its contiguous, PK-lookup and raw-byte fast paths are all gated away from
+                    // it" — was true of the route the arm took then (`ResolveUpdateRows`, whose PK branch is still
+                    // gated on `StorageMode != PageBased`, :2186); it is NOT true of this core since the SQL batch
+                    // dispatcher began aggregating UPDATE statements into one call (`Database.Batch.cs:1401-1407`). The
+                    // ungated PK branch above now serves the `--pk` arm, and this fallback's `row-locate` reads a
+                    // call count of 1 there (the contiguous attempt only — session 74's profile). It still fires
+                    // for compound/unindexed predicates and for tables without a primary key.
+                    // Text callers already hold the predicate; a structured caller gets it built here —
+                    // this branch is the only one that needs the string at all. A classifier-supplied
+                    // literal is preferred over rebuilding from the value: `column = <raw literal>` is
+                    // byte-for-byte the predicate the text route would have carried, so a statement whose
+                    // key was claimed as structured reaches this fallback with exactly the text it would
+                    // have had before (session 76) — including the quoting the literal arrived in.
+                    var fallbackWhere = where.Length > 0 || keyColumn is null
+                        ? where
+                        : structuredKeyLiteral is not null
+                            ? keyColumn + " = " + structuredKeyLiteral
+                            : BuildStructuredWhereText(keyColumn, keyValue);
+                    long locateStart = Diagnostics.WritePathProfiler.Stamp();
+                    foreach (var row in SelectInternal(fallbackWhere, orderBy: null, asc: true, noEncrypt: false))
                     {
                         long position = -1;
                         if (this.PrimaryKeyIndex >= 0 &&
@@ -2097,7 +2728,14 @@ public partial class Table
 
                         rows.Add((position, row, null));
                     }
+
+                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowLocate, locateStart);
                 }
+
+                // Every located row is written in one of the branches below (the in-place patch falls
+                // back to a full serialization when a field does not fit), so the located count is the
+                // updated count — and it is the only single place both branches pass through.
+                updatedRows += rows.Count;
 
                 foreach (var (rowPosition, resolvedRow, rawData) in rows)
                 {
@@ -2119,34 +2757,77 @@ public partial class Table
                             }
                         }
 
+                        // §5.3 (2026-09-26): the values the index maintenance below needs are read from the
+                        // record BEFORE the patch overwrites it. A fixed-width record's patch re-points the
+                        // column's slot to its new overflow block and frees the block that held the old value,
+                        // so afterwards the record no longer carries what the index has to remove. Reading the
+                        // column here is also one column read instead of the whole-row decode this replaced
+                        // (`row-decode` measured 10,000 calls / 623 B per row / 20,6 % of the profiled batch
+                        // UPDATE pass on the default job — worklog, 2026-09-26). Stamped as `row-decode` on
+                        // purpose: the bucket then compares the replacement against what it replaced.
+                        List<(string Column, object? OldValue)>? indexedOldValues = null;
+                        if (touchesHashIndexedColumn)
+                        {
+                            long captureStart = Diagnostics.WritePathProfiler.Stamp();
+                            indexedOldValues = TryCaptureIndexedOldValues(rawData, updates);
+                            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.RowDecode, captureStart);
+                        }
+
+                        long patchStart = Diagnostics.WritePathProfiler.Stamp();
                         byte[]? patched = _fixedWidthRecords
                             ? TryOverwriteFixedWidthInPlace(rawData, updates)
                             : TryOverwriteFieldsInPlaceActual(rawData, updates);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.InPlacePatch, patchStart);
 
-                        if (patched is not null && engine.TryUpdateInPlaceSameLength(Name, rowPosition, patched))
+                        long writeStart = Diagnostics.WritePathProfiler.Stamp();
+                        bool patchedInPlace = patched is not null &&
+                            engine.TryUpdateInPlaceSameLength(Name, rowPosition, patched);
+                        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
+
+                        if (patchedInPlace)
                         {
-                            // The record was overwritten in place; when the update changed a
-                            // hash-indexed column, re-point its entries (old key decoded from the
-                            // pre-write row bytes, new key added at the same position). Non-indexed
-                            // updates skip this entirely.
+                            // The record was overwritten in place; when the update changed a hash-indexed
+                            // column, re-point its entries (old key removed, new key added at the same
+                            // position). Non-indexed updates skip this entirely.
+                            //
+                            // The old values come from the pre-patch capture above. When that could not walk the
+                            // record (an unusual/corrupt layout) the whole-row decode is kept as the fallback, so
+                            // index maintenance is never silently skipped — and only for an operation that does
+                            // touch a hash-indexed column, exactly as before this change.
                             if (touchesHashIndexedColumn)
                             {
-                                var oldRow = DeserializeRow(rawData);
-                                if (oldRow is not null)
+                                indexedOldValues ??= TryDecodeIndexedOldValues(DeserializeRow(rawData), updates);
+                            }
+
+                            if (indexedOldValues is not null)
+                            {
+                                foreach (var (colName, oldVal) in indexedOldValues)
                                 {
-                                    foreach (var (colName, hashIdx) in this.hashIndexes)
+                                    if (!updates.TryGetValue(colName, out var newVal) ||
+                                        !this.hashIndexes.TryGetValue(colName, out var hashIdx))
                                     {
-                                        if (!updates.TryGetValue(colName, out var newVal) || newVal is null)
-                                        {
-                                            continue;
-                                        }
+                                        continue;
+                                    }
 
-                                        if (oldRow.TryGetValue(colName, out var oldVal) && oldVal is not null)
-                                        {
-                                            hashIdx.Remove(oldVal, rowPosition);
-                                        }
+                                    if (oldVal is not null)
+                                    {
+                                        long hashRemoveStart = Diagnostics.WritePathProfiler.Stamp();
+                                        hashIdx.Remove(oldVal, rowPosition);
+                                        Diagnostics.WritePathProfiler.Add(
+                                            Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
+                                            hashRemoveStart);
+                                    }
 
+                                    // A NULL value has no index entry — the same rule the append fallback path
+                                    // applies (`if (row.TryGetValue(key, out var newKey) && newKey is not null)`):
+                                    // the superseded entry is dropped and nothing is added in its place.
+                                    if (newVal is not null)
+                                    {
+                                        long hashAddStart = Diagnostics.WritePathProfiler.Stamp();
                                         hashIdx.Add(newVal, rowPosition);
+                                        Diagnostics.WritePathProfiler.Add(
+                                            Diagnostics.WritePathProfiler.Stage.IndexMaintenance,
+                                            hashAddStart);
                                     }
                                 }
                             }
@@ -2277,13 +2958,23 @@ public partial class Table
                             }
                             else
                             {
+                                // §6 instrumentation (2026-09-15): this is the PageBased update's actual write —
+                                // the `else` of `TryUpdateInPlace`, i.e. append a new version and re-point the
+                                // indexes. It was entirely unstamped, which is why that arm attributed only
+                                // ~31 %: the Columnar branch above is skipped for PageBased, and the
+                                // `fastPatch` branch's engine-write stamp (:2402) never runs on this engine
+                                // either.
+                                long writeStart = Diagnostics.WritePathProfiler.Stamp();
                                 long newPosition = engine.Insert(Name, rowData);
+                                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, writeStart);
 
                                 if (this.PrimaryKeyIndex >= 0)
                                 {
+                                    long repointStart = Diagnostics.WritePathProfiler.Stamp();
                                     var pkVal = row[this.Columns[this.PrimaryKeyIndex]]?.ToString() ?? string.Empty;
                                     this.Index.Delete(pkVal);
                                     this.Index.Insert(pkVal, newPosition);
+                                    Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.IndexMaintenance, repointStart);
                                 }
 
                                 foreach (var hashIndex in this.hashIndexes)
@@ -2305,7 +2996,14 @@ public partial class Table
                         }
                         else // PageBased
                         {
+                            // §2 instrumentation (2026-09-16): the two regions §6 named as unstamped on this route —
+                            // the serialize and the page write. PageBased UPDATE attributes only ~45 % of its pass
+                            // (209.7 ms of stages against a 470 ms pass, 46.98 µs/update) and the in-place machinery
+                            // never fires here (zero calls for in-place-patch, engine-write, index-maint, encode), so
+                            // what remains has to be split before it can be attacked.
+                            long encodeStart = Diagnostics.WritePathProfiler.Stamp();
                             rowData = SerializeRowExact(row);
+                            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Encode, encodeStart);
 
                             long position = rowPosition;
                             string? pkVal = this.PrimaryKeyIndex >= 0 ? oldPkValue?.ToString() : null;
@@ -2319,7 +3017,11 @@ public partial class Table
 
                             if (position >= 0)
                             {
+                                // §2 instrumentation: the page write itself, which the fastPatch branch's
+                                // engine-write stamp never covered because that branch is Columnar-only.
+                                long pageWriteStart = Diagnostics.WritePathProfiler.Stamp();
                                 long newPosition = engine.Update(Name, position, rowData);
+                                Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EngineWrite, pageWriteStart);
 
                                 if (newPosition != position)
                                 {
@@ -2356,6 +3058,13 @@ public partial class Table
                 Interlocked.Add(ref _updatedRowCount, appendedInBatch);
                 TryAutoCompact();
             }
+
+            if (structuredOps > 0)
+            {
+                Interlocked.Add(ref _structuredUpdateOperations, structuredOps);
+            }
+
+            return updatedRows;
         }
         finally
         {
@@ -2372,6 +3081,17 @@ public partial class Table
     private long _bulkContiguousUpdateBatches;
 
     /// <summary>
+    /// Number of batch-UPDATE operations whose key the caller handed in already resolved (a structured key
+    /// column plus value) instead of leaving it in the predicate text for this layer to parse — i.e. the
+    /// operations the structured routes claim (session 76, plan §5 item 2). Published for the same reason
+    /// <see cref="BulkContiguousUpdateBatches"/> is: a routing decision has to be observable from a test,
+    /// not only from a profile, because both routes produce identical results by design.
+    /// </summary>
+    public long StructuredUpdateOperations => Interlocked.Read(ref _structuredUpdateOperations);
+
+    private long _structuredUpdateOperations;
+
+    /// <summary>
     /// B8: single-pass contiguous UPDATE fast path for plaintext fixed-width tables. Requires every
     /// operation to be a simple <c>pk = &lt;numeric literal&gt;</c> match on the primary key, with keys
     /// strictly increasing AND records physically adjacent in the data file (the fixed-width layout
@@ -2383,7 +3103,7 @@ public partial class Table
     /// </summary>
     private bool TryBulkUpdateContiguousFixedWidth(
         IStorageEngine engine,
-        List<(string where, Dictionary<string, object> updates)> operations)
+        IReadOnlyList<(string Where, string? KeyColumn, object? KeyValue, string? KeyLiteral, Dictionary<string, object> Updates)> operations)
     {
         int count = operations.Count;
         if (count < 2)
@@ -2391,21 +3111,25 @@ public partial class Table
             return false;
         }
 
-        // Narrow, conservative gate: fixed-width columnar table with an explicit PK, plaintext
-        // records only (no per-record encryption magic — a raw contiguous read must equal the
-        // logical record bytes), no buffered overwrites for this file, and no CHECK constraints
-        // (mirrors the generic fastPatch gate).
+        // Narrow, conservative gate: fixed-width columnar table with an explicit PK, no buffered
+        // overwrites for this file, and no CHECK constraints (mirrors the generic fastPatch gate).
+        // Per-record encryption does NOT disqualify the path: an encrypted fixed-width record keeps a
+        // constant physical stride (its plaintext size plus [nonce(12)][tag(16)]), so the span is still
+        // read in ONE range and each payload is decrypted in memory, while the write goes through
+        // TryUpdateInPlaceSameLength — which encrypts on its own.
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.TableCheckConstraints.Count > 0 ||
             HasColumnCheckConstraints() ||
             this.storage is null ||
-            this.storage.AreRecordsEncrypted(DataFile) ||
-            this.storage.HasBufferedOverwrite(DataFile))
+            this.storage.HasBufferedOverwrite(DataFile) ||
+            this.storage.HasBufferedAppends(DataFile))
         {
             return false;
         }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
 
         var pkName = this.Columns[this.PrimaryKeyIndex];
         var layout = GetFixedWidthLayout();
@@ -2418,10 +3142,29 @@ public partial class Table
 
         for (int i = 0; i < count; i++)
         {
-            var (where, updates) = operations[i];
-            if (string.IsNullOrEmpty(where) ||
-                !TryParseSimpleWhereClause(where, out var whereCol, out var whereVal) ||
-                !string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
+            var (where, structuredKeyColumn, structuredKeyValue, _, updates) = operations[i];
+
+            // Key resolution mirrors the shared UPDATE core: the structured key when the caller
+            // supplied one (the SQL-free API), the parsed predicate otherwise (the text adapters).
+            string whereCol;
+            object? whereVal;
+            if (structuredKeyColumn is not null)
+            {
+                whereCol = structuredKeyColumn;
+                whereVal = structuredKeyValue;
+            }
+            else if (!string.IsNullOrEmpty(where) &&
+                     TryParseSimpleWhereClause(where, out var parsedCol, out var parsedVal))
+            {
+                whereCol = parsedCol;
+                whereVal = parsedVal;
+            }
+            else
+            {
+                return false;
+            }
+
+            if (!string.Equals(whereCol, pkName, StringComparison.OrdinalIgnoreCase) ||
                 whereVal is null)
             {
                 return false;
@@ -2489,7 +3232,7 @@ public partial class Table
 
         // Resolve every target record's position through the PK B-tree and read + verify the whole
         // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
-        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions, encrypted);
         if (raw is null)
         {
             return false;
@@ -2501,7 +3244,7 @@ public partial class Table
             var payload = new byte[layout.FixedSize];
             raw.AsSpan((int)(i * stride) + 4, layout.FixedSize).CopyTo(payload);
 
-            var patched = TryOverwriteFixedWidthInPlace(payload, operations[i].updates);
+            var patched = TryOverwriteFixedWidthInPlace(payload, operations[i].Updates);
             if (patched is null || !engine.TryUpdateInPlaceSameLength(Name, positions[i], patched))
             {
                 return false;
@@ -2545,7 +3288,7 @@ public partial class Table
 
                 var slot = raw.AsSpan((int)(i * stride) + 4 + layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
                 oldKeys[i] = ReadTypedValueFromSpan(slot, type, out _);
-                newKeys[i] = operations[i].updates[colName];
+                newKeys[i] = operations[i].Updates[colName];
             }
 
             hashIdx.RemoveBatchKeys(oldKeys, positions);
@@ -2613,8 +3356,10 @@ public partial class Table
         // Physical deletes (PageBased marks slots deleted; Columnar/AppendOnly are logical).
         if (StorageMode == StorageMode.PageBased)
         {
+            long pageDeleteStart = WritePathProfiler.Stamp();
             foreach (var (storagePosition, _) in recordsToDelete)
                 engine.Delete(Name, storagePosition);
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, pageDeleteStart);
         }
         else if (StorageMode != StorageMode.Columnar)
         {
@@ -2625,6 +3370,8 @@ public partial class Table
 
         // Primary-key B-tree cleanup: bulk-delete in descending key order (one pass through the
         // rightmost leaf path instead of arbitrary per-row order → fewer separator promotions).
+        long indexStart = WritePathProfiler.Stamp();
+        bool deferIndexMaintenance = _config?.EnableDeferredDeleteIndexes == true;
         if (this.PrimaryKeyIndex >= 0)
         {
             var pkCol = this.Columns[this.PrimaryKeyIndex];
@@ -2637,33 +3384,52 @@ public partial class Table
                 }
             }
 
-            if (pkKeys.Count > 0)
+            if (deferIndexMaintenance)
+            {
+                // Deferred DELETE: the tombstone is the durable truth. Skip the per-key B-tree
+                // removal entirely and mark the PK index stale; it is rebuilt from the data file
+                // (skipping tombstones) at the next committed-data boundary or reopen. Point
+                // lookups tolerate a tombstoned position (null read) and uniqueness verifies
+                // liveness, so the stale entries are invisible to readers.
+                MarkPrimaryKeyIndexStale(pkKeys.Count);
+            }
+            else if (pkKeys.Count > 0)
             {
                 this.Index.DeleteBulk(pkKeys);
             }
         }
 
-        // Key-only hash-index cleanup: extract each indexed column's key once per row and
-        // remove all positions in a single lock per index.
+        // Storage positions of the deleted rows — needed both for the (optional) hash-index cleanup
+        // below and for the durable tombstone write that follows.
         var positions = new long[recordsToDelete.Count];
         for (int i = 0; i < recordsToDelete.Count; i++)
         {
             positions[i] = recordsToDelete[i].storagePosition;
         }
 
-        foreach (var kvp in this.hashIndexes)
+        // Key-only hash-index cleanup: extract each indexed column's key once per row and remove all
+        // positions in a single lock per index. When deferring, the removal is skipped entirely — the
+        // hash index keeps stale entries pointing at tombstones (point lookups skip them via a null
+        // read, and the index is rebuilt on reopen). It is deliberately NOT marked stale, because the
+        // next DELETE's EnsureAllRegisteredIndexesLoaded would otherwise rebuild it O(n) per delete.
+        if (!deferIndexMaintenance)
         {
-            if (!this.loadedIndexes.Contains(kvp.Key))
-                continue;
-
-            var keys = new object?[recordsToDelete.Count];
-            for (int i = 0; i < recordsToDelete.Count; i++)
+            foreach (var kvp in this.hashIndexes)
             {
-                recordsToDelete[i].row.TryGetValue(kvp.Key, out keys[i]);
-            }
+                if (!this.loadedIndexes.Contains(kvp.Key))
+                    continue;
 
-            kvp.Value.RemoveBatchKeys(keys, positions);
+                var keys = new object?[recordsToDelete.Count];
+                for (int i = 0; i < recordsToDelete.Count; i++)
+                {
+                    recordsToDelete[i].row.TryGetValue(kvp.Key, out keys[i]);
+                }
+
+                kvp.Value.RemoveBatchKeys(keys, positions);
+            }
         }
+
+        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, indexStart);
 
         // Unloaded indexes rebuild lazily (columnar only - page-based indexes stay in sync).
         if (StorageMode == StorageMode.Columnar)
@@ -2682,15 +3448,20 @@ public partial class Table
                 // Transactional delete: buffer the physical offsets so the in-place marker is
                 // applied at COMMIT (rollback discards the buffer). Durable in O(delete) — the
                 // flush-time full-file rewrite is no longer needed for transactional deletes.
+                long bufferStart = WritePathProfiler.Stamp();
                 foreach (var position in positions.Where(static position => position >= 0))
                 {
                     this.storage.BufferTombstoneForCommit(DataFile, position);
                 }
+
+                WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, bufferStart);
             }
             else
             {
                 // Durable DELETE: physically mark the removed records so a reopen skips them.
+                long tombstoneStart = WritePathProfiler.Stamp();
                 TombstoneDeletedPositions(positions);
+                WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, tombstoneStart);
 
                 // Legacy variable-length (non-fixed-width) columnar tables keep older stale versions
                 // of a key in the file (UPDATE appends a new version). Tombstoning only the newest
@@ -2707,6 +3478,10 @@ public partial class Table
         }
 
         Interlocked.Add(ref _cachedRowCount, -recordsToDelete.Count);
+
+        // Bound the deferred-DELETE staleness: once the tombstones are durable (outside a transaction)
+        // and the pending count crossed the configured threshold, rebuild the PK B-tree now.
+        RebuildPrimaryKeyIndexIfThresholdExceeded();
     }
 
     /// <summary>
@@ -3042,7 +3817,7 @@ public partial class Table
 
                 if (!string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var deleteWhereCol, out var deleteWhereVal) &&
-                    this.registeredIndexes.ContainsKey(deleteWhereCol))
+                    this.EnsureAutoHashIndexRegistered(deleteWhereCol))
                 {
                     EnsureIndexLoaded(deleteWhereCol);
                     if (this.hashIndexes.TryGetValue(deleteWhereCol, out var deleteHashIndex))
@@ -3151,7 +3926,7 @@ public partial class Table
                 // Try hash index fast path
                 if (!string.IsNullOrEmpty(where) &&
                     TryParseSimpleWhereClause(where, out var col, out var val) &&
-                    this.registeredIndexes.ContainsKey(col))
+                    this.EnsureAutoHashIndexRegistered(col))
                 {
                     EnsureIndexLoaded(col);
                     if (this.hashIndexes.TryGetValue(col, out var hashIndex))
@@ -3307,7 +4082,7 @@ public partial class Table
                     }
                 }
                 // Hash index fast path.
-                if (this.registeredIndexes.ContainsKey(col))
+                if (this.EnsureAutoHashIndexRegistered(col))
                 {
                     EnsureIndexLoaded(col);
                     if (this.hashIndexes.TryGetValue(col, out var hashIndex))
@@ -3625,10 +4400,23 @@ public partial class Table
     /// <summary>
     /// Mirrors the value normalization of <see cref="TryParseSimpleWhereClause"/> (trim whitespace,
     /// then trim enclosing <c>'</c>/<c>"</c> quotes) on a raw SQL literal.
+    /// <para>
+    /// Two callers: the structured DELETE/UPDATE routes, which normalize the literal a canonical batch
+    /// statement carried, and the SQL batch classifier itself (session 76), which needs the same
+    /// normalized value to hand the UPDATE core as a structured key — one normalization, not a second
+    /// one written against the scanner.
+    /// </para>
     /// </summary>
-    private static string UnquoteSqlLiteral(string raw)
+    internal static string UnquoteSqlLiteral(string raw)
     {
-        return raw.AsSpan().Trim().Trim("'\"".AsSpan()).ToString();
+        // Session 79 (plan §5.5 (ii) residual): return the caller's own instance when the trim removed
+        // nothing. The trim is always a *subspan* of `raw`, so equal lengths prove the raw string already
+        // was the trimmed value — content-identical, and it stops the per-statement second copy a numeric
+        // predicate literal ("id = 5000" → "5000") used to pay. Measured at 32 B/statement on the fair-PK
+        // arm before this change.
+        var trimmed = raw.AsSpan().Trim();
+        var unquoted = trimmed.Trim("'\"".AsSpan());
+        return unquoted.Length == raw.Length ? raw : unquoted.ToString();
     }
 
     /// <summary>
@@ -3759,11 +4547,21 @@ public partial class Table
     }
 
     /// <summary>
-    /// Copies the raw (plaintext) payload of the record at <paramref name="position"/> out of a
-    /// whole-file snapshot. Returns null when the position/length is not fully contained in the
-    /// snapshot (caller falls back to the per-record read).
+    /// Copies the payload of the record at <paramref name="position"/> out of a whole-file snapshot,
+    /// decrypting it when the snapshot holds ciphertext. Returns null when the position/length is not fully
+    /// contained in the snapshot, or when an encrypted payload cannot be decrypted — the caller falls back to
+    /// the per-record read in both cases.
+    /// <para>
+    /// The encrypted half is what the PK-less UPDATE route needed: an encrypted file used to get no snapshot
+    /// at all (<see cref="TryLoadWholeFileForRowAccess"/> refuses it), so every update paid a per-record read
+    /// while the plaintext arm read the file once. The 4-byte prefix is the stored (ciphertext) length even in
+    /// an encrypted file, so the sliced bytes are a complete AEAD frame and
+    /// <see cref="IStorage.DecryptRecordPayload(byte[])"/> returns the plaintext the field patcher needs — the same
+    /// treatment the contiguous fixed-width path already gives encrypted spans
+    /// (<c>TryReadContiguousFixedWidthRecords</c>).
+    /// </para>
     /// </summary>
-    private static byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position)
+    private byte[]? TrySlicePayloadFromFile(byte[] wholeFile, long position, bool encrypted)
     {
         if (position < 0 || position + 4 > wholeFile.Length)
         {
@@ -3776,9 +4574,69 @@ public partial class Table
             return null;
         }
 
+        int payloadOffset = (int)position + 4;
+        if (encrypted)
+        {
+            // §5.3 tail (2026-09-22): decrypt the frame where it lies in the snapshot instead of copying it into a
+            // right-sized array first. The plaintext array below is still allocated (it becomes the caller's record
+            // bytes), but the ciphertext copy that preceded every AEAD open is gone — one allocation per record
+            // instead of two, which is what the profile's B/call for row-locate-index was charging for.
+            var decrypted = this.storage?.DecryptRecordPayload(wholeFile, payloadOffset, recordLength);
+            if (decrypted is not null)
+            {
+                return decrypted;
+            }
+
+            // A storage implementation without the range overload: copy, then decrypt — the pre-2026-09-22 route.
+        }
+
         var payload = new byte[recordLength];
-        wholeFile.AsSpan((int)position + 4, recordLength).CopyTo(payload);
-        return payload;
+        wholeFile.AsSpan(payloadOffset, recordLength).CopyTo(payload);
+
+        return encrypted ? this.storage?.DecryptRecordPayload(payload) : payload;
+    }
+
+    /// <summary>
+    /// Copies the AEAD frame of the <paramref name="index"/>-th record out of a contiguous range read into its own
+    /// array — the fallback used when the storage has no range overload for
+    /// <see cref="IStorage.DecryptRecordPayload(byte[], int, int)"/>. The range overload replaced this per-record
+    /// copy on the encrypted contiguous path; the fallback keeps alternative storages working unchanged.
+    /// </summary>
+    private static byte[] SliceCipher(byte[] physical, int index, long physicalStride, int frameLength)
+    {
+        var cipher = new byte[frameLength];
+        physical.AsSpan((int)(index * physicalStride) + 4, frameLength).CopyTo(cipher);
+        return cipher;
+    }
+
+    /// <summary>
+    /// Whole-file snapshot for the UPDATE fast-patch locate, ENCRYPTED files included.
+    /// <para>
+    /// <see cref="TryLoadWholeFileForRowAccess"/> deliberately refuses encrypted files because its other
+    /// caller (the DELETE key resolution) deserializes plaintext keys straight out of its snapshot and
+    /// ciphertext would mis-read every key. The UPDATE locate only ever slices one record and hands it to the
+    /// field patcher, so it can serve the same ciphertext snapshot and decrypt that record on demand. This is
+    /// what makes the snapshot usable on the default (encrypted) configuration, which is the one that pays the
+    /// per-record read today. Fixed-width records stay excluded — their contiguous path owns that case — and
+    /// the size limit keeps the snapshot bounded, falling back to the per-record read beyond it.
+    /// </para>
+    /// </summary>
+    private (byte[]? Snapshot, bool Encrypted) TryLoadWholeFileForUpdatePatch()
+    {
+        if (_fixedWidthRecords || this.storage is null)
+        {
+            return (null, false);
+        }
+
+        var fi = new System.IO.FileInfo(DataFile);
+        if (!fi.Exists || fi.Length <= 0 || fi.Length > WholeFileDeleteResolutionLimitBytes)
+        {
+            return (null, false);
+        }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
+        var bytes = this.storage.ReadBytesRange(DataFile, 0, (int)fi.Length);
+        return bytes is null ? (null, false) : (bytes, encrypted);
     }
 
     /// <summary>
@@ -3789,15 +4647,18 @@ public partial class Table
     /// with the whole span already in memory, decoding each record's fixed-width PK slot (~100 ns)
     /// is two orders of magnitude cheaper than ~10K tree searches and rejects the same batches
     /// (gaps/tombstones surface as prefix mismatches; a record whose PK differs from the requested
-    /// key falls back like the old per-key search miss). Returns the raw span bytes, or
-    /// <see langword="null"/> so the caller falls back to the generic per-row loop — nothing is
-    /// modified before this succeeds.
+    /// key falls back like the old per-key search miss). For an encrypted file the same range read
+    /// returns ciphertext, which is decrypted per record through
+    /// <c>IStorage.DecryptRecordPayload</c> and repacked as a plaintext span, so the caller's
+    /// slicing is identical in both modes. Returns the raw span bytes, or <see langword="null"/> so
+    /// the caller falls back to the generic per-row loop — nothing is modified before this succeeds.
     /// </summary>
     private byte[]? TryReadContiguousFixedWidthRecords(
         string[] keys,
         long stride,
         FixedWidthRecordLayout layout,
-        long[] positions)
+        long[] positions,
+        bool encrypted)
     {
         int count = keys.Length;
         if (this.PrimaryKeyIndex < 0)
@@ -3811,24 +4672,68 @@ public partial class Table
             return null;
         }
 
+        // Physical distance between two records: the plaintext stride, plus the GCM frame
+        // ([nonce(12)][tag(16)]) per record when the file is encrypted. Still constant, because a
+        // fixed-width record's plaintext length never changes — which is what keeps the equal-length
+        // in-place overwrite valid on the write side.
         long basePosition = first.Value;
+        long physicalStride = encrypted ? stride + AesGcmEncryption.OverheadSize : stride;
         long expected = basePosition;
         for (int i = 0; i < count; i++)
         {
             positions[i] = expected;
-            expected += stride;
+            expected += physicalStride;
         }
 
         long totalBytes = stride * count;
-        if (totalBytes <= 0 || totalBytes > int.MaxValue)
+        long physicalBytes = physicalStride * count;
+        if (totalBytes <= 0 || totalBytes > int.MaxValue || physicalBytes > int.MaxValue)
         {
             return null;
         }
 
-        var raw = this.storage.ReadBytesRange(DataFile, basePosition, (int)totalBytes);
-        if (raw is null || raw.Length < totalBytes)
+        var physical = this.storage.ReadBytesRange(DataFile, basePosition, (int)physicalBytes);
+        if (physical is null || physical.Length < physicalBytes)
         {
             return null;
+        }
+
+        byte[] raw;
+        if (encrypted)
+        {
+            // Repack the ciphertext span into a plaintext-laid-out buffer so every caller keeps
+            // slicing with the plaintext stride (i * stride + 4 + offset): ONE I/O read, one AEAD
+            // open per record, all in memory. A prefix that does not match the encrypted fixed-width
+            // layout (tombstone, mixed legacy file) or a payload that fails to decrypt rejects the
+            // whole batch — nothing has been modified yet.
+            raw = new byte[totalBytes];
+            for (int i = 0; i < count; i++)
+            {
+                int prefix = BinaryPrimitives.ReadInt32LittleEndian(
+                    physical.AsSpan((int)(i * physicalStride), 4));
+                if (prefix != layout.FixedSize + AesGcmEncryption.OverheadSize)
+                {
+                    return null; // tombstoned slot or layout mismatch -> generic per-row path
+                }
+
+                // §5.3 tail (2026-09-22): the frame is decrypted where it lies in the range read, so the per-record
+                // ciphertext copy (`new byte[prefix]` + copy) is gone — this path allocated two arrays per record
+                // and now allocates one. Falls back to the copy for a storage without the range overload.
+                var plain = this.storage.DecryptRecordPayload(physical, (int)(i * physicalStride) + 4, prefix)
+                    ?? this.storage.DecryptRecordPayload(SliceCipher(physical, i, physicalStride, prefix));
+                if (plain is null || plain.Length != layout.FixedSize)
+                {
+                    return null;
+                }
+
+                var target = raw.AsSpan((int)(i * stride));
+                BinaryPrimitives.WriteInt32LittleEndian(target, layout.FixedSize);
+                plain.CopyTo(target[4..]);
+            }
+        }
+        else
+        {
+            raw = physical;
         }
 
         int pkIdx = this.PrimaryKeyIndex;
@@ -3860,6 +4765,13 @@ public partial class Table
     /// </summary>
     public long BulkContiguousDeleteBatches => Interlocked.Read(ref _bulkContiguousDeleteBatches);
 
+    /// <summary>
+    /// Whether this table's deletes defer hash-index maintenance (<c>EnableDeferredDeleteIndexes</c>, product
+    /// default: true). Diagnostics only — it is the condition that decides whether a batch delete's row payloads
+    /// are ever read, so a test can assert which side of it a delete ran on instead of inferring it.
+    /// </summary>
+    public bool DeferredDeleteIndexesEnabled => _config?.EnableDeferredDeleteIndexes == true;
+
     private long _bulkContiguousDeleteBatches;
 
     /// <summary>
@@ -3880,18 +4792,22 @@ public partial class Table
         }
 
         // Identical safety gate to the UPDATE fast path: fixed-width columnar table with an explicit
-        // PK, plaintext records only (no per-record encryption magic — a raw range read must equal
-        // the logical record bytes), and no buffered overwrites. DeleteMultiple loads every
+        // PK and no buffered overwrites. Per-record encryption is allowed — the span is read as one
+        // ciphertext range and repacked through DecryptRecordPayload (see
+        // TryReadContiguousFixedWidthRecords); the delete itself only removes index entries and writes
+        // a length-prefix marker, so no record payload is ever rewritten. DeleteMultiple loads every
         // registered hash index before calling this.
         if (!_fixedWidthRecords ||
             StorageMode != StorageMode.Columnar ||
             this.PrimaryKeyIndex < 0 ||
             this.storage is null ||
-            this.storage.AreRecordsEncrypted(DataFile) ||
-            this.storage.HasBufferedOverwrite(DataFile))
+            this.storage.HasBufferedOverwrite(DataFile) ||
+            this.storage.HasBufferedAppends(DataFile))
         {
             return false;
         }
+
+        bool encrypted = this.storage.AreRecordsEncrypted(DataFile);
 
         var pkName = this.Columns[this.PrimaryKeyIndex];
         var layout = GetFixedWidthLayout();
@@ -3930,76 +4846,119 @@ public partial class Table
 
         // Resolve every target record's position through the PK B-tree and read + verify the whole
         // contiguous span (one range read) — shared by the UPDATE and DELETE contiguous fast paths.
-        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions);
+        // §2 instrumentation: this fast path bypassed DeleteRecordsCore entirely (measured 2026-09-14: the
+        // profiler recorded nothing for a 10K-row DELETE while 100% of the wall time was spent here).
+        long deleteLocateStart = WritePathProfiler.Stamp();
+        var raw = TryReadContiguousFixedWidthRecords(keys, stride, layout, positions, encrypted);
+        WritePathProfiler.Add(WritePathProfiler.Stage.RowLocate, deleteLocateStart);
         if (raw is null)
         {
             return false;
         }
 
-        // Remove PK entries (the keys are the WHERE literals) in one sorted bulk pass and then every
-        // loaded hash-index entry, decoding only the indexed columns from the raw fixed-width records
-        // (no full-row deserialization). Variable values resolve through the overflow arena, mirroring
-        // the fixed-width codec used by the generic path.
-        this.Index.DeleteBulk(keys);
+        // Index maintenance — and under the product default it is SKIPPED here too, exactly as DeleteRecordsCore
+        // skips it. Measured on this path (2026-09-16, --pk DELETE arm, 10,000 statements, profiled pass):
+        // the PK bulk removal and the per-row hash decode+removal are 42.6 % and 26.9 % of the attributed time
+        // — 3.63 and 2.29 µs/delete — while `EnableDeferredDeleteIndexes` (default: on) declares both optional.
+        // The tombstone is the durable truth: a point lookup treats a tombstoned position as a null read,
+        // insert-time uniqueness verifies the stored position is live before rejecting a re-INSERT, and the PK
+        // B-tree is rebuilt from the data file (skipping tombstones) at the next committed-data boundary or on
+        // reopen. Skipping the hash removal is deliberately NOT paired with marking the hash index stale, for the
+        // reason DeleteRecordsCore gives: the next DELETE's EnsureAllRegisteredIndexesLoaded would otherwise
+        // rebuild it O(n) per delete.
+        bool deferIndexMaintenance = _config?.EnableDeferredDeleteIndexes == true;
 
-        var arena = GetOverflowArena();
-        foreach (var (colName, hashIdx) in this.hashIndexes)
+        long deletePkIndexStart = WritePathProfiler.Stamp();
+        if (deferIndexMaintenance)
         {
-            int colIdx = -1;
-            for (int c = 0; c < this.Columns.Count; c++)
-            {
-                if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
-                {
-                    colIdx = c;
-                    break;
-                }
-            }
+            MarkPrimaryKeyIndexStale(keys.Length);
+        }
+        else
+        {
+            this.Index.DeleteBulk(keys);
+        }
 
-            if (colIdx < 0)
-            {
-                continue;
-            }
+        WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, deletePkIndexStart);
 
-            var type = this.ColumnTypes[colIdx];
-            var decoded = new object?[count];
-            for (int i = 0; i < count; i++)
+        if (!deferIndexMaintenance)
+        {
+            // Remove every loaded hash-index entry, decoding only the indexed columns from the raw fixed-width
+            // records (no full-row deserialization). Variable values resolve through the overflow arena,
+            // mirroring the fixed-width codec used by the generic path.
+            var arena = GetOverflowArena();
+            foreach (var (colName, hashIdx) in this.hashIndexes)
             {
-                var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
-                var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
-                if (layout.IsVariable[colIdx])
+                int colIdx = -1;
+                for (int c = 0; c < this.Columns.Count; c++)
                 {
-                    if (slot[0] == 0)
+                    if (this.Columns[c].Equals(colName, StringComparison.OrdinalIgnoreCase))
                     {
-                        decoded[i] = null;
-                        continue;
+                        colIdx = c;
+                        break;
                     }
-
-                    var blockOffset = BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
-                    var block = arena.Read(blockOffset);
-                    decoded[i] = block is null ? null : DecodeVariablePayload(type, block);
                 }
-                else
+
+                if (colIdx < 0)
                 {
-                    decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                    continue;
                 }
-            }
 
-            hashIdx.RemoveBatchKeys(decoded, positions);
+                var type = this.ColumnTypes[colIdx];
+                var decoded = new object?[count];
+
+                // §2 split: the DECODE (per row, per index — an arena read per variable value) is measured
+                // separately from the REMOVAL, because they have completely different fixes.
+                long decodeStart = WritePathProfiler.Stamp();
+                for (int i = 0; i < count; i++)
+                {
+                    var payload = raw.AsSpan((int)(i * stride) + 4, layout.FixedSize);
+                    var slot = payload.Slice(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                    if (layout.IsVariable[colIdx])
+                    {
+                        if (slot[0] == 0)
+                        {
+                            decoded[i] = null;
+                            continue;
+                        }
+
+                        // §4b: the slot may carry the payload inline (flag 2) rather than an arena offset, so this
+                        // goes through the shared reader instead of reading an offset unconditionally.
+                        decoded[i] = FixedWidthCodec.TryReadVariableSlot(slot, layout, type, arena, out var variableValue)
+                            ? variableValue
+                            : null;
+                    }
+                    else
+                    {
+                        decoded[i] = ReadTypedValueFromSpan(slot, type, out _);
+                    }
+                }
+
+                WritePathProfiler.Add(WritePathProfiler.Stage.IndexDecode, decodeStart);
+
+                long removeStart = WritePathProfiler.Stamp();
+                hashIdx.RemoveBatchKeys(decoded, positions);
+                WritePathProfiler.Add(WritePathProfiler.Stage.IndexMaintenance, removeStart);
+            }
         }
 
         if (this.storage is { IsInTransaction: true })
         {
             // Transactional delete: buffer the physical offsets so the in-place marker is applied
             // at COMMIT (see DeleteRecordsCore — rollback discards the buffer).
+            long deleteBufferStart = WritePathProfiler.Stamp();
             foreach (var position in positions.Where(static position => position >= 0))
             {
                 this.storage.BufferTombstoneForCommit(DataFile, position);
             }
+
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, deleteBufferStart);
         }
         else
         {
             // Durable DELETE: physically mark the removed records so a reopen skips them.
+            long deleteTombstoneStart = WritePathProfiler.Stamp();
             TombstoneDeletedPositions(positions);
+            WritePathProfiler.Add(WritePathProfiler.Stage.EngineWrite, deleteTombstoneStart);
         }
 
         Interlocked.Add(ref _cachedRowCount, -count);

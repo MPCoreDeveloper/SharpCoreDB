@@ -7,6 +7,7 @@ namespace SharpCoreDB.DataStructures;
 
 using System;
 using System.Collections.Generic;
+using System.Diagnostics.CodeAnalysis;
 using System.Linq;
 using System.Runtime.CompilerServices;
 
@@ -125,6 +126,10 @@ public partial class Table
     /// Clears the logical in-memory row state after a batch rollback.
     /// Forces the table to reload from storage on the next access.
     /// </summary>
+    [UnconditionalSuppressMessage(
+        "Trimming",
+        "IL2075",
+        Justification = "The _rows probe below is best-effort by construction: no Table partial declares a _rows field (a derived table may), the lookup is null-safe and inside a catch, and the storage rollback is the source of truth — so a trimmed field cannot change the outcome.")]
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void ClearLogicalRowsForRollback()
     {

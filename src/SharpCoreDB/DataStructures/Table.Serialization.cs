@@ -430,7 +430,12 @@ public partial class Table
 
     private FixedWidthRecordLayout GetFixedWidthLayout()
     {
-        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes);
+        // §4b: the inline capacity is part of the layout, so it participates in the cache key implicitly — the
+        // capacity is fixed for the lifetime of the table, and both the migration path and the property setter clear
+        // this field. ⚠️ Read the <b>persisted</b> property, never `_config` alone: a reopened table has no config
+        // (Database.Core.cs:385 deserializes the Table from metadata), and reading capacity 0 against records written
+        // with capacity 16 misdecoded every inline slot as an overflow offset — the §4b reopen defect.
+        _fixedWidthLayout ??= FixedWidthRecordLayout.Compute(ColumnTypes, _fixedWidthInlineValueBytes);
         return _fixedWidthLayout;
     }
 
@@ -507,15 +512,166 @@ public partial class Table
 
     /// <summary>Serializes a row using the fixed-width record layout (variable values → overflow arena).</summary>
     private byte[] SerializeRowFixedWidth(Dictionary<string, object> row)
-        => FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+    {
+        // §9-priority-2 instrumentation (2026-09-22): the layout half of a serialization, separated from the record
+        // bytes so the fair-PK INSERT arm's 706 B/row can be split. This arm's layout is computed once per table and
+        // cached, so the expected reading is ~0 bytes/row — which is itself the answer (the allocation is not layout
+        // computation) and it is why the split is measured rather than assumed.
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        var layout = GetFixedWidthLayout();
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        return FixedWidthCodec.SerializeRow(row, Columns, ColumnTypes, layout, GetOverflowArena());
+    }
 
     /// <summary>Serializes a column-ordered row (full table column order) with the fixed-width layout.</summary>
     private byte[] SerializeRowFixedWidth(object[] row)
-        => FixedWidthCodec.SerializeRow(row, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+    {
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        var layout = GetFixedWidthLayout();
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        return FixedWidthCodec.SerializeRow(row, ColumnTypes, layout, GetOverflowArena());
+    }
 
     /// <summary>Deserializes a fixed-width record into a row dictionary (variable values read from the overflow arena).</summary>
     private Dictionary<string, object> DeserializeRowFixedWidth(ReadOnlySpan<byte> data)
         => FixedWidthCodec.DeserializeRow(data, Columns, ColumnTypes, GetFixedWidthLayout(), GetOverflowArena());
+
+    /// <summary>
+    /// Reads the OLD values the in-place UPDATE's hash-index maintenance needs — the updated,
+    /// hash-indexed columns only — straight out of the <b>pre-patch</b> record bytes.
+    /// <para>
+    /// <b>Why before the patch.</b> A fixed-width record's variable columns live in the overflow arena, and
+    /// the patch re-points the column's slot to its new block and frees the one that held the old value, so
+    /// the value the index has to remove is not readable from the record afterwards (a freed block is gone
+    /// from the arena's cache). Reading the columns here reads the value the index actually holds.
+    /// </para>
+    /// <para>
+    /// <b>Why targeted.</b> This replaces the whole-row decode that ran per updated row for the same values:
+    /// measured on the default no-PK job, <c>row-decode</c> was 10,000 calls, 623 B/call and 20,6 % of the
+    /// profiled batch UPDATE pass (worklog, 2026-09-26), and every one of those decodes existed only to feed
+    /// the two index calls below.
+    /// </para>
+    /// Returns null when no updated column is hash-indexed, or when the record's layout cannot be walked —
+    /// the caller then keeps the whole-row decode as its fallback.
+    /// </summary>
+    /// <param name="rawData">The record bytes as they were before the patch.</param>
+    /// <param name="updates">The statement's SET values (only the hash-indexed keys are of interest).</param>
+    private List<(string Column, object? OldValue)>? TryCaptureIndexedOldValues(
+        byte[] rawData,
+        Dictionary<string, object> updates)
+    {
+        if (this.hashIndexes.Count == 0 || rawData is not { Length: > 0 } || updates.Count == 0)
+        {
+            return null;
+        }
+
+        var columnIndexCache = GetColumnIndexCache();
+
+        // Fixed-width records resolve their slots from the layout; legacy records walk the encoded fields.
+        FixedWidthRecordLayout? layout = null;
+        int[]? offsets = null;
+        if (_fixedWidthRecords)
+        {
+            layout = GetFixedWidthLayout();
+            if (rawData.Length != layout.FixedSize)
+            {
+                return null;
+            }
+        }
+        else
+        {
+            offsets = ComputeActualColumnOffsets(rawData);
+            if (offsets is null)
+            {
+                return null;
+            }
+        }
+
+        var arena = layout is null ? null : GetOverflowArena();
+        List<(string Column, object? OldValue)>? captured = null;
+
+        foreach (var (column, _) in this.hashIndexes)
+        {
+            if (!updates.ContainsKey(column) ||
+                !columnIndexCache.TryGetValue(column, out int colIdx) ||
+                colIdx < 0)
+            {
+                continue;
+            }
+
+            object? oldValue;
+            if (layout is not null)
+            {
+                if (colIdx >= layout.ColumnCount)
+                {
+                    continue;
+                }
+
+                var slot = rawData.AsSpan(layout.Offsets[colIdx], layout.SlotSizes[colIdx]);
+                if (layout.IsVariable[colIdx])
+                {
+                    // The same reader the fixed-width deserializer uses, so a NULL slot and the inline /
+                    // overflow encodings decode exactly as they do on the whole-row path.
+                    _ = FixedWidthCodec.TryReadVariableSlot(slot, layout, ColumnTypes[colIdx], arena!, out var variableValue);
+                    oldValue = variableValue;
+                }
+                else
+                {
+                    oldValue = ReadTypedValueFromSpan(slot, ColumnTypes[colIdx], out _);
+                }
+            }
+            else
+            {
+                if (colIdx >= offsets!.Length)
+                {
+                    continue;
+                }
+
+                int offset = offsets[colIdx];
+                if (offset < 0 || offset >= rawData.Length)
+                {
+                    continue;
+                }
+
+                oldValue = ReadTypedValueFromSpan(rawData.AsSpan(offset), ColumnTypes[colIdx], out _);
+            }
+
+            (captured ??= new List<(string Column, object? OldValue)>(1)).Add((column, oldValue));
+        }
+
+        return captured;
+    }
+
+    /// <summary>
+    /// Fallback producer of the same value set as <see cref="TryCaptureIndexedOldValues"/>: decodes a
+    /// whole-row image (the pre-patch bytes) and keeps only the updated, hash-indexed columns. Used when the
+    /// record's layout cannot be walked, so an unusual record keeps the pre-2026-09-26 behaviour rather than
+    /// silently skipping index maintenance.
+    /// </summary>
+    private List<(string Column, object? OldValue)>? TryDecodeIndexedOldValues(
+        Dictionary<string, object>? row,
+        Dictionary<string, object> updates)
+    {
+        if (row is null || this.hashIndexes.Count == 0 || updates.Count == 0)
+        {
+            return null;
+        }
+
+        List<(string Column, object? OldValue)>? captured = null;
+        foreach (var (column, _) in this.hashIndexes)
+        {
+            if (!updates.ContainsKey(column) || !row.TryGetValue(column, out var oldValue))
+            {
+                continue;
+            }
+
+            (captured ??= new List<(string Column, object? OldValue)>(1)).Add((column, oldValue));
+        }
+
+        return captured;
+    }
 
     /// <summary>
     /// Fixed-width in-place patch: overwrites only the updated slots in an existing fixed record
@@ -571,7 +727,10 @@ public partial class Table
         // B6: offset 0 is a VALID arena block (the first block's length prefix sits at 0), so
         // -1 is the sentinel for "no block" (NULL slot) — a real offset 0 must be freed too,
         // otherwise the first variable block leaks and the free-list cannot reuse it.
-        int oldOffset = slot[0] == 0 ? -1 : System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]);
+        // §4b: only flag 1 carries an arena offset. Flag 2 is a payload stored inline (so there is nothing to
+        // free), and flag 0 is NULL. Reading an offset for any non-zero flag — which this did — frees a block
+        // number assembled from payload bytes whenever the slot was inline: corruption, not just a lost value.
+        int oldOffset = slot[0] == 1 ? System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(slot[1..]) : -1;
         if (value == null || value == DBNull.Value)
         {
             if (oldOffset >= 0)
@@ -581,19 +740,32 @@ public partial class Table
 
             slot[0] = 0;
             System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], 0);
+            return;
         }
-        else
+
+        var newPayload = EncodeVariablePayload(columnType, value);
+
+        // §4b: prefer the slot itself when the layout has inline capacity and the new value fits, so updating a
+        // short value never touches the arena — and, when the old value was inline, never frees anything either.
+        var writeLayout = GetFixedWidthLayout();
+        if (FixedWidthCodec.TryWriteInlineVariableSlot(slot, writeLayout, newPayload))
         {
-            var payload = EncodeVariablePayload(columnType, value);
-            var offset = arena.Write(payload);
             if (oldOffset >= 0)
             {
                 arena.Free(oldOffset);
             }
 
-            slot[0] = 1;
-            System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
+            return;
         }
+
+        var offset = arena.Write(newPayload);
+        if (oldOffset >= 0)
+        {
+            arena.Free(oldOffset);
+        }
+
+        slot[0] = 1;
+        System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(slot[1..], (int)offset);
     }
 
     #endregion
@@ -650,7 +822,14 @@ public partial class Table
             return SerializeRowFixedWidth(row);
         }
 
-        byte[] buffer = new byte[ComputeExactRowSize(row)];
+        // §9-priority-2 instrumentation (2026-09-22): the size computation separated from the write, because on the
+        // legacy layout "serialization" was one stamp covering both and the plan's reading named layout computation
+        // as a possible owner of the intermediate buffering.
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        int size = ComputeExactRowSize(row);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        byte[] buffer = new byte[size];
         int bytesWritten = WriteRowOptimized(buffer.AsSpan(), row);
         return bytesWritten == buffer.Length
             ? buffer
@@ -673,7 +852,11 @@ public partial class Table
             return SerializeRowFixedWidth(values);
         }
 
-        byte[] buffer = new byte[ComputeExactRowSize(values)];
+        long layoutStart = Diagnostics.WritePathProfiler.Stamp();
+        int size = ComputeExactRowSize(values);
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.EncodeLayout, layoutStart);
+
+        byte[] buffer = new byte[size];
         int bytesWritten = WriteRowGeneric(buffer.AsSpan(), values);
         return bytesWritten == buffer.Length
             ? buffer

@@ -2,7 +2,10 @@ name: Docker
 
 on:
   push:
-    tags: [ 'v*' ]
+    # The Dockerfile is net11-aware (sdk:11.0 / aspnet:11.0) since the promotion, so v2.1+ tags produce an
+    # image again — the open item recorded in the 2.1.0-RC.3 release notes is closed. v2.0.x is excluded:
+    # that line is parked on release/v2.0 with its own net10.0 Dockerfile.
+    tags: [ 'v*', '!v2.0*' ]
   workflow_dispatch:
 
 env:

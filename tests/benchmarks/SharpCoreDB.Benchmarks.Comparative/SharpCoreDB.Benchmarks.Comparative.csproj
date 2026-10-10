@@ -1,16 +1,37 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
-    <LangVersion>14.0</LangVersion>
+    <LangVersion>preview</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2.0.0.3</Version>
+    <Version>2.1.0</Version>
     <IsPackable>false</IsPackable>
     <AssemblyTitle>SharpCoreDB.Benchmarks.Comparative</AssemblyTitle>
     <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
     <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
+    <!-- S4 (plan §4), the AOT profile's own archive step: every mode in this harness archives its run
+         as JSON and two of them (the gate and write-baseline modes) read that JSON back. The
+         serialization is reflection-based, and `PublishAot` turns reflection-based System.Text.Json
+         OFF by default (the AOT image is trimmed). Without this switch an AOT run measures every arm,
+         prints its whole result table, and *then* dies on the archive write:
+         `Unhandled exception. System.InvalidOperationException: Reflection-based serialization has
+         been disabled for this application. Either use the source generator APIs or explicitly
+         configure the 'JsonSerializerOptions.TypeInfoResolver' property.`
+         Observed 2026-10-09 (worklog session 78) and reproduced 2026-10-10 with the switch explicitly
+         off — exit 0xC0000409 (AOT fail-fast); with the shipped switch the same run exits 0 and prints
+         `Results saved to: …pk_comparative_*.json`. Artifacts: `artifacts/s78-aot-json-red.txt` /
+         `s78-aot-json-green.txt` (AOT binary) and `s78-json-defect-{red,green}.txt` (this switch flipped
+         on the JIT binary alone, to separate the switch from AOT itself — red there exits
+         0xE0434352 at `Program.cs:4014`).
+         The AOT publish also emits IL2026/IL3050 at the archive call sites, so the switch is the
+         proportionate fix rather than rewriting seven archive sites as source-generated contexts:
+         this project is a benchmark TOOL, not shippable product code, and its JSON is diagnostic
+         output. The product is deliberately NOT given this switch: `src/SharpCoreDB` stays AOT-clean by
+         source generation (`SharpCoreDBJsonContext`), which is the analyzer's own advice and what
+         session 56 verified IL-warning-free. -->
+    <JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>
   </PropertyGroup>
 
   <ItemGroup>
@@ -32,5 +53,4 @@
   </ItemGroup>
 
 </Project>
-
 

@@ -5,10 +5,48 @@
 
 // Native AOT smoke test for SharpCoreDB v2.
 //
-// Publish (Windows x64):
+// Publish (Windows x64) — the stock command is the supported path and it works:
 //   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishAot=true
 // Run (JIT):
 //   dotnet run -c Release --project tools/SharpCoreDB.AotSmoke
+//
+// Verified 2026-09-26 on this development box from a shell with LIB/INCLUDE/PATH cleared: the stock command
+// exits 0 in ~20 s, emits a 9 402 880-byte native image with no runtimeconfig.json and no deps.json, and
+// running that image prints the JSON reflection switch as False and PASSes the same scenario as the JIT and
+// trimmed arms. The prerequisite is a Visual Studio instance that both carries
+// Microsoft.VisualStudio.Component.VC.Tools.x86.x64 and is itself marked installed: ILCompiler locates the
+// toolchain through vswhere, and while the instance is half-installed ("installed": false in
+// C:\ProgramData\Microsoft\VisualStudio\Packages\_Instances\<id>\state.json) vswhere hides it and the publish
+// stops with "vswhere.exe failed to locate Visual Studio with Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+// even though the compiler, the desktop lib\x64 CRT and vcvarsall.bat are all on disk. Check the box with:
+//   vswhere -latest -prerelease -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+//   Test-Path "<VS>\VC\Auxiliary\Build\vcvarsall.bat"; Test-Path "<VS>\VC\Tools\MSVC\<ver>\lib\x64\libcmt.lib"
+// If that returns nothing, finish the Visual Studio installation — repair it in the installer UI, or from an
+// elevated prompt run setup.exe modify --installPath "<VS>" --add
+// Microsoft.VisualStudio.Component.VC.Tools.x86.x64 --quiet --norestart — then re-run the stock command.
+//
+// Fallback only, for a box whose VC toolchain is present but whose registration is unusable: ILCompiler's
+// vswhere/vcvarsall probe can be bypassed with its documented environmental-tools switch and the environment
+// vcvarsall would have set built by hand. Adjust the two roots, then:
+//
+//   $vc  = 'C:\Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.51.36231'
+//   $sdk = 'C:\Program Files (x86)\Windows Kits\10'; $sdkv = '10.0.22621.0'
+//   $env:PATH    = "$vc\bin\Hostx64\x64;$sdk\bin\$sdkv\x64;$env:PATH"
+//   $env:INCLUDE = "$sdk\Include\$sdkv\ucrt;$sdk\Include\$sdkv\shared;$sdk\Include\$sdkv\um"
+//   $env:LIB     = "$vc\lib\onecore\x64;$sdk\Lib\$sdkv\ucrt\x64;$sdk\Lib\$sdkv\um\x64"
+//   $env:VCToolsInstallDir = "$vc\"; $env:WindowsSdkDir = "$sdk\"; $env:WindowsSDKVersion = "$sdkv\"
+//   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishAot=true -p:IlcUseEnvironmentalTools=true
+//
+// That fallback produced the same 9 402 880-byte image (session 57). Now that the desktop CRT is deployed,
+// $vc\lib\x64 is the correct first LIB entry; the lib\onecore\x64 form above was session 57's workaround for
+// an instance that only carried the onecore libs.
+// A trimmed publish remains the cheap substitute when no AOT toolchain is available at all, because trimming
+// alone sets the JSON feature switch to false — i.e. the source-generated arm of AotJsonSerializer:
+//   dotnet publish tools/SharpCoreDB.AotSmoke -c Release -r win-x64 -p:PublishTrimmed=true
+//
+// History: sessions 56 and 58 recorded the stock publish as BLOCKED (component missing, then "needs one
+// interactive UAC consent"). The half-installed Visual Studio instance completed itself on 2026-09-26 and the
+// stock command has passed since; the full evidence is in docs/performance/WORKLOG.md, session 59.
 //
 // Exercises the core paths that must work under Native AOT:
 //   CREATE TABLE / CREATE INDEX, InsertBatch, parameterized ExecuteQuery,
@@ -18,6 +56,7 @@
 
 using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
+using System.Text.Json;
 
 // Smoke-test tool: throwaway local password, never a real credential.
 const string AotPassword = "aot123"; // NOSONAR:S2068 - intentional test fixture value
@@ -26,6 +65,12 @@ var services = new ServiceCollection();
 services.AddSharpCoreDB();
 var sp = services.BuildServiceProvider();
 var factory = sp.GetRequiredService<DatabaseFactory>();
+
+// State which JsonSerializer arm this build runs: the reflection resolver while reflection is enabled (the JIT
+// default) or the source-generated contexts where it is disabled (trimmed/Native AOT publications). It is the only
+// difference between the two arms of AotJsonSerializer, so printing it is what makes a PASS attributable to one.
+Console.WriteLine($"[aot-smoke] JsonSerializer.IsReflectionEnabledByDefault = {JsonSerializer.IsReflectionEnabledByDefault}");
+
 return await RunAotSmokeAsync(factory);
 
 /// <summary>

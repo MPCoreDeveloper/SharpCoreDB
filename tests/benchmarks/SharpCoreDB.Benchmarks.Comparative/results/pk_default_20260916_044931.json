@@ -1,0 +1,22 @@
+{
+  "SharpCoreDB (SQL, PK, default config)": {
+    "InsertTime": 1.9693614,
+    "InsertOpsPerSec": 50777,
+    "ReadTime": 0.2258913,
+    "ReadOpsPerSec": 44269,
+    "UpdateTime": 0.079509,
+    "UpdateOpsPerSec": 125771,
+    "DeleteTime": 0.0990111,
+    "DeleteOpsPerSec": 100998
+  },
+  "SQLite": {
+    "InsertTime": 0.6786258,
+    "InsertOpsPerSec": 147356,
+    "ReadTime": 0.1313418,
+    "ReadOpsPerSec": 76137,
+    "UpdateTime": 0.0474756,
+    "UpdateOpsPerSec": 210634,
+    "DeleteTime": 0.0377565,
+    "DeleteOpsPerSec": 264855
+  }
+}

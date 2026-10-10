@@ -6,6 +6,7 @@ namespace SharpCoreDB.Tests.Storage;
 
 using System;
 using System.IO;
+using System.IO.Compression;
 using System.Text;
 using SharpCoreDB;
 using SharpCoreDB.Compression;
@@ -457,6 +458,141 @@ public class CompressionLevelTests
 
         Cleanup(path);
     }
+
+    // ==========================================================
+    // Zstd span path (round-3 research rec 8, 2026-10-09)
+    // ==========================================================
+    // BlockCompressor.Compress no longer wraps a ZstandardStream round trip for Zstd: it reuses a
+    // thread-static ZstandardEncoder through Reset() and fills a destination rented from
+    // ArrayPool<byte>.Shared and sized by GetMaxCompressedLength. These tests pin the three things
+    // that change can break — the round trip at every block size, frame stability while the encoder
+    // is reused, and the per-block allocation the change exists to remove.
+
+#if NET11_0_OR_GREATER
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    [InlineData(255)]
+    [InlineData(256)]
+    [InlineData(1024)]
+    [InlineData(4096)]
+    [InlineData(65536)]
+    public void BlockCompressor_Zstd_BlockSizesAroundThreshold_RoundTrip(int size)
+    {
+        var data = new byte[size];
+        for (var i = 0; i < size; i++)
+        {
+            data[i] = (byte)((i / 32) % 7);
+        }
+
+        var compressed = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, OptionalCompressionLevel.Optimal);
+        var restored = BlockCompressor.Decompress(compressed, BlockCompressionMode.Zstd);
+
+        Assert.Equal(data, restored);
+    }
+
+    [Theory]
+    [InlineData(OptionalCompressionLevel.Fastest)]
+    [InlineData(OptionalCompressionLevel.Optimal)]
+    [InlineData(OptionalCompressionLevel.SmallestSize)]
+    public void BlockCompressor_Zstd_ReusedEncoderAcrossCallsAndLevels_ProducesStableFrames(OptionalCompressionLevel level)
+    {
+        var data = RealisticCompressiblePayload();
+
+        var first = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, level);
+
+        // A different level rebuilds the thread-static encoder; returning to the first level must
+        // reset the reused instance rather than carry the previous frame's state into this one.
+        foreach (var other in new[] { OptionalCompressionLevel.Fastest, OptionalCompressionLevel.Optimal, OptionalCompressionLevel.SmallestSize })
+        {
+            _ = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, other);
+        }
+
+        var again = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, level);
+
+        Assert.Equal(first, again);
+        Assert.True(again.Length < data.Length, "The payload is compressible; a frame that is not smaller means the encoder emitted garbage.");
+        Assert.Equal(data, BlockCompressor.Decompress(again, BlockCompressionMode.Zstd));
+    }
+
+    [Fact]
+    public void BlockCompressor_Zstd_Compress_AllocatesOnlyTheReturnedFrame()
+    {
+        // The lever rec 8 exists for. Measured on .NET 11 RC.1 in a standalone probe (2026-10-09), the
+        // stream shape allocated 2.480 B for a 4 KB block and 33.896 B for a 64 KB one — the
+        // MemoryStream, the ZstandardStream and their internal buffers. The encoder shape fills a
+        // pooled destination, so the only allocation left is the returned frame (~800 B for this
+        // payload). 4.096 B leaves ~5x headroom above the frame and stays ~8x below the old shape.
+        var data = RealisticCompressiblePayload();
+
+        // Warm-up: the first call creates this thread's encoder and rents from the shared pool.
+        _ = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, OptionalCompressionLevel.Optimal);
+
+        var before = GC.GetAllocatedBytesForCurrentThread();
+        var compressed = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, OptionalCompressionLevel.Optimal);
+        var allocated = GC.GetAllocatedBytesForCurrentThread() - before;
+
+        Assert.True(compressed.Length < data.Length, $"Expected a smaller frame, got {compressed.Length} from {data.Length} bytes.");
+
+        Assert.True(
+            allocated <= 4096,
+            $"Compressing a {data.Length:N0}-byte block allocated {allocated:N0} bytes; at most 4.096 was expected (the returned frame).");
+    }
+#endif
+
+
+    // ==========================================================
+    // Zstd frames across the writer change (rec 8 compatibility)
+    // ==========================================================
+    // Blocks written by an earlier build — or by any other Zstandard writer — must keep reading, and
+    // frames written from now on must stay readable by a plain ZstandardStream. Neither direction may
+    // depend on the frame being byte-identical, because the encoder's frame is not: measured at
+    // quality 5 it was 6 bytes smaller than the stream's on a 4 KB block and 1 byte larger on a
+    // 64 KB one (probe, RC.1) — different sizes in either direction.
+
+#if NET11_0_OR_GREATER
+    [Theory]
+    [InlineData(1)]
+    [InlineData(5)]
+    [InlineData(19)]
+    public void BlockCompressor_Decompress_ReadsFramesWrittenByTheStreamWriter(int quality)
+    {
+        // Reproduces the pre-rec-8 writer exactly: ZstandardStream over a MemoryStream, with the
+        // checksum the options request at each of our three levels.
+        var data = RealisticCompressiblePayload();
+
+        using var output = new MemoryStream();
+        using (var writer = new ZstandardStream(
+            output,
+            new ZstandardCompressionOptions { Quality = quality, AppendChecksum = true },
+            leaveOpen: true))
+        {
+            writer.Write(data);
+        }
+
+        var legacyFrame = output.ToArray();
+
+        Assert.Equal(data, BlockCompressor.Decompress(legacyFrame, BlockCompressionMode.Zstd));
+    }
+
+    [Theory]
+    [InlineData(OptionalCompressionLevel.Fastest)]
+    [InlineData(OptionalCompressionLevel.Optimal)]
+    [InlineData(OptionalCompressionLevel.SmallestSize)]
+    public void BlockCompressor_Zstd_Frames_StayReadableByAPlainZstandardStream(OptionalCompressionLevel level)
+    {
+        var data = RealisticCompressiblePayload();
+
+        var frame = BlockCompressor.Compress(data, BlockCompressionMode.Zstd, level);
+
+        using var input = new MemoryStream(frame);
+        using var decoder = new ZstandardStream(input, CompressionMode.Decompress);
+        using var restored = new MemoryStream();
+        decoder.CopyTo(restored);
+
+        Assert.Equal(data, restored.ToArray());
+    }
+#endif
 
     // ==========================================================
     // Helpers

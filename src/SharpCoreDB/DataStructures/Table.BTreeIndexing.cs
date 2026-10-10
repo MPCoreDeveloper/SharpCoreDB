@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.DataStructures;
 
+using SharpCoreDB.Interfaces;
 using SharpCoreDB.Services;
 using SharpCoreDB.Storage.Hybrid;
 using System;
@@ -142,7 +143,7 @@ public partial class Table
     /// <summary>
     /// Gets the B-tree index for a column (for range scan operations).
     /// </summary>
-    internal object? GetBTreeIndex(string columnName)
+    internal ITypeErasedIndex? GetBTreeIndex(string columnName)
     {
         var index = _btreeManager?.GetIndex(columnName);
         
@@ -273,24 +274,12 @@ public partial class Table
             Console.WriteLine($"[BTREE]   endKey: {endKey} (type: {endKey.GetType().Name})");
 #endif
 
-            // Call FindRange via reflection (since type is dynamic)
-            var findRangeMethod = btreeIndex.GetType().GetMethod("FindRange");
-            if (findRangeMethod == null)
-            {
-#if DEBUG
-                Console.WriteLine($"[BTREE] ❌ FindRange method not found on index type: {btreeIndex.GetType().Name}");
-                Console.WriteLine($"[BTREE] ════════════════════════════════════════");
-#endif
-                return null;
-            }
-
+            // Range scan through the non-generic index view: no GetMethod, no MethodInfo.Invoke
 #if DEBUG
             Console.WriteLine($"[BTREE] 🚀 Calling FindRange on B-tree index...");
 #endif
 
-            var positions = (IEnumerable<long>)findRangeMethod.Invoke(
-                btreeIndex,
-                new[] { startKey, endKey });
+            var positions = btreeIndex.FindRange(startKey, endKey);
 
             int positionCount = 0;
             foreach (var pos in positions)
@@ -455,16 +444,12 @@ public partial class Table
                 if (index == null)
                     continue;
 
-                // Insert via reflection (dynamic type)
-                var insertMethod = index.GetType().GetMethod("Add");
-                if (insertMethod != null)
+                // Convert the value to the index's key type, then insert through the non-generic
+                // index view (no GetMethod, no MethodInfo.Invoke)
+                var convertedValue = ConvertValueForBTreeKey(value, this.ColumnTypes[i]);
+                if (convertedValue != null)
                 {
-                    // Convert value to correct type
-                    var convertedValue = ConvertValueForBTreeKey(value, this.ColumnTypes[i]);
-                    if (convertedValue != null)
-                    {
-                        insertMethod.Invoke(index, new[] { convertedValue, position });
-                    }
+                    index.Add(convertedValue, position);
                 }
             }
             catch (Exception)

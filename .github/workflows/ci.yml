@@ -1,18 +1,27 @@
+# Primary pipeline: `master` is the net11.0 / C# 15 preview line, built with the .NET 11 SDK pinned in
+# global.json. The net10.0 / C# 14 line is parked on `release/v2.0` and is built by ci-net10.yml.
 name: CI/CD Pipeline
 
 on:
   push:
     branches: [ master, develop ]
-    tags: [ 'v*' ]
+    # v2.0.x tags belong to the parked net10 line (ci-net10.yml); without the exclusion a servicing tag
+    # shows a red run here that says nothing about the net11 release itself.
+    tags: [ 'v*', '!v2.0*' ]
   pull_request:
     branches: [ master, develop ]
+  # Manual runs exist for the core-only publish job below (`publish-core`); build and coverage run too,
+  # while pack/publish stay push-to-master only.
+  workflow_dispatch:
 
 permissions:
   contents: read
   packages: write
 
 env:
-  DOTNET_VERSION: '10.0.x'
+  # .NET 11 SDK pin. `include-prerelease` stays until the GA SDK ships (2026-11-10); after that the value
+  # becomes '11.0.x' and the flag can be dropped. One place to change, three setup steps consume it.
+  DOTNET_VERSION: '11.0.100-rc.1.26425.128'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -34,10 +43,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 10
+    - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '10.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        include-prerelease: true
 
     - name: Display .NET info
       run: dotnet --info
@@ -83,10 +93,21 @@ jobs:
 
         Write-Host "No vulnerable NuGet packages detected."
 
+    # .github/SIMD_STANDARDS.md bans System.Numerics.Vector<T>, and nothing else in this build fails
+    # when it comes back — the last real usage survived until 2026-09-26. The checker self-tests its own
+    # detector first, then scans src/**/*.cs; both exit codes are propagated explicitly.
+    - name: Fail on banned portable SIMD API
+      shell: pwsh
+      run: |
+        ./tools/check-banned-simd-api.ps1 -SelfTest
+        if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+        ./tools/check-banned-simd-api.ps1
+        exit $LASTEXITCODE
+
     - name: Build
       run: dotnet build SharpCoreDB.CI.slnf --configuration Release --no-restore /p:ContinuousIntegrationBuild=true /p:UseLocalProjectReferences=true
 
-    # MTP (xunit.v3) test hosts on .NET 10 no longer support `dotnet test`'s VSTest flags
+    # MTP (xunit.v3) test hosts on .NET 11 do not support `dotnet test`'s VSTest flags
     # (e.g. --collect "XPlat Code Coverage", --logger trx, --blame-hang). CI runs the MTP
     # executable directly, which understands the same VSTest filter expression and writes TRX.
     - name: Test SharpCoreDB.Tests
@@ -94,7 +115,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.Tests
-        tests/SharpCoreDB.Tests/bin/Release/net10.0/SharpCoreDB.Tests \
+        tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.Tests/SharpCoreDB.Tests.trx"
       timeout-minutes: 30
@@ -107,7 +128,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.VectorSearch.Tests
-        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net10.0/SharpCoreDB.VectorSearch.Tests \
+        tests/SharpCoreDB.VectorSearch.Tests/bin/Release/net11.0/SharpCoreDB.VectorSearch.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.trx"
       timeout-minutes: 15
@@ -120,7 +141,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.EntityFrameworkCore.Tests
-        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net10.0/SharpCoreDB.EntityFrameworkCore.Tests \
+        tests/SharpCoreDB.EntityFrameworkCore.Tests/bin/Release/net11.0/SharpCoreDB.EntityFrameworkCore.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.trx"
       timeout-minutes: 15
@@ -133,7 +154,7 @@ jobs:
       run: |
         set -euo pipefail
         mkdir -p ./TestResults/SharpCoreDB.Functional.Linq2DB.Tests
-        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net10.0/SharpCoreDB.Functional.Linq2DB.Tests \
+        tests/SharpCoreDB.Functional.Linq2DB.Tests/bin/Release/net11.0/SharpCoreDB.Functional.Linq2DB.Tests \
           -filterVSTest "${{ env.CI_TEST_FILTER }}" \
           -result-trx "./TestResults/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.trx"
       timeout-minutes: 10
@@ -149,6 +170,65 @@ jobs:
         path: '**/TestResults/**/*.trx'
         if-no-files-found: ignore
 
+  # Dedicated coverage job, carried over from the v2.1 RC pipeline (ci-net11.yml) when it became the
+  # primary one. `dotnet test` cannot collect here: xUnit v3 runs on Microsoft.Testing.Platform, which
+  # rejects the VSTest target, and the test host is xUnit's own in-process runner, which registers no
+  # coverage extension (its `--help` has none, and `--coverage` answers "unknown option"). The reports
+  # therefore come from `dotnet-coverage collect` wrapped around the same test hosts the build job runs —
+  # tools/measure-coverage.ps1 does that, merges the reports and enforces codecov.yml's 18% floor in-job,
+  # so the verdict does not depend on the upload succeeding. Ubuntu only and once: it runs the suites a
+  # second time under instrumentation, and line coverage does not change per operating system.
+  coverage:
+    name: Coverage (net11.0)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    # The global.json pin already selects the SDK; include-prerelease keeps setup-dotnet from rejecting it.
+    - name: Setup .NET 11 (RC)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        include-prerelease: true
+
+    - name: Restore tools
+      run: dotnet tool restore --configfile NuGet.Config
+
+    # The aggregation and the floor comparison are self-tested before any suite runs, the way
+    # tools/check-banned-simd-api.ps1 self-tests its detector before scanning the tree.
+    - name: Self-test the coverage gate
+      shell: pwsh
+      run: ./tools/measure-coverage.ps1 -SelfTest
+
+    - name: Measure coverage and enforce the floor
+      shell: pwsh
+      run: ./tools/measure-coverage.ps1 -Floor 0.18
+
+    - name: Upload coverage reports
+      if: ${{ !cancelled() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-reports
+        path: artifacts/coverage/*.cobertura.xml
+        if-no-files-found: error
+
+    # No `flags:` on purpose: codecov.yml's project and patch statuses read the unflagged coverage, so
+    # flagging these uploads would leave those statuses with no data (`if_no_uploads: error`).
+    - name: Upload to Codecov
+      if: ${{ !cancelled() }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: artifacts/coverage/*.cobertura.xml
+        disable_search: true
+        fail_ci_if_error: false
+        verbose: true
+
   pack:
     name: Pack NuGet Packages
     runs-on: ubuntu-latest
@@ -161,10 +241,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 10
+    - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '10.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        include-prerelease: true
 
     - name: Discover packable projects
       id: discover-packable
@@ -235,10 +316,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 10
+    - name: Setup .NET 11 (RC)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '10.0.x'
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        include-prerelease: true
 
     - name: Download NuGet packages
       uses: actions/download-artifact@v4
@@ -326,3 +408,41 @@ jobs:
         echo "" >> $GITHUB_STEP_SUMMARY
         echo "### Packages" >> $GITHUB_STEP_SUMMARY
         ls -1 ./artifacts/*.nupkg | xargs -I {} basename {} >> $GITHUB_STEP_SUMMARY
+
+  # Core-package-only publish (workflow_dispatch). Carried over from ci-net11.yml so the RC workflow's
+  # ability to push just SharpCoreDB to NuGet.org survives the promotion; the full package set goes
+  # through publish-manual.yml, which packs SharpCoreDB.CI.slnf in dependency order.
+  publish-core:
+    name: Pack + Publish core to NuGet.org (manual)
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
+    timeout-minutes: 30
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 11 (RC)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+        include-prerelease: true
+
+    - name: Pack SharpCoreDB core
+      run: dotnet pack src/SharpCoreDB/SharpCoreDB.csproj --configuration Release --output ./artifacts --configfile NuGet.Config
+
+    - name: Push to NuGet.org
+      shell: bash
+      env:
+        NUGET_API_KEY: ${{ secrets.NUGET_API_KEY }}
+      run: |
+        set -euo pipefail
+        for pkg in ./artifacts/SharpCoreDB.*.nupkg; do
+          [ -f "$pkg" ] || continue
+          echo "  Pushing $(basename "$pkg")"
+          dotnet nuget push "$pkg" \
+            --api-key "$NUGET_API_KEY" \
+            --source https://api.nuget.org/v3/index.json \
+            --skip-duplicate
+        done

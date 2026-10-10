@@ -153,6 +153,38 @@ public sealed class VectorQueryOptimizerTests : IDisposable
         Assert.True(_manager.HasIndex("docs", "embedding"));
     }
 
+    [Theory]
+    [InlineData("FLAT", VectorIndexType.Flat)]
+    [InlineData("HNSW", VectorIndexType.Hnsw)]
+    [InlineData("DISKANN", VectorIndexType.DiskAnn)]
+    [InlineData("diskann", VectorIndexType.DiskAnn)]
+    public void BuildIndex_FromSqlIndexType_SelectsRequestedIndexKind(string sqlType, VectorIndexType expected)
+    {
+        var table = CreateTable(4, 10);
+
+        _optimizer.BuildIndex(table, "docs", "embedding", sqlType);
+
+        var index = _manager.GetIndex("docs", "embedding");
+        Assert.NotNull(index);
+        Assert.Equal(expected, index.IndexType);
+    }
+
+    /// <summary>
+    /// Regression: <c>USING DISKANN</c> used to fall through the optimiser's type switch and build a
+    /// FlatIndex, so the DDL silently produced an exact scan instead of the requested graph index.
+    /// </summary>
+    [Fact]
+    public void BuildIndex_DiskAnn_IsNotSilentlyDowngradedToFlat()
+    {
+        var table = CreateTable(4, 10);
+
+        _optimizer.BuildIndex(table, "docs", "embedding", "DISKANN");
+
+        var plan = _optimizer.GetExplainPlan("docs", "embedding");
+        Assert.Contains("DiskAnn", plan);
+        Assert.DoesNotContain("Flat", plan);
+    }
+
     [Fact]
     public void DropIndex_ViaOptimizer_RemovesIndex()
     {

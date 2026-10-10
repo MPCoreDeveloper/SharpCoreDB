@@ -141,13 +141,20 @@
 
 ---
 
-### .NET 11 / C# 15 migration (v2.1, after Nov 2026 GA)
->> **Why:** Runtime Async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 are
->> automatic wins on hot paths. v2.0.x stays on .NET 10 / C# 14 (locked).
+### Munarium-inspired Vector & Artifact features (v2.1.0-RC.3 — net11.0 / C# 15 preview)
 
-- `LangVersion` 14 → 15; keep `net10.0` via `TargetFrameworks` during transition
-- Adopt Runtime Async in async hot paths; AVX-VNNI-512/SVE2 behind `SIMD_ENABLED` guards
-- Optional Zstandard WAL/page compression flag (default off)
+- ✅ **Content-verified immutable artifacts** (`ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex`, content-addressed `Verify()` with `BuildResult`).
+- ⚠️ **Hybrid fusion scoring — partial** (`HybridFusionAlpha` in `VectorSearchOptions`, recorded in the manifest; the weighted scorer is not yet wired into GraphRAG ranking).
+- ✅ **DiskANN-style index** (`DiskAnnIndex`, `DiskAnnConfig`, recall-focused graph, crossover testing helper — inspired by munarium-datastore `vector_diskann.rs`) + `CREATE VECTOR INDEX … USING DISKANN` DDL.
+- ⬜ **True C# 15 union types** for `BuildResult` — deferred to .NET 11 GA (currently a `record` hierarchy).
+
+### .NET 11 / C# 15 line (v2.1)
+>> **Branch model:** `release/v2.1.0.0-*` is **net11.0-only** with **C# 15 preview** (the current 2.1 RC line).
+>> `master` stays on **net10.0 / C# 14** as the v2.0 stable packages.
+
+- Runtime Async enabled on the core project (`Features=runtime-async=on`)
+- Native Zstandard compression (`ZstandardStream`) with quality presets + frame checksum
+- AVX-VNNI-512 / SVE2 intrinsics and the SIMD lane APIs remain open for a later pass
 
 ---
 
@@ -316,7 +323,7 @@ Have a feature idea? Found a bug? Want to work on a roadmap item?
 - 💡 [Propose a feature](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/new)
 - 🔀 [Submit a PR](https://github.com/MPCoreDeveloper/SharpCoreDB/pulls)
 
-All contributions follow the standards in `.github/CODING_STANDARDS_CSHARP14.md`.
+All contributions follow the standards in `.github/CODING_STANDARDS.md`.
 
 ---
 

@@ -103,6 +103,14 @@ public sealed class BinaryProtocolHandler(
                 await ProcessMessageAsync(message, session, writer, cancellationToken);
             }
         }
+        catch (Exception ex) when (IsConnectionLost(ex))
+        {
+            // An ordinary client disconnect — a TCP reset (WSAECONNRESET / error 10053), a peer that
+            // vanished mid-message, or the socket closed under an in-flight write — is not a server
+            // fault. There is nobody left to answer, so report it without a stack trace and do not
+            // count it as a failed request (session 60's finding (b)).
+            _logger.LogInformation("Binary protocol client {ClientAddress} disconnected", clientAddress);
+        }
         catch (Exception ex)
         {
             _metricsCollector.RecordFailedRequest("binary/connection", "CONNECTION_ERROR");
@@ -115,6 +123,70 @@ public sealed class BinaryProtocolHandler(
             _logger.LogInformation("Binary protocol connection closed for {ClientAddress}", clientAddress);
         }
     }
+
+    /// <summary>
+    /// Returns true when the exception is the client's transport failing, i.e. the peer went away.
+    /// A <see cref="NetworkStream"/> reports a socket failure as an <see cref="IOException"/> that wraps
+    /// the <see cref="SocketException"/> (or carries the Winsock error in its HResult), a peer that
+    /// closed mid-message as <see cref="EndOfStreamException"/>, and a socket closed under an operation
+    /// as <see cref="ObjectDisposedException"/>; a cancelled connection surfaces as
+    /// <see cref="OperationCanceledException"/>. Nothing else is treated as a disconnect, so a genuine
+    /// server-side failure (including a storage <see cref="IOException"/>) still logs loudly.
+    /// </summary>
+    /// <param name="exception">Exception raised while serving a connection.</param>
+    /// <returns>True when the peer is gone and there is nothing left to report or answer.</returns>
+    private static bool IsClientDisconnect(Exception exception)
+    {
+        for (Exception? current = exception; current is not null; current = current.InnerException)
+        {
+            switch (current)
+            {
+                case SocketException socket when IsPeerGone(socket.SocketErrorCode):
+                    return true;
+                case OperationCanceledException:
+                case ObjectDisposedException:
+                    return true;
+                case IOException io when IsPeerGone(io.HResult):
+                    return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Connection-level variant of <see cref="IsClientDisconnect"/>: a peer that closes the socket in the
+    /// middle of a protocol message makes the next <c>ReadExactly</c> throw <see cref="EndOfStreamException"/>,
+    /// which is a disconnect for this handler but not inside query execution (where the same exception
+    /// would mean a truncated data file and must be reported).
+    /// </summary>
+    /// <param name="exception">Exception raised while serving a connection.</param>
+    /// <returns>True when the peer is gone.</returns>
+    private static bool IsConnectionLost(Exception exception)
+        => exception is EndOfStreamException || IsClientDisconnect(exception);
+
+    /// <summary>Returns true for the socket error codes that mean "the client is gone".</summary>
+    /// <param name="errorCode">Winsock error reported by <see cref="SocketException"/> or an I/O HResult.</param>
+    /// <returns>True when the peer went away.</returns>
+    private static bool IsPeerGone(SocketError errorCode) => errorCode is
+        SocketError.ConnectionReset or      // 10054: an existing connection was forcibly closed
+        SocketError.ConnectionAborted or    // 10053: the host software aborted an established connection
+        SocketError.Shutdown or             // 10058: a send/receive request was issued after shutdown
+        SocketError.NetworkReset or
+        SocketError.NotConnected or
+        SocketError.Disconnecting or
+        SocketError.TimedOut;
+
+    /// <summary>
+    /// Returns true when an <see cref="IOException"/> carries a Winsock error code in its HResult
+    /// (0x8007_0000 | error), which is how the socket layer reports failures that arrive wrapped.
+    /// </summary>
+    /// <param name="hResult">HResult of the I/O exception.</param>
+    /// <returns>True when the wrapped Winsock code means the peer went away.</returns>
+    private static bool IsPeerGone(int hResult)
+        => hResult is unchecked((int)0x80072745)   // WSAECONNABORTED (10053)
+            or unchecked((int)0x80072746)          // WSAECONNRESET (10054)
+            or unchecked((int)0x8007274C);         // WSAETIMEDOUT (10060)
 
     /// <summary>
     /// Reads and parses the startup message from the raw stream.
@@ -306,6 +378,17 @@ public sealed class BinaryProtocolHandler(
             await writer.WriteBackendKeyDataAsync(session.SessionId.GetHashCode(), 0, cancellationToken);
 
             return session;
+        }
+        catch (Exception ex) when (IsConnectionLost(ex))
+        {
+            // The client left while the server was authenticating or writing the startup response
+            // (the reported case: TCP error 10053 during the parameter-status burst). That is not an
+            // authentication failure — the peer is gone, so log an information line without a stack
+            // trace instead of the misleading "Authentication failed for user …" error.
+            _logger.LogInformation(
+                "Binary protocol client for user '{User}' disconnected during startup",
+                startup.User);
+            return null;
         }
         catch (UnauthorizedAccessException ex)
         {
@@ -503,6 +586,13 @@ public sealed class BinaryProtocolHandler(
                 connection.Database.ExecuteSQL(queryText);
                 await writer.WriteCommandCompleteAsync(BuildCommandTag(normalizedSql, 0), cancellationToken);
             }
+        }
+        catch (Exception ex) when (IsClientDisconnect(ex))
+        {
+            // The peer vanished while the server was producing the response. Writing an error response
+            // now would only fail again, so report the disconnect and end the message handling here.
+            _logger.LogInformation("Binary protocol client disconnected while executing a query");
+            return;
         }
         catch (Exception ex)
         {

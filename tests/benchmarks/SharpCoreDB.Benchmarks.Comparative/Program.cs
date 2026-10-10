@@ -5,6 +5,7 @@
 
 using System.Diagnostics;
 using System.Globalization;
+using System.Text;
 using System.Text.Json;
 using BLite.Bson;
 using BLite.Core;
@@ -32,6 +33,12 @@ class Program
     const string BannerTop = "╔══════════════════════════════════════════════════════════╗";
     const string BannerBottom = "╚══════════════════════════════════════════════════════════╝";
     const string ResultsDirName = "results";
+    const string GateBaselineFolder = "baselines";
+    const string GateBaselineFile = "dual-mode-baseline.json";
+    const double GateDefaultFactor = 1.5;
+    const double GateNoisySpread = 2.5;
+    const int GateExitRegression = 1;
+    const int GateExitInconclusive = 2;
     const string BenchDbPassword = "bench123"; // NOSONAR:S2068 - throwaway local benchmark credential, not a real secret
     const string EmailColumn = "email";
     const string ScoreColumn = "score";
@@ -39,8 +46,104 @@ class Program
     const string CreateDocsIndexSql = "CREATE INDEX idx_docs_name ON docs(name)";
     const string SelectDocsByNameSql = "SELECT * FROM docs WHERE name = @name";
 
+    // ── S1 (plan §4): the SQLite arm's pragma set is HALF the regime banner ──────────────────────
+    // The SQLite side of every ratio was always tuned (WAL + NORMAL) and that tuning was printed
+    // nowhere, so a reader could not reproduce the reference. That mattered less when the only reader
+    // was the author; it matters now, because the plan's goal is a public claim. SQLite's own
+    // documented surface can swing its write throughput by more than 2× (sqlite.org/pragma.html; the
+    // vendor's own obsolete benchmark page shows nosync at 1.4–1.7× on write tests), and SQLite
+    // publishes NO CRUD benchmark at all — so the reference is a *choice*, and a choice has to travel
+    // with the number. SHARPCOREDB_SQLITE_PRAGMAS overrides the set for a deliberate A/B; the override
+    // is printed, so a tuned reference can never be mistaken for the default one.
+    const string SqlitePragmaEnvVar = "SHARPCOREDB_SQLITE_PRAGMAS";
+
+    /// <summary>The reference regime: what the SQLite arm is opened with unless overridden.</summary>
+    static readonly string[] DefaultSqlitePragmas =
+    [
+        "journal_mode=WAL",
+        "synchronous=NORMAL",
+    ];
+
+    /// <summary>
+    /// The pragma set the SQLite reference arm is opened with — <see cref="DefaultSqlitePragmas"/>, or
+    /// <c>SHARPCOREDB_SQLITE_PRAGMAS</c> (<c>;</c>-separated <c>name=value</c> pairs) when set.
+    /// </summary>
+    static string[] SqlitePragmas()
+    {
+        var raw = Environment.GetEnvironmentVariable(SqlitePragmaEnvVar);
+        if (!string.IsNullOrWhiteSpace(raw))
+        {
+            var parsed = raw.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+            if (parsed.Length > 0)
+            {
+                return parsed;
+            }
+        }
+
+        return DefaultSqlitePragmas;
+    }
+
+    /// <summary>The resolved pragma set as one printable string, for the banner.</summary>
+    static string SqlitePragmaBanner() => string.Join(", ", SqlitePragmas());
+
+    /// <summary>
+    /// Where this harness puts its data files. Defaults to the OS temp path, but
+    /// <c>SHARPCOREDB_BENCH_TEMP</c> overrides it — and that override is what makes a Defender path
+    /// exclusion actually <em>effective</em>.
+    /// <para>
+    /// The ambient <c>TEMP</c> cannot be relied on for this. The harness is launched by whatever shell
+    /// runs it, and that shell's environment block may predate the exclusion — an agent's shell, for
+    /// instance, inherits VS Code's block (which is read at VS Code start-up) rather than the current
+    /// user environment. Measured on the campaign dev box: with a Defender exclusion on
+    /// <c>D:\scdb-bench-tmp</c>, the harness still wrote every database into
+    /// <c>C:\Users\&lt;user&gt;\AppData\Local\Temp</c> — i.e. outside the exclusion — because that is
+    /// what <c>Path.GetTempPath()</c> returned. An explicit, per-process setting removes the guesswork.
+    /// </para>
+    /// </summary>
+    static string BenchTempDirectory()
+    {
+        var configured = Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_TEMP");
+        if (!string.IsNullOrWhiteSpace(configured))
+        {
+            Directory.CreateDirectory(configured);
+            return configured;
+        }
+
+        return Path.GetTempPath();
+    }
+
     static async Task Main(string[] args)
     {
+        // §2 rule 6: the regime travels with every number. These switches are environment variables and the shell that
+        // runs this harness persists, so a leaked switch has already cost one session of figures (plan §11) — and an
+        // unstated regime is how a "default" measurement turns out not to be one. Print whatever is set, every run.
+        var regimeSwitches = Environment.GetEnvironmentVariables()
+            .Keys.Cast<object>()
+            .Select(k => k.ToString()!)
+            .Where(k => k.StartsWith("SHARPCOREDB_", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(k => k, StringComparer.OrdinalIgnoreCase)
+            .Select(k => $"{k}={Environment.GetEnvironmentVariable(k)}")
+            .ToList();
+        Console.WriteLine(regimeSwitches.Count == 0
+            ? "REGIME: no SHARPCOREDB_* switches set — harness and product defaults apply."
+            : $"REGIME (overridden): {string.Join("  ", regimeSwitches)}");
+
+        // S1 (plan §4): the OTHER half of the regime. Every ratio this harness publishes is SharpCoreDB
+        // over SQLite, so the SQLite arm's tuning is part of the number rather than a detail of the
+        // harness. Print it on every run, beside our own switches, so neither side can drift silently.
+        Console.WriteLine($"REGIME (SQLite reference): {SqlitePragmaBanner()}"
+            + (Environment.GetEnvironmentVariable(SqlitePragmaEnvVar) is null
+                ? "  [built-in reference set]"
+                : $"  [from {SqlitePragmaEnvVar}]"));
+
+        // Where the data files will land. Printed because a measurement is only reproducible if the
+        // I/O path is known — and because a Defender exclusion that does not cover THIS directory is
+        // an exclusion that does nothing (plan §6.7).
+        Console.WriteLine($"REGIME (data dir): {BenchTempDirectory()}"
+            + (Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_TEMP") is null
+                ? "  [OS temp - set SHARPCOREDB_BENCH_TEMP to move it onto an excluded path]"
+                : "  [from SHARPCOREDB_BENCH_TEMP]"));
+
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
         if (args.Any(a => a.Equals("--readtest", StringComparison.OrdinalIgnoreCase)))
         {
@@ -55,10 +158,57 @@ class Program
             return;
         }
 
+        // Optional: --multirowinsert → focused multi-row `INSERT … VALUES (…),(…)` micro-benchmark. This
+        // statement shape used to lower to one Table.Insert per row — one standalone write-through append
+        // each — and now routes to the batched core, so the mode exists to measure exactly that change.
+        if (args.Any(a => a.Equals("--multirowinsert", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunMultiRowInsertMicroBenchmark();
+            return;
+        }
+
         // Optional: --fixedwidth → run the fixed-width vs legacy before/after benchmark only.
         if (args.Any(a => a.Equals("--fixedwidth", StringComparison.OrdinalIgnoreCase)))
         {
             FixedWidthBenchmark.Run();
+            return;
+        }
+
+        // Optional: --pk-profile → the write-path profiler's stage report for the `--pk` harness's UPDATE
+        // arm, for one engine. Plan §6 (B2) asked for exactly this: the PageBased UPDATE trap (29,407 vs
+        // 420,187 ops/sec) has survived two code-reading guesses, so the attribution has to come from the
+        // instrumented stages and not from another plausible story — the treatment `--multirowinsert` gets.
+        if (args.Any(a => a.Equals("--pk-profile", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkUpdateProfile(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --pk-profile-delete → the same treatment for the DELETE arm (plan §9 priority 1), because
+        // the DELETE column is the one this session re-scoped the append-only work onto.
+        if (args.Any(a => a.Equals("--pk-profile-delete", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkDeleteProfile(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --pk-profile-insert → the same treatment for the INSERT arm (plan §9 priority 2). INSERT is
+        // the only fair-PK column still behind SQLite, and neither --pk-profile (UPDATE) nor --multirowinsert
+        // (a different, SQL-statement-driven shape) attributes it.
+        if (args.Any(a => a.Equals("--pk-profile-insert", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkInsertProfile(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --scdb → the single-file (.scdb) INSERT … VALUES arm (2026-09-22). This is the storage mode the
+        // harness could not measure before that date: the single-file SQL CREATE TABLE path forwarded only the
+        // fixed-width flag and never the inline capacity, so its tables silently ran the historical 5-byte-slot layout
+        // and the inline capacity's win was invisible there. Same shape as --multirowinsert (20,000 rows, 1,000
+        // rows/statement, median of five) so the two modes are comparable, and it honours SHARPCOREDB_INLINE_BYTES.
+        if (args.Any(a => a.Equals("--scdb", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunSingleFileInsertBenchmark(ParseEngineType(args));
             return;
         }
 
@@ -80,10 +230,119 @@ class Program
             return;
         }
 
+        // Optional: --fair-ni (S5, plan §4) → the fair non-PK arm. Neither side declares a primary key,
+        // both resolve the same predicate through a secondary index, and both carry an index on every
+        // column, so the default job's two asymmetries (SQLite's rowid shortcut, and the updated column
+        // being unindexed on SQLite's side while ours is auto-indexed) are both removed. What is left is
+        // the row write path, which is the quantity the default job's no-PK arm could not isolate.
+        if (args.Any(a => a.Equals("--fair-ni", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunFairNoPkIndexed(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --fair-ni-batch → the fair shape with THREE arms in one process: the SQL batch path,
+        // the SQL-free batch path (Database.UpdateBatch/DeleteBatch), and SQLite's reference. Reports
+        // batch/SQLite (the mission cell), SQL/SQLite (the control) and batch/SQL (the attribution), each
+        // as a median of PAIRED per-rep ratios with its range. Inserted before --fair-ni's sibling checks
+        // because the two flags must not be confused: --fair-ni keeps the published protocol untouched.
+        if (args.Any(a => a.Equals("--fair-ni-batch", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunFairNoPkIndexedBatchComparison(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --pk-default-batch → arm B (the pure default posture, the tracked cell) with THREE arms in
+        // one process: SQL batch, SQL-free batch, SQLite. Reports batch/SQLite, SQL/SQLite (control) and
+        // batch/SQL (attribution), each as a median of PAIRED per-rep ratios with its range.
+        if (args.Any(a => a.Equals("--pk-default-batch", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunPkDefaultBatchComparison(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --docs-batch → arm C (the default no-PK `docs` job) with the same three arms. The job's
+        // statement lists are cached from session 46 on, so this cell's SQL column is the corrected one.
+        if (args.Any(a => a.Equals("--docs-batch", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunDocsBatchComparison(ParseEngineType(args));
+            return;
+        }
+
         // Optional: --pk-ab → same-window interleaved A/B: runs arm A and arm B as alternating
         // rep pairs (A1,B1,A2,B2,...) and reports the PER-REP median ratio B/A per phase, so
         // machine drift affects both arms of each pair equally. Arms are config variants named by
         // SHARPCOREDB_PK_AB_ARM_A / SHARPCOREDB_PK_AB_ARM_B (defaults: pure default vs 'plain').
+        // Optional: --update-parse-cost → split the batch dispatcher's per-statement parse allocation into its
+        // components, so the UPDATE optimisation is aimed at a measured piece. Diagnostic only; measures the
+        // pieces in isolation rather than adding sub-stages inside the 10.000-statement loop, which would
+        // perturb the phase it describes.
+        if (args.Any(a => a.Equals("--update-parse-cost", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunUpdateParseCostDiagnostic();
+            return;
+        }
+
+        // Optional: --batch-dml-shape-cost → the dictionary-free lever's CEILING, before anything is built.
+        // In-process micro-measurement (the --update-parse-cost method): what a column-ordered op shape could
+        // remove from the window, against the live per-op time of the cells it would touch. Diagnostic only.
+        if (args.Any(a => a.Equals("--batch-dml-shape-cost", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunBatchDmlShapeCostDiagnostic();
+            return;
+        }
+
+        // Optional: --auto-index-benefit → what the per-column auto hash indexes BUY (point queries on the
+        // columns no explicit index covers), measured against what sessions 42/49/50 priced them at on INSERT.
+        // Diagnostic only, two in-process configurations, same data, row counts printed beside the timings.
+        if (args.Any(a => a.Equals("--auto-index-benefit", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunAutoIndexBenefitComparison();
+            return;
+        }
+
+        // Optional: --struct-arm → the ladder's zero-alloc StructRow arm on its own, so its cells (and the fact
+        // that its UPDATE/DELETE are deliberately not measured) can be read in one short run instead of by
+        // running the whole ladder and isolating one row of it (plan §5.5). Same arm, same workload, same table
+        // and index, and the same median-of-N protocol as the ladder row it stands in for — so a reader never
+        // compares a single-shot reading against a median. Diagnostic only.
+        if (args.Any(a => a.Equals("--struct-arm", StringComparison.OrdinalIgnoreCase)))
+        {
+            var structArm = new Dictionary<string, BenchmarkResult>
+            {
+                ["SharpCoreDB (StructRow)"] = RunLadderMedianOf(
+                    "SharpCoreDB (StructRow)",
+                    LadderReps(),
+                    () => RunSharpCoreDBStruct(ParseEngineType(args))),
+            };
+            PrintComparison(structArm);
+            return;
+        }
+
+        // Optional: --dual-mode → run the CRUD workload in EVERY encryption configuration and print
+        // the columns side by side, so the cost of protection is a published per-operation number
+        // instead of a hidden tax. See docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c.
+        if (args.Any(a => a.Equals("--dual-mode", StringComparison.OrdinalIgnoreCase)))
+        {
+            RunDualModeComparison(ParseEngineType(args));
+            return;
+        }
+
+        // Optional: --gate → the §2.4 write-path regression gate. Runs the same §2 protocol as
+        // --dual-mode and compares every operation against a committed baseline, exiting non-zero on a
+        // regression beyond the tolerance factor. --write-baseline re-records that baseline.
+        if (args.Any(a => a.Equals("--gate", StringComparison.OrdinalIgnoreCase))
+            || args.Any(a => a.Equals("--write-baseline", StringComparison.OrdinalIgnoreCase))
+            || args.Any(a => a.StartsWith("--gate-", StringComparison.OrdinalIgnoreCase)))
+        {
+            Environment.ExitCode = RunRegressionGate(
+                ParseEngineType(args),
+                ParseGateFactor(args),
+                ParseGateBaseline(args),
+                args.Any(a => a.Equals("--write-baseline", StringComparison.OrdinalIgnoreCase)));
+            return;
+        }
+
         if (args.Any(a => a.Equals("--pk-ab", StringComparison.OrdinalIgnoreCase)))
         {
             RunPkAbComparison(ParseEngineType(args));
@@ -109,24 +368,32 @@ class Program
 
         var results = new Dictionary<string, BenchmarkResult>();
 
+        int ladderReps = LadderReps();
+        if (ladderReps > 1)
+        {
+            Console.WriteLine($"LADDER PROTOCOL: every ladder arm below is the median of {ladderReps} runs (SHARPCOREDB_LADDER_REPS),");
+            Console.WriteLine("                 each with its own same-run reference, per plan §5.4 (2026-09-24).");
+            Console.WriteLine();
+        }
+
         // ── SharpCoreDB ──
         Console.WriteLine("━━━ SharpCoreDB (SQL) ━━━");
-        results["SharpCoreDB (SQL)"] = RunSharpCoreDB(engineType);
+        results["SharpCoreDB (SQL)"] = RunLadderMedianOf("SharpCoreDB (SQL)", ladderReps, () => RunSharpCoreDB(engineType));
         Console.WriteLine();
 
         // ── SharpCoreDB Direct API ──
         Console.WriteLine("━━━ SharpCoreDB (Direct API) ━━━");
-        results["SharpCoreDB (Direct)"] = RunSharpCoreDBDirectApi(engineType);
+        results["SharpCoreDB (Direct)"] = RunLadderMedianOf("SharpCoreDB (Direct)", ladderReps, () => RunSharpCoreDBDirectApi(engineType));
         Console.WriteLine();
 
         // ── SharpCoreDB StructRow (zero-alloc read path) ──
         Console.WriteLine("━━━ SharpCoreDB (StructRow) ━━━");
-        results["SharpCoreDB (StructRow)"] = RunSharpCoreDBStruct(engineType);
+        results["SharpCoreDB (StructRow)"] = RunLadderMedianOf("SharpCoreDB (StructRow)", ladderReps, () => RunSharpCoreDBStruct(engineType));
         Console.WriteLine();
 
         // ── SQLite ──
         Console.WriteLine("━━━ SQLite ━━━");
-        results["SQLite"] = RunSQLite();
+        results["SQLite"] = RunLadderMedianOf("SQLite", ladderReps, RunSQLite);
         Console.WriteLine();
 
         // ── LiteDB ──
@@ -151,8 +418,7 @@ class Program
         PrintComparison(results);
 
         // Save JSON
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -192,7 +458,7 @@ class Program
         var sp = services.BuildServiceProvider();
         var factory = sp.GetRequiredService<DatabaseFactory>();
         var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly);
-        var dbPath = Path.Combine(Path.GetTempPath(), $"scdb-readtest-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"scdb-readtest-{Guid.NewGuid()}");
 
         using var db = (SharpCoreDB.Database)factory.Create(
             dbPath: dbPath,
@@ -277,6 +543,529 @@ class Program
     }
 
     /// <summary>
+    /// Query-cache switch for every arm, from <c>SHARPCOREDB_QUERY_CACHE=off</c>. The multi-row arm's
+    /// statements carry distinct literals per row, so every cache lookup is a miss there; running it with the
+    /// cache off measures what the cache costs when it can never hit, which is the datum for whether a
+    /// never-repeating statement should be cached at all (plan §11). Missing or any other value keeps the
+    /// harness's tuned default. The config property is init-only, so this must be read in the object
+    /// initializer inside <see cref="BuildConfig"/> — assigning it after construction does not compile (CS8852).
+    /// </summary>
+    static bool QueryCacheOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_QUERY_CACHE");
+        return !(value is not null && value.Equals("off", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Forces the fixed-width record layout for the document-CRUD job, from <c>SHARPCOREDB_MAIN_FIXEDWIDTH=1</c>.
+    /// Diagnostic only (plan §9 priority 1): the default job's schema declares no PRIMARY KEY, and
+    /// <c>SqlParser.DDL.cs</c> grants the fixed-width layout only to tables with an explicitly declared PK, so that
+    /// arm runs legacy variable-length records and cannot take the in-place UPDATE patch. Running the identical job
+    /// with the layout forced separates the two candidate gates — the layout and the PK-equality predicate — instead
+    /// of leaving them entangled in one 5.4× spread.
+    /// </summary>
+    static bool MainFixedWidthOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_FIXEDWIDTH") == "1";
+
+    /// <summary>
+    /// Overrides <see cref="DatabaseConfig.FixedWidthInlineValueBytes"/> from <c>SHARPCOREDB_INLINE_BYTES</c>.
+    /// Diagnostic only (plan §4b and §9 priority 1): a fixed-width record sends every variable-length value to the
+    /// overflow arena unless its slot can hold the value inline, which is why forcing the layout on the PK-less
+    /// document-CRUD job measured <em>worse</em> there. This switch quantifies that half of the package in isolation.
+    /// Default 0 keeps the historical layout byte for byte, and the property is inert on legacy variable-length
+    /// tables, so it only bites when <c>SHARPCOREDB_MAIN_FIXEDWIDTH</c> is also set.
+    /// </summary>
+    static int InlineBytesOverride()
+    {
+        // Unset means the PRODUCT default, not 0: the product default became 16 when §4b shipped (2026-09-16) and 24
+        // by owner decision (2026-09-22), and an unconditional 0 here silently pinned every arm to the historical
+        // layout — which made a "default" measurement reproduce the old numbers exactly and hide the change. An
+        // explicit value, including 0, wins.
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_INLINE_BYTES");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : new DatabaseConfig().FixedWidthInlineValueBytes;
+    }
+
+    /// <summary>
+    /// Overrides the auto-compaction threshold from <c>SHARPCOREDB_COMPACTION_THRESHOLD</c> (S7, plan §4).
+    /// Unset returns <see langword="null"/>, so the product default applies.
+    /// <para>
+    /// Applied through <see cref="SharpCoreDB.DataStructures.Table.SetCompactionThreshold"/>, <b>not</b>
+    /// through the config — and that is a finding, not a preference. Setting
+    /// <see cref="DatabaseConfig.ColumnarAutoCompactionThreshold"/> to 0 does <b>not</b> disable compaction:
+    /// <c>Table.cs:64</c> guards that assignment with <c>&gt; 0</c>, so 0 silently leaves the previous
+    /// threshold (1000) in force, while the property's own documentation says the opposite — "When the sum of
+    /// UPDATEs and DELETEs … reaches this threshold, a background compaction is triggered. Default: 1000.
+    /// Set to 0 to disable auto-compaction." <c>SetCompactionThreshold</c> maps anything <c>&lt;= 0</c> to
+    /// <c>long.MaxValue</c>, which <em>is</em> off. Anyone who follows the config's documented advice gets
+    /// compaction they did not ask for.
+    /// </para>
+    /// </summary>
+    static long? CompactionThresholdOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_COMPACTION_THRESHOLD");
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    /// <summary>
+    /// How many <b>discarded</b> warm-up reps to run before the measured ones (plan §6 rule 10, from S7's
+    /// verdict). Default <b>8</b> — the code's own value, and the paragraph below records why it was raised
+    /// from 3 (session 40; the `Default 3` this line carried until session 78 was stale in the same file as
+    /// the paragraph proving it so). An explicit <c>SHARPCOREDB_WARMUP_REPS</c> value is used verbatim and
+    /// only an <em>unparseable</em> one falls back to 3; <c>=0</c> disables the protocol, which is what makes
+    /// this a protocol change rather than a hidden behaviour.
+    /// <para>
+    /// The reason is measured, not assumed. In two independent 5-rep runs our per-rep numbers improved
+    /// <em>monotonically</em> from rep 1 to rep 5 while SQLite's stayed flat, and because every rep builds a
+    /// fresh database only <em>process</em> state can carry across them — JIT tiering on a 100 %-managed hot
+    /// path. <c>DOTNET_TieredCompilation=0</c> collapses the spreads (INSERT 1,70× → 1,10×, DELETE
+    /// 3,20× → 1,54×), which confirms it. Warm-up is used rather than that switch because a warm-up rep
+    /// measures the <b>shipped</b> configuration, while the switch measures one no user runs.
+    /// </para>
+    /// <para>
+    /// <b>Why 3 and not 1.</b> One warm-up rep was tried first (session 23) and it removed the *monotone*
+    /// ramp but not the spread: the measured UPDATE cell still moved 2,05× per rep and its ratio range
+    /// straddled 1,00× (0,86–1,71×), so it could not be resolved. Raising it to 3 (session 25) collapsed
+    /// UPDATE's per-rep spread to <b>1,18×</b>, and a second independent run reproduced it at 1,26× — with
+    /// every one of the four cells' ranges clearing 1,00× in both runs (UPDATE 1,66–2,02× and 1,43–1,81×).
+    /// One warm-up rep was therefore <b>under-provisioned</b>.
+    /// </para>
+    /// <para>
+    /// <b>Why 8 and not 3 (session 40).</b> Three was validated on the <em>fair</em> arm's five measured reps.
+    /// Running arm B at <b>eight</b> measured reps revealed that three is not enough there: our per-rep numbers
+    /// came out as a continuing ramp across the measured set — UPDATE 92.338 → 182.719 → 254.114 → 150.922 →
+    /// 350.654 → 355.664 → 347.374 → 351.514, monotone through the fifth measured rep (i.e. pass 8) and only
+    /// then flat — while SQLite sat at 842k–970k from pass 1. **So adding reps had not added noise; it had
+    /// exposed an insufficient warm-up**, and the five measured reps of session 32 had looked flat only because
+    /// they sampled passes 4–8, a segment of the ramp. Re-run with eight warm-ups, the ramp is gone: measured
+    /// reps 1–3 read UPDATE 353.713 / 350.089 / 357.393 and DELETE 409.871 / 430.411 / 439.916 — flat from the
+    /// first measured rep, which is what "warm" has to mean for the measured set to describe the engine rather
+    /// than the CLI's startup curve. The cost is runtime; the alternative is publishing a range whose low end
+    /// is a pass number.
+    /// </para>
+    /// <para>
+    /// Known residual, recorded rather than papered over: single <em>anomalous</em> reps still occur with the
+    /// ramp removed (session 40, one rep of five read UPDATE 137.659 and DELETE 631.528 while its siblings sat
+    /// at ~355k and ~420k), so a range's extremes can still be single-rep artefacts. The <b>median</b> is
+    /// robust to them — arm B's UPDATE median moved only 0,39 → 0,37 → 0,36 across three protocols — which is
+    /// why the median is the published cell and the range is the gate on whether it may be quoted at all.
+    /// </para>
+    /// <para>
+    /// <b>Session 78 correction to the paragraph above:</b> <c>DOTNET_TieredCompilation=0</c> collapsing the
+    /// spread on the <em>fair</em> arm does not generalise into "the ramp is tiering". On <c>--pk</c>'s legacy
+    /// arm — the one this session's defect was in — <em>neither</em> dial removes a cold first rep: with
+    /// <c>DOTNET_TieredCompilation=0</c> rep 1 read UPDATE 101.681 against its own median of 522.392, and with
+    /// <c>DOTNET_TieredPGO=0</c> 145.932 against 543.711 (artifacts <c>s78-aot-jitnotc-r1.txt</c>,
+    /// <c>s78-aot-jitpgo0-r1.txt</c>). So on this arm the ramp is not a tiering artefact alone — first-use JIT
+    /// of not-yet-called paths and first-touch data-file costs look the same in the rep list. That is exactly
+    /// why the fix is a <b>warm-up</b> rather than a runtime switch: discarded reps absorb every cause, while a
+    /// switch would only absorb the one it names. What the dials actually changed is worth stating, because it
+    /// is easy to assume otherwise: this Exe's own <c>runtimeconfig.json</c> declares <em>neither</em>
+    /// <c>TieredPGO</c> nor <c>TieredCompilation</c> (so both sit at the runtime's defaults — dynamic PGO has
+    /// been on by default since .NET 8), and <c>src/SharpCoreDB</c>'s <c>&lt;TieredPGO&gt;true&lt;/TieredPGO&gt;</c>
+    /// cannot flow across a <c>ProjectReference</c> into it, since only the entry assembly's runtimeconfig
+    /// governs. The dials therefore reach this process only as <c>DOTNET_*</c> environment variables, which is
+    /// how they were run.
+    /// </para>
+    /// </summary>
+    static int ResolveWarmupReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_WARMUP_REPS");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return 8;
+        }
+
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : 3;
+    }
+
+    /// <summary>
+    /// Overrides <see cref="DatabaseConfig.SingleFileMinExtensionBytes"/> from <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c>
+    /// (plan §9's file-growth item, 2026-09-23). Unset keeps the product default, which is <c>0</c> = the historical
+    /// 10 MiB minimum extension: the single-file file starts at 1.037 pages and the first extension that does not fit
+    /// adds <c>max(requiredPages, currentSize / 2, 10 MiB / pageSize)</c>, so a small <c>.scdb</c> database is
+    /// 3.597 pages = 14.733.312 B <em>whatever its row count</em> — which the <c>--scdb</c> arm measures at 100, 500
+    /// and 2.000 rows. Same shape as <see cref="InlineBytesOverride"/>: unset means the product default, and an explicit
+    /// value (including 0) wins.
+    /// </summary>
+    static long SingleFileMinExtensionOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_MIN_EXTENSION");
+        return long.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Max(0, parsed)
+            : new DatabaseConfig().SingleFileMinExtensionBytes;
+    }
+
+    /// <summary>
+    /// Profiles the document-CRUD job's UPDATE phase, from <c>SHARPCOREDB_MAIN_PROFILE_UPDATE=1</c> (plan §9
+    /// priority 1). Mirrors <c>--pk-profile</c> for the PK-less arm: the question is whether any in-place route is
+    /// taken at all on a hash-predicate update, and the <c>in-place-patch</c> stage call count answers it directly.
+    /// </summary>
+    static bool MainProfileUpdateOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_UPDATE") == "1";
+
+    /// <summary>
+    /// DELETE-phase profiler switch, from <c>SHARPCOREDB_MAIN_PROFILE_DELETE=1</c>. Mirrors
+    /// <see cref="MainProfileUpdateOverride"/> because the 2026-09-21 gate found this phase at 1,33x baseline on the
+    /// default arm — reproduced twice (74.134 / 74.333 ops/s) and bisected to the buffered-overwrite flush
+    /// coalescing (`851ac232`) — while this arm had no DELETE profile at all. The question the table answers is
+    /// whether DELETE's own stages grew, or whether it measures an environment left behind by the phases before it.
+    /// </summary>
+    static bool MainProfileDeleteOverride() =>
+        Environment.GetEnvironmentVariable("SHARPCOREDB_MAIN_PROFILE_DELETE") == "1";
+
+    /// <summary>
+    /// Hash-index switch, from <c>SHARPCOREDB_HASH_INDEXES=0</c>. Diagnostic for plan §9 priority 1's profiler-free
+    /// bisect: the default job's UPDATE pays two <c>index-maint</c> calls per row (the PK B-tree plus the hash index
+    /// on the updated column), and this switch removes the hash half. ⚠️ It also changes how the row is *located*, so
+    /// a delta here is the pair, not the index alone — the same pairing caveat the rest of §9 records.
+    /// </summary>
+    static bool HashIndexesOverride()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_HASH_INDEXES");
+        return !(value is not null && value.Equals("0", StringComparison.Ordinal));
+    }
+
+    /// <summary>
+    /// Focused multi-row <c>INSERT … VALUES (…), (…)</c> micro-benchmark. This statement shape used to lower
+    /// to one <see cref="SharpCoreDB.DataStructures.Table.Insert"/> call per row — i.e. one standalone
+    /// write-through append per row — and now routes to the batched core when the table has no per-row-only
+    /// semantics. Each repetition runs on a fresh database so append-only growth cannot skew it; min, median
+    /// and max are reported rather than a single run.
+    /// </summary>
+    static void RunMultiRowInsertMicroBenchmark()
+    {
+        const int inserts = 20_000;
+        int reps = 5;
+
+        // Rows per statement is the dimension that separates per-row cost from per-statement cost: at a
+        // fixed row total, a constant per-row cost keeps rows/s flat, whereas anything super-linear in the
+        // statement length shows up as big statements costing more per row. Overridable for that bracket.
+        int rowsPerStatement = 1_000;
+        var rowsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ROWS");
+        if (int.TryParse(rowsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRows) && parsedRows > 0)
+        {
+            rowsPerStatement = parsedRows;
+        }
+
+        // Diagnostic runs only need the stage report, not five timed reps of a deliberately slow shape.
+        var repsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_REPS");
+        if (int.TryParse(repsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedReps) && parsedReps > 0)
+        {
+            reps = parsedReps;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var sp = services.BuildServiceProvider();
+        var factory = sp.GetRequiredService<DatabaseFactory>();
+        // Diagnostic: force the per-record at-rest encryption posture for THIS mode only, so cost and
+        // allocation can be attributed to it. Unset keeps the product default, so the headline number is
+        // unchanged by this switch existing.
+        static bool? MultiRowAtRestOverride() =>
+            Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ATREST") switch
+            {
+                "0" => false,
+                "1" => true,
+                _ => null,
+            };
+
+        var config = BuildConfig(SharpCoreDB.Interfaces.StorageEngineType.AppendOnly, atRestRecords: MultiRowAtRestOverride());
+
+        var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
+        double[] times = new double[reps];
+
+        // Diagnostics: whether the overflow arena is actually used for this schema, and how big the two files
+        // are. Shared with the fair-PK arm's diag line — see TableFileSizes.
+
+        double RunPass()
+        {
+            var path = Path.Combine(BenchTempDirectory(), $"scdb-multirow-{Guid.NewGuid()}");
+            using (var db = (SharpCoreDB.Database)factory.Create(path, "pw", isReadOnly: false, config: config))
+            {
+                var before = TableFileSizes(db);
+                db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                db.ExecuteSQL(CreateDocsIndexSql);
+
+                var sw = Stopwatch.StartNew();
+                long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
+                int gen0Before = GC.CollectionCount(0);
+                foreach (var stmt in statements)
+                {
+                    db.ExecuteSQL(stmt);
+                }
+
+                sw.Stop();
+                var elapsed = sw.Elapsed.TotalSeconds;
+                long allocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+                int gen0 = GC.CollectionCount(0) - gen0Before;
+                var after = TableFileSizes(db);
+                Console.WriteLine($"    [diag] data file {after.DataBytes:N0} B · overflow arena {after.OvfBytes:N0} B (before: {before.DataBytes:N0}/{before.OvfBytes:N0})");
+                Console.WriteLine($"    [diag] allocated {allocBytes:N0} B ({allocBytes / Math.Max(1, inserts):N0} B/row) · gen0 collections {gen0}");
+                try { Directory.Delete(path, true); } catch { /* best-effort temp-dir cleanup */ }
+                return elapsed;
+            }
+        }
+
+        for (int r = 0; r < reps; r++)
+        {
+            times[r] = RunPass();
+        }
+
+        Array.Sort(times);
+        double median = times[reps / 2];
+
+        Console.WriteLine();
+        Console.WriteLine($"═══ Multi-row INSERT … VALUES micro-benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, {statements.Count} statements, median of {reps}) ═══");
+        Console.WriteLine($"  rows/s (median) : {inserts / median:N0}");
+        Console.WriteLine($"  min {times[0]:F3}s   median {median:F3}s   max {times[^1]:F3}s");
+        Console.WriteLine($"  median µs/row   : {median * 1_000_000 / inserts:F2}");
+        Console.WriteLine($"  median ms/statement : {median * 1000 / statements.Count:F2}");
+
+        // One further, untimed pass with the write-path profiler on, so the stage breakdown for this exact
+        // workload is available without perturbing the timings above.
+        SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+        SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+        double profiled = RunPass();
+        SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+        Console.WriteLine();
+        Console.WriteLine($"  profiled pass: {profiled:F3}s");
+        Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+    }
+
+    /// <summary>
+    /// Single-file (<c>.scdb</c>) INSERT … VALUES arm (2026-09-22; extended the same day to two shapes).
+    /// <para>
+    /// It runs the <c>--multirowinsert</c> statement shape against a single-file database in the two ways a caller can
+    /// drive it, because on this storage mode they are not equivalent: <b>(a) one <c>ExecuteSQL</c> per statement</b>,
+    /// where every statement is its own flush and the table rewrites its whole block on a flush — O(n²) in the row
+    /// count — and <b>(b) one <c>ExecuteBatchSQL</c> call</b>, where the batch extension already disables auto-flush,
+    /// begins a BlockRegistry batch and flushes once per table. Reporting both is what separates "this mode is slow"
+    /// from "this shape is slow on this mode", which is the difference between a redesign and a documentation line.
+    /// </para>
+    /// <para>
+    /// It honours <c>SHARPCOREDB_INLINE_BYTES</c>, prints the capacity the table actually resolved to, and declares its
+    /// one shape difference from <c>--multirowinsert</c>: no secondary index, because this mode has none to maintain.
+    /// <b>The row count defaults to 2,000</b> because shape (a) is quadratic — 20,000 rows did not finish inside five
+    /// minutes on this machine — and can be overridden with <c>SHARPCOREDB_SCDB_ROWS</c>.
+    /// </para>
+    /// </summary>
+    static void RunSingleFileInsertBenchmark(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        int inserts = 2_000;
+        var insertEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_ROWS");
+        if (int.TryParse(insertEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedInserts) && parsedInserts > 0)
+        {
+            inserts = parsedInserts;
+        }
+
+        int reps = 5;
+        int rowsPerStatement = 1_000;
+        var rowsEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_MULTIROW_ROWS");
+        if (int.TryParse(rowsEnv, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsedRows) && parsedRows > 0)
+        {
+            rowsPerStatement = parsedRows;
+        }
+
+        var services = new ServiceCollection();
+        services.AddSharpCoreDB();
+        var factory = services.BuildServiceProvider().GetRequiredService<DatabaseFactory>();
+
+        // SHARPCOREDB_SCDB_SHAPES: "both" (default) measures the statementwise and the batched caller shape; "batched"
+        // measures only the batched one. That is what makes a 20.000-row run feasible here: the statementwise shape is
+        // quadratic by construction (703 rows/s at 2.000 rows) and did not finish inside five minutes at 20.000, while
+        // the batched shape does 20.000 rows in well under a second — so the large-database file-growth A/B of the
+        // 2026-09-24 minimum-extension decision needs exactly the batched half.
+        var shapesEnv = Environment.GetEnvironmentVariable("SHARPCOREDB_SCDB_SHAPES");
+        bool runStatementwise = !string.Equals(shapesEnv, "batched", StringComparison.OrdinalIgnoreCase);
+
+        var statements = BuildMultiRowInsertStatements(inserts, rowsPerStatement);
+        double[] statementTimes = new double[reps];
+        double[] batchTimes = new double[reps];
+        (long AllocPerRow, int Gen0, long FileBytes) statementShape = default;
+        (long AllocPerRow, int Gen0, long FileBytes) batchShape = default;
+        int resolvedCapacity = -1;
+
+        (long AllocPerRow, int Gen0, long FileBytes) RunPass(bool batched, out double elapsed)
+        {
+            elapsed = 0;
+            var path = Path.Combine(BenchTempDirectory(), $"scdb-scdbinsert-{Guid.NewGuid()}.scdb");
+            var options = DatabaseOptions.CreateSingleFileDefault();
+            options.DatabaseConfig = BuildConfig(engineType, fixedWidth: true);
+
+            long allocBefore = GC.GetTotalAllocatedBytes(precise: false);
+            int gen0Before = GC.CollectionCount(0);
+            long allocBytes = 0;
+            int gen0 = 0;
+
+            var db = factory.CreateWithOptions(path, BenchDbPassword, options);
+            try
+            {
+                db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                if (db.TryGetTable("docs", out var table) && table is SharpCoreDB.Interfaces.ITable typed)
+                {
+                    resolvedCapacity = typed.FixedWidthInlineValueBytes;
+                }
+
+                var sw = Stopwatch.StartNew();
+                if (batched)
+                {
+                    // The batch extension disables auto-flush, begins a BlockRegistry batch and flushes once per table.
+                    db.ExecuteBatchSQL(statements);
+                }
+                else
+                {
+                    foreach (var statement in statements)
+                    {
+                        db.ExecuteSQL(statement);
+                    }
+                }
+
+                db.Flush();
+                sw.Stop();
+                elapsed = sw.Elapsed.TotalSeconds;
+                allocBytes = GC.GetTotalAllocatedBytes(precise: false) - allocBefore;
+                gen0 = GC.CollectionCount(0) - gen0Before;
+            }
+            finally
+            {
+                // IDatabase is IAsyncDisposable (the multi-file mode's concrete Database class is IDisposable as well,
+                // which is why the other arms can use `using`); this arm drives both through one shape.
+                db.DisposeAsync().AsTask().GetAwaiter().GetResult();
+            }
+
+            long fileBytes = File.Exists(path) ? new FileInfo(path).Length : 0;
+            try { File.Delete(path); } catch { /* best-effort temp cleanup */ }
+            return (allocBytes / inserts, gen0, fileBytes);
+        }
+
+        if (runStatementwise)
+        {
+            for (int r = 0; r < reps; r++)
+            {
+                statementShape = RunPass(batched: false, out statementTimes[r]);
+            }
+        }
+
+        for (int r = 0; r < reps; r++)
+        {
+            batchShape = RunPass(batched: true, out batchTimes[r]);
+        }
+
+        Array.Sort(statementTimes);
+        Array.Sort(batchTimes);
+        double statementMedian = runStatementwise ? statementTimes[reps / 2] : 0;
+        double batchMedian = batchTimes[reps / 2];
+
+        Console.WriteLine();
+        Console.WriteLine($"═══ Single-file (.scdb) INSERT … VALUES benchmark ({inserts:N0} rows, {rowsPerStatement:N0} rows/statement, median of {reps}) ═══");
+        Console.WriteLine("  shape                        rows/s      µs/row   allocated/row     .scdb file");
+        if (runStatementwise)
+        {
+            Console.WriteLine($"  ExecuteSQL per statement   {inserts / statementMedian,8:N0}  {statementMedian * 1_000_000 / inserts,10:F2}   {statementShape.AllocPerRow,12:N0} B   {statementShape.FileBytes,11:N0} B");
+        }
+        else
+        {
+            Console.WriteLine("  ExecuteSQL per statement   skipped (SHARPCOREDB_SCDB_SHAPES=batched: quadratic by construction)");
+        }
+
+        Console.WriteLine($"  ExecuteBatchSQL (one call) {inserts / batchMedian,8:N0}  {batchMedian * 1_000_000 / inserts,10:F2}   {batchShape.AllocPerRow,12:N0} B   {batchShape.FileBytes,11:N0} B");
+        Console.WriteLine($"    [diag] resolved inline capacity {resolvedCapacity} B (SHARPCOREDB_INLINE_BYTES or the product default) · gen0 {(runStatementwise ? statementShape.Gen0.ToString(CultureInfo.InvariantCulture) : "skipped")} / {batchShape.Gen0} (statementwise / batched)");
+        Console.WriteLine($"    [diag] minimum file extension {SingleFileMinExtensionOverride()} B (0 = the product default 1 MiB, SHARPCOREDB_SCDB_MIN_EXTENSION) — the knob behind the .scdb file size above");
+        if (!runStatementwise)
+        {
+            Console.WriteLine("    [diag] SHARPCOREDB_SCDB_SHAPES=batched: the statementwise shape was skipped by request");
+        }
+
+        // Persist the arm as tracked evidence, like the pk/dual-mode arms do: the .scdb numbers above are quoted in the
+        // plan and the worklog, and sessions 8-10 had to be re-run to re-obtain them because this arm wrote no file.
+        // Both caller shapes go in one document, together with the configuration that produced them (resolved inline
+        // capacity, the growth setting and the row count), so a figure can be checked without re-reading stdout.
+        // Anchored at the PROJECT directory like every other writer (see ResultsDirectory()): the repo root has an
+        // ignored results/ folder, and only the project's one is the tracked evidence location.
+        // A skipped shape is omitted rather than written as a zero: a zero would read as "instant" in the archive.
+        string scdbResultsDir = ResultsDirectory();
+        string scdbResultsPath = Path.Combine(
+            scdbResultsDir,
+            $"scdb_insert_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+
+        List<object> scdbShapeRecords = new(2);
+        if (runStatementwise)
+        {
+            scdbShapeRecords.Add(new
+            {
+                shape = "ExecuteSQL per statement",
+                rowsPerSecond = inserts / statementMedian,
+                microSecondsPerRow = statementMedian * 1_000_000 / inserts,
+                allocatedBytesPerRow = statementShape.AllocPerRow,
+                fileBytes = statementShape.FileBytes,
+                gen0Collections = statementShape.Gen0,
+            });
+        }
+
+        scdbShapeRecords.Add(new
+        {
+            shape = "ExecuteBatchSQL (one call)",
+            rowsPerSecond = inserts / batchMedian,
+            microSecondsPerRow = batchMedian * 1_000_000 / inserts,
+            allocatedBytesPerRow = batchShape.AllocPerRow,
+            fileBytes = batchShape.FileBytes,
+            gen0Collections = batchShape.Gen0,
+        });
+
+        File.WriteAllText(scdbResultsPath, JsonSerializer.Serialize(new
+        {
+            rows = inserts,
+            rowsPerStatement,
+            reps,
+            resolvedInlineCapacityBytes = resolvedCapacity,
+            minExtensionBytes = SingleFileMinExtensionOverride(),
+            skippedShapes = runStatementwise ? Array.Empty<string>() : new[] { "ExecuteSQL per statement" },
+            shapes = scdbShapeRecords,
+        }, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {scdbResultsPath}");
+    }
+
+    /// <summary>
+    /// Builds multi-row <c>INSERT … VALUES</c> statements carrying <paramref name="rowsPerStatement"/> tuples
+    /// each. Built once, outside the timed region, because it is caller work.
+    /// </summary>
+    static List<string> BuildMultiRowInsertStatements(int totalRows, int rowsPerStatement)
+    {
+        var statements = new List<string>((totalRows / rowsPerStatement) + 1);
+        var sb = new StringBuilder(rowsPerStatement * 96);
+
+        for (int start = 0; start < totalRows; start += rowsPerStatement)
+        {
+            int count = Math.Min(rowsPerStatement, totalRows - start);
+            sb.Clear();
+            sb.Append("INSERT INTO docs (id, name, email, age, score, data) VALUES ");
+
+            for (int i = 0; i < count; i++)
+            {
+                int id = start + i;
+                if (i > 0)
+                {
+                    sb.Append(',');
+                }
+
+                sb.Append('(').Append(id).Append(", 'User").Append(id)
+                    .Append("', 'user").Append(id).Append("@example.com', ").Append(id % 100)
+                    .Append(", ").Append(id).Append(".5, 'data-").Append(id).Append("')");
+            }
+
+            statements.Add(sb.ToString());
+        }
+
+        return statements;
+    }
+
+    /// <summary>
     /// Focused insert micro-benchmark: SQL (<c>ExecuteBatchSQL</c> with INSERT statements) vs
     /// Direct API (<c>InsertBatch</c>). Each repetition runs on a fresh database so append-only
     /// growth and unique keys do not skew the result; median of several runs is reported.
@@ -298,7 +1087,7 @@ class Program
 
         for (int r = 0; r < reps; r++)
         {
-            var sqlPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-sql-{Guid.NewGuid()}");
+            var sqlPath = Path.Combine(BenchTempDirectory(), $"scdb-insert-sql-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(sqlPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
@@ -320,7 +1109,7 @@ class Program
 
             try { Directory.Delete(sqlPath, true); } catch { /* best-effort temp-dir cleanup */ }
 
-            var directPath = Path.Combine(Path.GetTempPath(), $"scdb-insert-direct-{Guid.NewGuid()}");
+            var directPath = Path.Combine(BenchTempDirectory(), $"scdb-insert-direct-{Guid.NewGuid()}");
             using (var db = (SharpCoreDB.Database)factory.Create(directPath, "pw", isReadOnly: false, config: config))
             {
                 db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
@@ -403,28 +1192,193 @@ class Program
         return rowBatches;
     }
 
-    static DatabaseConfig BuildConfig(SharpCoreDB.Interfaces.StorageEngineType engineType, bool fixedWidth = false, bool noEncrypt = true)
+    /// <summary>
+    /// How many runs each ladder arm is measured over, from <c>SHARPCOREDB_LADDER_REPS</c> (default 1, clamped to 1-9).
+    /// The §5.4 protocol asks for 3.
+    /// </summary>
+    static int LadderReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_LADDER_REPS");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? Math.Clamp(parsed, 1, 9)
+            : 1;
+    }
+
+    /// <summary>
+    /// Median-of-N wrapper for the SQL / Direct / StructRow / SQLite ladder arms — plan §5.4's protocol since
+    /// 2026-09-24.
+    /// <para>
+    /// A single ladder run on this machine is not verdict-worthy: <b>four runs of the identical binary put the SQL arm's
+    /// INSERT ratio anywhere between 0,31× and 0,69×</b>, because the arms are measured one after another inside one
+    /// process and our SQL arm's own absolute reading moved 35K → 84K ops/s while the same-run SQLite reference moved
+    /// 9 %. A ratio only means something next to the reference it was measured with, so the arms and the reference are
+    /// measured the same number of times and reported as medians. The default stays 1, which keeps existing invocations
+    /// byte-identical in output and runtime; <c>SHARPCOREDB_LADDER_REPS=3</c> is the protocol value and prints the
+    /// per-metric min–max spread as well, so a reader can see whether a cell was stable.
+    /// </para>
+    /// </summary>
+    static BenchmarkResult RunLadderMedianOf(string label, int reps, Func<BenchmarkResult> run)
+    {
+        var samples = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            samples.Add(run());
+        }
+
+        if (reps == 1)
+        {
+            return samples[0];
+        }
+
+        var median = MedianOf(samples);
+        Console.WriteLine();
+        Console.WriteLine($"  [ladder] {label}: median of {reps} runs, with each cell's min–max so stability is visible");
+        PrintLadderMetric("INSERT", samples, static s => s.InsertOpsPerSec, median.InsertOpsPerSec, measured: true);
+        PrintLadderMetric("READ", samples, static s => s.ReadOpsPerSec, median.ReadOpsPerSec, measured: true);
+        PrintLadderMetric("UPDATE", samples, static s => s.UpdateOpsPerSec, median.UpdateOpsPerSec, samples[0].UpdateMeasured);
+        PrintLadderMetric("DELETE", samples, static s => s.DeleteOpsPerSec, median.DeleteOpsPerSec, samples[0].DeleteMeasured);
+        return median;
+    }
+
+    /// <summary>Prints one ladder cell's median and spread (see <see cref="RunLadderMedianOf"/>).</summary>
+    static void PrintLadderMetric(
+        string metric,
+        List<BenchmarkResult> samples,
+        Func<BenchmarkResult, int> read,
+        int median,
+        bool measured)
+    {
+        // An unrun phase has no median and no spread: printing `median 0 / spread 0,00x` for it would be the
+        // same misleading number the summary table used to print, one level down (plan §5.5).
+        if (!measured)
+        {
+            Console.WriteLine($"           {metric,-7} not measured - this arm deliberately does not run that phase (plan §5.5)");
+            return;
+        }
+
+        int min = samples.Min(read);
+        int max = samples.Max(read);
+        double spread = min > 0 ? max / (double)min : 0;
+        Console.WriteLine($"           {metric,-7} median {median,10:N0}   min–max {min,10:N0}–{max,10:N0}   spread {spread:F2}×");
+    }
+
+    /// <summary>Per-metric median of N ladder samples; <c>Reps</c> records how many.</summary>
+    static BenchmarkResult MedianOf(List<BenchmarkResult> samples)
+    {
+        static int MedianInt(List<int> values)
+        {
+            values.Sort();
+            return values[values.Count / 2];
+        }
+
+        static double MedianDouble(List<double> values)
+        {
+            values.Sort();
+            return values[values.Count / 2];
+        }
+
+        return new BenchmarkResult
+        {
+            Reps = samples.Count,
+            InsertOpsPerSec = MedianInt([.. samples.Select(s => s.InsertOpsPerSec)]),
+            ReadOpsPerSec = MedianInt([.. samples.Select(s => s.ReadOpsPerSec)]),
+            UpdateOpsPerSec = MedianInt([.. samples.Select(s => s.UpdateOpsPerSec)]),
+            DeleteOpsPerSec = MedianInt([.. samples.Select(s => s.DeleteOpsPerSec)]),
+            InsertTime = MedianDouble([.. samples.Select(s => s.InsertTime)]),
+            ReadTime = MedianDouble([.. samples.Select(s => s.ReadTime)]),
+            UpdateTime = MedianDouble([.. samples.Select(s => s.UpdateTime)]),
+            DeleteTime = MedianDouble([.. samples.Select(s => s.DeleteTime)]),
+            UpdateMeasured = samples.All(static s => s.UpdateMeasured),
+            DeleteMeasured = samples.All(static s => s.DeleteMeasured),
+        };
+    }
+
+    /// <summary>
+    /// The results directory, anchored at the PROJECT directory instead of the process CWD.
+    /// <para>
+    /// Why it matters for evidence (2026-09-23): the documented invocation runs the harness from the repo root, where a
+    /// <c>results/</c> folder also exists — but that one is git-ignored (<c>.gitignore: /results/</c>), while the
+    /// tracked evidence lives in the project's own <c>results/</c>. CWD-relative writers therefore produced files
+    /// nobody could commit: six runs of §5.4 (three ladder runs, <c>--pk</c>, <c>--pk-default</c>, <c>--multirowinsert</c>)
+    /// landed in the ignored root folder. Every writer now goes through this helper, so "results saved to" names a path
+    /// that can be committed.
+    /// </para>
+    /// </summary>
+    static string ResultsDirectory()
+    {
+        string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        string dir = Path.Combine(projectDir, ResultsDirName);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    static DatabaseConfig BuildConfig(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool fixedWidth = false,
+        bool noEncrypt = true,
+        bool? atRestRecords = null)
     {
         return new DatabaseConfig
         {
             NoEncryptMode = noEncrypt,
+            // Per-record at-rest encryption of table payloads (the 8-byte magic header format).
+            // null keeps whatever the PRODUCT default is (true since the 2026-09-13 flip; read from a
+            // fresh instance so a benchmark arm can never drift from it), true/false force it. The old
+            // "default" arm forced it OFF — a configuration no default database has had since the flip,
+            // see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c/§3-1d.
+            EnableAtRestRecordEncryption = atRestRecords ?? ProductAtRestDefault,
             StorageEngineType = engineType,
             // The fair PK comparison intentionally isolates the record-layout variable: the legacy
             // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
             // records; the fixed-width arm forces FixedWidthRecordLayout.
             AutoFixedWidthRecords = !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
+            // §4b inline capacity — SHARPCOREDB_INLINE_BYTES. Unset keeps the PRODUCT default (24 since the
+            // 2026-09-22 owner decision; it was 16 from §4b's landing on 2026-09-16), so the arms track it;
+            // set it (e.g. 0) to measure the historical layout.
+            FixedWidthInlineValueBytes = InlineBytesOverride(),
+            // §9 file-growth knob — SHARPCOREDB_SCDB_MIN_EXTENSION. Unset keeps the product default (0 = the
+            // historical 10 MiB minimum extension, which is why a small .scdb file is 14,7 MB whatever it holds);
+            // set it to a byte count to see that floor move. Read per open, and it is not part of the on-disk format.
+            SingleFileMinExtensionBytes = SingleFileMinExtensionOverride(),
             UseGroupCommitWal = false,
             EnableAdaptiveWalBatching = false,
             HighSpeedInsertMode = true,
             GroupCommitSize = 1000,
-            WalDurabilityMode = SharpCoreDB.Services.DurabilityMode.Async,
+            // Durability mode only — since the 2026-09-16 reversal it no longer implies append buffering (see
+            // Storage.BuffersAppends). The A/B that produced that reversal ran through this switch: the tuned
+            // arm declared Async, so A1 had made it buffer appends too, and re-running the identical arm with
+            // FullSync restored FW UPDATE to 356,135 from 230,722 (+54 %), DELETE to 216,909 from 168,804
+            // (+28 %) and INSERT to 99,575 from 81,344 (+22 %), with SQLite's own reference within 5 %.
+            // SHARPCOREDB_BUFFERED_APPENDS=1 (below) is now the switch that selects the appends-buffered
+            // regime, so either posture can be measured without touching durability.
+            WalDurabilityMode = Environment.GetEnvironmentVariable("SHARPCOREDB_WAL_DURABILITY") == "fullsync"
+                ? SharpCoreDB.Services.DurabilityMode.FullSync
+                : SharpCoreDB.Services.DurabilityMode.Async,
             EnablePageCache = true,
             PageCacheCapacity = 10_000,
             UseMemoryMapping = true,
             UseBufferedIO = true,
-            EnableHashIndexes = true,
-            EnableQueryCache = true,
+            EnableHashIndexes = HashIndexesOverride(),
+            // Pooled (unsafe) hash-index backend, as a DECLARED measurement configuration. The product's
+            // EnableUnsafeEqualityIndex is a non-nullable `false`, so `_config?.EnableUnsafeEqualityIndex ??
+            // ResolveUnsafeEqualityIndexFlag()` (Table.Indexing.cs:26) can never reach the
+            // SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX env var or the AppContext switch once a config object exists —
+            // the arm has to set the property itself, which is exactly why this is a switch here rather than a
+            // product change. Unset = false = the product default, so every other arm is unchanged.
+            EnableUnsafeEqualityIndex = Environment.GetEnvironmentVariable("SHARPCOREDB_USE_UNSAFE_EQUALITY_INDEX") == "1",
+            // DELETE index maintenance (plan §7). Deferred maintenance is the PRODUCT DEFAULT since
+            // v2.1, so this arm follows the default unless the env var explicitly opts out — set
+            // SHARPCOREDB_DEFER_DELETE_INDEXES=0 to measure the eager behaviour.
+            EnableDeferredDeleteIndexes = Environment.GetEnvironmentVariable("SHARPCOREDB_DEFER_DELETE_INDEXES") != "0",
+            // Buffered appends (product default: off). This is the switch that decides whether an append —
+            // in the table file or in the overflow arena — does a write-through file open per value or
+            // shares one buffer, so the arms need to be able to turn it on. Set
+            // SHARPCOREDB_BUFFERED_APPENDS=1 to measure it.
+            EnableBufferedAppends = Environment.GetEnvironmentVariable("SHARPCOREDB_BUFFERED_APPENDS") == "1",
+            // Query cache (product default: on). Keyed by statement text, so it only pays for itself when
+            // statements repeat; set SHARPCOREDB_QUERY_CACHE=off to measure an all-miss workload (plan §11).
+            EnableQueryCache = QueryCacheOverride(),
             QueryCacheSize = 4096,
             EnableCompiledPlanCache = true,
             EnableBTreeSelection = true,
@@ -435,6 +1389,31 @@ class Program
             SqlValidationMode = SharpCoreDB.Services.SqlQueryValidator.ValidationMode.Disabled,
             StrictParameterValidation = false
         };
+    }
+
+    /// <summary>
+    /// The product's per-record at-rest encryption default, read from a fresh
+    /// <see cref="DatabaseConfig"/> so a benchmark arm can never drift from it. It flipped to
+    /// <see langword="true"/> on 2026-09-13 (plan §3-1c deliverable 2), and the arms report it.
+    /// </summary>
+    static bool ProductAtRestDefault => new DatabaseConfig().EnableAtRestRecordEncryption;
+
+    /// <summary>
+    /// The two on-disk sizes a write arm's cost is explained by: the table's data file and its overflow arena
+    /// (<c>.ovf</c>, absent when nothing overflowed). Shared by <c>--multirowinsert</c> and by the fair-PK arm's own
+    /// <c>[diag]</c> line (2026-09-22), because the plan's rules require every published figure to name the shape it
+    /// was measured on — and the arena-versus-record split is the one shape fact that changes a figure's meaning.
+    /// </summary>
+    static (long OvfBytes, long DataBytes) TableFileSizes(SharpCoreDB.Database db)
+    {
+        if (!db.TryGetTable("docs", out var t) || t is not SharpCoreDB.DataStructures.Table dt || string.IsNullOrEmpty(dt.DataFile))
+        {
+            return (0, 0);
+        }
+
+        var ovf = Path.ChangeExtension(dt.DataFile, ".ovf");
+        return (File.Exists(ovf) ? new FileInfo(ovf).Length : 0,
+                File.Exists(dt.DataFile) ? new FileInfo(dt.DataFile).Length : 0);
     }
 
     /// <summary>
@@ -461,13 +1440,40 @@ class Program
             // only difference is that "tuned" turns the NoEncryptMode flag off (isolating it).
             "plain" => BuildConfig(engineType, fixedWidth: true),
             "tuned" => BuildConfig(engineType, fixedWidth: true, noEncrypt: false),
-            _ => new DatabaseConfig { StorageEngineType = engineType },
+            // The pure default posture — EXCEPT for one documented opt-in: `SHARPCOREDB_HASH_INDEXES=0`, which
+            // gates the per-column auto-index set (session 42's fix, pinned by HashIndexAutoCreationGateTests).
+            // Unset, `HashIndexesOverride()` returns true, which is the product default, so this arm stays the
+            // pure default for every run that does not ask. It is here because session 49 showed the dial's cost
+            // is shape-dependent (large on the legacy no-PK docs shape, nil on this arm's fixed-width PK shape
+            // as measured in session 42 *before* the dictionary-free INSERT existed), so "arrays + no auto
+            // indexes" on the arm ordinary users actually run needed its own measurement.
+            _ => new DatabaseConfig
+            {
+                StorageEngineType = engineType,
+                EnableHashIndexes = HashIndexesOverride(),
+            },
         };
     }
 
     static BenchmarkResult RunSharpCoreDB(SharpCoreDB.Interfaces.StorageEngineType engineType)
+        => RunSharpCoreDbMode(engineType, noEncrypt: true, atRestRecords: null);
+
+    /// <summary>
+    /// Runs the SQL CRUD workload in one encryption configuration:
+    /// <paramref name="noEncrypt"/> true is the raw-speed arm (<c>NoEncryptMode=true</c>, everything
+    /// plaintext); false is an encrypted-metadata run, with
+    /// <paramref name="atRestRecords"/> <see langword="null"/> keeping the PRODUCT default for
+    /// per-record at-rest encryption (<see langword="true"/> since the 2026-09-13 flip) and an explicit
+    /// <see langword="true"/>/<see langword="false"/> overriding it.
+    /// </summary>
+    static BenchmarkResult RunSharpCoreDbMode(
+        SharpCoreDB.Interfaces.StorageEngineType engineType, bool noEncrypt, bool? atRestRecords, bool? batchDml = null)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-{Guid.NewGuid()}");
+        // Session 46: same SQL-free batch dial as arm B, for the no-PK `docs` shape (arm C).
+        bool useBatchUpdate = batchDml ?? BatchDmlDial("UPDATE");
+        bool useBatchDelete = batchDml ?? BatchDmlDial("DELETE");
+        bool useArrayInsert = batchDml ?? BatchDmlDial("INSERT");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -477,7 +1483,7 @@ class Program
             var sp = services.BuildServiceProvider();
 
             var factory = sp.GetRequiredService<DatabaseFactory>();
-            var config = BuildConfig(engineType);
+            var config = BuildConfig(engineType, fixedWidth: MainFixedWidthOverride(), noEncrypt: noEncrypt, atRestRecords: atRestRecords);
 
             using var db = (SharpCoreDB.Database)factory.Create(
                 dbPath: dbPath,
@@ -496,24 +1502,49 @@ class Program
             // Index lookup path used by READ/UPDATE/DELETE in this benchmark
             db.ExecuteSQL(CreateDocsIndexSql);
 
-            // INSERT (batched via InsertBatch API for optimal performance)
+            // §9 priority-1 diagnostics: report the layout this table actually resolved to. The schema declares no
+            // PK, so AutoFixedWidthRecords cannot apply and the arm runs legacy variable-length records unless
+            // SHARPCOREDB_MAIN_FIXEDWIDTH=1 forced FixedWidthRecordLayout — which is the variable under test.
+            if (db.TryGetTable("docs", out var layoutProbe) && layoutProbe is SharpCoreDB.DataStructures.Table probeTable)
+            {
+                Console.WriteLine(
+                    $"    [diag] docs layout: IsFixedWidthRecords={probeTable.IsFixedWidthRecords} " +
+                    $"(config FixedWidthRecordLayout={config.FixedWidthRecordLayout}, AutoFixedWidthRecords={config.AutoFixedWidthRecords})");
+            }
+
+            // INSERT (batched via InsertBatch API for optimal performance). Session 48: the dial/triple flag can
+            // route this phase through the dictionary-free `object[]` + column-order API; see the fair arm.
             var sw = Stopwatch.StartNew();
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
-                var rows = new List<Dictionary<string, object>>(end - batch);
-                for (int i = batch; i < end; i++)
+                if (useArrayInsert)
                 {
-                    rows.Add(new Dictionary<string, object>
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
                     {
-                        ["name"] = $"User{i}",
-                        [EmailColumn] = $"user{i}@test.com",
-                        ["age"] = 20 + i % 60,
-                        [ScoreColumn] = i * 0.1,
-                        ["data"] = $"payload-{i}"
-                    });
+                        arrayRows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", arrayRows, DocsColumns);
                 }
-                db.InsertBatch("docs", rows);
+                else
+                {
+                    var rows = new List<Dictionary<string, object>>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add(new Dictionary<string, object>
+                        {
+                            ["name"] = $"User{i}",
+                            [EmailColumn] = $"user{i}@test.com",
+                            ["age"] = 20 + i % 60,
+                            [ScoreColumn] = i * 0.1,
+                            ["data"] = $"payload-{i}"
+                        });
+                    }
+
+                    db.InsertBatch("docs", rows);
+                }
             }
             db.Flush();
             sw.Stop();
@@ -535,34 +1566,108 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE
-            sw.Restart();
-            var updateStmts = new List<string>(UpdateCount);
-            for (int i = 0; i < UpdateCount; i++)
+            // UPDATE (plan §9 priority 1: the PK-less, hash-predicate route). SHARPCOREDB_MAIN_PROFILE_UPDATE=1
+            // turns the profiler on for THIS phase only, mirroring --pk-profile: Reset clears the INSERT/READ stamps
+            // so the report describes the update batch alone, and the question it answers is whether any in-place
+            // route is taken at all — read the in-place-patch stage call count.
+            if (MainProfileUpdateOverride())
             {
-                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE docs SET score = {0:F1} WHERE name = 'User{1}'", i * 99.9, i));
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
-            db.ExecuteBatchSQL(updateStmts);
+
+            sw.Restart();
+            // Session 46: the list now comes from a cache built OUTSIDE the window. The fair arm and arm B were
+            // given this correction in sessions 28/31; this arm still formatted 10.000 statements inside its own
+            // timed window, against a SQLite reference that has used one prepared command with re-bound
+            // parameters since session 31 — a one-sided defect by §6 rule 12, fixed here rather than inherited by
+            // the new comparison. See DocsUpdateStatements: this makes old arm-C absolute numbers incomparable.
+            List<string>? updateStmts = null;
+            if (!useBatchUpdate)
+            {
+                updateStmts = new List<string>(DocsUpdateStatements.Value);
+            }
+
+            if (useBatchUpdate)
+            {
+                int updated = db.UpdateBatch("docs", DocsBatchUpdates.Value);
+                Console.WriteLine($"    [diag] docs UPDATE shape: SQL-free batch — {updated:N0}/{UpdateCount:N0} rows reported updated");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(updateStmts!);
+            }
+
             db.Flush();
             sw.Stop();
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
 
-            // DELETE
-            sw.Restart();
-            var deleteStmts = new List<string>(DeleteCount);
-            for (int i = 0; i < DeleteCount; i++)
+            if (MainProfileUpdateOverride())
             {
-                deleteStmts.Add($"DELETE FROM docs WHERE name = 'User{i}'");
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled UPDATE pass: {result.UpdateTime:F2}s "
+                    + $"({result.UpdateOpsPerSec:N0} ops/sec, {result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
             }
-            db.ExecuteBatchSQL(deleteStmts);
+
+            // Correctness gate — AFTER the timed phase so the cell is untouched, and BEFORE the DELETE phase,
+            // which removes exactly the rows this samples.
+            if (batchDml.HasValue || useBatchUpdate)
+            {
+                VerifyBatchUpdateByKey(db, "docs", "docs", FairNiKeyColumn, ScoreColumn,
+                    keyFor: i => $"User{i}", expectedScoreFor: i => i * 99.9, total: UpdateCount);
+            }
+
+            // DELETE (2026-09-21: the gate put this phase at 1,33x baseline on the default arm, twice, bisected to the
+            // buffered-overwrite flush coalescing. SHARPCOREDB_MAIN_PROFILE_DELETE=1 profiles THIS phase only,
+            // mirroring the UPDATE override above, so the stage table can say whether DELETE's own work grew or
+            // whether it inherits an environment from the phases before it.)
+            if (MainProfileDeleteOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
+            sw.Restart();
+            List<string>? deleteStmts = null;
+            if (!useBatchDelete)
+            {
+                deleteStmts = new List<string>(DocsDeleteStatements.Value);
+            }
+
+            if (useBatchDelete)
+            {
+                int deleted = db.DeleteBatch("docs", DocsBatchDeletes.Value);
+                Console.WriteLine($"    [diag] docs DELETE shape: SQL-free batch — {deleted:N0}/{DeleteCount:N0} rows reported deleted");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(deleteStmts!);
+            }
+
             db.Flush();
             sw.Stop();
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+
+            if (batchDml.HasValue || useBatchDelete)
+            {
+                VerifyBatchDeleteByKey(db, "docs", "docs", FairNiKeyColumn, keyFor: i => $"User{i}", total: DeleteCount);
+            }
+
+            if (MainProfileDeleteOverride())
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled DELETE pass: {result.DeleteTime:F2}s "
+                    + $"({result.DeleteOpsPerSec:N0} ops/sec, {result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
+
         }
         finally
         {
@@ -587,7 +1692,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSharpCoreDBDirectApi(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-direct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -706,7 +1811,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSharpCoreDBStruct(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-struct-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -780,12 +1885,19 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE/DELETE intentionally omitted — they use identical code paths to the
-            // Direct API row; this row focuses on the zero-allocation READ path.
+            // UPDATE/DELETE are deliberately not run on this arm: the call path is the same
+            // db.ExecuteBatchSQL with the same statements, over the same table with the same index, as the
+            // Direct API row above — only the READ path differs (FindByIndex vs ExecuteQueryStruct). Running
+            // them would re-measure that row's numbers and invite a reader to read two measurements of one
+            // code path as independent evidence, so the omission stays; what changes (plan §5.5) is that it is
+            // now *printed* as `n/a` instead of as a 0 that reads like a result. The flags travel into the
+            // ladder median and into comparative_*.json.
             result.UpdateTime = 0d;
             result.UpdateOpsPerSec = 0;
+            result.UpdateMeasured = false;
             result.DeleteTime = 0d;
             result.DeleteOpsPerSec = 0;
+            result.DeleteMeasured = false;
         }
         finally
         {
@@ -810,7 +1922,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunSQLite()
     {
-        var dbFile = Path.Combine(Path.GetTempPath(), $"bench-sqlite-{Guid.NewGuid()}.db");
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-sqlite-{Guid.NewGuid()}.db");
         var result = new BenchmarkResult();
 
         try
@@ -831,9 +1943,7 @@ class Program
                 cmd.ExecuteNonQuery();
             }
 
-            // Pragmas for fair comparison
-            using (var cmd = conn.CreateCommand()) { cmd.CommandText = "PRAGMA journal_mode=WAL"; cmd.ExecuteNonQuery(); }
-            using (var cmd = conn.CreateCommand()) { cmd.CommandText = "PRAGMA synchronous=NORMAL"; cmd.ExecuteNonQuery(); }
+            ConfigureSqliteReference(conn, result);
 
             // INSERT (batched in transactions)
             var sw = Stopwatch.StartNew();
@@ -874,17 +1984,23 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
-            // UPDATE
+            // UPDATE. ONE prepared command with re-bound parameter VALUES, not a fresh command and fresh
+            // parameter objects per row: our arm's statements now come from a cache built outside the window, so
+            // leaving this side to allocate per row would have biased the comparison in our favour rather than
+            // corrected it (session 31 — the same rule the fair arm's fix followed in session 29).
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var updCmd = conn.CreateCommand();
+                updCmd.CommandText = "UPDATE docs SET score = @score WHERE id = @id";
+                var pScore = updCmd.CreateParameter(); pScore.ParameterName = "@score"; updCmd.Parameters.Add(pScore);
+                var pId = updCmd.CreateParameter(); pId.ParameterName = "@id"; updCmd.Parameters.Add(pId);
+                updCmd.Prepare();
                 for (int i = 1; i <= UpdateCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = "UPDATE docs SET score = @score WHERE id = @id";
-                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 99.9; cmd.Parameters.Add(pScore);
-                    var pId = cmd.CreateParameter(); pId.ParameterName = "@id"; pId.Value = i; cmd.Parameters.Add(pId);
-                    cmd.ExecuteNonQuery();
+                    pScore.Value = i * 99.9;
+                    pId.Value = i;
+                    updCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -893,16 +2009,19 @@ class Program
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
 
-            // DELETE
+            // DELETE. Same correction as UPDATE above: one prepared command with a re-bound parameter, so this
+            // side is not paying a command allocation per row while our side reads its statements from a cache.
             sw.Restart();
             using (var tx = conn.BeginTransaction())
             {
+                using var delCmd = conn.CreateCommand();
+                delCmd.CommandText = "DELETE FROM docs WHERE id = @id";
+                var pDel = delCmd.CreateParameter(); pDel.ParameterName = "@id"; delCmd.Parameters.Add(pDel);
+                delCmd.Prepare();
                 for (int i = 1; i <= DeleteCount; i++)
                 {
-                    using var cmd = conn.CreateCommand();
-                    cmd.CommandText = "DELETE FROM docs WHERE id = @id";
-                    var p = cmd.CreateParameter(); p.ParameterName = "@id"; p.Value = i; cmd.Parameters.Add(p);
-                    cmd.ExecuteNonQuery();
+                    pDel.Value = i;
+                    delCmd.ExecuteNonQuery();
                 }
                 tx.Commit();
             }
@@ -919,6 +2038,1463 @@ class Program
         return result;
     }
 
+    /// <summary>
+    /// Opens a SQLite reference connection onto the resolved reference regime (S1): applies
+    /// <see cref="SqlitePragmas"/> and READS THEM BACK, so the archive records the values SQLite
+    /// actually took rather than the ones the harness asked for — a pragma can be silently refused
+    /// (SQLite documents that <c>page_size</c> is immutable once a database is in WAL mode, and unknown
+    /// pragmas are ignored without error). One helper, so every SQLite arm uses the same reference and
+    /// no arm can drift.
+    /// </summary>
+    static void ConfigureSqliteReference(SqliteConnection conn, BenchmarkResult result)
+    {
+        var plannedPragmas = SqlitePragmas();
+        foreach (var pragma in plannedPragmas)
+        {
+            using var pragmaCmd = conn.CreateCommand();
+            pragmaCmd.CommandText = $"PRAGMA {pragma}";
+            pragmaCmd.ExecuteNonQuery();
+        }
+
+        var effectivePragmas = new List<string>(plannedPragmas.Length);
+        foreach (var pragma in plannedPragmas)
+        {
+            var name = pragma.Split('=', 2)[0].Trim();
+            using var readCmd = conn.CreateCommand();
+            readCmd.CommandText = $"PRAGMA {name}";
+            effectivePragmas.Add($"{name}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
+        }
+
+        result.SqlitePragmas = string.Join(", ", effectivePragmas);
+        Console.WriteLine($"  SQLite reference pragmas (effective): {result.SqlitePragmas}");
+    }
+
+    // ══════════════════════════════════════
+    // S5 (plan §4): the FAIR non-PK, indexed-predicate comparison
+    // ══════════════════════════════════════
+
+    /// <summary>Table name for the S5 fair arm. Both engines use the same one.</summary>
+    const string FairNiTable = "fni";
+
+    /// <summary>Name of the secondary index on the predicate column, on both engines.</summary>
+    const string FairNiNameIndex = "idx_fni_name";
+
+    /// <summary>
+    /// The predicate column the fair arm's UPDATE/DELETE statements match on (<c>name</c>) — the column the
+    /// SQL-free batch API is given as a key column, so both shapes locate through the same index.
+    /// </summary>
+    const string FairNiKeyColumn = "name";
+
+    /// <summary>
+    /// The user-facing column order the dictionary-free INSERT arms pass with each row (session 48). The
+    /// internal <c>_rowid</c> column is deliberately absent — the engine re-maps this order onto the table's
+    /// positions, which is exactly what the SQL batch parser's fast path does.
+    /// </summary>
+    static readonly string[] DocsColumns = ["name", "email", "age", "score", "data"];
+
+    /// <inheritdoc cref="DocsColumns"/>
+    static readonly string[] PkColumns = ["id", "name", "email", "age", "score", "data"];
+
+    /// <summary>
+    /// The columns the fair arm indexes on the SQLite side. SharpCoreDB's Columnar <c>CREATE TABLE</c>
+    /// already registers a hash index per column (<c>SqlParser.DDL.cs:430-436</c>), so listing the same
+    /// columns here is what MATCHES the index sets instead of assuming they match.
+    /// </summary>
+    static readonly string[] FairNiAllColumns = ["name", "email", "age", "score", "data"];
+
+    /// <summary>
+    /// The fair arm's statement lists, built <b>once</b> and reused. Plain harness work must not sit inside a
+    /// timed phase: measured (worklog session 28), formatting 10.000 interpolated DELETE statements cost
+    /// **0–17 ms of a 21–65 ms phase** and varied per rep — about a quarter of what the arm reported as
+    /// "our DELETE" was the harness rather than the engine. The statements are identical on every rep, so
+    /// rebuilding them per rep was pure waste as well as a variance source.
+    /// <para>
+    /// A shallow copy is handed to the engine (pointer copies, no formatting) so that one phase cannot observe
+    /// a list another phase is enumerating. The SQLite side gets the symmetric treatment — one prepared
+    /// command with re-bound parameters instead of a fresh command and parameter objects per row — because
+    /// removing only our client-side work would bias the comparison in our favour rather than correct it.
+    /// </para>
+    /// </summary>
+    static readonly Lazy<List<string>> FairNiUpdateStatements = new(() =>
+    {
+        var list = new List<string>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE {0} SET score = {1:F1} WHERE name = 'User{2}'", FairNiTable, i * 99.9, i));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="FairNiUpdateStatements"/>
+    static readonly Lazy<List<string>> FairNiDeleteStatements = new(() =>
+    {
+        var list = new List<string>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add($"DELETE FROM {FairNiTable} WHERE name = 'User{i}'");
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// The fair arm's SQL-free batch operation lists, built <b>once</b> and reused for the same reason the
+    /// statement lists above are cached: harness work must not sit inside a timed phase (§6 rule 11 — the
+    /// interpolated statements cost 0–17 ms of a 21–65 ms window before they were cached). Same work, same
+    /// order, same values as the SQL statements: key <c>name = User{i}</c>, set <c>score = i * 99.9</c>.
+    /// </summary>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>> FairNiBatchUpdates = new(() =>
+    {
+        var list = new List<(string, object?, Dictionary<string, object>)>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}", new Dictionary<string, object>(1) { [ScoreColumn] = i * 99.9 }));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="FairNiBatchUpdates"/>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue)>> FairNiBatchDeletes = new(() =>
+    {
+        var list = new List<(string, object?)>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}"));
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// SQL-free batch DML dial, <b>general</b> form: <c>SHARPCOREDB_BATCH_DML</c> is what every arm reads,
+    /// and <c>SHARPCOREDB_FAIR_BATCH_DML</c> stays accepted because it is the name the fair arm's archives and
+    /// the session-45 worklog entry record. <c>1</c> (or <c>both</c>/<c>all</c>) routes BOTH phases through
+    /// <c>Database.UpdateBatch</c>/<c>Database.DeleteBatch</c>; a comma-separated list (<c>update</c>,
+    /// <c>delete</c>) routes only the named phases, which is what makes a per-phase attribution possible.
+    /// Unset keeps every published cell's shape: the SQL batch path.
+    /// <para>
+    /// Why this dial exists: the campaign's best PK cell (INSERT) has a dedicated SQL-free batch path while
+    /// UPDATE and DELETE hand the engine statement text and pay a per-statement classification. This dial is
+    /// the only way to measure what removing that layer is worth without changing a shipped default.
+    /// </para>
+    /// </summary>
+    static bool BatchDmlDial(string phase) =>
+        ReadBatchDmlDial("SHARPCOREDB_BATCH_DML", phase) || ReadBatchDmlDial("SHARPCOREDB_FAIR_BATCH_DML", phase);
+
+    /// <inheritdoc cref="BatchDmlDial"/>
+    static bool FairBatchDml(string phase) => BatchDmlDial(phase);
+
+    private static bool ReadBatchDmlDial(string variable, string phase)
+    {
+        var value = Environment.GetEnvironmentVariable(variable);
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        if (value is "1" || value.Equals("both", StringComparison.OrdinalIgnoreCase) || value.Equals("all", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        foreach (var part in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (part.Equals(phase, StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Arm B's SQL-free batch lists, cached for the same reason every other arm's statement list is: harness
+    /// work must not sit inside a timed phase (§6 rule 11). Same work, same order, same values as
+    /// <see cref="PkUpdateStatements"/> / <see cref="PkDeleteStatements"/> — key <c>id = i</c>, set
+    /// <c>score = i * 99.9</c>, for i = 1..10.000.
+    /// </summary>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>> PkBatchUpdates = new(() =>
+    {
+        var list = new List<(string, object?, Dictionary<string, object>)>(UpdateCount);
+        for (int i = 1; i <= UpdateCount; i++)
+        {
+            list.Add(("id", i, new Dictionary<string, object>(1) { [ScoreColumn] = i * 99.9 }));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="PkBatchUpdates"/>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue)>> PkBatchDeletes = new(() =>
+    {
+        var list = new List<(string, object?)>(DeleteCount);
+        for (int i = 1; i <= DeleteCount; i++)
+        {
+            list.Add(("id", i));
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// The default (no-PK) <c>docs</c> job's SQL-free batch lists — key <c>name = User{i}</c>, set
+    /// <c>score = i * 99.9</c>, i = 0..9.999, mirroring the statements that job builds.
+    /// </summary>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>> DocsBatchUpdates = new(() =>
+    {
+        var list = new List<(string, object?, Dictionary<string, object>)>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}", new Dictionary<string, object>(1) { [ScoreColumn] = i * 99.9 }));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="DocsBatchUpdates"/>
+    static readonly Lazy<List<(string KeyColumn, object? KeyValue)>> DocsBatchDeletes = new(() =>
+    {
+        var list = new List<(string, object?)>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add((FairNiKeyColumn, $"User{i}"));
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// The default (no-PK) <c>docs</c> job's statement lists, built <b>once</b>. This arm kept the old shape
+    /// until session 46 — both lists were formatted inside the timed window — while its SQLite reference has
+    /// used one prepared command with re-bound parameters since session 31. That was a one-sided defect, so it
+    /// is fixed here rather than inherited by the new comparison (§6 rule 12); the change makes old arm-C
+    /// absolute numbers non-comparable with new ones, and the worklog says so.
+    /// </summary>
+    static readonly Lazy<List<string>> DocsUpdateStatements = new(() =>
+    {
+        var list = new List<string>(UpdateCount);
+        for (int i = 0; i < UpdateCount; i++)
+        {
+            list.Add(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE docs SET score = {0:F1} WHERE name = 'User{1}'", i * 99.9, i));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="DocsUpdateStatements"/>
+    static readonly Lazy<List<string>> DocsDeleteStatements = new(() =>
+    {
+        var list = new List<string>(DeleteCount);
+        for (int i = 0; i < DeleteCount; i++)
+        {
+            list.Add($"DELETE FROM docs WHERE name = 'User{i}'");
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// Arm B's statement lists, built once and reused — the same correction the fair arm received in session
+    /// 29, which arm B never got. Measured on the fair arm: building 10.000 statements inside the timed window
+    /// cost 0–17 ms of a 21–65 ms phase and drove one collapsed rep per run. Arm B kept the old shape and kept
+    /// collapsing: session 31 caught its DELETE at **124.714 ops/s** against 380k–460k in its four sibling reps,
+    /// which is what put the 0,32× low end on that cell. The DELETE build here also had no `StmtBuild` stamp
+    /// (UPDATE's did), so the harness's own formatting was charged to the engine **unmeasured**.
+    /// <para>
+    /// The SQLite side of arm B gets the symmetric treatment — one prepared command with re-bound parameter
+    /// values instead of a fresh command and fresh parameter objects per row — because removing only our
+    /// client-side work would bias the comparison in our favour rather than correct it (plan §6 rule 12).
+    /// </para>
+    /// </summary>
+    static readonly Lazy<List<string>> PkUpdateStatements = new(() =>
+    {
+        var list = new List<string>(UpdateCount);
+        for (int i = 1; i <= UpdateCount; i++)
+        {
+            list.Add(string.Format(CultureInfo.InvariantCulture,
+                "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
+        }
+        return list;
+    });
+
+    /// <inheritdoc cref="PkUpdateStatements"/>
+    static readonly Lazy<List<string>> PkDeleteStatements = new(() =>
+    {
+        var list = new List<string>(DeleteCount);
+        for (int i = 1; i <= DeleteCount; i++)
+        {
+            list.Add($"DELETE FROM docs WHERE id = {i}");
+        }
+        return list;
+    });
+
+    /// <summary>
+    /// The <c>User{i}</c> literals, built once. Every phase needs 10.000 of them and neither arm should
+    /// allocate them inside a timed window: this is the SQLite-side analogue of caching the statement lists,
+    /// and without it the symmetry fix would have removed our per-row allocation while leaving theirs.
+    /// </summary>
+    static readonly Lazy<string[]> FairNiNames = new(() =>
+    {
+        int count = Math.Max(InsertCount, Math.Max(UpdateCount, DeleteCount));
+        var names = new string[count];
+        for (int i = 0; i < count; i++)
+        {
+            names[i] = $"User{i}";
+        }
+        return names;
+    });
+
+    /// <summary>
+    /// A GC checkpoint for the fair arm (S7 follow-up). The UPDATE cell is the last unresolved one: our
+    /// per-rep UPDATE moves 2,05× while SQLite's moves 1,04×, and compaction, CPU, disk and thermal are all
+    /// ruled out by measurement. The remaining asymmetry is allocation — this engine allocates roughly
+    /// 750 B per update (in-place-patch 175 + row-locate-index 279 + engine-write 302, measured) against
+    /// SQLite's near-zero per row — so a collection landing inside a measured pass is a live suspect, and
+    /// a collection count per phase is what turns that from a story into a reading.
+    /// </summary>
+    static (int G0, int G1, int G2, long Alloc) GcCheckpoint() =>
+        (GC.CollectionCount(0), GC.CollectionCount(1), GC.CollectionCount(2), GC.GetTotalAllocatedBytes(precise: false));
+
+    /// <inheritdoc cref="GcCheckpoint"/>
+    static string GcDelta((int G0, int G1, int G2, long Alloc) from, (int G0, int G1, int G2, long Alloc) to) =>
+        $"gen0+{to.G0 - from.G0} gen1+{to.G1 - from.G1} gen2+{to.G2 - from.G2}"
+        + $" alloc+{(to.Alloc - from.Alloc) / 1048576.0:F1}MB";
+
+    /// <summary>
+    /// Turns the write-path profiler on for <b>one phase</b> of the fair arm, from
+    /// <c>SHARPCOREDB_FAIR_PROFILE_&lt;PHASE&gt;=1</c> — e.g. <c>SHARPCOREDB_FAIR_PROFILE_UPDATE</c>,
+    /// <c>SHARPCOREDB_FAIR_PROFILE_DELETE</c>. Diagnostic only, and the same shape the document job already
+    /// uses (<c>SHARPCOREDB_MAIN_PROFILE_*</c>): <c>Reset</c> before the phase so the report describes that
+    /// batch alone, <c>Disable</c> after so the other phases are not stamped.
+    /// <para>
+    /// It exists because the fair arm's cells were the campaign's unresolved measurements — UPDATE varied
+    /// 2,07× per rep (since resolved by the warm-up count), and DELETE stalls in exactly one rep per run,
+    /// seen four times across two arms while SQLite never stalls. A stage table per rep is what converts
+    /// "something in this pass varies" into "this stage varies", which is the difference between a story and
+    /// an attribution.
+    /// </para>
+    /// </summary>
+    static bool FairProfile(string phase) =>
+        Environment.GetEnvironmentVariable($"SHARPCOREDB_FAIR_PROFILE_{phase.ToUpperInvariant()}") == "1";
+
+    // ══════════════════════════════════════
+    // Shared paired-rep protocol (§6 rules 4, 7 and 10)
+    // ══════════════════════════════════════
+    //
+    // Extracted for the arms that did NOT yet have the protocol. The fair arm (`--fair-ni`) has an inline
+    // copy of the same logic, and it is deliberately left there for now: its numbers are validated and
+    // published (worklog session 25), and re-shaping a validated measurement without re-validating it is
+    // exactly what this campaign forbids. **Known debt, stated rather than hidden:** two implementations
+    // of one protocol is a drift hazard, and the fair arm should be moved onto these helpers in the same
+    // change that re-runs it — not before.
+    //
+    // The arm that motivated the extraction is the PK-default one (arm B — the pure-default encrypted
+    // posture, the number the product actually ships). It ran all of one arm's reps and then all of the
+    // other's, with no discarded warm-up and no printed spread: the same pair of defects S5 and S7 closed
+    // on the fair arm. Leaving them in arm B while publishing the fair arm's corrected numbers would have
+    // been an inconsistency with a number attached to it.
+
+    /// <summary>Median of a phase's per-rep ops/sec values. Zero-length input yields 0, never a throw.</summary>
+    static int MedianOps(IEnumerable<int> xs)
+    {
+        var sorted = xs.OrderBy(x => x).ToArray();
+        return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+    }
+
+    /// <summary>One paired per-rep ratio; 0 when the denominator is unusable, so it is dropped not faked.</summary>
+    static double PairedRatio(int a, int b) => b > 0 ? a / (double)b : 0;
+
+    /// <summary>Median, min and max of a set of paired ratios — the spread that decides whether a cell stands.</summary>
+    static (double Median, double Min, double Max) RatioSpread(List<double> xs)
+    {
+        var sorted = xs.Where(x => x > 0).OrderBy(x => x).ToArray();
+        return sorted.Length == 0 ? (0, 0, 0) : (sorted[sorted.Length / 2], sorted[0], sorted[sorted.Length - 1]);
+    }
+
+    /// <summary>Measured reps per arm, from <c>SHARPCOREDB_BENCH_REPS</c> (default 3, minimum 1).</summary>
+    static int ResolveReps()
+    {
+        var value = Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS");
+        return int.TryParse(value, NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed) && parsed > 0
+            ? parsed
+            : 3;
+    }
+
+    /// <summary>
+    /// Collapses a per-rep list into the single record an archive stores: the per-phase median, the rep
+    /// count, and (for SQLite only) the comparator's pragma set. Same aggregation everywhere, so no archive
+    /// can describe a run differently from the console report that produced it.
+    /// </summary>
+    static BenchmarkResult MedianArm(List<BenchmarkResult> runs, string? sqlitePragmas = null) =>
+        new()
+        {
+            Reps = runs.Count,
+            InsertOpsPerSec = MedianOps(runs.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(runs.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(runs.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(runs.Select(r => r.DeleteOpsPerSec)),
+            SqlitePragmas = sqlitePragmas,
+        };
+
+    /// <summary>
+    /// Runs two arms as <b>discarded warm-up reps followed by interleaved measured reps</b>, and returns
+    /// the two per-rep lists in order. This is the whole protocol in one place: the warm-up
+    /// (<see cref="ResolveWarmupReps"/>, default 3) so a cold first rep cannot charge only the managed hot
+    /// path, and alternating arm order every rep so a slow window lands on both arms of a pair rather than
+    /// on one arm's block. See §6 rules 4, 7 and 10.
+    /// </summary>
+    static (List<BenchmarkResult> A, List<BenchmarkResult> B) RunInterleavedPairedReps(
+        Func<BenchmarkResult> armA, Func<BenchmarkResult> armB, string labelA, string labelB, int reps)
+    {
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = armA();
+            _ = armB();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        var runsA = new List<BenchmarkResult>(reps);
+        var runsB = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            bool aFirst = r % 2 == 0;
+            Console.WriteLine($"── rep {r + 1}/{reps} · {(aFirst ? labelA : labelB)} first ──");
+            if (aFirst)
+            {
+                runsA.Add(armA());
+                runsB.Add(armB());
+            }
+            else
+            {
+                runsB.Add(armB());
+                runsA.Add(armA());
+            }
+        }
+        Console.WriteLine();
+
+        return (runsA, runsB);
+    }
+
+    /// <summary>
+    /// Reports two arms' interleaved runs the one way this campaign reads them: per-rep rows, a median
+    /// table, and the median of the <b>paired</b> per-rep ratios with its range — plus the rule for reading
+    /// it. A range that does not straddle 1,00× supports that cell; one that does means the cell sits inside
+    /// this box's noise and must be re-run rather than rounded. One implementation, so an arm cannot report
+    /// itself differently from the others.
+    /// </summary>
+    static void ReportPaired(string labelA, string labelB, List<BenchmarkResult> runsA, List<BenchmarkResult> runsB)
+    {
+        int reps = Math.Min(runsA.Count, runsB.Count);
+
+        var ratioInsert = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].InsertOpsPerSec, runsB[i].InsertOpsPerSec)).ToList();
+        var ratioRead = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].ReadOpsPerSec, runsB[i].ReadOpsPerSec)).ToList();
+        var ratioUpdate = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].UpdateOpsPerSec, runsB[i].UpdateOpsPerSec)).ToList();
+        var ratioDelete = Enumerable.Range(0, reps).Select(i => PairedRatio(runsA[i].DeleteOpsPerSec, runsB[i].DeleteOpsPerSec)).ToList();
+
+        Console.WriteLine($"  per-rep, {reps} paired reps, arm order alternated (ops/sec):");
+        Console.WriteLine("  rep │  A  INSERT      READ    UPDATE    DELETE │  B  INSERT      READ    UPDATE    DELETE │ paired ratios I / R / U / D");
+        for (int r = 0; r < reps; r++)
+        {
+            var s = runsA[r];
+            var q = runsB[r];
+            Console.WriteLine($"  {r + 1,3} │ {s.InsertOpsPerSec,12:N0} {s.ReadOpsPerSec,8:N0} {s.UpdateOpsPerSec,8:N0} {s.DeleteOpsPerSec,8:N0}"
+                + $" │ {q.InsertOpsPerSec,12:N0} {q.ReadOpsPerSec,8:N0} {q.UpdateOpsPerSec,8:N0} {q.DeleteOpsPerSec,8:N0}"
+                + $" │ {ratioInsert[r]:F2} {ratioRead[r]:F2} {ratioUpdate[r]:F2} {ratioDelete[r]:F2}");
+        }
+        Console.WriteLine();
+
+        Console.WriteLine("║ Arm               │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ {labelA,-18}│ {MedianOps(runsA.Select(r => r.InsertOpsPerSec)),10:N0} │ {MedianOps(runsA.Select(r => r.ReadOpsPerSec)),8:N0} │ {MedianOps(runsA.Select(r => r.UpdateOpsPerSec)),8:N0} │ {MedianOps(runsA.Select(r => r.DeleteOpsPerSec)),8:N0} ║");
+        Console.WriteLine($"║ {labelB,-18}│ {MedianOps(runsB.Select(r => r.InsertOpsPerSec)),10:N0} │ {MedianOps(runsB.Select(r => r.ReadOpsPerSec)),8:N0} │ {MedianOps(runsB.Select(r => r.UpdateOpsPerSec)),8:N0} │ {MedianOps(runsB.Select(r => r.DeleteOpsPerSec)),8:N0} ║");
+        Console.WriteLine();
+
+        var (mI, iMin, iMax) = RatioSpread(ratioInsert);
+        var (mR, rMin, rMax) = RatioSpread(ratioRead);
+        var (mU, uMin, uMax) = RatioSpread(ratioUpdate);
+        var (mD, dMin, dMax) = RatioSpread(ratioDelete);
+        Console.WriteLine($"  {labelA} / {labelB} — median of the PAIRED per-rep ratios, with the range:");
+        Console.WriteLine($"    INSERT: {mI:F2}x  ({iMin:F2}x - {iMax:F2}x)      (> 1,00x means {labelA} is ahead)");
+        Console.WriteLine($"    READ:   {mR:F2}x  ({rMin:F2}x - {rMax:F2}x)");
+        Console.WriteLine($"    UPDATE: {mU:F2}x  ({uMin:F2}x - {uMax:F2}x)");
+        Console.WriteLine($"    DELETE: {mD:F2}x  ({dMin:F2}x - {dMax:F2}x)");
+        Console.WriteLine("  A range that does not straddle 1,00x supports that cell's direction; one that does means the");
+        Console.WriteLine("  cell sits inside this box's noise and must be re-run, not rounded.");
+    }
+
+    /// <summary>
+    /// The fair comparison the default job cannot provide.
+    /// <para>
+    /// The default job compares a SharpCoreDB table with <b>no primary key</b> and a predicate on an
+    /// <em>indexed</em> <c>name</c> against a SQLite table with <c>id INTEGER PRIMARY KEY</c> and the
+    /// predicate on that <em>rowid</em> — so SQLite resolves in one B-tree descent to a row it edits in
+    /// place, while ours probes a secondary hash index. On top of that, SQLite's <c>score</c> is
+    /// unindexed while ours is not, because every column of a Columnar table gets an auto-created hash
+    /// index (<c>SqlParser.DDL.cs:430-436</c>). The brief's §8 trap 4 names the first half of that
+    /// asymmetry; S2's verdict (worklog session 19) named the second.
+    /// </para>
+    /// <para>
+    /// This arm removes both: <b>neither</b> side declares a primary key, <b>both</b> resolve the same
+    /// predicate through a secondary index on <c>name</c>, and <b>both</b> carry an index on every
+    /// column — SharpCoreDB implicitly, SQLite explicitly — so the SET column is indexed on both sides
+    /// and neither engine gets the "unindexed column" shortcut. What is left is the row write path,
+    /// which is precisely the quantity arm C's 0,24× could not isolate.
+    /// </para>
+    /// </summary>
+    static void RunFairNoPkIndexed(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║  S5 fair arm: NO primary key on EITHER side         ║");
+        Console.WriteLine("║  same predicate, same secondary index, same columns ║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("(median of 3 per phase)");
+        Console.WriteLine("Both sides carry an index on EVERY column — SharpCoreDB implicitly for a Columnar table,");
+        Console.WriteLine("SQLite explicitly — so the SET column is indexed on both sides. No rowid shortcut either way.");
+        Console.WriteLine();
+
+        // Plan §6 rule 10 (S7's verdict): one DISCARDED warm-up rep, because our per-rep numbers improved
+        // monotonically from rep 1 to rep 5 in two independent runs while SQLite's stayed flat — and since
+        // every rep builds a fresh database, only process state can carry across them. It runs the real arms
+        // so the warm-up exercises the same paths the measurement does, and it is counted out loud so a
+        // reader can never mistake it for a measured rep.
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = RunFairNoPkSharp(engineType);
+            _ = RunFairNoPkSqlite();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        // S5 (plan §6.4): the arms are INTERLEAVED and the SPREAD is printed. Two reasons, both required by
+        // the measurement protocol. (1) The first version ran every SharpCoreDB rep and then every SQLite
+        // rep, so a slow window landed on one arm's block and not the other's — drift has to hit both arms
+        // of a pair, so the arm order alternates every rep. (2) A median without a spread cannot be told
+        // from a lucky draw, and this campaign has already thrown away one reading that had no error bar.
+        int reps = 3;
+        if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
+        {
+            reps = envReps;
+        }
+
+        var scdbRuns = new List<BenchmarkResult>(reps);
+        var sqliteRuns = new List<BenchmarkResult>(reps);
+        for (int r = 0; r < reps; r++)
+        {
+            bool scdbFirst = r % 2 == 0;
+            Console.WriteLine($"── rep {r + 1}/{reps} · {(scdbFirst ? "SharpCoreDB" : "SQLite")} first ──");
+            if (scdbFirst)
+            {
+                scdbRuns.Add(RunFairNoPkSharp(engineType));
+                sqliteRuns.Add(RunFairNoPkSqlite());
+            }
+            else
+            {
+                sqliteRuns.Add(RunFairNoPkSqlite());
+                scdbRuns.Add(RunFairNoPkSharp(engineType));
+            }
+        }
+        Console.WriteLine();
+
+        static int MedianOps(IEnumerable<int> xs)
+        {
+            var sorted = xs.OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
+        }
+
+        static double Paired(int a, int b) => b > 0 ? a / (double)b : 0;
+
+        static (double Median, double Min, double Max) Spread(List<double> xs)
+        {
+            var sorted = xs.Where(x => x > 0).OrderBy(x => x).ToArray();
+            return sorted.Length == 0 ? (0, 0, 0) : (sorted[sorted.Length / 2], sorted[0], sorted[sorted.Length - 1]);
+        }
+
+        var scdb = new BenchmarkResult
+        {
+            Reps = reps,
+            InsertOpsPerSec = MedianOps(scdbRuns.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(scdbRuns.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(scdbRuns.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(scdbRuns.Select(r => r.DeleteOpsPerSec)),
+        };
+        var sqlite = new BenchmarkResult
+        {
+            Reps = reps,
+            InsertOpsPerSec = MedianOps(sqliteRuns.Select(r => r.InsertOpsPerSec)),
+            ReadOpsPerSec = MedianOps(sqliteRuns.Select(r => r.ReadOpsPerSec)),
+            UpdateOpsPerSec = MedianOps(sqliteRuns.Select(r => r.UpdateOpsPerSec)),
+            DeleteOpsPerSec = MedianOps(sqliteRuns.Select(r => r.DeleteOpsPerSec)),
+            // S1: the comparator's regime travels with the comparator, even through this aggregation.
+            SqlitePragmas = sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null,
+        };
+
+        var ratioInsert = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.InsertOpsPerSec, b.InsertOpsPerSec)).ToList();
+        var ratioRead = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.ReadOpsPerSec, b.ReadOpsPerSec)).ToList();
+        var ratioUpdate = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.UpdateOpsPerSec, b.UpdateOpsPerSec)).ToList();
+        var ratioDelete = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.DeleteOpsPerSec, b.DeleteOpsPerSec)).ToList();
+
+        Console.WriteLine($"  per-rep, {reps} paired reps, arm order alternated (ops/sec):");
+        Console.WriteLine("  rep │ SCDB  INSERT      READ    UPDATE    DELETE │ SQLITE INSERT      READ    UPDATE    DELETE │ paired ratios I / R / U / D");
+        for (int r = 0; r < reps; r++)
+        {
+            var s = scdbRuns[r];
+            var q = sqliteRuns[r];
+            Console.WriteLine($"  {r + 1,3} │ {s.InsertOpsPerSec,12:N0} {s.ReadOpsPerSec,8:N0} {s.UpdateOpsPerSec,8:N0} {s.DeleteOpsPerSec,8:N0}"
+                + $" │ {q.InsertOpsPerSec,13:N0} {q.ReadOpsPerSec,8:N0} {q.UpdateOpsPerSec,8:N0} {q.DeleteOpsPerSec,8:N0}"
+                + $" │ {ratioInsert[r]:F2} {ratioRead[r]:F2} {ratioUpdate[r]:F2} {ratioDelete[r]:F2}");
+        }
+        Console.WriteLine();
+
+        Console.WriteLine("║ Database (median) │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB       │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite            │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine();
+
+        var (mI, iMin, iMax) = Spread(ratioInsert);
+        var (mR, rMin, rMax) = Spread(ratioRead);
+        var (mU, uMin, uMax) = Spread(ratioUpdate);
+        var (mD, dMin, dMax) = Spread(ratioDelete);
+        Console.WriteLine("  SharpCoreDB / SQLite — median of the PAIRED per-rep ratios, with the range:");
+        Console.WriteLine($"    INSERT: {mI:F2}x  ({iMin:F2}x - {iMax:F2}x)      (> 1,00x means SharpCoreDB is ahead)");
+        Console.WriteLine($"    READ:   {mR:F2}x  ({rMin:F2}x - {rMax:F2}x)");
+        Console.WriteLine($"    UPDATE: {mU:F2}x  ({uMin:F2}x - {uMax:F2}x)");
+        Console.WriteLine($"    DELETE: {mD:F2}x  ({dMin:F2}x - {dMax:F2}x)");
+        Console.WriteLine("  A range that does not straddle 1,00x supports that cell's direction; one that does means the");
+        Console.WriteLine("  cell sits inside this box's noise and must be re-run, not rounded.");
+        Console.WriteLine("  Compare against the default job's no-PK arm: if the gap shrinks HERE, the default job's gap");
+        Console.WriteLine("  was row LOCATION, not the row write path — that separation is the whole point of this arm.");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL, no PK, indexed predicate)"] = scdb,
+            ["SQLite (reference, no PK, indexed predicate)"] = sqlite,
+        };
+        var path = Path.Combine(ResultsDirectory(), $"fair_ni_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// <c>--fair-ni-batch</c>: the SQL batch path and the SQL-free batch path on the <b>same</b> fair shape, in
+    /// one process, with SQLite's reference beside them — the paired attribution the campaign's protocol
+    /// requires (§6 rules 4, 10 and 12): discarded warm-up reps, the three arms rotated every measured rep,
+    /// and a per-rep spread printed beside every median.
+    /// <para>
+    /// The three ratios answer three different questions and all three are needed: <b>batch/SQLite</b> is the
+    /// cell the mission is about, <b>SQL/SQLite</b> is the control that proves this run reproduces the
+    /// published shape, and <b>batch/SQL</b> is the attribution — what removing the per-statement text layer
+    /// is actually worth, measured on the same engine, same machine, same index, same values.
+    /// </para>
+    /// </summary>
+    static void RunFairNoPkIndexedBatchComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║  S5 fair arm: SQL-free batch DML vs SQL batch      ║");
+        Console.WriteLine("║  and vs SQLite — three arms, one process           ║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("Arms (identical shape, identical index, identical values):");
+        Console.WriteLine("  A = SharpCoreDB, SQL batch path   (ExecuteBatchSQL, cached statements)");
+        Console.WriteLine("  B = SharpCoreDB, SQL-free batch   (Database.UpdateBatch / Database.DeleteBatch)");
+        Console.WriteLine("  C = SQLite reference              (one prepared command, re-bound parameters)");
+        Console.WriteLine();
+
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false);
+            _ = RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true);
+            _ = RunFairNoPkSqlite();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        int reps = ResolveReps();
+        var sqlRuns = new List<BenchmarkResult>(reps);
+        var batchRuns = new List<BenchmarkResult>(reps);
+        var sqliteRuns = new List<BenchmarkResult>(reps);
+
+        for (int r = 0; r < reps; r++)
+        {
+            // Rotate the arm order every rep: drift has to land on each arm equally often, which is the same
+            // correction the two-arm fair protocol already carries.
+            int order = r % 3;
+            string orderLabel = order switch { 0 => "A,B,C", 1 => "B,C,A", _ => "C,A,B" };
+            Console.WriteLine($"── rep {r + 1}/{reps} · {orderLabel} ──");
+            switch (order)
+            {
+                case 0:
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    break;
+                case 1:
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    break;
+                default:
+                    sqliteRuns.Add(RunFairNoPkSqlite());
+                    sqlRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: false, batchDelete: false));
+                    batchRuns.Add(RunFairNoPkSharp(engineType, batchUpdate: true, batchDelete: true));
+                    break;
+            }
+        }
+        Console.WriteLine();
+
+        ReportBatchComparisonCell("INSERT", sqlRuns, batchRuns, sqliteRuns, static x => x.InsertOpsPerSec);
+        ReportBatchComparisonCell("READ", sqlRuns, batchRuns, sqliteRuns, static x => x.ReadOpsPerSec);
+        ReportBatchComparisonCell("UPDATE", sqlRuns, batchRuns, sqliteRuns, static x => x.UpdateOpsPerSec);
+        ReportBatchComparisonCell("DELETE", sqlRuns, batchRuns, sqliteRuns, static x => x.DeleteOpsPerSec);
+
+        Console.WriteLine();
+        Console.WriteLine("  Reading the three ratios:");
+        Console.WriteLine("    batch/SQLite  — the mission cell, with the SQL-free API in place.");
+        Console.WriteLine("    SQL/SQLite    — the control: this run's reproduction of the published SQL shape.");
+        Console.WriteLine("    batch/SQL     — the attribution: what the API change alone is worth on this engine.");
+        Console.WriteLine("  READ is the same code in arms A and B, so its batch/SQL column is the protocol's own resolution.");
+        Console.WriteLine("  INSERT differs in the input shape too (dictionary-free object[] vs dictionaries), so its column");
+        Console.WriteLine("  is that API's own measurement; a straddling range means re-run, not rounding.");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL batch, fair no-PK)"] = MedianArm(sqlRuns),
+            ["SharpCoreDB (SQL-free batch, fair no-PK)"] = MedianArm(batchRuns),
+            ["SQLite (reference, fair no-PK)"] = MedianArm(sqliteRuns, sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null),
+        };
+        var path = Path.Combine(ResultsDirectory(), $"fair_ni_batch_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// The three-arm protocol in one place — arm A = the SQL batch path, arm B = the SQL-free batch path,
+    /// arm C = SQLite's reference — all in <b>one process</b>, with discarded warm-up reps, the arm order
+    /// rotated every measured rep, and paired per-rep ratios printed with their ranges. It reports the same
+    /// three ratios <c>--fair-ni-batch</c> reports: <b>batch/SQLite</b> (the mission cell), <b>SQL/SQLite</b>
+    /// (the control that this run reproduces the published shape) and <b>batch/SQL</b> (the attribution —
+    /// what removing the per-statement text layer is worth, same engine, same values).
+    /// <para>
+    /// <c>--fair-ni-batch</c> keeps its own inline implementation deliberately: its archives and its session-45
+    /// numbers are published evidence, and re-plumbing the function that produced them would make those
+    /// archives unreproducible. The two arms added in session 46 use this shared form.
+    /// </para>
+    /// </summary>
+    static void RunBatchDmlTriple(
+        string title,
+        string referenceNote,
+        string engineLabel,
+        Func<bool, BenchmarkResult> sharpArm,
+        Func<BenchmarkResult> referenceArm,
+        string archivePrefix)
+    {
+        Console.WriteLine(BannerTop);
+        Console.WriteLine($"  {title}");
+        Console.WriteLine("  SQL batch vs SQL-free batch vs SQLite, one process");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine();
+        Console.WriteLine($"Engine: {engineLabel}");
+        Console.WriteLine("Arms: A = SQL batch path (cached statements) · B = SQL-free batch (UpdateBatch/DeleteBatch)");
+        Console.WriteLine("      C = SQLite reference (one prepared command, re-bound parameters)");
+        Console.WriteLine(referenceNote);
+        Console.WriteLine();
+
+        int warmupReps = ResolveWarmupReps();
+        Console.WriteLine($"Warm-up: {warmupReps} discarded rep(s) (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            _ = sharpArm(false);
+            _ = sharpArm(true);
+            _ = referenceArm();
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        int reps = ResolveReps();
+        var sqlRuns = new List<BenchmarkResult>(reps);
+        var batchRuns = new List<BenchmarkResult>(reps);
+        var referenceRuns = new List<BenchmarkResult>(reps);
+
+        for (int r = 0; r < reps; r++)
+        {
+            int order = r % 3;
+            string orderLabel = order switch { 0 => "A,B,C", 1 => "B,C,A", _ => "C,A,B" };
+            Console.WriteLine($"── rep {r + 1}/{reps} · {orderLabel} ──");
+            switch (order)
+            {
+                case 0:
+                    sqlRuns.Add(sharpArm(false));
+                    batchRuns.Add(sharpArm(true));
+                    referenceRuns.Add(referenceArm());
+                    break;
+                case 1:
+                    batchRuns.Add(sharpArm(true));
+                    referenceRuns.Add(referenceArm());
+                    sqlRuns.Add(sharpArm(false));
+                    break;
+                default:
+                    referenceRuns.Add(referenceArm());
+                    sqlRuns.Add(sharpArm(false));
+                    batchRuns.Add(sharpArm(true));
+                    break;
+            }
+        }
+        Console.WriteLine();
+
+        ReportBatchComparisonCell("INSERT", sqlRuns, batchRuns, referenceRuns, static x => x.InsertOpsPerSec);
+        ReportBatchComparisonCell("READ", sqlRuns, batchRuns, referenceRuns, static x => x.ReadOpsPerSec);
+        ReportBatchComparisonCell("UPDATE", sqlRuns, batchRuns, referenceRuns, static x => x.UpdateOpsPerSec);
+        ReportBatchComparisonCell("DELETE", sqlRuns, batchRuns, referenceRuns, static x => x.DeleteOpsPerSec);
+
+        Console.WriteLine();
+        Console.WriteLine("  READ is the same code in arms A and B, so its batch/SQL column is the protocol's own resolution.");
+        Console.WriteLine("  INSERT differs in the input shape only when the dictionary-free array API drives it, so that");
+        Console.WriteLine("  column is that API's own measurement (both arms still insert through InsertBatch, no SQL text).");
+        Console.WriteLine("  A straddling range means re-run, not rounding.");
+
+        var results = new Dictionary<string, BenchmarkResult>
+        {
+            ["SharpCoreDB (SQL batch)"] = MedianArm(sqlRuns),
+            ["SharpCoreDB (SQL-free batch)"] = MedianArm(batchRuns),
+            ["SQLite (reference)"] = MedianArm(referenceRuns, referenceRuns.Count > 0 ? referenceRuns[0].SqlitePragmas : null),
+        };
+        var path = Path.Combine(ResultsDirectory(), $"{archivePrefix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
+        File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
+        Console.WriteLine($"\nResults saved to: {path}");
+    }
+
+    /// <summary>
+    /// <c>--pk-default-batch</c>: arm B — the pure default posture (encrypted, at-rest records on, no
+    /// harness-only flags) — with the SQL-free batch path beside its SQL batch path and SQLite's reference.
+    /// This is the tracked default-posture cell (UPDATE 0,39× / DELETE 0,38× on the SQL path), so it is the arm
+    /// the mission is actually about.
+    /// </summary>
+    static void RunPkDefaultBatchComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        RunBatchDmlTriple(
+            "Arm B - pure default posture (encrypted, at rest)",
+            "Reference note: SQLite carries `id INTEGER PRIMARY KEY` here, so trap 4's rowid asymmetry is present.",
+            engineLabel,
+            batch => RunSharpCoreDBPk(engineType, useDefaultConfig: true, batchDml: batch),
+            RunSQLite,
+            "pk_default_batch");
+    }
+
+    /// <summary>
+    /// <c>--docs-batch</c>: arm C — the default no-PK <c>docs</c> job — with the SQL-free batch path beside its
+    /// SQL batch path and SQLite's reference. The job's statement lists are <b>cached</b> from this session on
+    /// (they were formatted inside the timed window until session 46, against a SQLite side that has used a
+    /// prepared command since session 31), so this cell's SQL column is not the one the recorded 0,24× was
+    /// measured on: it is the corrected, like-for-like one.
+    /// </summary>
+    static void RunDocsBatchComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        RunBatchDmlTriple(
+            "Arm C - default no-PK docs job (product default)",
+            "Reference note: `docs` has no PK and matches on `name`; SQLite's reference resolves through its rowid,",
+            engineLabel,
+            batch => RunSharpCoreDbMode(engineType, noEncrypt: false, atRestRecords: null, batchDml: batch),
+            RunSQLite,
+            "docs_batch");
+    }
+
+    /// <summary>
+    /// One phase of <c>--fair-ni-batch</c>: the three medians and the three paired ratios with their ranges.
+    /// Paired per rep, never median-over-median, because this campaign has already published one cell that
+    /// looked resolved and was not.
+    /// </summary>
+    static void ReportBatchComparisonCell(
+        string phase,
+        List<BenchmarkResult> sqlRuns,
+        List<BenchmarkResult> batchRuns,
+        List<BenchmarkResult> sqliteRuns,
+        Func<BenchmarkResult, int> select)
+    {
+        var sqlVals = sqlRuns.Select(select).ToList();
+        var batchVals = batchRuns.Select(select).ToList();
+        var sqliteVals = sqliteRuns.Select(select).ToList();
+
+        var (batchVsSqlite, bMin, bMax) = RatioSpread([.. batchVals.Zip(sqliteVals, (a, b) => PairedRatio(a, b))]);
+        var (sqlVsSqlite, sMin, sMax) = RatioSpread([.. sqlVals.Zip(sqliteVals, (a, b) => PairedRatio(a, b))]);
+        var (batchVsSql, aMin, aMax) = RatioSpread([.. batchVals.Zip(sqlVals, (a, b) => PairedRatio(a, b))]);
+
+        Console.WriteLine($"  {phase,-7} medians:  SQL {MedianOps(sqlVals),9:N0}   batch {MedianOps(batchVals),9:N0}   SQLite {MedianOps(sqliteVals),9:N0}  (ops/sec)");
+        Console.WriteLine($"           batch/SQLite {batchVsSqlite:F2}x ({bMin:F2}-{bMax:F2}x)"
+            + $"   SQL/SQLite {sqlVsSqlite:F2}x ({sMin:F2}-{sMax:F2}x)"
+            + $"   batch/SQL {batchVsSql:F2}x ({aMin:F2}-{aMax:F2}x)");
+    }
+
+    /// <summary>
+    /// SQLite side of the S5 fair arm. Two things are deliberately withdrawn from the default job's
+    /// SQLite arm: the <c>id INTEGER PRIMARY KEY</c> (which made every access a rowid descent) and the
+    /// absent secondary index (which left the updated column unindexed). What remains is the shape
+    /// SharpCoreDB is measured on, so the ratio measures the engine rather than the schema difference.
+    /// </summary>
+    static BenchmarkResult RunFairNoPkSqlite()
+    {
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-fairni-sqlite-{Guid.NewGuid()}.db");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            using var conn = new SqliteConnection($"Data Source={dbFile}");
+            conn.Open();
+
+            // No PRIMARY KEY declared: the rowid shortcut is out, and the predicate has to go through the
+            // secondary index below, exactly as ours does.
+            using (var cmd = conn.CreateCommand())
+            {
+                cmd.CommandText = $@"CREATE TABLE {FairNiTable} (
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    age INTEGER,
+                    score REAL,
+                    data TEXT
+                )";
+                cmd.ExecuteNonQuery();
+            }
+
+            // Match the index set. SharpCoreDB's Columnar CREATE TABLE auto-registers a hash index per
+            // column, so SQLite gets one index per column here. Without this the SET column would be
+            // indexed on our side and unindexed on SQLite's — the asymmetry S2's verdict identified.
+            foreach (var column in FairNiAllColumns)
+            {
+                using var idxCmd = conn.CreateCommand();
+                idxCmd.CommandText = $"CREATE INDEX idx_fni_{column} ON {FairNiTable}({column})";
+                idxCmd.ExecuteNonQuery();
+            }
+
+            ConfigureSqliteReference(conn, result);
+
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                using var tx = conn.BeginTransaction();
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                for (int i = batch; i < end; i++)
+                {
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = $"INSERT INTO {FairNiTable} (name, email, age, score, data) VALUES (@name, @email, @age, @score, @payload)";
+                    var pName = cmd.CreateParameter(); pName.ParameterName = NameParam; pName.Value = $"User{i}"; cmd.Parameters.Add(pName);
+                    var pEmail = cmd.CreateParameter(); pEmail.ParameterName = "@email"; pEmail.Value = $"user{i}@test.com"; cmd.Parameters.Add(pEmail);
+                    var pAge = cmd.CreateParameter(); pAge.ParameterName = "@age"; pAge.Value = 20 + i % 60; cmd.Parameters.Add(pAge);
+                    var pScore = cmd.CreateParameter(); pScore.ParameterName = "@score"; pScore.Value = i * 0.1; cmd.Parameters.Add(pScore);
+                    var pPayload = cmd.CreateParameter(); pPayload.ParameterName = "@payload"; pPayload.Value = $"payload-{i}"; cmd.Parameters.Add(pPayload);
+                    cmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            // READ by the secondary-indexed predicate column
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"SELECT * FROM {FairNiTable} WHERE name = @name";
+                var p = cmd.CreateParameter(); p.ParameterName = NameParam; p.Value = $"User{i}"; cmd.Parameters.Add(p);
+                using var reader = cmd.ExecuteReader();
+                reader.Read();
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+
+            // UPDATE through the secondary index, setting the same score column our arm sets. ONE prepared
+            // command with re-bound parameter VALUES, not a fresh command and fresh parameter objects per row:
+            // our arm's statements come from a cache built outside the window, so leaving this side to allocate
+            // per row would have biased the comparison in our favour rather than corrected it.
+            var fairNames = FairNiNames.Value;
+            sw.Restart();
+            using (var tx = conn.BeginTransaction())
+            {
+                using var updCmd = conn.CreateCommand();
+                updCmd.CommandText = $"UPDATE {FairNiTable} SET score = @score WHERE name = @name";
+                var pScore = updCmd.CreateParameter(); pScore.ParameterName = "@score"; updCmd.Parameters.Add(pScore);
+                var pName = updCmd.CreateParameter(); pName.ParameterName = NameParam; updCmd.Parameters.Add(pName);
+                updCmd.Prepare();
+                for (int i = 0; i < UpdateCount; i++)
+                {
+                    pScore.Value = i * 99.9;
+                    pName.Value = fairNames[i];
+                    updCmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.UpdateTime = sw.Elapsed.TotalSeconds;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+
+            // DELETE through the secondary index. Same correction as UPDATE above: one prepared command with a
+            // re-bound parameter, so this side is not paying a command allocation per row while our side reads
+            // its statements from a cache.
+            sw.Restart();
+            using (var tx = conn.BeginTransaction())
+            {
+                using var delCmd = conn.CreateCommand();
+                delCmd.CommandText = $"DELETE FROM {FairNiTable} WHERE name = @name";
+                var pDel = delCmd.CreateParameter(); pDel.ParameterName = NameParam; delCmd.Parameters.Add(pDel);
+                delCmd.Prepare();
+                for (int i = 0; i < DeleteCount; i++)
+                {
+                    pDel.Value = fairNames[i];
+                    delCmd.ExecuteNonQuery();
+                }
+                tx.Commit();
+            }
+            sw.Stop();
+            result.DeleteTime = sw.Elapsed.TotalSeconds;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+        }
+        finally
+        {
+            try { if (File.Exists(dbFile)) File.Delete(dbFile); } catch { /* temp */ }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// SharpCoreDB side of the S5 fair arm: the same no-PK schema, the same secondary index on the
+    /// predicate column and the same CRUD shapes as <see cref="RunFairNoPkSqlite"/>, so the only
+    /// variables left are the engines. Plaintext and the product configuration are held constant here
+    /// on purpose — this arm measures the index/predicate shape, not the encryption posture.
+    /// </summary>
+    /// <summary>
+    /// SharpCoreDB side of the S5 fair arm.
+    /// </summary>
+    /// <param name="engineType">The storage engine under test.</param>
+    /// <param name="batchUpdate">
+    /// Overrides the SQL-free batch dial for the UPDATE phase; <c>null</c> reads
+    /// <see cref="FairBatchDml"/> (the <c>--fair-ni</c> behaviour).
+    /// </param>
+    /// <param name="batchDelete">Overrides the SQL-free batch dial for the DELETE phase.</param>
+    static BenchmarkResult RunFairNoPkSharp(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool? batchUpdate = null,
+        bool? batchDelete = null)
+    {
+        bool useBatchUpdate = batchUpdate ?? FairBatchDml("UPDATE");
+        bool useBatchDelete = batchDelete ?? FairBatchDml("DELETE");
+        bool useArrayInsert = batchUpdate ?? FairBatchDml("INSERT");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-fairni-{Guid.NewGuid()}");
+        var result = new BenchmarkResult();
+
+        try
+        {
+            var services = new ServiceCollection();
+            services.AddSharpCoreDB();
+            var sp = services.BuildServiceProvider();
+
+            var factory = sp.GetRequiredService<DatabaseFactory>();
+            var config = BuildConfig(engineType, fixedWidth: MainFixedWidthOverride(), noEncrypt: true, atRestRecords: null);
+
+            using var db = (SharpCoreDB.Database)factory.Create(
+                dbPath: dbPath,
+                masterPassword: BenchDbPassword,
+                isReadOnly: false,
+                config: config);
+
+            db.ExecuteSQL($@"CREATE TABLE {FairNiTable} (
+                name TEXT NOT NULL,
+                email TEXT,
+                age INTEGER,
+                score REAL,
+                data TEXT
+            )");
+
+            // No PRIMARY KEY — matching SQLite's side, where none is declared either.
+            db.ExecuteSQL($"CREATE INDEX {FairNiNameIndex} ON {FairNiTable}(name)");
+
+            // S7 (plan §4): the auto-compaction threshold is the variable under test and these counters are
+            // the instrument. TryAutoCompact launches a fire-and-forget Task.Run(CompactStorage), so a
+            // full-file rewrite can land inside a measured phase; a completion lagging a launch is that
+            // interference made visible, where before this instrumentation it was unanswerable from any
+            // report. See CompactionThresholdOverride for why the override goes through
+            // SetCompactionThreshold rather than through the config.
+            SharpCoreDB.DataStructures.Table? fairNiTable = null;
+            if (db.TryGetTable(FairNiTable, out var fairNiProbe) && fairNiProbe is SharpCoreDB.DataStructures.Table probedTable)
+            {
+                fairNiTable = probedTable;
+                if (CompactionThresholdOverride() is { } thresholdOverride)
+                {
+                    probedTable.SetCompactionThreshold(thresholdOverride);
+                    Console.WriteLine("    [diag] " + FairNiTable + " compaction threshold overridden to "
+                        + (thresholdOverride <= 0 ? "off (long.MaxValue)" : thresholdOverride.ToString(CultureInfo.InvariantCulture)));
+                }
+            }
+
+            void ReportCompactions(string phase)
+            {
+                if (fairNiTable is null)
+                {
+                    return;
+                }
+
+                Console.WriteLine($"    [diag] {phase} compactions: launches={fairNiTable.AutoCompactionLaunches}"
+                    + $" completions={fairNiTable.AutoCompactionCompletions}");
+            }
+
+            // INSERT (batched, same batch size as every other arm). Session 48: the dial/triple flag can route this
+            // phase through the dictionary-free `object[]` + column-order API, which is the engine path the SQL
+            // batch parser already used and the public dictionary overload never reached. Row construction stays
+            // inside the window on purpose: building the input IS part of the API shape a caller pays for, and
+            // SQLite's side builds its own input per row in the same window.
+            var sw = Stopwatch.StartNew();
+            for (int batch = 0; batch < InsertCount; batch += BatchSize)
+            {
+                int end = Math.Min(batch + BatchSize, InsertCount);
+                if (useArrayInsert)
+                {
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        arrayRows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch(FairNiTable, arrayRows, FairNiAllColumns);
+                }
+                else
+                {
+                    var rows = new List<Dictionary<string, object>>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add(new Dictionary<string, object>
+                        {
+                            ["name"] = $"User{i}",
+                            [EmailColumn] = $"user{i}@test.com",
+                            ["age"] = 20 + i % 60,
+                            [ScoreColumn] = i * 0.1,
+                            ["data"] = $"payload-{i}"
+                        });
+                    }
+
+                    db.InsertBatch(FairNiTable, rows);
+                }
+            }
+
+            db.Flush();
+            sw.Stop();
+            result.InsertTime = sw.Elapsed.TotalSeconds;
+            result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
+            Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after INSERT");
+
+            // READ by the secondary-indexed predicate column — the same statement shape as SQLite's side
+            sw.Restart();
+            for (int i = 0; i < ReadCount; i++)
+            {
+                db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                    new Dictionary<string, object?> { [NameParam] = $"User{i}" });
+            }
+            sw.Stop();
+            result.ReadTime = sw.Elapsed.TotalSeconds;
+            result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
+            Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
+            ReportCompactions("after READ");
+
+            // Correctness gate (plan §6: no ratio without reading what produced it), placed AFTER the timed loop
+            // so the measured cell is untouched.
+            VerifyReadSamples(
+                db,
+                "fair",
+                i => ($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                      new Dictionary<string, object?> { [NameParam] = $"User{i}" }),
+                "name",
+                i => $"User{i}",
+                Math.Min(ReadCount, 200));
+
+            // UPDATE through the secondary index, setting the same score column SQLite's side sets.
+            // The statement list comes from the cache — see FairNiUpdateStatements for why harness work does
+            // not belong in this window — and the phase is split like DELETE's (plan §6 rule 11), so the
+            // engine's share is separable from the flush.
+            var updateStmts = useBatchUpdate ? null : new List<string>(FairNiUpdateStatements.Value);
+            var gcBeforeUpdate = GcCheckpoint();
+            if (FairProfile("UPDATE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
+            sw.Restart();
+            if (useBatchUpdate)
+            {
+                int updated = db.UpdateBatch(FairNiTable, FairNiBatchUpdates.Value);
+                sw.Stop();
+                Console.WriteLine($"    [diag] UPDATE shape: SQL-free batch (SHARPCOREDB_FAIR_BATCH_DML) — {updated:N0}/{UpdateCount:N0} rows reported updated");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(updateStmts!);
+                sw.Stop();
+            }
+            double updateExecMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
+            db.Flush();
+            sw.Stop();
+            double updateFlushMs = sw.Elapsed.TotalMilliseconds;
+
+            result.UpdateTime = (updateExecMs + updateFlushMs) / 1000.0;
+            result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
+            Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
+            Console.WriteLine($"    [diag] UPDATE split: exec={updateExecMs:F0}ms flush={updateFlushMs:F0}ms");
+            ReportCompactions("after UPDATE");
+            Console.WriteLine($"    [diag] UPDATE GC: {GcDelta(gcBeforeUpdate, GcCheckpoint())}");
+            if (FairProfile("UPDATE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
+
+            // Correctness gate (plan §6: no ratio without reading what produced it). AFTER the timed
+            // phase so the cell stays untouched, and BEFORE the DELETE phase, which removes exactly the
+            // rows this samples. It runs for whichever shape drove this rep — the SQL-free batch API and,
+            // in the A/B mode, the SQL batch path beside it, so neither shape is trusted on faith.
+            if (batchUpdate.HasValue || useBatchUpdate)
+            {
+                VerifyFairBatchUpdate(db, UpdateCount);
+            }
+
+            // DELETE through the secondary index.
+            //
+            // The phase is SPLIT into statement-build, ExecuteBatchSQL and Flush (S7 follow-up). The reason is
+            // measured: our DELETE stalls in exactly one rep per run — 156.666 against 340.875–462.592 in arm B,
+            // and 150.623/161.641 against 326k–401k in this arm, four sightings across two arms — while
+            // SQLite's DELETE never stalls (~400k in arm B, ~50k here, both tight). An engine-stage table
+            // alone cannot place a stall that sits in the batch dispatch or the flush, so those are timed
+            // separately first and the stage profiler runs underneath them.
+            var gcBeforeDelete = GcCheckpoint();
+            if (FairProfile("DELETE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
+            var deleteStmts = useBatchDelete ? null : new List<string>(FairNiDeleteStatements.Value);
+            sw.Restart();
+            if (useBatchDelete)
+            {
+                int deleted = db.DeleteBatch(FairNiTable, FairNiBatchDeletes.Value);
+                sw.Stop();
+                Console.WriteLine($"    [diag] DELETE shape: SQL-free batch (SHARPCOREDB_FAIR_BATCH_DML) — {deleted:N0}/{DeleteCount:N0} rows reported deleted");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(deleteStmts!);
+                sw.Stop();
+            }
+            double deleteExecMs = sw.Elapsed.TotalMilliseconds;
+
+            sw.Restart();
+            db.Flush();
+            sw.Stop();
+            double deleteFlushMs = sw.Elapsed.TotalMilliseconds;
+
+            result.DeleteTime = (deleteExecMs + deleteFlushMs) / 1000.0;
+            result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
+            Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+            Console.WriteLine($"    [diag] DELETE split: exec={deleteExecMs:F0}ms flush={deleteFlushMs:F0}ms (statements cached, not timed)");
+            Console.WriteLine($"    [diag] DELETE GC: {GcDelta(gcBeforeDelete, GcCheckpoint())}");
+            ReportCompactions("after DELETE");
+            if (FairProfile("DELETE"))
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
+
+            // DELETE correctness gate — same placement rule as the UPDATE gate above.
+            if (batchDelete.HasValue || useBatchDelete)
+            {
+                VerifyFairBatchDelete(db, DeleteCount);
+            }
+        }
+        finally
+        {
+            try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Samples the fair arm's UPDATE targets and checks the value actually landed. 200 keys spread across
+    /// the updated range, read back by the same indexed predicate the workload uses; reports empties and
+    /// wrong values rather than throwing, so a failing gate is visible in the run's own output beside the
+    /// ratio it qualifies (plan §6: no ratio without reading what produced it).
+    /// </summary>
+    static void VerifyFairBatchUpdate(SharpCoreDB.Database db, int updateCount)
+    {
+        const int samples = 200;
+        int empty = 0;
+        int wrong = 0;
+        int stride = Math.Max(1, updateCount / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int key = s * stride;
+            var rows = db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                new Dictionary<string, object?> { [NameParam] = $"User{key}" });
+
+            if (rows.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
+            double expected = key * 99.9;
+            var actual = rows[0].TryGetValue(ScoreColumn, out var value) ? value : null;
+            if (actual is null ||
+                Math.Abs(Convert.ToDouble(actual, CultureInfo.InvariantCulture) - expected) > 1e-6)
+            {
+                wrong++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] UPDATE correctness gate: {samples} sampled keys · {empty} empty · {wrong} wrong value");
+    }
+
+    /// <summary>
+    /// Samples the fair arm's DELETE targets and checks the rows are actually gone — the same gate shape as
+    /// the UPDATE one above, and the reason a fast batch DELETE cannot be published on speed alone.
+    /// </summary>
+    static void VerifyFairBatchDelete(SharpCoreDB.Database db, int deleteCount)
+    {
+        const int samples = 200;
+        int stillPresent = 0;
+        int stride = Math.Max(1, deleteCount / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int key = s * stride;
+            var rows = db.ExecuteQuery($"SELECT * FROM {FairNiTable} WHERE name = @name",
+                new Dictionary<string, object?> { [NameParam] = $"User{key}" });
+            if (rows.Count > 0)
+            {
+                stillPresent++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] DELETE correctness gate: {samples} sampled keys · {stillPresent} still present (expected 0)");
+    }
+
+    /// <summary>
+    /// Generic correctness gate for a SQL-free batch UPDATE (arm B and the no-PK <c>docs</c> job): samples
+    /// keys spread across the batch's range, reads each one back through the same predicate the workload used,
+    /// and reports empties and wrong values rather than throwing — a failing gate belongs in the run's output
+    /// beside the ratio it qualifies (plan §6: a ratio that cannot be read back is not a result).
+    /// </summary>
+    static void VerifyBatchUpdateByKey(
+        SharpCoreDB.Database db,
+        string label,
+        string table,
+        string keyColumn,
+        string valueColumn,
+        Func<int, object> keyFor,
+        Func<int, double> expectedScoreFor,
+        int total)
+    {
+        const int samples = 200;
+        int empty = 0;
+        int wrong = 0;
+        int stride = Math.Max(1, total / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int index = s * stride;
+            var rows = db.ExecuteQuery($"SELECT {valueColumn} FROM {table} WHERE {keyColumn} = @key",
+                new Dictionary<string, object?> { ["@key"] = keyFor(index) });
+
+            if (rows.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
+            double expected = expectedScoreFor(index);
+            var actual = rows[0].TryGetValue(valueColumn, out var value) ? value : null;
+            if (actual is null ||
+                Math.Abs(Convert.ToDouble(actual, CultureInfo.InvariantCulture) - expected) > 1e-6)
+            {
+                wrong++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] {label} UPDATE gate: {samples} sampled keys · {empty} empty · {wrong} wrong value");
+    }
+
+    /// <summary>
+    /// Generic correctness gate for a SQL-free batch DELETE — the companion of
+    /// <see cref="VerifyBatchUpdateByKey"/>, and the reason a fast batched delete cannot be published on speed
+    /// alone.
+    /// </summary>
+    static void VerifyBatchDeleteByKey(
+        SharpCoreDB.Database db,
+        string label,
+        string table,
+        string keyColumn,
+        Func<int, object> keyFor,
+        int total)
+    {
+        const int samples = 200;
+        int stillPresent = 0;
+        int stride = Math.Max(1, total / samples);
+
+        for (int s = 0; s < samples; s++)
+        {
+            int index = s * stride;
+            var rows = db.ExecuteQuery($"SELECT {keyColumn} FROM {table} WHERE {keyColumn} = @key",
+                new Dictionary<string, object?> { ["@key"] = keyFor(index) });
+            if (rows.Count > 0)
+            {
+                stillPresent++;
+            }
+        }
+
+        Console.WriteLine($"    [diag] {label} DELETE gate: {samples} sampled keys · {stillPresent} still present (expected 0)");
+    }
+
     // ══════════════════════════════════════
     // PK-based "fair usage" SharpCoreDB scenario
     // ══════════════════════════════════════
@@ -933,9 +3509,21 @@ class Program
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool fixedWidth = false,
         bool useDefaultConfig = false,
-        string? defaultVariant = null)
+        string? defaultVariant = null,
+        bool noEncrypt = true,
+        bool? atRestRecords = null,
+        bool profileUpdateArm = false,
+        bool profileDeleteArm = false,
+        bool profileInsertArm = false,
+        bool? batchDml = null)
     {
-        var dbPath = Path.Combine(Path.GetTempPath(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
+        // Session 46: the SQL-free batch path for this arm, explicit when the three-arm comparison drives it
+        // and dial-driven otherwise. One flag covers both phases here because the arm is the unit of the
+        // claim; the fair arm's dial can split them (SHARPCOREDB_BATCH_DML=update).
+        bool useBatchUpdate = batchDml ?? BatchDmlDial("UPDATE");
+        bool useBatchDelete = batchDml ?? BatchDmlDial("DELETE");
+        bool useArrayInsert = batchDml ?? BatchDmlDial("INSERT");
+        var dbPath = Path.Combine(BenchTempDirectory(), $"bench-sharpcoredb-pk-{Guid.NewGuid()}");
         var result = new BenchmarkResult();
 
         try
@@ -954,7 +3542,7 @@ class Program
             }
             else
             {
-                config = BuildConfig(engineType, fixedWidth);
+                config = BuildConfig(engineType, fixedWidth, noEncrypt, atRestRecords);
             }
 
             using var db = (SharpCoreDB.Database)factory.Create(
@@ -974,10 +3562,57 @@ class Program
             db.ExecuteSQL(CreateDocsIndexSql);
 
             // INSERT (batched via InsertBatch with explicit ids, mirroring SQLite's rowid 1..N)
+            // §9 priority 2 instrumentation: this phase had NO stage attribution at all. --pk-profile
+            // profiles the UPDATE arm, and --multirowinsert profiles a different shape (1,000 rows/statement
+            // driven by SQL statements), while this arm is db.InsertBatch over 10,000-row batches. Turn the
+            // profiler on for exactly the region that is timed (the loop plus Flush) so the report and the
+            // ops/sec describe the same work.
+            if (profileInsertArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
             var sw = Stopwatch.StartNew();
+            // §2.7 instrumentation (2026-09-22, session 3): the fair-PK arm is the tracked-ratio arm and its
+            // allocation was only visible through the write-path profiler — whose times are biased under
+            // Parallel.For serialization and whose stages nest — so the engine's own allocation is read here with
+            // the profiler-free counter, scoped to the `db.InsertBatch` calls so the harness's row dictionaries are
+            // excluded (the shape --multirowinsert gets for free by building its statements outside the timed
+            // region). The layout probe travels with the number because the inline capacity decides whether a TEXT
+            // value reaches the arena at all.
+            bool pkFixedWidth = false;
+            int pkInline = -1;
+            if (db.TryGetTable("docs", out var pkProbe) && pkProbe is SharpCoreDB.DataStructures.Table pkProbeTable)
+            {
+                pkFixedWidth = pkProbeTable.IsFixedWidthRecords;
+                pkInline = pkProbeTable.FixedWidthInlineValueBytes;
+            }
+
+            long pkEngineAlloc = 0;
+            int pkEngineGen0 = 0;
             for (int batch = 0; batch < InsertCount; batch += BatchSize)
             {
                 int end = Math.Min(batch + BatchSize, InsertCount);
+                long pkAllocBefore = GC.GetTotalAllocatedBytes(precise: false);
+                int pkGen0Before = GC.CollectionCount(0);
+                if (useArrayInsert)
+                {
+                    // Session 48: the dictionary-free `object[]` + column-order shape, measured with the same
+                    // engine-scoped allocation counters (read around the InsertBatch call, so the harness's own
+                    // row objects stay excluded) so the two shapes' engine cost is comparable.
+                    var arrayRows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        arrayRows.Add([i + 1, $"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.1, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", arrayRows, PkColumns);
+                    pkEngineAlloc += GC.GetTotalAllocatedBytes(precise: false) - pkAllocBefore;
+                    pkEngineGen0 += GC.CollectionCount(0) - pkGen0Before;
+                    continue;
+                }
+
                 var rows = new List<Dictionary<string, object>>(end - batch);
                 for (int i = batch; i < end; i++)
                 {
@@ -993,6 +3628,8 @@ class Program
                 }
 
                 db.InsertBatch("docs", rows);
+                pkEngineAlloc += GC.GetTotalAllocatedBytes(precise: false) - pkAllocBefore;
+                pkEngineGen0 += GC.CollectionCount(0) - pkGen0Before;
             }
 
             db.Flush();
@@ -1000,6 +3637,23 @@ class Program
             result.InsertTime = sw.Elapsed.TotalSeconds;
             result.InsertOpsPerSec = (int)(InsertCount / result.InsertTime);
             Console.WriteLine($"  INSERT {InsertCount:N0}: {result.InsertTime:F2}s ({result.InsertOpsPerSec:N0} ops/sec)");
+
+            var pkFiles = TableFileSizes(db);
+            Console.WriteLine($"    [diag] pk INSERT shape: {(useArrayInsert ? "dictionary-free object[] columns=" + string.Join(",", PkColumns) : "List<Dictionary<string,object>>")}");
+            Console.WriteLine($"    [diag] pk INSERT fixedWidth={fixedWidth} noEncrypt={noEncrypt} "
+                + $"atRest={config.EnableAtRestRecordEncryption} IsFixedWidthRecords={pkFixedWidth} inline={pkInline}");
+            Console.WriteLine($"    [diag] pk INSERT engine allocated {pkEngineAlloc:N0} B "
+                + $"({pkEngineAlloc / InsertCount:N0} B/row) · gen0 {pkEngineGen0} "
+                + $"· data file {pkFiles.DataBytes:N0} B · overflow arena {pkFiles.OvfBytes:N0} B");
+
+            if (profileInsertArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled INSERT pass: {result.InsertTime:F2}s "
+                    + $"({result.InsertOpsPerSec:N0} ops/sec, {result.InsertTime * 1_000_000 / InsertCount:F2} µs/row)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
 
             // READ by PK
             sw.Restart();
@@ -1013,36 +3667,148 @@ class Program
             result.ReadOpsPerSec = (int)(ReadCount / result.ReadTime);
             Console.WriteLine($"  READ   {ReadCount:N0}: {result.ReadTime:F2}s ({result.ReadOpsPerSec:N0} ops/sec)");
 
+            // Correctness gate, AFTER the timed loop. Rows were inserted as id = i + 1 with name = $"User{i}", and
+            // the READ loop walks id = 1..ReadCount, so sample index i must come back as name = $"User{i}".
+            VerifyReadSamples(
+                db,
+                "pk",
+                i => ("SELECT * FROM docs WHERE id = @id", new Dictionary<string, object?> { ["@id"] = i + 1 }),
+                "name",
+                i => $"User{i}",
+                Math.Min(ReadCount, 200));
+
             // UPDATE by PK (single ExecuteBatchSQL transaction, like SQLite's single tx)
-            sw.Restart();
-            var updateStmts = new List<string>(UpdateCount);
-            for (int i = 1; i <= UpdateCount; i++)
+            // --pk-profile turns the profiler on for THIS arm only: Reset clears whatever the INSERT/READ
+            // arms recorded (they run with it off unless the environment variable is set), so the printed
+            // report describes the UPDATE batch and nothing else. The timed arms never take this branch.
+            if (profileUpdateArm)
             {
-                updateStmts.Add(string.Format(CultureInfo.InvariantCulture,
-                    "UPDATE docs SET score = {0:F1} WHERE id = {1}", i * 99.9, i));
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
             }
 
-            db.ExecuteBatchSQL(updateStmts);
+            // §9 priority 3 instrumentation (2026-09-21): the statement-text loop and the Flush ran INSIDE the
+            // profiled and timed window, so leaving them unstamped charged harness text formatting and the page
+            // flush to the engine. The list now comes from a cache built outside the window (session 31), so the
+            // stamp measures a shallow copy; it is kept so the stage table stays comparable across sessions and
+            // so a future regression that puts formatting back here shows up as a jump in this field.
+            //
+            // ⚠️ "a cache built outside the window" was only true from the SECOND touch: the cache is a `Lazy`, so
+            // its first materialization happened inside this stamp, and the 2026-09-27 profile showed the stage as
+            // 7,2 ms / 1,84 MB (184 B per statement) — the 10.000-string build, not the shallow copy the sentence
+            // above promises. Forcing the lazy here keeps that claim true on every run, and it stays outside the
+            // timed window below (`sw.Restart()`), so no published ops/s moves.
+            _ = PkUpdateStatements.Value;
+            long stmtBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+            List<string>? updateStmts = null;
+            if (!useBatchUpdate)
+            {
+                updateStmts = new List<string>(PkUpdateStatements.Value);
+            }
+
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtBuild, stmtBuildStart);
+
+            sw.Restart();
+            if (useBatchUpdate)
+            {
+                int updated = db.UpdateBatch("docs", PkBatchUpdates.Value);
+                Console.WriteLine($"    [diag] pk UPDATE shape: SQL-free batch — {updated:N0}/{UpdateCount:N0} rows reported updated");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(updateStmts!);
+            }
+
+            long flushStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
             db.Flush();
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.WalFlush, flushStart);
             sw.Stop();
             result.UpdateTime = sw.Elapsed.TotalSeconds;
             result.UpdateOpsPerSec = (int)(UpdateCount / result.UpdateTime);
             Console.WriteLine($"  UPDATE {UpdateCount:N0}: {result.UpdateTime:F2}s ({result.UpdateOpsPerSec:N0} ops/sec)");
 
-            // DELETE by PK
-            sw.Restart();
-            var deleteStmts = new List<string>(DeleteCount);
-            for (int i = 1; i <= DeleteCount; i++)
+            // Correctness gate (plan §6: no ratio without reading what produced it) — after the timed phase, and
+            // before the DELETE phase that removes exactly the rows this samples. Runs whenever this rep was
+            // driven through the SQL-free batch API, and symmetrically on both shapes in the A/B mode.
+            if (batchDml.HasValue || useBatchUpdate)
             {
-                deleteStmts.Add($"DELETE FROM docs WHERE id = {i}");
+                // Keys are 1-based in this arm (ids 1..10.000), so the sampled index is shifted by one: the
+                // first sample of a 0-based sweep would ask for id 0, which no arm ever inserts.
+                VerifyBatchUpdateByKey(db, "pk", "docs", "id", ScoreColumn,
+                    keyFor: i => i + 1, expectedScoreFor: i => (i + 1) * 99.9, total: UpdateCount);
             }
 
-            db.ExecuteBatchSQL(deleteStmts);
+            if (profileUpdateArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled UPDATE pass: {result.UpdateTime:F2}s "
+                    + $"({result.UpdateOpsPerSec:N0} ops/sec, {result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
+
+            // DELETE by PK
+            // --pk-profile-delete turns the profiler on for THIS arm only, exactly as --pk-profile does for
+            // UPDATE, and Reset clears the INSERT/READ/UPDATE stamps so the report describes the DELETE batch
+            // and nothing else. This column opened the plan at 0.51× SQLite and is now 2.19× ahead of it (§8b), and
+            // the call counts were the
+            // question: the contiguous fixed-width delete fast path buffers its tombstones in ONE stamped
+            // region, so a single `engine-write` call means the fast path ran for the whole batch while 10,000
+            // means it fell through to the per-statement generic route.
+            if (profileDeleteArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+                SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+            }
+
+            // The DELETE build had no stamp at all before session 31: the harness's own formatting was charged to
+            // the engine unmeasured, which is why this cell's collapsed rep (124.714 against 380k–460k in its
+            // siblings) never had a stage that could explain it. Cached like UPDATE's, and stamped for the same
+            // reason — and forced before the stamp for the same reason UPDATE's is (see the note there: a `Lazy`'s
+            // first materialization is the build, not the copy).
+            _ = PkDeleteStatements.Value;
+            long deleteBuildStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+            List<string>? deleteStmts = null;
+            if (!useBatchDelete)
+            {
+                deleteStmts = new List<string>(PkDeleteStatements.Value);
+            }
+
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.StmtBuild, deleteBuildStart);
+
+            sw.Restart();
+            if (useBatchDelete)
+            {
+                int deleted = db.DeleteBatch("docs", PkBatchDeletes.Value);
+                Console.WriteLine($"    [diag] pk DELETE shape: SQL-free batch — {deleted:N0}/{DeleteCount:N0} rows reported deleted");
+            }
+            else
+            {
+                db.ExecuteBatchSQL(deleteStmts!);
+            }
+
             db.Flush();
             sw.Stop();
             result.DeleteTime = sw.Elapsed.TotalSeconds;
             result.DeleteOpsPerSec = (int)(DeleteCount / result.DeleteTime);
             Console.WriteLine($"  DELETE {DeleteCount:N0}: {result.DeleteTime:F2}s ({result.DeleteOpsPerSec:N0} ops/sec)");
+
+            if (batchDml.HasValue || useBatchDelete)
+            {
+                VerifyBatchDeleteByKey(db, "pk", "docs", "id", keyFor: i => i + 1, total: DeleteCount);
+            }
+
+            if (profileDeleteArm)
+            {
+                SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+                Console.WriteLine();
+                Console.WriteLine($"  profiled DELETE pass: {result.DeleteTime:F2}s "
+                    + $"({result.DeleteOpsPerSec:N0} ops/sec, {result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+                Console.WriteLine(SharpCoreDB.Diagnostics.WritePathProfiler.Report());
+            }
         }
         finally
         {
@@ -1055,6 +3821,14 @@ class Program
     /// <summary>
     /// D1: runs a fair-PK arm several times and reports the per-phase median time so the printed
     /// ops/s is robust to run-to-run noise (single-shot arms fluctuated by roughly ±30%).
+    /// <para>
+    /// Session 78: the measured set is preceded by <see cref="ResolveWarmupReps"/> discarded reps, the
+    /// protocol every other measuring mode in this harness already used. Without it this was the only
+    /// mode that measured straight from process start, so the value of the first arm of a <c>--pk</c>
+    /// process (the legacy row of the published table, whose position in the arm order is fixed)
+    /// depended on where its own ramp happened to leave the median. The measured size of that defect,
+    /// and the honest limit of the explanation, are on the warm-up call below.
+    /// </para>
     /// </summary>
     private static BenchmarkResult RunPkMedian(Func<BenchmarkResult> arm, int reps = 3)
     {
@@ -1062,6 +3836,43 @@ class Program
         if (int.TryParse(Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_REPS"), out int envReps) && envReps > 0)
         {
             reps = envReps;
+        }
+
+        // Harness defect (found while measuring S4, 2026-10-09 session 78; no plan section owns it —
+        // `--pk` is the measurement path, not a plan item): this helper was the only
+        // measuring mode in the harness that sampled straight from process start, ignoring
+        // SHARPCOREDB_WARMUP_REPS and discarding nothing. The first arm of a --pk process is always the
+        // legacy row of the published fair-PK table (the arm order in RunPkComparison is fixed), so that
+        // row — and only that row — was measured on/in the process's ramp. Measured over five --pk
+        // processes, its published UPDATE window was the ramp itself: reps 94.883 … 590.182, i.e. a
+        // 5,32×–6,22× spread *inside the window whose median is published*, median 232.275–344.778
+        // (median of medians 263.575). NativeAOT carries no such ramp — its first measured rep is already
+        // at its own median (507.251 vs 502.479 in r1) — so S4 was comparing a ramp against a plateau, and
+        // the first AOT run duly looked 1,85× faster on UPDATE.
+        //
+        // What the fix does, measured. It removes the ramp from the published window by construction: the
+        // same cell's window becomes 431.931 527.264 483.416 448.490 409.990 (spread 1,29×, median
+        // 448.490) and 504.385 … 587.440 over three processes (spreads 1,16×–1,29×, medians
+        // 448.490–529.134), with the discarded reps carrying the whole ramp (118.306 → 453.479 across the
+        // eight). Every other arm in the same comparison moved by no more than ~11% between the two
+        // protocols (FW 0,89–1,04, encrypted at-rest 0,98–1,09, SQLite control 0,91–0,96) while this row's
+        // cells moved 1,04×–2,01× — i.e. the defect was confined to the row measured first, which is what
+        // the mechanism predicts. The 1,85× AOT "win" on that row is gone: AOT now reads 0,85–0,88 of JIT
+        // on UPDATE (0,85 ratio-of-medians, 0,88 median-of-pairs) and 0,93–0,95 on READ.
+        //
+        // The honest limit, named rather than hidden: discarded reps do not make a *slow* ramp impossible,
+        // they make a slow ramp harmless. The control process artifacts/s78-pkwarm0-jit-r1.txt ran this
+        // same cell with WARMUP_REPS=0 on a settled box, measured a window that still ramps
+        // (148.704 → 402.011 → 549.302 → 671.005 → 530.028, spread 4,51×) and still landed its median hot
+        // at 530.028. So the pre-fix reading was not *guaranteed* to be low — on a settled box it could
+        // read hot too — and the fix's guarantee is that the published window no longer contains a segment
+        // of the ramp at all, whichever way the box is behaving. That is why this uses the shared resolver
+        // instead of inventing a sixth warm-up policy; the per-process rep lists, the arm medians and the
+        // derivation are in artifacts/s78-warmup-defect.{ps1,txt} and artifacts/s78-ratio.{ps1,txt}.
+        int warmupReps = ResolveWarmupReps();
+        for (int w = 0; w < warmupReps; w++)
+        {
+            arm();
         }
 
         var runs = new List<BenchmarkResult>(reps);
@@ -1082,6 +3893,9 @@ class Program
             ReadTime = MedianOf(runs, static r => r.ReadTime),
             UpdateTime = MedianOf(runs, static r => r.UpdateTime),
             DeleteTime = MedianOf(runs, static r => r.DeleteTime),
+            // S1: a median is a fresh object, so the comparator's regime has to be carried across
+            // explicitly or the archived median loses the very thing S1 exists to record.
+            SqlitePragmas = runs.Count > 0 ? runs[0].SqlitePragmas : null,
         };
 
         median.InsertOpsPerSec = median.InsertTime > 0 ? (int)(InsertCount / median.InsertTime) : 0;
@@ -1094,6 +3908,71 @@ class Program
     /// <summary>
     /// Runs the fair PK scenario (SharpCoreDB vs SQLite) and prints the comparison.
     /// </summary>
+    /// <summary>
+    /// Plan §6 (B2): prints the write-path profiler's stage report for the exact UPDATE arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same 10,000
+    /// <c>UPDATE … WHERE id = ?</c> statements in one <c>ExecuteBatchSQL</c> transaction. No timed reps: the
+    /// question is where the ~34 µs/update goes, not how much of it there is, and the per-stage call counts
+    /// are what turn a plausible story into an attributable one.
+    /// </summary>
+    static void RunPkUpdateProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ UPDATE-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {UpdateCount:N0} UPDATE … WHERE id = ? statements in ONE ExecuteBatchSQL transaction, over {InsertCount:N0} rows");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileUpdateArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  UPDATE: {result.UpdateOpsPerSec:N0} ops/sec ({result.UpdateTime * 1_000_000 / UpdateCount:F2} µs/update)");
+        Console.WriteLine("  Run the same command with --engine=<the other engine> to read the two reports side by side.");
+    }
+
+    /// <summary>
+    /// Plan §9 priority 1: prints the write-path profiler's stage report for the exact DELETE arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same 10,000
+    /// <c>DELETE FROM docs WHERE id = ?</c> statements in one <c>ExecuteBatchSQL</c> transaction. The call
+    /// counts carry the answer: <c>TryBulkDeleteContiguousFixedWidth</c> buffers its tombstones in a single
+    /// stamped region, so <b>one</b> <c>engine-write</c> call means the contiguous fast path ran once for the
+    /// whole batch, while <b>10,000</b> means the batch fell through to the per-statement generic route.
+    /// </summary>
+    static void RunPkDeleteProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ DELETE-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {DeleteCount:N0} DELETE FROM docs WHERE id = ? statements in ONE ExecuteBatchSQL transaction, over {InsertCount:N0} rows");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileDeleteArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  DELETE: {result.DeleteOpsPerSec:N0} ops/sec ({result.DeleteTime * 1_000_000 / DeleteCount:F2} µs/delete)");
+        Console.WriteLine("  One engine-write call = the contiguous fast path ran once for the batch; 10,000 = per-statement fallback.");
+    }
+
+    /// <summary>
+    /// Plan §9 priority 2: prints the write-path profiler's stage report for the exact INSERT arm the `--pk`
+    /// parity table is measured on — the same schema, the same fixed-width plaintext arm, the same
+    /// <c>db.InsertBatch</c> calls over <c>BatchSize</c>-row batches (then a Flush). INSERT is the only fair-PK
+    /// column still behind SQLite and it had no attribution at all: <c>--pk-profile</c> covers UPDATE,
+    /// <c>--pk-profile-delete</c> covers DELETE, and <c>--multirowinsert</c> measures a different shape driven
+    /// by SQL statements rather than the Direct API.
+    /// </summary>
+    static void RunPkInsertProfile(SharpCoreDB.Interfaces.StorageEngineType engineType)
+    {
+        var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
+        Console.WriteLine($"═══ INSERT-arm stage profile: {engineLabel}, fixed-width plaintext (the --pk parity arm) ═══");
+        Console.WriteLine($"    {InsertCount:N0} rows via db.InsertBatch in {InsertCount / BatchSize:N0} batches of {BatchSize:N0}, then Flush");
+        Console.WriteLine();
+
+        var result = RunSharpCoreDBPk(engineType, fixedWidth: true, profileInsertArm: true);
+
+        Console.WriteLine();
+        Console.WriteLine($"  INSERT: {result.InsertOpsPerSec:N0} ops/sec ({result.InsertTime * 1_000_000 / InsertCount:F2} µs/row)");
+        Console.WriteLine("  Per-statement stages fire once per InsertBatch call; per-row stages fire once per row.");
+    }
+
     static void RunPkComparison(SharpCoreDB.Interfaces.StorageEngineType engineType)
     {
         var engineLabel = engineType == SharpCoreDB.Interfaces.StorageEngineType.PageBased ? "PageBased" : "AppendOnly";
@@ -1103,36 +3982,55 @@ class Program
         Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
-        Console.WriteLine("(fair-PK arms run 3x; median time per phase is reported)");
+        Console.WriteLine($"(fair-PK arms: {ResolveWarmupReps()} discarded warm-up rep(s) each, then the measured reps — median time per phase is reported)");
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length) ━━━");
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length, plaintext) ━━━");
         var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType));
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width) ━━━");
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width, plaintext) ━━━");
         var scdbFw = RunPkMedian(() => RunSharpCoreDBPk(engineType, fixedWidth: true));
+        Console.WriteLine();
+
+        // §0.1-6: every target table must carry the encryption posture beside the plaintext number. The
+        // arms above are NoEncryptMode=true (BuildConfig's default); this arm is the PRODUCT default
+        // posture (at-rest records on, read from a fresh DatabaseConfig so it cannot drift).
+        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width, at-rest default) ━━━");
+        var scdbFwAtRest = RunPkMedian(() => RunSharpCoreDBPk(engineType, fixedWidth: true, noEncrypt: false));
         Console.WriteLine();
 
         Console.WriteLine("━━━ SQLite (reference) ━━━");
         var sqlite = RunPkMedian(() => RunSQLite());
         Console.WriteLine();
 
-        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
-        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SharpCoreDB FW│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap: SQLite vs legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   vs fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x");
-        Console.WriteLine($"  DELETE gap: SQLite vs legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   vs fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x");
+        Console.WriteLine("║ Database                     │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
+        Console.WriteLine($"║ SharpCoreDB legacy  plaintext│ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SharpCoreDB FW      plaintext│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SharpCoreDB FW      at-rest  │ {scdbFwAtRest.InsertOpsPerSec,10:N0} │ {scdbFwAtRest.ReadOpsPerSec,8:N0} │ {scdbFwAtRest.UpdateOpsPerSec,8:N0} │ {scdbFwAtRest.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"║ SQLite                       │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
+        Console.WriteLine($"\n  UPDATE gap vs SQLite: legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F1}x");
+        Console.WriteLine($"  DELETE gap vs SQLite: legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.DeleteOpsPerSec / (double)scdbFwAtRest.DeleteOpsPerSec:F1}x");
+        Console.WriteLine($"  INSERT gap vs SQLite: legacy {sqlite.InsertOpsPerSec / (double)scdb.InsertOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.InsertOpsPerSec / (double)scdbFw.InsertOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F1}x");
+        Console.WriteLine($"  At-rest tax (same arm shape): INSERT {scdbFw.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F2}x   "
+            + $"READ {scdbFw.ReadOpsPerSec / (double)scdbFwAtRest.ReadOpsPerSec:F2}x   "
+            + $"UPDATE {scdbFw.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F2}x   "
+            + $"DELETE {scdbFw.DeleteOpsPerSec / (double)scdbFwAtRest.DeleteOpsPerSec:F2}x");
 
         var results = new Dictionary<string, BenchmarkResult>
         {
-            ["SharpCoreDB (SQL, PK, legacy)"] = scdb,
-            ["SharpCoreDB (SQL, PK, fixed-width)"] = scdbFw,
+            ["SharpCoreDB (SQL, PK, legacy, plaintext)"] = scdb,
+            ["SharpCoreDB (SQL, PK, fixed-width, plaintext)"] = scdbFw,
+            ["SharpCoreDB (SQL, PK, fixed-width, at-rest default)"] = scdbFwAtRest,
             ["SQLite"] = sqlite,
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_comparative_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -1153,21 +4051,28 @@ class Program
         Console.WriteLine(BannerBottom);
         Console.WriteLine();
         Console.WriteLine($"Engine: {engineLabel}");
-        Console.WriteLine("(median of 3 per phase)");
-
-        Console.WriteLine("━━━ SharpCoreDB (SQL, PK, default config = Columnar fixed-width) ━━━");
-        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType, useDefaultConfig: true));
+        Console.WriteLine("(paired interleaved reps, arm order alternated, with discarded warm-up reps)");
+        Console.WriteLine("Arm B — the posture the product actually ships (at-rest records on, no harness flags).");
+        Console.WriteLine("It ran the OLD protocol until 2026-09-24: all of one arm's reps and then all of the");
+        Console.WriteLine("other's, no warm-up, no printed spread. See the fair arm for why that mattered.");
         Console.WriteLine();
 
-        Console.WriteLine("━━━ SQLite (reference) ━━━");
-        var sqlite = RunPkMedian(() => RunSQLite());
+        int reps = ResolveReps();
+        var (runsScDb, runsSqlite) = RunInterleavedPairedReps(
+            () => RunSharpCoreDBPk(engineType, useDefaultConfig: true),
+            RunSQLite,
+            "SharpCoreDB",
+            "SQLite",
+            reps);
+
+        ReportPaired("SharpCoreDB (default cfg)", "SQLite (reference)", runsScDb, runsSqlite);
         Console.WriteLine();
 
-        Console.WriteLine("║ Database      │ INSERT     │ READ     │ UPDATE   │ DELETE   ║");
-        Console.WriteLine($"║ SharpCoreDB   │ {scdb.InsertOpsPerSec,10:N0} │ {scdb.ReadOpsPerSec,8:N0} │ {scdb.UpdateOpsPerSec,8:N0} │ {scdb.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"║ SQLite        │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap: SQLite vs default-config {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x");
-        Console.WriteLine($"  DELETE gap: SQLite vs default-config {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x");
+        var scdb = MedianArm(runsScDb);
+        var sqlite = MedianArm(runsSqlite, runsSqlite.Count > 0 ? runsSqlite[0].SqlitePragmas : null);
+
+        // The per-phase table and the one-line gap readout that used to live here are superseded by
+        // ReportPaired above, which prints the same medians plus the paired ranges the protocol requires.
 
         var results = new Dictionary<string, BenchmarkResult>
         {
@@ -1175,8 +4080,7 @@ class Program
             ["SQLite"] = sqlite,
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_default_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -1254,8 +4158,7 @@ class Program
             ["medianReadRatio_B_over_A"] = Ratio(listA, listB, static r => r.ReadOpsPerSec),
         };
 
-        var dir = ResultsDirName;
-        Directory.CreateDirectory(dir);
+        var dir = ResultsDirectory();
         var path = Path.Combine(dir, $"pk_ab_{armA}_{armB}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(summary, new JsonSerializerOptions { WriteIndented = true }));
         Console.WriteLine($"\nResults saved to: {path}");
@@ -1266,7 +4169,7 @@ class Program
     // ══════════════════════════════════════
     static BenchmarkResult RunLiteDB()
     {
-        var dbFile = Path.Combine(Path.GetTempPath(), $"bench-litedb-{Guid.NewGuid()}.db");
+        var dbFile = Path.Combine(BenchTempDirectory(), $"bench-litedb-{Guid.NewGuid()}.db");
         var result = new BenchmarkResult();
 
         try
@@ -1366,6 +4269,1096 @@ class Program
     // ══════════════════════════════════════
     // Comparison Table
     // ══════════════════════════════════════
+    /// <summary>
+    /// Runs the CRUD workload in every encryption configuration and prints the columns side by side.
+    /// Medians over <paramref name="reps"/> runs per arm, with the arm order alternated per rep so a
+    /// warming machine cannot systematically favour one configuration (the <c>--pk-ab</c> pattern).
+    /// </summary>
+    /// <remarks>
+    /// TWO arms since the 2026-09-13 flip, labelled literally: <c>raw</c> is
+    /// <c>NoEncryptMode=true</c> (the documented opt-out, every file plaintext) and <c>default</c> is
+    /// the product default, which now encrypts table records as well as metadata. Before the flip the
+    /// default stored table records as PLAINTEXT while still encrypting metadata; that configuration is
+    /// now only reachable by forcing <c>EnableAtRestRecordEncryption=false</c>, so it is no longer an
+    /// arm — the §3-1c audit table stays as the historical record. Publish the columns together or not
+    /// at all.
+    /// </remarks>
+    /// <summary>
+    /// Diagnostic only (<c>--update-parse-cost</c>): splits the <b>531 B/statement</b> that worklog session 31
+    /// attributed to the batch dispatcher's <c>parse</c> stage into the components the canonical UPDATE path
+    /// actually allocates, so the next optimisation targets a measured piece instead of an assumed one.
+    /// <para>
+    /// The obvious alternative — sub-stages inside the 10.000-statement loop — is not viable: every stage stamp
+    /// is a clock read, so four stamp/add pairs per statement would perturb the very phase being described.
+    /// Measure the pieces in isolation instead, and report bytes as well as time.
+    /// </para>
+    /// <para>
+    /// BCL-only on purpose: it touches no engine internals, so the numbers describe the allocation itself rather
+    /// than this harness's access to it. Whatever remains after the measured components is what the canonical
+    /// scanner (<c>TryScanCanonicalDml</c>) and <c>SqlParser.ParseValue</c> are left with.
+    /// </para>
+    /// </summary>
+    /// <summary>
+    /// Correctness gate for the READ arms — the debt session 35 recorded when PageBased's PK READ came in at
+    /// 4,58×, a 316 % jump nobody had checked the code behind.
+    /// <para>
+    /// Two facts were established by reading rather than assumed, and both are recorded here because they decide
+    /// what is left to verify. (1) <c>ExecuteQuery</c> returns <c>List&lt;Dictionary&lt;string, object&gt;&gt;</c>
+    /// — it is <b>eager</b>, not a lazy enumerable — so discarding the return value in the arms does <i>not</i>
+    /// skip the read: the work happens inside the call. (2) The asymmetry that does exist is against us: our arm
+    /// materialises a dictionary per returned row while SQLite's arm only calls <c>reader.Read()</c>, so if
+    /// anything our READ cell is made to look worse than SQLite's. Neither fact makes the number *right* —
+    /// what they leave open is whether the row that comes back is the row that was asked for, which a page-based
+    /// engine can get wrong while staying fast.
+    /// </para>
+    /// <para>
+    /// Runs <b>after</b> the timed loop, on a sample, so the measured cell is untouched. Prints a single line
+    /// with the three failure modes kept apart: no row, wrong row count, wrong value.
+    /// </para>
+    /// </summary>
+    static void VerifyReadSamples(
+        SharpCoreDB.Interfaces.IDatabase db,
+        string label,
+        Func<int, (string Sql, Dictionary<string, object?> Parameters)> request,
+        string expectColumn,
+        Func<int, object?> expected,
+        int keys)
+    {
+        int sampled = 0;
+        int empty = 0;
+        int wrongCount = 0;
+        int wrongValue = 0;
+
+        for (int i = 0; i < keys; i++)
+        {
+            var (sql, parameters) = request(i);
+            var rows = db.ExecuteQuery(sql, parameters);
+            sampled++;
+
+            if (rows.Count == 0)
+            {
+                empty++;
+                continue;
+            }
+
+            if (rows.Count != 1)
+            {
+                wrongCount++;
+            }
+
+            if (!rows[0].TryGetValue(expectColumn, out var actual) ||
+                !Equals(NormalizeForCompare(actual), NormalizeForCompare(expected(i))))
+            {
+                wrongValue++;
+            }
+        }
+
+        string verdict = empty == 0 && wrongCount == 0 && wrongValue == 0 ? "PASS" : "FAIL";
+        Console.WriteLine($"    [verify] {label} READ: {verdict} — {sampled:N0} sampled · "
+            + $"{empty} empty · {wrongCount} unexpected row count · {wrongValue} wrong value");
+    }
+
+    /// <summary>
+    /// Makes <c>EqualityComparer</c> usable across the numeric types the engines hand back for one column
+    /// (a PK read can come back as <see cref="int"/> where the insert supplied a <see cref="long"/>, and that
+    /// is not a correctness problem). Strings compare as strings; booleans and nulls compare as themselves.
+    /// </summary>
+    static object? NormalizeForCompare(object? value) => value switch
+    {
+        null => null,
+        string s => s,
+        bool b => b,
+        char c => c.ToString(),
+        IConvertible => Convert.ToDecimal((IConvertible)value, CultureInfo.InvariantCulture),
+        _ => value.ToString(),
+    };
+
+    static void RunUpdateParseCostDiagnostic()
+    {
+        const int N = 500_000;
+
+        // Deliberately NOT const: with a constant literal the compiler folds `"id" + " = " + whereLit` into a
+        // single interned string, so the first version of this diagnostic reported **0 B and 1,9 ns** for the
+        // WHERE rebuild — it was measuring the compiler, not the runtime. Built at runtime instead, so the
+        // concatenation actually happens in the loop.
+        string whereLit = new string(['5']);
+        string setCol = new string(['s', 'c', 'o', 'r', 'e']);
+
+        static (double NsPerOp, double BytesPerOp) Measure(int n, Action body)
+        {
+            // Warm the shape first: a tiered-JIT promotion inside the measured loop would be charged to it.
+            for (int i = 0; i < 20_000; i++)
+            {
+                body();
+            }
+
+            long allocBefore = GC.GetAllocatedBytesForCurrentThread();
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            for (int i = 0; i < n; i++)
+            {
+                body();
+            }
+            sw.Stop();
+            long allocAfter = GC.GetAllocatedBytesForCurrentThread();
+
+            return (sw.Elapsed.TotalNanoseconds / n, (allocAfter - allocBefore) / (double)n);
+        }
+
+        Console.WriteLine("UPDATE canonical parse — per-statement component cost");
+        Console.WriteLine();
+        Console.WriteLine($"  iterations {N:N0} per shape, each shape warmed before measuring");
+        Console.WriteLine();
+        Console.WriteLine($"  {"shape",-48}{"ns/op",11}{"B/op",10}");
+
+        var dict = Measure(N, () =>
+        {
+            var d = new Dictionary<string, object>(1) { [setCol] = 5L };
+            _ = d.Count;
+        });
+        var concat = Measure(N, () => { _ = "id" + " = " + whereLit; });
+        var bare = Measure(N, () => { _ = new object(); });
+
+        Console.WriteLine($"  {"A  Dictionary<string,object>(1) + one entry (the `updates` arg)",-48}{dict.NsPerOp,11:F1}{dict.BytesPerOp,10:F0}");
+        Console.WriteLine($"  {"B  WHERE rebuild: \"col\" + \" = \" + literal",-48}{concat.NsPerOp,11:F1}{concat.BytesPerOp,10:F0}");
+        // The `parse` stage's OWN instrumentation runs inside the region it measures: the dispatcher stamps and
+        // adds per statement (Database.Batch.cs:1315 / :1363, the classifier both dispatchers share), so any share sampled with the profiler ON is an
+        // upper bound that includes the observer. Measure it enabled, which is the only state in which stage
+        // tables are produced at all.
+        SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+        SharpCoreDB.Diagnostics.WritePathProfiler.Enable();
+        var stampAddEnabled = Measure(N, () =>
+        {
+            long stamp = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Parse, stamp);
+        });
+        SharpCoreDB.Diagnostics.WritePathProfiler.Disable();
+
+        var stampAddDisabled = Measure(N, () =>
+        {
+            long stamp = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+            SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+                SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Parse, stamp);
+        });
+        SharpCoreDB.Diagnostics.WritePathProfiler.Reset();
+
+        Console.WriteLine($"  {"C  profiler Stamp()+Add(), ENABLED (the observer's own cost)",-48}{stampAddEnabled.NsPerOp,11:F1}{stampAddEnabled.BytesPerOp,10:F0}");
+        Console.WriteLine($"  {"D  profiler Stamp()+Add(), disabled",-48}{stampAddDisabled.NsPerOp,11:F1}{stampAddDisabled.BytesPerOp,10:F0}");
+        Console.WriteLine();
+        Console.WriteLine("  Session 31 measured the whole `parse` stage at 531 B/statement across 10.000 calls, in every");
+        Console.WriteLine("  rep. A + B is the part this diagnostic can name; the residue is what the canonical scanner");
+        Console.WriteLine("  and SqlParser.ParseValue are left with. Whichever component dominates is the one worth");
+        Console.WriteLine("  removing — and that decision should not be taken from the 531 B total alone, because the");
+        Console.WriteLine("  tuple also has to keep a non-empty WHERE for TryBulkUpdateContiguousFixedWidth (B8) to fire.");
+    }
+
+    /// <summary>
+    /// The dictionary-free lever's <b>ceiling</b>, measured before anything is built (the B3 lesson: measure the
+    /// ceiling first — that item was cancelled at 1,6 % of its cell). The INSERT path's documented advantage is
+    /// that it is "explicitly dictionary-free", and the new batch UPDATE/DELETE API takes one
+    /// <c>Dictionary&lt;string, object&gt;</c> per operation — so "make the op shape dictionary-free" is the
+    /// obvious next lever. But the dictionaries are built by the <b>caller</b>, outside the timed window (the
+    /// harness caches the op list), so what a dictionary-free shape could remove from the window is only the
+    /// <b>read pattern</b> and the <b>GC pressure</b>. This measures those two at the real batch size and prints
+    /// the share against the live cells' per-op time, which is the number that decides.
+    /// </summary>
+    static void RunBatchDmlShapeCostDiagnostic()
+    {
+        const int Ops = 10_000;
+        const int Repeats = 200;
+
+        // Runtime-built strings, never const literals: with a constant the compiler folds the concat and the
+        // interning removes the lookup cost, which is exactly the mistake session 44's first version made.
+        string setCol = new string(['s', 'c', 'o', 'r', 'e']);
+        string[] setColumns = [setCol];
+
+        // Shape A: the live op dictionaries, built once (this is what the harness caches — out of window).
+        long allocBeforeA = GC.GetAllocatedBytesForCurrentThread();
+        int gen0BeforeA = GC.CollectionCount(0);
+        var dictOps = new List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>(Ops);
+        for (int i = 0; i < Ops; i++)
+        {
+            dictOps.Add(("id", i + 1, new Dictionary<string, object>(1) { [setCol] = i * 99.9 }));
+        }
+
+        long dictBytes = GC.GetAllocatedBytesForCurrentThread() - allocBeforeA;
+        int dictGen0 = GC.CollectionCount(0) - gen0BeforeA;
+
+        // Shape B: the column-ordered alternative — one shared column list + one object[] per operation.
+        long allocBeforeB = GC.GetAllocatedBytesForCurrentThread();
+        int gen0BeforeB = GC.CollectionCount(0);
+        var arrayOps = new List<(string KeyColumn, object? KeyValue, object[] Values)>(Ops);
+        for (int i = 0; i < Ops; i++)
+        {
+            arrayOps.Add(("id", i + 1, [i * 99.9]));
+        }
+
+        long arrayBytes = GC.GetAllocatedBytesForCurrentThread() - allocBeforeB;
+        int arrayGen0 = GC.CollectionCount(0) - gen0BeforeB;
+
+        static (double NsPerOp, double BytesPerOp) Measure(int n, Action body)
+        {
+            for (int i = 0; i < 20_000; i++)
+            {
+                body();
+            }
+
+            long before = GC.GetAllocatedBytesForCurrentThread();
+            var sw = Stopwatch.StartNew();
+            for (int i = 0; i < n; i++)
+            {
+                body();
+            }
+            sw.Stop();
+            long after = GC.GetAllocatedBytesForCurrentThread();
+            return (sw.Elapsed.TotalNanoseconds / n, (after - before) / (double)n);
+        }
+
+        // The read pattern the UPDATE core performs per operation: enumerate the SET entries, test a column
+        // name, fetch it. Both shapes are read the way the core would have to read them.
+        double dictRead = 0;
+        double arrayRead = 0;
+        for (int r = 0; r < Repeats; r++)
+        {
+            var readDict = Measure(Ops, () =>
+            {
+                var op = dictOps[0];
+                foreach (var kvp in op.Values)
+                {
+                    _ = kvp.Key;
+                    _ = kvp.Value;
+                }
+
+                if (op.Values.ContainsKey(setCol))
+                {
+                    _ = op.Values[setCol];
+                }
+            });
+
+            var readArray = Measure(Ops, () =>
+            {
+                var op = arrayOps[0];
+                for (int c = 0; c < setColumns.Length; c++)
+                {
+                    _ = setColumns[c];
+                    _ = op.Values[c];
+                }
+            });
+
+            dictRead += readDict.NsPerOp;
+            arrayRead += readArray.NsPerOp;
+        }
+
+        dictRead /= Repeats;
+        arrayRead /= Repeats;
+        double deltaNs = dictRead - arrayRead;
+
+        Console.WriteLine("Batch-DML op shape - what a dictionary-free variant could actually remove");
+        Console.WriteLine();
+        Console.WriteLine($"  batch size {Ops:N0} ops · read patterns averaged over {Repeats} passes of {Ops:N0} ops each");
+        Console.WriteLine();
+        Console.WriteLine($"  {"shape",-44}{"ns/op",11}{"B/op",10}");
+        Console.WriteLine($"  {"A  Dictionary<string,object>(1) + one entry",-44}{dictRead,11:F1}{dictBytes / (double)Ops,10:F0}");
+        Console.WriteLine($"  {"B  shared column list + object[] per op",-44}{arrayRead,11:F1}{arrayBytes / (double)Ops,10:F0}");
+        Console.WriteLine();
+        Console.WriteLine($"  op-list build (outer, once per batch): dictionaries {dictBytes / 1024.0 / 1024.0:F1} MB"
+            + $" · arrays {arrayBytes / 1024.0 / 1024.0:F1} MB · gen0 {dictGen0} vs {arrayGen0}");
+        Console.WriteLine($"  in-window difference (A reads - B reads): {deltaNs:F1} ns/op");
+        Console.WriteLine();
+
+        // The live per-op times this delta has to be compared against, from the medians measured in sessions
+        // 45/46 (ops/s -> ns/op). Absolute ops/s differ per run; these are the phases this lever would touch.
+        var cells = new (string Label, double OpsPerSec)[]
+        {
+            ("fair arm UPDATE (SQL-free batch, 5-rep run)", 715_793),
+            ("fair arm UPDATE (SQL-free batch, 9-rep run)", 645_765),
+            ("arm B UPDATE (SQL-free batch)", 531_629),
+            ("arm B DELETE (SQL-free batch)", 766_594),
+            ("arm C UPDATE (SQL-free batch)", 284_759),
+        };
+
+        Console.WriteLine("  share of each measured cell, if the ENTIRE read difference were removed:");
+        foreach (var (label, opsPerSec) in cells)
+        {
+            double nsPerOp = 1_000_000_000.0 / opsPerSec;
+            Console.WriteLine($"    {label,-44}{deltaNs / nsPerOp * 100.0,7:F1} %   ({nsPerOp:F0} ns/op in the cell)");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  Read this against the protocol's own resolution: the INSERT/READ control column of the three-arm");
+        Console.WriteLine("  runs reads 0,92-1,07x where both arms are the SAME code, and per-rep ratios move ~20 %. A");
+        Console.WriteLine("  ceiling well inside that is not a lever — it is a change that cannot be told from noise, which is");
+        Console.WriteLine("  what cancelled B3. The dictionaries are built OUTSIDE the window (the harness caches the op");
+        Console.WriteLine("  list), so their allocation is not part of any measured cell; only the reads and the GC above are.");
+    }
+
+    /// <summary>
+    /// <c>--auto-index-benefit</c>: the other half of §9 row 5. Sessions 42/49/50 measured what the per-column
+    /// auto hash indexes cost (large on INSERT for both the no-PK docs shape and the default-posture arm);
+    /// this measures what they <b>buy</b>, by running the same point queries against two databases built from
+    /// the same data — one with the auto-index set, one with only the explicit index — and reporting µs/query
+    /// beside the row counts, so a difference in speed can never be a difference in results.
+    /// <para>
+    /// The queries deliberately target the columns the auto indexes cover and no explicit index does
+    /// (<c>email</c>, <c>age</c>, <c>score</c>), plus <c>name</c> as the control: <c>name</c> carries the explicit
+    /// index in both configurations, so its numbers should agree while the others show what the auto-index set
+    /// is worth. Integer and REAL columns are included because the hash index has to be reached with a typed
+    /// value there (<c>ParseValueForHashLookup</c>), which is a different route from TEXT.
+    /// </para>
+    /// </summary>
+    static void RunAutoIndexBenefitComparison()
+    {
+        const int Rows = 20_000;
+        const int Queries = 2_000;
+
+        Console.WriteLine("Per-column auto hash indexes - what they COST (sessions 42/49/50) vs what they BUY");
+        Console.WriteLine();
+        Console.WriteLine($"  {Rows:N0} rows, {Queries:N0} point queries per column per configuration, same data both times");
+        Console.WriteLine();
+
+        static (Dictionary<string, double> Micros, Dictionary<string, int> Counts, Dictionary<string, double> FirstMicros, Dictionary<string, int> FirstCounts) Measure(bool hashIndexes)
+        {
+            var dbPath = Path.Combine(BenchTempDirectory(), $"bench-autoidx-{hashIndexes}-{Guid.NewGuid()}");
+            var micros = new Dictionary<string, double>();
+            var counts = new Dictionary<string, int>();
+            var firstMicros = new Dictionary<string, double>();
+            var firstCounts = new Dictionary<string, int>();
+
+            try
+            {
+                var services = new ServiceCollection();
+                services.AddSharpCoreDB();
+                var sp = services.BuildServiceProvider();
+                var factory = sp.GetRequiredService<DatabaseFactory>();
+
+                using var db = (SharpCoreDB.Database)factory.Create(
+                    dbPath: dbPath,
+                    masterPassword: BenchDbPassword,
+                    isReadOnly: false,
+                    config: new DatabaseConfig
+                    {
+                        NoEncryptMode = true,
+                        EnableHashIndexes = hashIndexes,
+                    });
+
+                db.ExecuteSQL("CREATE TABLE docs (name TEXT NOT NULL, email TEXT, age INTEGER, score REAL, data TEXT)");
+                // The explicit index the real docs job creates: it survives the dial, so `name` is the control.
+                db.ExecuteSQL("CREATE INDEX idx_docs_name_benefit ON docs(name)");
+
+                var columnList = new List<string> { "name", "email", "age", "score", "data" };
+                for (int batch = 0; batch < Rows; batch += BatchSize)
+                {
+                    int end = Math.Min(batch + BatchSize, Rows);
+                    var rows = new List<object[]>(end - batch);
+                    for (int i = batch; i < end; i++)
+                    {
+                        rows.Add([$"User{i}", $"user{i}@test.com", 20 + i % 60, i * 0.5, $"payload-{i}"]);
+                    }
+
+                    db.InsertBatch("docs", rows, columnList);
+                }
+
+                db.Flush();
+
+                var probes = new (string Label, string Column, Func<int, object> Value)[]
+                {
+                    ("name  (explicit index, control)", "name", i => $"User{i}"),
+                    ("email (auto index only)", "email", i => $"user{i}@test.com"),
+                    ("age   (auto index only, INTEGER)", "age", i => 20 + i % 60),
+                    ("score (auto index only, REAL)", "score", i => i * 0.5),
+                };
+
+                foreach (var (label, column, valueFor) in probes)
+                {
+                    int stride = Math.Max(1, Rows / Queries);
+
+                    // §9 row 5 constraint (e): the FIRST filtered query on a column is the one that pays for the
+                    // index — with registration on demand that is the moment the index is created AND built — so
+                    // it is timed and reported on its own. Blending it into the repeated queries would hide the
+                    // build the change pays, which is exactly the trade the row decided.
+                    var firstSw = Stopwatch.StartNew();
+                    var firstRows = db.ExecuteQuery($"SELECT name FROM docs WHERE {column} = @p",
+                        new Dictionary<string, object?> { ["@p"] = valueFor(0) });
+                    firstSw.Stop();
+                    firstMicros[label] = firstSw.Elapsed.TotalMicroseconds;
+                    firstCounts[label] = firstRows.Count;
+
+                    int found = firstRows.Count;
+                    var sw = Stopwatch.StartNew();
+                    for (int q = 1; q < Queries; q++)
+                    {
+                        var rows = db.ExecuteQuery($"SELECT name FROM docs WHERE {column} = @p",
+                            new Dictionary<string, object?> { ["@p"] = valueFor(q * stride) });
+                        found += rows.Count;
+                    }
+
+                    sw.Stop();
+                    micros[label] = sw.Elapsed.TotalMicroseconds / Math.Max(1, Queries - 1);
+                    counts[label] = found;
+                }
+            }
+            finally
+            {
+                try { if (Directory.Exists(dbPath)) Directory.Delete(dbPath, true); } catch { /* temp */ }
+            }
+
+            return (micros, counts, firstMicros, firstCounts);
+        }
+
+        // Rule 10, applied inside a diagnostic this time: the FIRST pass measured in a process is cold (JIT), and
+        // because the probe order is fixed it charges that cold cost to whichever column runs first — the first
+        // single-shot version of this mode read the `name` control at 0,33x for exactly that reason. So both
+        // configurations are run once discarded and once measured, and only the warm pair is printed.
+        Console.WriteLine("  (one discarded warm-up pass per configuration; only the warm pair is printed)");
+        Console.WriteLine();
+        _ = Measure(hashIndexes: true);
+        _ = Measure(hashIndexes: false);
+
+        var (withIndexes, countsWith, firstWith, firstCountsWith) = Measure(hashIndexes: true);
+        var (withoutIndexes, countsWithout, firstWithout, firstCountsWithout) = Measure(hashIndexes: false);
+
+        Console.WriteLine($"  {"query on",-34}{"1st query",12}{"repeated on",14}{"repeated off",15}{"ratio",9}   rows 1st/repeated on / off");
+        foreach (var label in withIndexes.Keys)
+        {
+            double on = withIndexes[label];
+            double off = withoutIndexes[label];
+            Console.WriteLine($"  {label,-34}{firstWith[label],9:F0} µs{on,11:F1} µs{off,12:F1} µs{off / on,8:F2}x"
+                + $"   {firstCountsWith[label]} / {countsWith[label],6:N0} /{firstCountsWithout[label]} / {countsWithout[label]:N0}");
+        }
+
+        Console.WriteLine();
+        Console.WriteLine("  `1st query` is the FIRST filtered query on that column, timed on its own: it is the query that");
+        Console.WriteLine("  registers the index (on demand since §9 row 5) and pays for building it. `repeated on/off` are");
+        Console.WriteLine("  the per-query means of the warm queries that follow, with the auto indexes on and with the dial");
+        Console.WriteLine("  off — the `ratio` is off/on over those two, i.e. what the index buys once it exists. A ratio near");
+        Console.WriteLine("  1,00x means the column was answered from an index either way; a large ratio means the query fell");
+        Console.WriteLine("  back to something else with the dial off. The row counts must agree column for column — if they do");
+        Console.WriteLine("  not, this measured two different result sets and is void.");
+    }
+
+    static void RunDualModeComparison(SharpCoreDB.Interfaces.StorageEngineType engineType, int reps = 0)
+    {
+        const int Failed = -1;
+        // reps <= 0 means "take it from the environment", so this table is driven by the same
+        // SHARPCOREDB_BENCH_REPS dial as every other arm. It was hard-coded at 3, which is too few for a
+        // ratio-of-two-configurations table: on the unpaired version READ swung 2,12x -> 0,85x between two
+        // runs at three reps (session 33).
+        if (reps <= 0)
+        {
+            reps = ResolveReps();
+        }
+        Console.WriteLine();
+        Console.WriteLine(BannerTop);
+        Console.WriteLine("║ Encryption-mode comparison — one workload, two configurations          ║");
+        Console.WriteLine(BannerBottom);
+        Console.WriteLine("    raw      NoEncryptMode=true              (opt-out; plaintext everywhere)");
+        Console.WriteLine("    default  product default                 (table data encrypted)");
+        Console.WriteLine($"    product default: NoEncryptMode=false, EnableAtRestRecordEncryption={ProductAtRestDefault}");
+        Console.WriteLine($"  engine={engineType} · inserts={InsertCount:N0} · reads/updates/deletes={ReadCount:N0} each · reps={reps}");
+        Console.WriteLine();
+
+        // The warm-up, the alternating arm order and the paired ranges now come from the SAME machinery every
+        // other arm uses (RunInterleavedPairedReps + ReportPaired) rather than a hand-rolled loop. Two reasons,
+        // both measured. (1) This runner had no warm-up at all until session 33, and it published UPDATE at
+        // 0,75x — *faster with encryption on*, which no configuration can be; rep 1's first block read 92.651
+        // INSERT / 66.972 UPDATE against 147.715 / 130.262 later, and because 'default' ran first on even reps
+        // it was the encrypted arm that paid the cold cost. (2) The hand-rolled loop could only print medians,
+        // never the per-rep range the protocol requires before a cell may be quoted (plan §6 rule 7) — and on
+        // the unpaired version READ swung 2,12x cold -> 0,85x warm, which is exactly the failure a range
+        // exposes and a median hides.
+        var (raw, deflt) = RunInterleavedPairedReps(
+            () => RunArm(engineType, noEncrypt: true, atRestRecords: null, "raw", Failed),
+            () => RunArm(engineType, noEncrypt: false, atRestRecords: null, "default", Failed),
+            "raw", "default", reps);
+
+        Console.WriteLine();
+        Console.WriteLine($"  {"operation",-10}{"raw",13}{"default",13}{"raw/default",14}");
+        PrintModeRow("INSERT", raw, deflt, static r => r.InsertOpsPerSec, Failed);
+        PrintModeRow("READ", raw, deflt, static r => r.ReadOpsPerSec, Failed);
+        PrintModeRow("UPDATE", raw, deflt, static r => r.UpdateOpsPerSec, Failed);
+        PrintModeRow("DELETE", raw, deflt, static r => r.DeleteOpsPerSec, Failed);
+        Console.WriteLine();
+        Console.WriteLine("  /default is the multiplier paid for the encrypted default versus the opt-out arm.");
+        Console.WriteLine("  FAILED means that configuration could not complete the workload (message printed above).");
+
+        // The medians above say how much is paid; the paired range below says whether the cell may be quoted
+        // at all. Keep both — the medians are the published shape, the ranges are the gate on publishing them.
+        ReportPaired("raw (NoEncryptMode=true)", "default (encrypted)", raw, deflt);
+
+        try
+        {
+            var payload = new
+            {
+                timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                engine = engineType.ToString(),
+                reps,
+                inserts = InsertCount,
+                reads = ReadCount,
+                updates = UpdateCount,
+                deletes = DeleteCount,
+                arms = new
+                {
+                    raw = "NoEncryptMode=true (opt-out; plaintext everywhere)",
+                    @default = $"product default (EnableAtRestRecordEncryption={ProductAtRestDefault})",
+                },
+                raw = raw.Select(ToRecord).ToList(),
+                @default = deflt.Select(ToRecord).ToList(),
+            };
+
+            // Anchored at the PROJECT directory, not the process CWD: `dotnet run` may be invoked from the
+            // repo root, and the project's results/ folder is the tracked evidence location (the
+            // comparative_*.json runs live there). One helper, so no writer can drift again.
+            string resultsDir = ResultsDirectory();
+            string path = Path.Combine(resultsDir, $"dual-mode-{DateTime.Now:yyyyMMdd_HHmmss}.json");
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine($"  JSON archived: {path}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  (could not archive JSON: {ex.Message})");
+        }
+    }
+
+    static object ToRecord(BenchmarkResult r) => new
+    {
+        r.InsertOpsPerSec,
+        r.ReadOpsPerSec,
+        r.UpdateOpsPerSec,
+        r.DeleteOpsPerSec,
+        // S1 (plan §4): the comparator travel with the number, even in this projected shape.
+        r.SqlitePragmas,
+    };
+
+    // ══════════════════════════════════════
+    // §2.4 — the write-path regression gate
+    // ══════════════════════════════════════
+
+    /// <summary>
+    /// The baseline shape written by <c>--write-baseline</c>. It is deliberately the same shape the
+    /// <c>--dual-mode</c> archive already uses (two arm arrays of per-operation ops/sec), so any archived
+    /// dual-mode run can also serve as a baseline via <c>--gate-baseline=&lt;path&gt;</c>.
+    /// </summary>
+    sealed class GateBaseline
+    {
+        public List<BenchmarkResult> Raw { get; set; } = [];
+        public List<BenchmarkResult> Default { get; set; } = [];
+    }
+
+    /// <summary>
+    /// The §2.4 regression gate: runs the accepted §2 protocol (the dual-mode arms, medians over
+    /// alternating reps) and compares every operation against a committed baseline, returning non-zero
+    /// when one has regressed beyond the tolerance factor.
+    /// <para>
+    /// It exists because a silent write-path regression has already shipped twice on this branch: the
+    /// UPDATE cost between 2.0 and 2.1 moved inside the noise band with nothing to catch it, and the first
+    /// version of the deferred-DELETE reconcile made random-key DELETE **4× slower** (294,185 → 70,248
+    /// ops/sec) while all 2,321 tests stayed green. Neither was visible without running this harness by hand.
+    /// </para>
+    /// <para>
+    /// The tolerance is deliberately generous. The machine's documented run-to-run band is ±20%, so a factor
+    /// near 1 would fire on noise; 1.5× still catches the regressions worth catching (both of the above were
+    /// ≥2×) without making the gate a coin flip. A failure means "look on a quiet machine", not "revert
+    /// immediately" — which is why this job is non-gating.
+    /// </para>
+    /// <para>
+    /// Options: <c>--gate-factor=&lt;double&gt;</c>, <c>--gate-baseline=&lt;path&gt;</c>, and
+    /// <c>--write-baseline</c> (re-records the committed baseline — an explicit, reviewable act, never
+    /// automatic).
+    /// </para>
+    /// </summary>
+    static int RunRegressionGate(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        double factor,
+        string? baselineArg,
+        bool writeBaseline,
+        int reps = 3)
+    {
+        const int Failed = -1;
+        const string RawArm = "raw";
+        const string DefaultArm = "default";
+
+        string projectDir = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, "..", "..", ".."));
+        string baselinePath = baselineArg is null
+            ? Path.Combine(projectDir, GateBaselineFolder, GateBaselineFile)
+            : Path.GetFullPath(baselineArg);
+
+        int warmupReps = ResolveWarmupReps();
+
+        Console.WriteLine();
+        Console.WriteLine("━━━ Write-path regression gate (§2.4) ━━━");
+        Console.WriteLine($"  engine={engineType} · reps={reps} · tolerance={factor:0.00}x");
+        Console.WriteLine(writeBaseline
+            ? $"  recording baseline: {baselinePath}"
+            : $"  baseline:           {baselinePath}");
+        Console.WriteLine($"  warm-up:            {warmupReps} discarded rep(s) of both arms (SHARPCOREDB_WARMUP_REPS, 0 disables)");
+        Console.WriteLine();
+
+        // The §2 protocol: the same alternating-rep arms the dual-mode comparison uses, so the two
+        // artefacts stay directly comparable and any archived dual-mode JSON is a valid baseline.
+        var raw = new List<BenchmarkResult>();
+        var deflt = new List<BenchmarkResult>();
+
+        // One pass = both arms, in the alternating order the protocol prescribes, so a slow window lands on
+        // both arms of a pair rather than on one arm's block. Shared by the warm-up and the measured reps so
+        // the two cannot drift apart.
+        void RunGatePass(int pass, bool measured)
+        {
+            BenchmarkResult defltRep;
+            BenchmarkResult rawRep;
+            if (pass % 2 == 0)
+            {
+                defltRep = RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed);
+                rawRep = RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed);
+            }
+            else
+            {
+                rawRep = RunArm(engineType, noEncrypt: true, atRestRecords: null, RawArm, Failed);
+                defltRep = RunArm(engineType, noEncrypt: false, atRestRecords: null, DefaultArm, Failed);
+            }
+
+            if (!measured)
+            {
+                return;
+            }
+
+            deflt.Add(defltRep);
+            raw.Add(rawRep);
+            Console.WriteLine($"     rep {raw.Count}/{reps} complete");
+        }
+
+        // Warm-up first, and discarded: every other mode in this harness does this through
+        // RunInterleavedPairedReps(), and this gate — the one consumer of the §2 arms that skipped it — cannot
+        // arbitrate without it. Session 52 measured the default arm's UPDATE at 58.653 → 142.819 → 174.354
+        // ops/sec across the three measured reps, and sessions 61–63 added four exit-2 runs (2,76×–4,16×
+        // against the 2,50× limit) whose every disagreeing metric was slowest at rep 1: a starter cost inside
+        // the statistic that decides the verdict, on a machine where nothing else was running.
+        for (int w = 0; w < warmupReps; w++)
+        {
+            Console.WriteLine($"── warm-up rep {w + 1}/{warmupReps} — DISCARDED, not measured ──");
+            RunGatePass(w, measured: false);
+        }
+
+        if (warmupReps > 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine("  warm-up complete; the measured reps follow.");
+            Console.WriteLine();
+        }
+
+        for (int rep = 0; rep < reps; rep++)
+        {
+            RunGatePass(warmupReps + rep, measured: true);
+        }
+
+        if (raw.Any(static r => r.InsertOpsPerSec <= 0) || deflt.Any(static r => r.InsertOpsPerSec <= 0))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  GATE FAILED: an arm could not complete the workload (see the message above).");
+            return GateExitRegression;
+        }
+
+        var currentRaw = MedianOf(raw);
+        var currentDefault = MedianOf(deflt);
+
+        // §2 requires min–median–max, never a single run — and a run whose own reps disagree wildly
+        // cannot support any verdict, however it compares. So the spread is measured and reported first.
+        double rawSpread = MaxSpread(raw);
+        double defltSpread = MaxSpread(deflt);
+        double worstSpread = Math.Max(rawSpread, defltSpread);
+        string rawShape = ArmShape(raw);
+        string defltShape = ArmShape(deflt);
+        string worstShape = rawSpread >= defltSpread ? rawShape : defltShape;
+        Console.WriteLine();
+        Console.WriteLine($"  rep spread (max ÷ min across the {reps} reps — the run's own noise):");
+        Console.WriteLine($"    raw     {SpreadLine(raw)}");
+        Console.WriteLine($"    default {SpreadLine(deflt)}");
+        Console.WriteLine($"    worst   {worstSpread:F2}x   (a quiet machine sits near 1.0)");
+
+        // Which is it: warm-up, load, or both at once? The gate now discards ResolveWarmupReps() reps of both
+        // arms before it measures (the protocol every other mode in this harness already used), so a rep-1
+        // ramp is no longer expected — but it is still the one shape that must not be read as load. Measured,
+        // session 52, before that warm-up existed: the default arm's UPDATE read 58.653 → 142.819 → 174.354
+        // ops/sec across three reps — a monotone 2,97× rise carrying the whole of the printed worst spread.
+        // So the numbers are printed in rep order, and the verdict below reports the shape it can actually see
+        // (ArmShape asks "was rep 1 the slowest?") instead of asserting load. This adds no threshold, no
+        // statistic and no exit code.
+        Console.WriteLine();
+        Console.WriteLine("  per-rep ops/sec, in rep order (is rep 1 the slowest? then this is a cold process, not load):");
+        Console.WriteLine($"    raw     {SequenceLine(raw)}");
+        Console.WriteLine($"    default {SequenceLine(deflt)}");
+        Console.WriteLine($"    shape   raw {rawShape} · default {defltShape}");
+
+        if (worstSpread > GateNoisySpread)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE INCONCLUSIVE (exit {GateExitInconclusive}): the reps disagree by {worstSpread:F2}x, over the");
+            Console.WriteLine($"  {GateNoisySpread:F2}x limit, so this run supports no verdict.");
+            switch (worstShape)
+            {
+                case "cold-start":
+                    Console.WriteLine("  Every disagreeing metric is slowest at rep 1, which is the signature of a cold process rather");
+                    Console.WriteLine("  than of load. This gate discards warm-up reps before it measures, so the ramp has outlasted");
+                    Console.WriteLine(warmupReps > 0
+                        ? $"  the {warmupReps} it ran: raise SHARPCOREDB_WARMUP_REPS and re-run. The number alone never settles it."
+                        : "  none — SHARPCOREDB_WARMUP_REPS=0 disabled them: unset it and re-run. The number alone never settles it.");
+                    break;
+                case "mixed":
+                    Console.WriteLine("  Some disagreeing metrics are slowest at rep 1 (warm-up) and others are not (load), so this run");
+                    Console.WriteLine("  carries both and separates neither. No verdict. Re-run on a quiet machine.");
+                    break;
+                default:
+                    Console.WriteLine("  No disagreeing metric is slowest at rep 1, which is the load signature this limit exists to");
+                    Console.WriteLine("  catch. Nothing is concluded. Re-run on a quiet machine.");
+                    break;
+            }
+
+            return GateExitInconclusive;
+        }
+
+        if (writeBaseline)
+        {
+            return WriteGateBaseline(baselinePath, engineType, reps, currentRaw, currentDefault);
+        }
+
+        return CompareAgainstBaseline(baselinePath, factor, currentRaw, currentDefault);
+    }
+
+    /// <summary>
+    /// Compares a run's medians against the baseline and reports the verdict. Split out of
+    /// <see cref="RunRegressionGate"/> so the recording half and the checking half stay readable.
+    /// </summary>
+    static int CompareAgainstBaseline(
+        string baselinePath,
+        double factor,
+        BenchmarkResult currentRaw,
+        BenchmarkResult currentDefault)
+    {
+        if (!File.Exists(baselinePath))
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: no baseline at {baselinePath}");
+            Console.WriteLine("  Record one with --write-baseline on a quiet machine, then commit it.");
+            return GateExitRegression;
+        }
+
+        List<BenchmarkResult> baselineRaw;
+        List<BenchmarkResult> baselineDefault;
+        try
+        {
+            var payload = JsonSerializer.Deserialize<GateBaseline>(
+                File.ReadAllText(baselinePath),
+                new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            baselineRaw = payload?.Raw ?? [];
+            baselineDefault = payload?.Default ?? [];
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: could not read the baseline ({ex.GetType().Name}: {ex.Message}).");
+            return GateExitRegression;
+        }
+
+        if (baselineRaw.Count == 0 || baselineDefault.Count == 0)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  GATE FAILED: the baseline at {baselinePath} carries no raw/default measurements.");
+            return GateExitRegression;
+        }
+
+        var baseRaw = MedianOf(baselineRaw);
+        var baseDefault = MedianOf(baselineDefault);
+
+        Console.WriteLine();
+        Console.WriteLine("  metric                   baseline     current    ratio   verdict");
+        bool regressed = false;
+        regressed |= GateRow("raw INSERT", baseRaw.InsertOpsPerSec, currentRaw.InsertOpsPerSec, factor);
+        regressed |= GateRow("raw READ", baseRaw.ReadOpsPerSec, currentRaw.ReadOpsPerSec, factor);
+        regressed |= GateRow("raw UPDATE", baseRaw.UpdateOpsPerSec, currentRaw.UpdateOpsPerSec, factor);
+        regressed |= GateRow("raw DELETE", baseRaw.DeleteOpsPerSec, currentRaw.DeleteOpsPerSec, factor);
+        regressed |= GateRow("default INSERT", baseDefault.InsertOpsPerSec, currentDefault.InsertOpsPerSec, factor);
+        regressed |= GateRow("default READ", baseDefault.ReadOpsPerSec, currentDefault.ReadOpsPerSec, factor);
+        regressed |= GateRow("default UPDATE", baseDefault.UpdateOpsPerSec, currentDefault.UpdateOpsPerSec, factor);
+        regressed |= GateRow("default DELETE", baseDefault.DeleteOpsPerSec, currentDefault.DeleteOpsPerSec, factor);
+        Console.WriteLine();
+        Console.WriteLine("  ratio = baseline ÷ current, so >1 is slower than the baseline.");
+        Console.WriteLine();
+
+        if (regressed)
+        {
+            Console.WriteLine($"  GATE FAILED: at least one metric is slower than baseline × {factor:0.00}.");
+            Console.WriteLine("  The band is ±20%, so re-run on a quiet machine before trusting a single");
+            Console.WriteLine("  failure — then fix the regression, or re-record the baseline on purpose.");
+            return GateExitRegression;
+        }
+
+        Console.WriteLine($"  GATE PASSED: nothing is slower than baseline × {factor:0.00}.");
+        return 0;
+    }
+
+    /// <summary>
+    /// Median of each operation's ops/sec across an arm's reps, as a single result. Uses the upper-middle
+    /// element for an even rep count, matching the convention the PK harness already uses.
+    /// </summary>
+    static BenchmarkResult MedianOf(IReadOnlyList<BenchmarkResult> runs)
+    {
+        static int Median(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick)
+        {
+            var values = runs.Select(pick).Where(static v => v > 0).OrderBy(static v => v).ToArray();
+            return values.Length == 0 ? 0 : values[values.Length / 2];
+        }
+
+        return new BenchmarkResult
+        {
+            InsertOpsPerSec = Median(runs, static r => r.InsertOpsPerSec),
+            ReadOpsPerSec = Median(runs, static r => r.ReadOpsPerSec),
+            UpdateOpsPerSec = Median(runs, static r => r.UpdateOpsPerSec),
+            DeleteOpsPerSec = Median(runs, static r => r.DeleteOpsPerSec),
+        };
+    }
+
+    /// <summary>Prints one gate row. Returns true when the metric regressed beyond the tolerance.</summary>
+    static bool GateRow(string metric, int baseline, int current, double factor)
+    {
+        double ratio = baseline > 0 && current > 0 ? baseline / (double)current : 0;
+        bool regressed = ratio > factor;
+
+        // "watch" is the band below the tolerance: a 1.25×+ slowdown is worth a look even when it passes,
+        // because two of those in a row is how a regression arrives without ever tripping the gate.
+        string verdict = current <= 0 ? "FAILED" : regressed ? "REGRESSED" : ratio > 1.25 ? "watch" : "ok";
+        Console.WriteLine($"  {metric,-20} {baseline,10:N0} {current,11:N0} {ratio,7:F2}x   {verdict}");
+        return regressed;
+    }
+
+    /// <summary>One arm's per-metric rep spread, compact enough for a single console line.</summary>
+    static string SpreadLine(IReadOnlyList<BenchmarkResult> runs) =>
+        $"I {Spread(runs, static r => r.InsertOpsPerSec):F2}x   R {Spread(runs, static r => r.ReadOpsPerSec):F2}x   " +
+        $"U {Spread(runs, static r => r.UpdateOpsPerSec):F2}x   D {Spread(runs, static r => r.DeleteOpsPerSec):F2}x";
+
+    /// <summary>One arm's four per-rep sequences, in rep order, so a ramp can be told from a scatter.</summary>
+    static string SequenceLine(IReadOnlyList<BenchmarkResult> runs) =>
+        $"I {SequenceText(runs, static r => r.InsertOpsPerSec)}   R {SequenceText(runs, static r => r.ReadOpsPerSec)}   " +
+        $"U {SequenceText(runs, static r => r.UpdateOpsPerSec)}   D {SequenceText(runs, static r => r.DeleteOpsPerSec)}";
+
+    /// <summary>Per-rep values of one metric, in the order they were measured, zero-padded out.</summary>
+    static string SequenceText(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        string.Join(' ', runs.Select(pick).Select(static v => v.ToString("N0")).ToArray());
+
+    static int[] Sequence(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        runs.Select(pick).ToArray();
+
+    /// <summary>
+    /// Classifies an arm's rep-by-rep behaviour by asking the one question the spread cannot answer:
+    /// <b>is the first measured rep the slowest one?</b> That is the signature of a cold process. Every
+    /// measuring mode in this harness now discards <see cref="ResolveWarmupReps"/> rep(s) before its
+    /// measured set (default 8; <c>SHARPCOREDB_WARMUP_REPS=0</c> disables them), so this shape means the
+    /// ramp <em>outlasted</em> that budget rather than that no budget was set — and the gate's own
+    /// inconclusive message prints which of the two it is.
+    /// <para>
+    /// Session 78 correction: this comment used to read "unlike every other mode in this harness (they
+    /// start with ResolveWarmupReps reps, default 3) — it discards no warm-up rep". It was wrong in both
+    /// directions by the time it was read. The gate had already been given warm-up reps (session 77), and
+    /// <c>--pk</c>'s <c>RunPkMedian</c> — the mode behind the published fair-PK table, and the only
+    /// measuring helper that never called this resolver — was the one mode it did not describe. That
+    /// defect is fixed in the same session that found it; the measured evidence is on <c>RunPkMedian</c>.
+    /// </para>
+    /// <list type="bullet">
+    /// <item><c>cold-start</c> — every disagreeing metric bottoms out at rep 1: the disagreement is
+    /// explained by warm-up, whether or not the rise is strictly monotone.</item>
+    /// <item><c>load</c> — no disagreeing metric bottoms out at rep 1: the load signature the limit is
+    /// there to catch.</item>
+    /// <item><c>mixed</c> — some metrics do and some do not, i.e. the run carries both and separates
+    /// neither, which is the case a single spread number hides.</item>
+    /// <item><c>flat</c> — every metric agreed across the reps.</item>
+    /// </list>
+    /// Descriptive only: it changes no threshold, no median and no exit code.
+    /// </summary>
+    static string ArmShape(IReadOnlyList<BenchmarkResult> runs)
+    {
+        Func<BenchmarkResult, int>[] metrics =
+        [
+            static r => r.InsertOpsPerSec,
+            static r => r.ReadOpsPerSec,
+            static r => r.UpdateOpsPerSec,
+            static r => r.DeleteOpsPerSec,
+        ];
+
+        int disagreeing = 0;
+        int coldFirst = 0;
+        foreach (var pick in metrics)
+        {
+            int[] measured = Sequence(runs, pick).Where(static v => v > 0).ToArray();
+            if (measured.Length < 2 || Spread(measured) <= 1.0)
+            {
+                continue;   // every rep agreed on this metric, so there is nothing to classify
+            }
+
+            disagreeing++;
+            if (measured[0] == measured.Min())
+            {
+                coldFirst++;
+            }
+        }
+
+        if (disagreeing == 0)
+        {
+            return "flat";
+        }
+
+        if (coldFirst == disagreeing)
+        {
+            return "cold-start";
+        }
+
+        return coldFirst == 0 ? "load" : "mixed";
+    }
+
+    /// <summary>The worst of one arm's four per-metric rep spreads.</summary>
+    static double MaxSpread(IReadOnlyList<BenchmarkResult> runs) =>
+        Math.Max(
+            Math.Max(Spread(runs, static r => r.InsertOpsPerSec), Spread(runs, static r => r.ReadOpsPerSec)),
+            Math.Max(Spread(runs, static r => r.UpdateOpsPerSec), Spread(runs, static r => r.DeleteOpsPerSec)));
+
+    /// <summary>max ÷ min for one metric across an arm's reps; 1.0 when there is nothing to compare.</summary>
+    static double Spread(IReadOnlyList<BenchmarkResult> runs, Func<BenchmarkResult, int> pick) =>
+        Spread(Sequence(runs, pick));
+
+    /// <summary>max ÷ min across a sequence of per-rep values; 1.0 when there is nothing to compare.</summary>
+    static double Spread(IReadOnlyList<int> values)
+    {
+        int[] measured = values.Where(static v => v > 0).ToArray();
+        return measured.Length < 2 ? 1.0 : measured.Max() / (double)measured.Min();
+    }
+
+    /// <summary>
+    /// Records the baseline from this run's medians, in the archived dual-mode shape. One entry per arm —
+    /// the median of the reps — so the file stays small, is reviewable in a diff, and is re-readable by the
+    /// gate (and by anything that already reads a dual-mode result).
+    /// </summary>
+    static int WriteGateBaseline(
+        string path,
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        int reps,
+        BenchmarkResult raw,
+        BenchmarkResult deflt)
+    {
+        try
+        {
+            var payload = new
+            {
+                timestamp = DateTime.UtcNow.ToString("O", CultureInfo.InvariantCulture),
+                engine = engineType.ToString(),
+                reps,
+                note = "One entry per arm: the median of that arm's reps, not a single rep.",
+                raw = new[] { ToRecord(raw) },
+                @default = new[] { ToRecord(deflt) },
+            };
+
+            var dir = Path.GetDirectoryName(path);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            File.WriteAllText(path, JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true }));
+            Console.WriteLine();
+            Console.WriteLine($"  baseline recorded: {path}");
+            Console.WriteLine("  Review the diff before committing: a baseline recorded during a regression");
+            Console.WriteLine("  silently accepts that regression for every later run.");
+            return 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine();
+            Console.WriteLine($"  COULD NOT RECORD BASELINE: {ex.GetType().Name}: {ex.Message}");
+            return GateExitRegression;
+        }
+    }
+
+    /// <summary>Reads <c>--gate-factor=&lt;double&gt;</c> (default 1.5); values below 1 are ignored.</summary>
+    static double ParseGateFactor(string[] args)
+    {
+        const string prefix = "--gate-factor=";
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)
+                && double.TryParse(arg[prefix.Length..], NumberStyles.Float, CultureInfo.InvariantCulture, out var factor)
+                && factor >= 1.0)
+            {
+                return factor;
+            }
+        }
+
+        return GateDefaultFactor;
+    }
+
+    /// <summary>Reads <c>--gate-baseline=&lt;path&gt;</c>; null means the committed baseline.</summary>
+    static string? ParseGateBaseline(string[] args)
+    {
+        const string prefix = "--gate-baseline=";
+        foreach (var arg in args)
+        {
+            if (arg.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                return arg[prefix.Length..];
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>Runs one arm, turning a failure into a marked result instead of killing the run.</summary>
+    static BenchmarkResult RunArm(
+        SharpCoreDB.Interfaces.StorageEngineType engineType,
+        bool noEncrypt,
+        bool? atRestRecords,
+        string label,
+        int failed)
+    {
+        try
+        {
+            return RunSharpCoreDbMode(engineType, noEncrypt, atRestRecords);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"  !! {label} arm FAILED: {ex.GetType().Name}: {ex.Message}");
+            return new BenchmarkResult
+            {
+                InsertOpsPerSec = failed,
+                ReadOpsPerSec = failed,
+                UpdateOpsPerSec = failed,
+                DeleteOpsPerSec = failed,
+            };
+        }
+    }
+
+    static void PrintModeRow(
+        string op,
+        List<BenchmarkResult> raw,
+        List<BenchmarkResult> deflt,
+        Func<BenchmarkResult, int> select,
+        int failed)
+    {
+        int r = MedianOps(raw, select, failed);
+        int d = MedianOps(deflt, select, failed);
+        Console.WriteLine($"  {op,-10}{Cell(r),13}{Cell(d),13}{Ratio(r, d),14}");
+    }
+
+    static int MedianOps(List<BenchmarkResult> xs, Func<BenchmarkResult, int> select, int failed)
+    {
+        if (xs.Count == 0)
+        {
+            return failed;
+        }
+
+        var sorted = xs.Select(select).OrderBy(x => x).ToList();
+        return sorted[sorted.Count / 2];
+    }
+
+    static string Cell(int ops) => ops < 0 ? "FAILED" : ops.ToString("N0", CultureInfo.InvariantCulture);
+
+    static string Ratio(int numerator, int denominator)
+        => numerator < 0 || denominator <= 0 ? "n/a" : $"{(double)numerator / denominator:F2}x";
+
     static void PrintComparison(Dictionary<string, BenchmarkResult> results)
     {
         Console.WriteLine("╔══════════════════════════════════════════════════════════════════════════════╗");
@@ -1376,13 +5369,33 @@ class Program
 
         foreach (var (name, r) in results)
         {
-            Console.WriteLine($"║ {name,-13} │ {r.InsertOpsPerSec,14:N0} │ {r.ReadOpsPerSec,14:N0} │ {r.UpdateOpsPerSec,14:N0} │ {r.DeleteOpsPerSec,8:N0} ║");
+            Console.WriteLine($"║ {name,-13} │ {r.InsertOpsPerSec,14:N0} │ {r.ReadOpsPerSec,14:N0} │ {UpdateCell(r),14} │ {DeleteCell(r),8} ║");
         }
+
+        // A deliberately-unrun phase prints `n/a`, never a 0. This table is the artefact people quote, and a
+        // 0 in it reads as "this engine does 0 updates/sec" rather than "this arm does not measure updates"
+        // (plan §5.5). The distinction travels on the result object, not on the arm's name, and the same flags
+        // are written to comparative_*.json.
+        static string UpdateCell(BenchmarkResult r) =>
+            r.UpdateMeasured ? r.UpdateOpsPerSec.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
+
+        static string DeleteCell(BenchmarkResult r) =>
+            r.DeleteMeasured ? r.DeleteOpsPerSec.ToString("N0", CultureInfo.InvariantCulture) : "n/a";
 
         Console.WriteLine("╠═══════════════════════════════════════════════════════════════════════════════╣");
         Console.WriteLine("║  Test: 100K inserts (10K batches), 10K reads/updates/deletes by PK          ║");
         Console.WriteLine("║  All databases: WAL mode, optimal batch settings                            ║");
         Console.WriteLine("╚═══════════════════════════════════════════════════════════════════════════════╝");
+        // The footnote is printed only when a cell actually is `n/a`, so a run that measures everything stays
+        // byte-identical to what it printed before this distinction existed.
+        if (results.Values.Any(static r => !r.UpdateMeasured || !r.DeleteMeasured))
+        {
+            Console.WriteLine();
+            Console.WriteLine("  n/a = that phase is deliberately not run on that arm (plan §5.5). The Direct API row");
+            Console.WriteLine("        carries those cells: the same ExecuteBatchSQL call path, the same table and index.");
+        }
+
+
     }
 }
 
@@ -1400,6 +5413,20 @@ class LiteDoc
 
 class BenchmarkResult
 {
+    /// <summary>
+    /// How many runs each cell is the median of (<c>SHARPCOREDB_LADDER_REPS</c>, default 1). Additive and
+    /// additive-only: the field is written to <c>comparative_*.json</c> so a reader can tell a median from a
+    /// single-shot reading without the console log, and it default-deserializes to 0 on older archives.
+    /// </summary>
+    public int Reps { get; set; } = 1;
+
+    /// <summary>
+    /// S1 (plan §4): the SQLite reference arm's pragma set as actually applied and read back
+    /// (<c>name=value</c>, comma-separated). Null on SharpCoreDB arms and on runs that never touch
+    /// SQLite — this field documents the *comparator*, and only the comparator has one. Additive and
+    /// additive-only, like <see cref="Reps"/>: older archives default-deserialize it to null.
+    /// </summary>
+    public string? SqlitePragmas { get; set; }
     public double InsertTime { get; set; }
     public int InsertOpsPerSec { get; set; }
     public double ReadTime { get; set; }
@@ -1408,4 +5435,21 @@ class BenchmarkResult
     public int UpdateOpsPerSec { get; set; }
     public double DeleteTime { get; set; }
     public int DeleteOpsPerSec { get; set; }
+
+    /// <summary>
+    /// False when an arm deliberately does not run that phase, so its cell is <b>not measured</b> rather
+    /// than a measured zero. Additive and additive-only, like <see cref="Reps"/>: it is written to
+    /// <c>comparative_*.json</c> so a machine reader gets the same distinction the console prints, and an
+    /// older archive default-deserializes it to <c>true</c> — its zeros were published as numbers, which is
+    /// exactly the ambiguity this flag removes.
+    /// <para>
+    /// The distinction is needed because <c>0</c> already means something else in this harness: a failed arm
+    /// reports zero ops/sec and the gate prints <c>FAILED</c> for it. A deliberate omission must not borrow
+    /// that reading (plan §5.5: the StructRow arm's UPDATE/DELETE cells).
+    /// </para>
+    /// </summary>
+    public bool UpdateMeasured { get; set; } = true;
+
+    /// <inheritdoc cref="UpdateMeasured"/>
+    public bool DeleteMeasured { get; set; } = true;
 }

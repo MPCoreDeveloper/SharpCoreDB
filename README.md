@@ -24,19 +24,34 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by a **1,679-test core suite** (CI-filtered, 0 failed; plus CQRS, VectorSearch, EF Core and Linq2DB suites) and **backward compatibility**
+- A production-focused stack validated by a **1,916-test core suite** (0 failed; **2,897 tests across
+  16 suites** in total) and **backward compatibility**
 
-> **Current release: v2.0.0.3 (2026-09-12)** — maintenance release on the v2.x engine line:
-> 13 SonarCloud cognitive-complexity refactors (behavior unchanged) and a NuGet dependency update
-> batch (Microsoft.* 10.0.12 servicing, Dapper, linq2db, Identity.Client, Test.Sdk). No API or
-> storage-format changes; benchmark-verified no regression (INSERT 187K ops/s, READ 178K ops/s).
+> **Current release: v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
+> NuGet.org** (all 27 packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
+> ships at 16 by default on both storage paths (+12–19 % on the batched multi-row INSERT shape, per
+> the tracked measurement), the overflow arena appends a row's payloads in one call instead of one
+> file open per value, and in-place UPDATE/DELETE with deferred index maintenance put the
+> fixed-width fair-PK layout **ahead of SQLite on UPDATE (0.8×) and DELETE (0.5×)**.
+> Validated by **2,897 tests across 16 suites (0 failed, 16 skipped)** and the write-path regression
+> gate (PASSED). Honest caveats: INSERT is still ~1.4× behind SQLite on the fair-PK shape, the
+> PageBased engine's UPDATE is 4.9× behind, and the pure default (encrypted) config is 1.3–1.6×
+> behind the `NoEncryptMode` raw-speed posture. Full notes:
+> [`docs/2.1.0-RC.3_WHAT_CHANGED.md`](docs/2.1.0-RC.3_WHAT_CHANGED.md) — the RC.3 validation record;
+> the promotion itself re-verified the core suite at **1995 / 0 failed** and is documented in
+> [`docs/net11/PROMOTION_TO_MAIN.md`](docs/net11/PROMOTION_TO_MAIN.md).
+
+> **Previous line — net10.0 / C# 14 stable, parked on `release/v2.0`: v2.0.0.3 (2026-09-12)** — the v2.x engine line: fixed-width record layout is the
+> default for new PK tables, UPDATE/DELETE run in-place with commit-time tombstones, and a reopen
+> data-integrity hardening batch closed silent-data-loss edge cases (empty-value overflow reload,
+> single-file fixed-width arena markers, legacy 1.x delete-after-update purge).
 >
 > **Performance (fair-PK, median-of-3, tuned harness):** UPDATE **~163–245K ops/s**, DELETE
 > **~106–172K ops/s**, INSERT **~125–152K ops/s**, READ **~72–110K ops/s** (SQLite reference:
 > UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K, READ ~95–107K). Honest default-config
 > caveat: the pure default config runs ~1.3–1.6x slower because the file-level wrapper still pays
 > AES work while per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full
-> report: [`docs/2.0.0.3_WHAT_CHANGED.md`](docs/2.0.0.3_WHAT_CHANGED.md) and
+> report: [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
 > [`docs/benchmarks/default-config-pk.md`](docs/benchmarks/default-config-pk.md).
 
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**
@@ -71,7 +86,7 @@ Use it when you need:
 
 The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite**) is closed. The
 numbers below are the **fair-PK harness (median-of-3, tuned config, ascending-PK batches)** from
-`docs/2.0.0.3_WHAT_CHANGED.md` (a 2.0.0.3 re-run confirmed no regression):
+`docs/2.0.0.2_WHAT_CHANGED.md`:
 
 | Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
 |---|---:|---:|---:|
@@ -106,7 +121,7 @@ Headline changes:
 - ⚡ **Removed hidden `D:\*.log` debug writes** that throttled every SELECT/execute/transaction/INSERT
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
   source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
-- ✅ validated by a **1,679-test core suite (CI-filtered, 0 failed)** plus CQRS (64), VectorSearch (143), EF Core (116) and Functional.Linq2DB (24)
+- ✅ validated by a **1,916-test core suite (0 failed)** — **2,897 tests across 16 suites** in total (CQRS 64, VectorSearch 248, EF Core 116, Provider.Sync 135, Search 58, HybridSearch 6, Functional.Linq2DB 24, …)
 - 🛡️ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL, key & password rotation APIs (#341 follow-on)
 - 🗜️ **Block-level Brotli/GZip compression** for single-file (`.scdb`) storage — transparent, per-block, applied before encryption / removed after decryption (#344)
 - ⚙️ **Configurable metadata region sizing** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` remove the 512 MB single-file ceiling; byte-based file extension (~10 MB regardless of `PageSize`) (#345)
@@ -153,9 +168,14 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server --version 2.0.0.3
+dotnet add package SharpCoreDB.Server.Core --version 2.0.0.3
 dotnet add package SharpCoreDB.Client --version 2.0.0.3
 ```
+
+> The server host is a standalone executable (`src/SharpCoreDB.Server`), distributed as the
+> `sharpcoredb-server` binary and the `ghcr.io/mpcoredeveloper/sharpcoredb-server` container image —
+> it is **not** published as the `SharpCoreDB.Server` NuGet package. The packable server-side
+> libraries are `SharpCoreDB.Server.Core` and `SharpCoreDB.Server.Protocol`.
 
 
 ---
@@ -170,14 +190,58 @@ dotnet add package SharpCoreDB.Client --version 2.0.0.3
 
 ---
 
-## Available NuGet packages (v2.0.0.3)
+## Available NuGet packages
+
+### v2.1.0 — current release (`master`, net11.0 / C# 15 preview)
+
+```bash
+# Core
+dotnet add package SharpCoreDB --version 2.1.0
+
+# Server/client
+dotnet add package SharpCoreDB.Server.Core --version 2.1.0
+dotnet add package SharpCoreDB.Client --version 2.1.0
+
+# Engines and extensions
+dotnet add package SharpCoreDB.Analytics --version 2.1.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.0
+dotnet add package SharpCoreDB.Search --version 2.1.0
+dotnet add package SharpCoreDB.HybridSearch --version 2.1.0
+dotnet add package SharpCoreDB.Graph --version 2.1.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0
+dotnet add package SharpCoreDB.Distributed --version 2.1.0
+dotnet add package SharpCoreDB.Provider.Sync --version 2.1.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.0
+dotnet add package SharpCoreDB.Extensions --version 2.1.0
+
+# Optional architecture packages
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.0
+dotnet add package SharpCoreDB.Projections --version 2.1.0
+dotnet add package SharpCoreDB.CQRS --version 2.1.0
+
+# Optional functional adapters
+dotnet add package SharpCoreDB.Functional --version 2.1.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0
+```
+
+> Pre-release versions are **not** selected by default — request the version explicitly (as above) or
+> tick *Include prerelease* in Visual Studio.
+>
+> The **server host is a standalone executable**, not a NuGet package: run
+> `dotnet run --project src/SharpCoreDB.Server -c Release` or use the
+> `ghcr.io/mpcoredeveloper/sharpcoredb-server` container image. The packable server-side libraries are
+> `SharpCoreDB.Server.Core` (hosting) and `SharpCoreDB.Server.Protocol` (wire contracts).
+
+### v2.0.0.2 — stable (`master`, net10.0 / C# 14)
 
 ```bash
 # Core
 dotnet add package SharpCoreDB --version 2.0.0.3
 
 # Server/client
-dotnet add package SharpCoreDB.Server --version 2.0.0.3
+dotnet add package SharpCoreDB.Server.Core --version 2.0.0.3
 dotnet add package SharpCoreDB.Client --version 2.0.0.3
 
 # Engines and extensions
@@ -213,7 +277,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.3
 - Feature matrix: `docs/FEATURE_MATRIX.md`
 - Server docs: `docs/server/README.md` · Server quick start: `docs/server/QUICKSTART.md`
 - GraphRAG docs: `docs/graphrag/00_START_HERE.md`
-- SQL dialect extensions: `docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`
+- SQL dialect: `docs/manual/query.md`
 - Migration docs: `docs/migration/README.md`
 - Single-file SQL support and limits: `docs/storage/SINGLE_FILE_SQL_LIMITATIONS.md`
 - EF Core provider docs: `src/SharpCoreDB.EntityFrameworkCore/README.md`, `src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
@@ -237,7 +301,6 @@ This project is licensed under the MIT License. See `LICENSE` for details.
 ---
 
 **Made with ❤️ for the .NET community**
-
 
 
 

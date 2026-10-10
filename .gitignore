@@ -58,7 +58,7 @@ dlldata.c
 # Benchmark Results
 BenchmarkDotNet.Artifacts/
 # Comparative benchmark harness output (tests/benchmarks/SharpCoreDB.Benchmarks.Comparative)
-results/
+/results/
 
 # .NET Core
 project.lock.json
@@ -369,6 +369,12 @@ FodyWeavers.xsd
 
 # Test output logs
 test_out.txt
+
+# Local test-run output captured by hand (e.g. `SharpCoreDB.Tests > suite.txt`) — evidence, never source.
+# Their absence from this file is how a 464 KB test log nearly landed in a commit.
+suite.txt
+run-*.txt
+ci-suite-run.txt
 test_full_output.txt
 benchmark_output.txt
 
@@ -400,6 +406,9 @@ PageCacheTest/
 
 # NuGet packaging artifacts
 artifacts/
+# ...but keep SOURCE folders named Artifacts (the ignore above matches case-insensitively on Windows)
+!src/**/Artifacts/
+!src/**/Artifacts/**
 packages/
 *.nupkg
 *.snupkg
@@ -427,3 +436,19 @@ dist/
 # SonarScanner local analysis artifacts
 .sonarqube/
 .scannerwork/
+
+# Generated databases: runtime artifacts that the examples and the server create on first run.
+# The compatibility-smoke fixture (tests/CompatibilitySmoke/smoke-data) is CI input and stays tracked.
+# The smoke runner's own per-run output is not.
+tests/CompatibilitySmoke/smoke-results.json
+tests/CompatibilitySmoke/appsettings.smoke.patched.json
+tests/CompatibilitySmoke/appsettings.smoke.ci.json
+Examples/**/*.scdb
+Examples/**/*.scdb/
+src/SharpCoreDB.Server/data/
+
+# BMAD agent tooling
+# _bmad/ and .cline/skills/ are committed so the whole team shares one setup.
+# Only the personal install answers are ignored (the installer rewrites them per machine):
+_bmad/config.user.toml
+# (_bmad/custom/config.user.toml is already covered by _bmad/custom/.gitignore)

@@ -98,6 +98,73 @@ public sealed class InMemoryEventStore : IEventStore
     }
 
     /// <inheritdoc />
+    public Task<ConditionalAppendResult> TryAppendEventsAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        IEnumerable<EventAppendEntry> entries,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(entries);
+
+        if (cancellationToken.IsCancellationRequested)
+        {
+            return Task.FromCanceled<ConditionalAppendResult>(cancellationToken);
+        }
+
+        var entryList = entries as IList<EventAppendEntry> ?? entries.ToList();
+
+        lock (_lock)
+        {
+            var currentVersion = _streams.TryGetValue(streamId.Value, out var existing)
+                ? existing.HighestSequence
+                : 0L;
+
+            if (expectedVersion != ExpectedVersion.Any && expectedVersion != currentVersion)
+            {
+                return Task.FromResult(ConditionalAppendResult.Conflict(expectedVersion, currentVersion));
+            }
+
+            if (entryList.Count == 0)
+            {
+                return Task.FromResult(ConditionalAppendResult.Ok(expectedVersion, currentVersion, []));
+            }
+
+            var (events, nextSequence) = GetOrCreateStream(streamId);
+            var results = new List<AppendResult>(entryList.Count);
+
+            foreach (var entry in entryList)
+            {
+                var globalSeq = Interlocked.Increment(ref _globalSequence);
+                var envelope = new EventEnvelope(
+                    streamId,
+                    nextSequence,
+                    globalSeq,
+                    entry.EventType,
+                    entry.Payload,
+                    entry.Metadata,
+                    entry.TimestampUtc);
+
+                events.Add(envelope);
+                results.Add(AppendResult.Ok(streamId, nextSequence, globalSeq));
+
+                nextSequence++;
+            }
+
+            _streams[streamId.Value] = new StreamData(events, nextSequence - 1);
+
+            return Task.FromResult(ConditionalAppendResult.Ok(expectedVersion, nextSequence - 1, results));
+        }
+    }
+
+    /// <inheritdoc />
+    public Task<ConditionalAppendResult> TryAppendEventAsync(
+        EventStreamId streamId,
+        long expectedVersion,
+        EventAppendEntry entry,
+        CancellationToken cancellationToken = default) =>
+        TryAppendEventsAsync(streamId, expectedVersion, [entry], cancellationToken);
+
+    /// <inheritdoc />
     public Task<ReadResult> ReadStreamAsync(
         EventStreamId streamId,
         EventReadRange range,

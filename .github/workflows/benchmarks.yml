@@ -1,0 +1,81 @@
+# Write-path regression gate — §2.4 of docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md.
+#
+# The plan asks for the benchmark to be runnable as a non-gating (nightly/manual) job, "so future work
+# cannot silently regress INSERT/UPDATE the way UPDATE did between 2.0 and 2.1". The need is not
+# theoretical: during the v2.1 deferred-DELETE work, a reconcile placed at Table.Flush() made random-key
+# DELETE 4x slower (294,185 -> 70,248 ops/sec) and every one of the 2,321 tests stayed green — only a
+# hand-run of the harness caught it.
+#
+# This workflow never blocks a pull request: it is its own workflow, so no branch-protection rule
+# requires it. It exists to make a regression visible, not to fail a merge.
+#
+# What it compares against:
+#   tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/baselines/dual-mode-baseline.json
+# That baseline was recorded on the maintainer's machine. GitHub-hosted runners get a different CPU on
+# every run, so on this runner the comparison is TREND evidence only. Run the same command on a stable
+# self-hosted runner (or the dev box) when the answer has to mean something; re-record with
+# `--write-baseline` after an intentional change in performance.
+#
+# Exit codes from the gate: 0 = within tolerance, 1 = a metric regressed beyond the factor,
+# 2 = the run was too noisy to conclude anything (the reps disagreed by more than the spread limit).
+
+name: Benchmarks (non-gating)
+
+on:
+  workflow_dispatch:
+    inputs:
+      factor:
+        description: 'Regression tolerance — current must be within baseline/factor'
+        required: false
+        default: '1.5'
+  schedule:
+    # 03:17 UTC nightly. Off the hour so it does not queue behind the every-hour jobs.
+    - cron: '17 3 * * *'
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  BENCH_PROJECT: tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/SharpCoreDB.Benchmarks.Comparative.csproj
+
+jobs:
+  regression-gate:
+    name: Write-path regression gate (§2.4)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    # The branch's global.json pins the .NET 11 RC SDK (net11.0 + C# 15 preview only).
+    - name: Setup .NET 11 (RC)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: '11.0.100-rc.1.26425.128'
+        include-prerelease: true
+
+    - name: Build the comparative benchmark (Release)
+      run: dotnet build "$BENCH_PROJECT" --configuration Release --framework net11.0
+
+    # pipefail + tee: the step goes red when the gate exits non-zero, and the log survives for upload.
+    - name: Run the gate
+      run: |
+        set -o pipefail
+        dotnet run --project "$BENCH_PROJECT" \
+          --configuration Release --framework net11.0 \
+          -- --gate "--gate-factor=${{ github.event.inputs.factor || '1.5' }}" \
+          | tee gate-output.txt
+
+    - name: Upload the run log
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: regression-gate-log
+        path: gate-output.txt
+        retention-days: 14

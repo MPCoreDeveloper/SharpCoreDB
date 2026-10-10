@@ -73,6 +73,84 @@ public partial class Table
     }
 
     /// <summary>
+    /// True when a deferred DELETE has skipped the PK B-tree removal since the last rebuild. While
+    /// stale, the B-tree holds entries that point at tombstones; point lookups tolerate them (a null
+    /// read) and <see cref="IsPrimaryKeyTaken"/> verifies liveness, so the staleness is invisible.
+    /// </summary>
+    private bool _pkIndexStale;
+
+    /// <summary>
+    /// Number of primary keys deleted in deferred mode since the last rebuild. Used for observability
+    /// and to bound the staleness window.
+    /// </summary>
+    private int _pendingDeferredDeletes;
+
+    /// <summary>
+    /// Gets the number of deferred DELETE keys accumulated since the last primary-key B-tree rebuild.
+    /// Zero when deferred maintenance is off, or once the counter crossed
+    /// <see cref="DatabaseConfig.DeferredDeleteIndexThreshold"/> and the rebuild ran.
+    /// </summary>
+    public int PendingDeferredDeleteCount => _pendingDeferredDeletes;
+
+    /// <summary>
+    /// Marks the PK B-tree stale because a deferred DELETE skipped its removal. The B-tree itself is
+    /// left untouched — so a rolled-back transaction needs no index rollback — and the stale entries
+    /// are reconciled by <see cref="RebuildPrimaryKeyIndexIfThresholdExceeded"/> or, for free, by the
+    /// index rebuild a reopen performs.
+    /// </summary>
+    /// <param name="deletedCount">Number of primary keys deleted in this batch.</param>
+    internal void MarkPrimaryKeyIndexStale(int deletedCount)
+    {
+        _pkIndexStale = true;
+        _pendingDeferredDeletes += deletedCount;
+    }
+
+    /// <summary>
+    /// Rebuilds the PK B-tree when the pending deferred-delete count crossed
+    /// <see cref="DatabaseConfig.DeferredDeleteIndexThreshold"/>, called at the end of a delete once the
+    /// tombstone has been written. Only safe once the tombstones are durable (outside a transaction), so
+    /// a transactional batch leaves its entries stale until a reopen — see the threshold option's own
+    /// documentation for why the reconcile is deliberately not run at every <c>Flush()</c>.
+    /// </summary>
+    private void RebuildPrimaryKeyIndexIfThresholdExceeded()
+    {
+        if (!_pkIndexStale)
+            return;
+
+        if (_pendingDeferredDeletes < (_config?.DeferredDeleteIndexThreshold ?? 100000))
+            return;
+
+        if (storage is { IsInTransaction: true })
+            return; // buffered tombstones are not yet in the file; a reopen reconciles
+
+        RebuildPrimaryKeyIndexFromDisk();
+        _pkIndexStale = false;
+        _pendingDeferredDeletes = 0;
+    }
+
+    /// <summary>
+    /// Liveness-aware primary-key uniqueness check. When the PK B-tree is exact (the default, and the
+    /// only state when deferred DELETE is off) this is just <c>Index.Search(pkVal).Found</c>. When the
+    /// B-tree is stale it additionally verifies the stored position is live, so a tombstoned entry is
+    /// treated as free rather than as a false duplicate-key conflict.
+    /// </summary>
+    internal bool IsPrimaryKeyTaken(string pkVal)
+    {
+        if (PrimaryKeyIndex < 0)
+            return false;
+
+        var search = Index.Search(pkVal);
+        if (!search.Found)
+            return false;
+
+        if (!_pkIndexStale)
+            return true; // index is exact → no read needed
+
+        var engine = GetOrCreateStorageEngine();
+        return engine.Read(Name, search.Value) != null;
+    }
+
+    /// <summary>
     /// Flushes all deferred updates and rebuilds affected indexes.
     /// This is called at the end of a batch transaction to apply all queued changes.
     ///

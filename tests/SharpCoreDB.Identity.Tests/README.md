@@ -91,31 +91,35 @@ Token generation and validation tests:
 
 ### Command Line
 ```powershell
+# dotnet test is not supported in this repo (xUnit v3 runs on Microsoft.Testing.Platform).
+# Build once, then drive the test host directly:
+dotnet build tests/SharpCoreDB.Identity.Tests/SharpCoreDB.Identity.Tests.csproj -c Release -f net11.0
+
 # Run all tests
-dotnet test tests/SharpCoreDB.Identity.Tests/SharpCoreDB.Identity.Tests.csproj
+tests/SharpCoreDB.Identity.Tests/bin/Release/net11.0/SharpCoreDB.Identity.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance"
 
-# Run with detailed output
-dotnet test tests/SharpCoreDB.Identity.Tests/SharpCoreDB.Identity.Tests.csproj --logger "console;verbosity=detailed"
+# Verbose output
+tests/SharpCoreDB.Identity.Tests/bin/Release/net11.0/SharpCoreDB.Identity.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance" -reporter verbose
 
-# Run with code coverage
-dotnet test tests/SharpCoreDB.Identity.Tests/SharpCoreDB.Identity.Tests.csproj --collect:"XPlat Code Coverage"
+# TRX report (coverage is collected by the CI pipeline -- see codecov.yml; floor 18%)
+tests/SharpCoreDB.Identity.Tests/bin/Release/net11.0/SharpCoreDB.Identity.Tests.exe -filterVSTest "Category!=Debug&Category!=Manual&Category!=Performance" -result-trx ./TestResults/identity.trx
 ```
 
 ### Filter by Test Class
 ```powershell
 # Run only concurrency tests
-dotnet test --filter "FullyQualifiedName~ConcurrencyTests"
+tests/SharpCoreDB.Identity.Tests/bin/Release/net11.0/SharpCoreDB.Identity.Tests.exe -filterVSTest "FullyQualifiedName~ConcurrencyTests"
 
 # Run only persistence tests
-dotnet test --filter "FullyQualifiedName~PersistenceTests"
+tests/SharpCoreDB.Identity.Tests/bin/Release/net11.0/SharpCoreDB.Identity.Tests.exe -filterVSTest "FullyQualifiedName~PersistenceTests"
 ```
 
 ## Test Framework
 
-- **Framework:** xUnit v3 (3.2.2) - Latest stable for .NET 10
-- **Test Runner:** Microsoft.NET.Test.Sdk 18.6.0
+- **Framework:** xUnit v3 (4.0.0) - latest stable for .NET 11
+- **Test Runner:** Microsoft.NET.Test.Sdk 18.9.0 (plus `Microsoft.Testing.Extensions.CodeCoverage` 18.11.0)
 - **Code Coverage:** coverlet.collector 10.0.1
-- **Target:** .NET 10 / C# 14
+- **Target:** .NET 11 (`net11.0`) / C# 15 preview
 
 ## Test Patterns
 
@@ -200,7 +204,7 @@ public class AccountController(SharpCoreDbIdentityService identityService) : Con
 
 ## Performance Benchmarks
 
-*(Run `dotnet test --filter "FullyQualifiedName~PasswordHasherTests" --logger "console;verbosity=detailed"` to measure)*
+*(Run the test host with `-filterVSTest "FullyQualifiedName~PasswordHasherTests" -reporter verbose` to measure — see Command Line above)*
 
 - **Password Hashing:** ~50-100ms (PBKDF2 with 10,000 iterations)
 - **User Creation:** <10ms (including hash generation)

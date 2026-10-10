@@ -22,10 +22,7 @@
 
 ## Topics
 
-- **Storage quick reference** (engine flags, modes, trade-offs):
-  [QUICK_REFERENCE_v1.7.0.md](QUICK_REFERENCE_v1.7.0.md)
-- **Metadata behavior & improvements** (catalog, headers, versioning):
-  [METADATA_IMPROVEMENTS_v1.7.0.md](METADATA_IMPROVEMENTS_v1.7.0.md)
+- **Storage modes (directory vs single-file)** and **engine modes** (append-only vs page-based) are covered above.
 - **Single-file SQL support & limitations**:
   [SINGLE_FILE_SQL_LIMITATIONS.md](SINGLE_FILE_SQL_LIMITATIONS.md)
 - **Serialization & binary formats**:

@@ -59,17 +59,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private IGraphRagProvider? _cachedGraphRagProvider;  // v2: cached DI resolution (avoids per-call GetService)
 
     /// <summary>
-    /// v2 (Native AOT readiness): metadata JSON options. Uses the reflection resolver when
-    /// reflection is enabled (identical JIT behavior) and the source-generated
-    /// <see cref="SharpCoreDBJsonContext"/> under Native AOT where reflection-based
-    /// serialization is disabled.
+    /// v2 (Native AOT readiness): metadata JSON options. <see cref="AotJsonSerializer.Options"/> resolves the
+    /// type metadata from the reflection resolver while reflection is enabled (identical JIT behavior) and
+    /// from the source-generated contexts under Native AOT where reflection-based serialization is disabled —
+    /// and every call site below asks it for a <c>JsonTypeInfo</c> instead of using the reflection-only
+    /// <c>JsonSerializer</c> overloads (the IL2026 / IL3050 blockers).
     /// </summary>
-    private static readonly JsonSerializerOptions MetadataJsonOptions = new()
-    {
-        TypeInfoResolver = JsonSerializer.IsReflectionEnabledByDefault
-            ? new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()
-            : SharpCoreDBJsonContext.Default
-    };
+    private static readonly JsonSerializerOptions MetadataJsonOptions = AotJsonSerializer.Options;
     
     // ✅ SCDB Phase 1: Storage provider abstraction
     // Null when using legacy directory-based storage (IStorage)
@@ -310,7 +306,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         Dictionary<string, object>? meta;
         try
         {
-            meta = JsonSerializer.Deserialize<Dictionary<string, object>>(metaJson, MetadataJsonOptions);
+            meta = JsonSerializer.Deserialize(metaJson, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>());
         }
         catch (JsonException ex)
         {
@@ -367,7 +363,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             return;
         }
 
-        var tablesList = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(tablesObjString, MetadataJsonOptions);
+        var tablesList = JsonSerializer.Deserialize(
+            tablesObjString,
+            MetadataJsonOptions.GetTypeInfo<List<Dictionary<string, object>>>());
         if (tablesList is null)
         {
 #if DEBUG
@@ -382,7 +380,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
 
         foreach (var tableDict in tablesList)
         {
-            var table = JsonSerializer.Deserialize<Table>(JsonSerializer.Serialize(tableDict, MetadataJsonOptions), MetadataJsonOptions);
+            var table = JsonSerializer.Deserialize(
+                JsonSerializer.Serialize(tableDict, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>()),
+                MetadataJsonOptions.GetTypeInfo<Table>());
             if (table is not null)  // ✅ C# 14: is not null pattern
             {
                 // Backward compatibility: older metadata may not include StorageMode.
@@ -423,6 +423,22 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                          storageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased))
                     {
                         table.MigrateToFixedWidth();
+                        migratedAnyTable = true;
+                    }
+                }
+                // §8c (2026-09-22): the same idea one layer in — an existing FIXED-WIDTH table whose stored inline
+                // capacity is below the configured one is rewritten once, on the first writable open, so that "open it
+                // and it upgrades" is true rather than half true (new tables got the capacity, existing ones kept
+                // theirs). One-way: a config asking for a lower capacity never rewrites anything, and a read-only open
+                // never does either — until the rewrite happens, the STORED capacity stays authoritative for reading,
+                // which is what makes an interrupted or skipped upgrade harmless.
+                else if (!isReadOnly &&
+                         table.IsFixedWidthRecords &&
+                         config is not null &&
+                         table.FixedWidthInlineValueBytes < config.FixedWidthInlineValueBytes)
+                {
+                    if (table.MigrateToInlineCapacity(config.FixedWidthInlineValueBytes) > 0)
+                    {
                         migratedAnyTable = true;
                     }
                 }
@@ -547,13 +563,17 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             ColumnCollations = t.ColumnCollations,  // ✅ COLLATE Phase 1: Persist per-column collation
             AutoIncrementCounters = t.AutoIncrementCounters,  // ✅ AUTO INCREMENT: Persist counter state
             IsFixedWidthRecords = t.IsFixedWidthRecords,  // B5: persist the record format (1.x → 2.0)
+            // §4b: persist the inline capacity too — it is part of the same layout, and a reopened table without it
+            // decoded every inlined value as an overflow offset (DBNull). Missing in older metadata = 0 = the
+            // historical layout, so this is backward compatible.
+            FixedWidthInlineValueBytes = t.FixedWidthInlineValueBytes,
         }).ToList();
         
         var meta = new Dictionary<string, object> { [PersistenceConstants.TablesKey] = tablesList };
         // ✅ 1.9.5: Persist the ULID-spec marker so reopened databases know whether they were created
         // by 1.9.5+ (spec-compliant ULIDs) or earlier (legacy ULIDs needing MigrateLegacyUlids()).
         meta[PersistenceConstants.UlidSpecMarkerKey] = _ulidSpec ?? true;
-        var metaJson = JsonSerializer.Serialize(meta, MetadataJsonOptions);
+        var metaJson = JsonSerializer.Serialize(meta, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>());
         
         if (_storageProvider is not null)
         {
@@ -653,9 +673,25 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// </summary>
     /// <param name="sql">The SQL command.</param>
     /// <returns>True if schema-changing command.</returns>
-    private static bool IsSchemaChangingCommand(string sql) =>
-        sql.TrimStart().ToUpperInvariant() is var upper &&
-        (upper.StartsWith("CREATE ") || upper.StartsWith("ALTER ") || upper.StartsWith("DROP "));
+    private static bool IsSchemaChangingCommand(string sql)
+    {
+        // §2 instrumentation (2026-09-16): stamped to settle whether this per-statement post-dispatch test is part of
+        // the single-row-statement profile's unattributed 26.2 µs. It should be negligible — this is already the
+        // span-based replacement for a per-statement ToUpperInvariant — and the measurement decides, not the reading.
+        long classifyStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
+
+        // Span-based ordinal check — the previous TrimStart().ToUpperInvariant() allocated a full
+        // uppercased copy of the statement on every ExecuteSQL call (measured as part of the
+        // per-statement SQL overhead; the statement text itself is already case-preserved).
+        var span = sql.AsSpan().TrimStart();
+        var result = span.StartsWith("CREATE ", StringComparison.OrdinalIgnoreCase)
+            || span.StartsWith("ALTER ", StringComparison.OrdinalIgnoreCase)
+            || span.StartsWith("DROP ", StringComparison.OrdinalIgnoreCase);
+
+        SharpCoreDB.Diagnostics.WritePathProfiler.Add(
+            SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
+        return result;
+    }
 
     /// <summary>
     /// Gets or creates the database-specific salt for key derivation.
@@ -706,12 +742,21 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         if (isReadOnly)
             return;
 
+        // §5.3 session 2 (2026-09-26): this call is the caller's explicit durability boundary, and on the
+        // default-job UPDATE pass it sits INSIDE the timed window (the harness stops its clock after it), with
+        // no stamp of its own — so a batch-level flush was indistinguishable from per-operation glue there.
+        long dbFlushStart = Diagnostics.WritePathProfiler.Stamp();
         try
         {
             // ✅ CRITICAL: Flush WAL batch buffer FIRST
             // Rows 101-200 may still be queued in the batch buffer waiting for batch completion
             // Must flush them before storage engine
+            // §5.3 session 2 (2026-09-26): the plan's §2 recorded `wal-flush` as having no writer anywhere;
+            // this is its first one, and it separates the WAL-batch-buffer half of an explicit flush from the
+            // table/engine half below (which `db-flush` covers).
+            long walFlushStart = Diagnostics.WritePathProfiler.Stamp();
             FlushBatchWalBuffer();
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.WalFlush, walFlushStart);
             
             // ✅ CRITICAL: Flush BOTH storage engine AND all table data
             // Storage engine handles low-level persistence, but table data lives in memory
@@ -747,6 +792,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         catch (Exception ex)
         {
             throw new InvalidOperationException($"Failed to flush database changes: {ex.Message}", ex);
+        }
+        finally
+        {
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.DbFlush, dbFlushStart);
         }
     }
 

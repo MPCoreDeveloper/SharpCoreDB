@@ -158,6 +158,11 @@ public partial class PageBasedEngine : IStorageEngine
     {
         ArgumentNullException.ThrowIfNull(newData);
 
+        // §9 priority 3 instrumentation (2026-09-21, re-added): the page write itself had no stamp, so
+        // the PageBased UPDATE gap could not be split between the page engine and the code around it.
+        // Measured at 1.22 µs/update against a 45 µs/update pass — the engine is 4 % of the arm.
+        long pageUpdateStart = Diagnostics.WritePathProfiler.Stamp();
+
         var manager = GetOrCreatePageManager(tableName);
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var (newPage, newRecordId) = manager.UpdateRecord(
@@ -169,9 +174,12 @@ public partial class PageBasedEngine : IStorageEngine
         // In-place and within-page relocations keep page + slot index, so the storage
         // reference is unchanged. A cross-page relocation returns a new reference that
         // points at the record's new page + slot.
-        return newPage.Value == pageId && newRecordId.SlotIndex == recordId
+        long result = newPage.Value == pageId && newRecordId.SlotIndex == recordId
             ? storageReference
             : EncodeStorageReference(newPage.Value, newRecordId.SlotIndex);
+
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.PageUpdate, pageUpdateStart);
+        return result;
     }
 
     /// <inheritdoc />
@@ -199,6 +207,10 @@ public partial class PageBasedEngine : IStorageEngine
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public byte[]? Read(string tableName, long storageReference)
     {
+        // §9 priority 3 instrumentation (2026-09-21, re-added): the page read had no stamp either.
+        // Measured at 0.29 µs/update — the page engine is not where the PageBased UPDATE gap lives.
+        long pageReadStart = Diagnostics.WritePathProfiler.Stamp();
+
         var (pageId, recordId) = DecodeStorageReference(storageReference);
         var manager = GetOrCreatePageManager(tableName);
 
@@ -211,9 +223,11 @@ public partial class PageBasedEngine : IStorageEngine
         {
             Interlocked.Increment(ref totalReads);
             Interlocked.Add(ref bytesRead, data.Length);
+            Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.PageRead, pageReadStart);
             return data;
         }
 
+        Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.PageRead, pageReadStart);
         return null;
     }
 

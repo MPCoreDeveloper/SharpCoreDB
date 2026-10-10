@@ -333,7 +333,9 @@ public class StorageMigrator
         if (File.Exists(metadataPath))
         {
             await using var readStream = new FileStream(metadataPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            index = await JsonSerializer.DeserializeAsync<Dictionary<string, TableMetadataExtended>>(readStream)
+            index = await JsonSerializer.DeserializeAsync(
+                readStream,
+                AotJsonSerializer.Options.GetTypeInfo<Dictionary<string, TableMetadataExtended>>())
                 ?? [];
         }
         else
@@ -357,7 +359,11 @@ public class StorageMigrator
         index[tableName].ModifiedAt = DateTime.UtcNow;
 
         await using var writeStream = new FileStream(metadataPath, FileMode.Create, FileAccess.Write, FileShare.None);
-        await JsonSerializer.SerializeAsync(writeStream, index, new JsonSerializerOptions { WriteIndented = true });
+        var writeOptions = AotJsonSerializer.CreateOptions(writeIndented: true);
+        await JsonSerializer.SerializeAsync(
+            writeStream,
+            index,
+            writeOptions.GetTypeInfo<Dictionary<string, TableMetadataExtended>>());
     }
 
     private async Task ArchiveColumnarData(string tableName)

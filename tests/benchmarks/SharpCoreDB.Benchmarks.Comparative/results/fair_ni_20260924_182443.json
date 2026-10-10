@@ -1,0 +1,26 @@
+{
+  "SharpCoreDB (SQL, no PK, indexed predicate)": {
+    "Reps": 1,
+    "SqlitePragmas": null,
+    "InsertTime": 0,
+    "InsertOpsPerSec": 137107,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 31351,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 77334,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 158317
+  },
+  "SQLite (reference, no PK, indexed predicate)": {
+    "Reps": 1,
+    "SqlitePragmas": "journal_mode=wal, synchronous=1",
+    "InsertTime": 0,
+    "InsertOpsPerSec": 78056,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 84854,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 253481,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 63840
+  }
+}

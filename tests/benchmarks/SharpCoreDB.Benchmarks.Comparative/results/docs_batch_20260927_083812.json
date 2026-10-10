@@ -1,0 +1,44 @@
+{
+  "SharpCoreDB (SQL batch)": {
+    "Reps": 3,
+    "SqlitePragmas": null,
+    "InsertTime": 0,
+    "InsertOpsPerSec": 130610,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 98745,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 129673,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 106957,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  },
+  "SharpCoreDB (SQL-free batch)": {
+    "Reps": 3,
+    "SqlitePragmas": null,
+    "InsertTime": 0,
+    "InsertOpsPerSec": 170596,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 97245,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 282003,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 116435,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  },
+  "SQLite (reference)": {
+    "Reps": 3,
+    "SqlitePragmas": "journal_mode=wal, synchronous=1",
+    "InsertTime": 0,
+    "InsertOpsPerSec": 137851,
+    "ReadTime": 0,
+    "ReadOpsPerSec": 86966,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 717663,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 923326,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  }
+}

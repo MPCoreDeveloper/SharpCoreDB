@@ -1,0 +1,53 @@
+{
+  "timestamp": "2026-09-21T19:30:02.1736093Z",
+  "engine": "AppendOnly",
+  "reps": 3,
+  "inserts": 100000,
+  "reads": 10000,
+  "updates": 10000,
+  "deletes": 10000,
+  "arms": {
+    "raw": "NoEncryptMode=true (opt-out; plaintext everywhere)",
+    "default": "product default (EnableAtRestRecordEncryption=True)"
+  },
+  "raw": [
+    {
+      "InsertOpsPerSec": 116858,
+      "ReadOpsPerSec": 86218,
+      "UpdateOpsPerSec": 56761,
+      "DeleteOpsPerSec": 121976
+    },
+    {
+      "InsertOpsPerSec": 108176,
+      "ReadOpsPerSec": 120962,
+      "UpdateOpsPerSec": 100203,
+      "DeleteOpsPerSec": 267953
+    },
+    {
+      "InsertOpsPerSec": 139918,
+      "ReadOpsPerSec": 119985,
+      "UpdateOpsPerSec": 129834,
+      "DeleteOpsPerSec": 219690
+    }
+  ],
+  "default": [
+    {
+      "InsertOpsPerSec": 82393,
+      "ReadOpsPerSec": 44285,
+      "UpdateOpsPerSec": 54592,
+      "DeleteOpsPerSec": 56547
+    },
+    {
+      "InsertOpsPerSec": 126923,
+      "ReadOpsPerSec": 91502,
+      "UpdateOpsPerSec": 91870,
+      "DeleteOpsPerSec": 93542
+    },
+    {
+      "InsertOpsPerSec": 126990,
+      "ReadOpsPerSec": 89924,
+      "UpdateOpsPerSec": 156110,
+      "DeleteOpsPerSec": 94491
+    }
+  ]
+}

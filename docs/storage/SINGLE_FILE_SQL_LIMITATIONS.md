@@ -180,6 +180,49 @@ var results = db.ExecuteQuery("SELECT * FROM users WHERE full_name LIKE 'A%' ORD
 var joined  = db.ExecuteQuery("SELECT u.full_name, o.total FROM users u JOIN orders o ON u.id = o.user_id");
 ```
 
+### Bulk inserts: use `ExecuteBatchSQL`, because one `ExecuteSQL` per statement is quadratic
+
+The single-file table keeps a table's rows in **one block** and rewrites that block on every flush, so a loop of
+individual `ExecuteSQL` inserts pays for the whole table on every statement — O(n²) in the row count. `ExecuteBatchSQL`
+is the supported fast path: it disables auto-flush for the duration, begins a block-registry batch and flushes once per
+table.
+
+Measured 2026-09-22 with `SharpCoreDB.Benchmarks.Comparative --scdb` (2,000 rows, `INSERT … VALUES` with 1,000 rows per
+statement, median of 5, `FixedWidthInlineValueBytes` at the shipped default 24):
+
+| How the statements are issued | rows/s | µs/row | allocated/row |
+|---|---:|---:|---:|
+| `ExecuteSQL` per statement | 703 | 1,423 | 844,563 B |
+| **`ExecuteBatchSQL` (one call)** | **368,535** | **2.71** | **1,444 B** |
+
+The batch shape is ~525× faster and allocates ~580× less, and **at that shape the single-file mode is the fastest
+INSERT path in the codebase** — about 4.4× the multi-file mode's batched arm (84,263 rows/s at 3,555 B/row). It also
+sits above this machine's SQLite INSERT reference on the `--pk` arm (176–199K ops/s), which is a *different* shape and
+is quoted as context rather than as a like-for-like ratio. Both shapes gain from the inline capacity: going 0 → 24 moves
+the batched shape 300,436 → 368,535 rows/s and the solo shape 545 → 703 rows/s.
+
+```csharp
+// Preferred: many statements in one call — one flush per table.
+db.ExecuteBatchSQL(new[]
+{
+    "INSERT INTO users VALUES (1, 'Alice')",
+    "INSERT INTO users VALUES (2, 'Bob')",
+});
+
+// A single multi-row INSERT … VALUES (…) , (…) statement is also batched internally.
+db.ExecuteSQL("INSERT INTO users VALUES (3, 'Carol'), (4, 'Dave')");
+```
+
+⚠️ One caveat that is **not** shape-dependent, and it is about **file size** rather than speed: a `.scdb` database is
+**14,733,312 B whatever it holds** — measured 2026-09-23 at **1, 100, 500 and 2.000 rows**, at both inline capacities and
+in both shapes. The file starts at **1.037 pages** (4.247.552 B) and the first extension adds
+`max(requiredPages, currentSize / 2, minExtensionPages)`, where the **10 MiB historical minimum** is 2.560 pages at a
+4 KiB page size — so 1.037 + 2.560 = 3.597 pages, and the row count never enters the sum.
+`DatabaseConfig.SingleFileMinExtensionBytes` trades size for growth steps: the same 100-row database measures **6.369.280 B** at
+64 KiB, because the halving term then decides (1.037 + 518 = 1.555 pages). The setting is read **per open** and is not
+part of the on-disk format, so it is safe to change on an existing file. Full derivation in plan §9; pinned by
+`SingleFileFileGrowthTests`.
+
 ---
 
 ## Error Messages You Might See
@@ -217,7 +260,7 @@ storage backend.
 ## See Also
 
 - [`docs/storage/STORAGE_MODE_GUIDANCE.md`](STORAGE_MODE_GUIDANCE.md) — Columnar vs Page-Based storage within a database
-- [`docs/sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md`](../sql/SQL_DIALECT_EXTENSIONS_v1.7.2.md) — full SQL dialect reference
+- [`docs/manual/query.md`](../manual/query.md) — full SQL dialect reference
 - [`Examples/FluentMigrator/`](../../Examples/FluentMigrator/) — working FluentMigrator + SingleFileDatabase demo
 
 ---

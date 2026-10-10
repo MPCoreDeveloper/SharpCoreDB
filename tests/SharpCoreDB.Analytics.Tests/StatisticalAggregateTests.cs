@@ -61,9 +61,13 @@ public sealed class StatisticalAggregateTests
         
         var result = (double?)stddev.GetResult();
         
-        // Assert - stddev of [1, 2, 3] = 0.8165 (population)
+        // Assert - stddev of [1, 2, 3] = sqrt(2/3) ~= 0.81649658... (population).
+        // Compare at 4 decimal places: asserting at 3 decimal places puts the
+        // expected value 0.8165 exactly on the rounding midpoint, whose result
+        // changed in .NET 11 preview 7 (Math.Round(value, digits) rounding fix,
+        // dotnet/runtime#130574) and would fail there.
         Assert.NotNull(result);
-        Assert.Equal(0.8165, result.Value, precision: 3);
+        Assert.Equal(0.8165, result.Value, precision: 4);
     }
     
     [Fact]

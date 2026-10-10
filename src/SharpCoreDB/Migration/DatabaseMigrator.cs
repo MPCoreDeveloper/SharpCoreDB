@@ -460,7 +460,7 @@ public static class DatabaseMigrator
         try
         {
             var json = await File.ReadAllTextAsync(path);
-            return JsonSerializer.Deserialize<MigrationCheckpoint>(json) ?? new MigrationCheckpoint();
+            return AotJsonSerializer.Deserialize<MigrationCheckpoint>(json) ?? new MigrationCheckpoint();
         }
         catch
         {
@@ -470,7 +470,8 @@ public static class DatabaseMigrator
 
     private static async Task SaveCheckpoint(string path, MigrationCheckpoint checkpoint)
     {
-        var json = JsonSerializer.Serialize(checkpoint, new JsonSerializerOptions { WriteIndented = true });
+        var options = AotJsonSerializer.CreateOptions(writeIndented: true);
+        var json = JsonSerializer.Serialize(checkpoint, options.GetTypeInfo<MigrationCheckpoint>());
         await File.WriteAllTextAsync(path, json);
     }
 }

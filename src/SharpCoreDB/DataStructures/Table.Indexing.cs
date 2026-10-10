@@ -192,6 +192,33 @@ public partial class Table
                     index.Add(row, pos);
             }
         }
+        else if (this.storage != null && File.Exists(this.DataFile) && this.storage.AreRecordsEncrypted(this.DataFile))
+        {
+            // At-rest file: records are ciphertext behind an 8-byte magic header with a per-record GCM
+            // frame, so the plaintext walk below cannot parse them (it reads the header as a record
+            // length and stops, leaving an EMPTY index — which made every indexed lookup miss).
+            // ReadAllRecords yields each record DECRYPTED together with the PHYSICAL offset of its
+            // 4-byte length prefix: exactly the position the index stores and the read path resolves,
+            // and it skips tombstones for us.
+            foreach (var (recordOffset, recordData) in this.storage.ReadAllRecords(this.DataFile))
+            {
+                var record = _fixedWidthRecords
+                    ? DeserializeRowFixedWidth(recordData.AsSpan())
+                    : DeserializeRowFromSpan(recordData);
+
+                // Only the CURRENT version of a row is indexed: a length-changing update leaves its
+                // superseded record in the file, and the scan that replaces this index filters those by
+                // the PK pointer. Without the same filter here the index answered with rows the scan
+                // never returns (see IsCurrentRecordVersion).
+                if (record is not null
+                    && record.TryGetValue(columnName, out var recordValue)
+                    && recordValue != null
+                    && IsCurrentRecordVersion(record, recordOffset))
+                {
+                    index.Add(record, recordOffset);
+                }
+            }
+        }
         else if (this.storage != null && File.Exists(this.DataFile))
         {
             // PERF: Use a single buffered FileStream with SequentialScan hint instead of
@@ -210,34 +237,51 @@ public partial class Table
                     break;
 
                 int length = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthBuf);
-                if (length <= 0 || length > 1_000_000_000)
+
+                // Tombstoned record: the prefix stores the negative slot size to skip. Treating this as
+                // end-of-data (the old `length <= 0 → break`) hid every live row behind the first
+                // deleted one from the index.
+                if (length < 0)
+                {
+                    int slotSize = -length;
+                    if (slotSize < 4)
+                        break;
+
+                    fs.Seek(slotSize - 4, SeekOrigin.Current); // the 4 prefix bytes are already read
+                    position += slotSize;
+                    continue;
+                }
+
+                // Empty slot (no payload): nothing to index.
+                if (length == 0)
+                {
+                    position += 4;
+                    continue;
+                }
+
+                if (length > 1_000_000_000)
                     break;
 
                 byte[] rowData = new byte[length];
                 if (fs.Read(rowData) < length)
                     break;
 
-                var row = new Dictionary<string, object>();
-                int offset = 0;
-                ReadOnlySpan<byte> dataSpan = rowData.AsSpan();
-                bool valid = true;
+                // Decode with the layout the records were WRITTEN with: the fixed-width codec (constant
+                // slots + overflow arena) or the variable-length record format. Parsing fixed-width
+                // records with the variable-length walk silently produced a near-empty index — and
+                // because CREATE TABLE registers a hash index for every column, that made a
+                // `WHERE <non-unique column> = value` lookup return only the rows that happened to
+                // parse instead of every match.
+                var row = _fixedWidthRecords
+                    ? DeserializeRowFixedWidth(rowData.AsSpan())
+                    : DeserializeRowFromSpan(rowData);
 
-                for (int i = 0; i < this.Columns.Count; i++)
-                {
-                    try
-                    {
-                        var columnValue = ReadTypedValueFromSpan(dataSpan.Slice(offset), this.ColumnTypes[i], out int bytesRead);
-                        row[this.Columns[i]] = columnValue;
-                        offset += bytesRead;
-                    }
-                    catch
-                    {
-                        valid = false;
-                        break;
-                    }
-                }
-
-                if (valid && row.TryGetValue(columnName, out var indexedValue) && indexedValue != null)
+                // Same current-version filter as the at-rest walk above: this walk sees the superseded
+                // records of a length-changing update, which the scan (PK-pointer rule) never returns.
+                if (row is not null
+                    && row.TryGetValue(columnName, out var indexedValue)
+                    && indexedValue != null
+                    && IsCurrentRecordVersion(row, position))
                 {
                     index.Add(row, position);
                 }
@@ -275,10 +319,28 @@ public partial class Table
     /// is rebuilt from the data file on next use — which, after an append update or logical
     /// delete, still contains the stale record — so any write that creates stale versions must
     /// ensure its registered indexes are loaded first. Cheap after the first load (cached).
+    /// <para>
+    /// <b>PageBased is deliberately exempt.</b> The reason this pre-load exists is a rebuild reading a
+    /// <i>version-bearing</i> file: on the append/Columnar engines a superseded record stays in the data file
+    /// and is still enumerated, which is the "stale row returned for the same PK" regression that
+    /// <c>54b0a5b8</c> fixed by loading every index before the write. PageBased has no such version to leak —
+    /// <c>PageManager.UpdateRecord</c> either rewrites the slot in place or moves the slot pointer inside
+    /// the page (the old bytes are never enumerated), and when the page is full it marks the old slot
+    /// <c>RecordFlags.Deleted</c> and inserts the record elsewhere; <c>PageManager.GetAllRecordsInPage</c>
+    /// yields only slots that are not flagged deleted, and <c>PageManager.TryReadRecord</c> returns false
+    /// for them. A PageBased rebuild therefore reads exactly the live rows, so deferring it is not a correctness
+    /// risk — while paying it up front costs one full-table decode pass per batch UPDATE entry: measured
+    /// (<c>--pk-profile --engine=pagebased</c>, fix-state independent) <c>row-decode</c> 100,000 calls for a
+    /// 10,000-row UPDATE batch over 100,000 rows, 60.2 MB of decode garbage, and 42.60 → 9.73 µs/update with the
+    /// pre-load skipped.
+    /// </para>
     /// </summary>
     private void EnsureAllRegisteredIndexesLoaded()
     {
         if (this.registeredIndexes.Count == 0)
+            return;
+
+        if (StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.PageBased)
             return;
 
         // Safe to iterate directly: the caller holds the write lock and EnsureIndexLoaded only
@@ -290,11 +352,179 @@ public partial class Table
     }
 
     /// <summary>
+    /// Whether automatic per-column hash indexes may be created for this table at all — the same
+    /// condition the Columnar <c>CREATE TABLE</c> path applies (<c>SqlParser.DDL.cs</c>): Columnar storage
+    /// and <c>DatabaseConfig.EnableHashIndexes</c> (default <c>true</c>). PageBased never auto-creates hash
+    /// indexes — its row lookups are served by B-trees and its records are never versioned.
+    /// </summary>
+    internal bool AutoHashIndexesEnabled =>
+        this.StorageMode == SharpCoreDB.Storage.Hybrid.StorageMode.Columnar &&
+        (this._config?.EnableHashIndexes ?? true);
+
+    /// <summary>
+    /// Registers the automatic hash index for <paramref name="columnName"/> the first time an operation
+    /// actually filters on that column, and reports whether a hash index can serve such a lookup.
+    /// <para>
+    /// This is §9 row 5's lever, owner-decided 2026-09-26: <em>registration</em> used to be eager (one index
+    /// per column at <c>CREATE TABLE</c>), and because <see cref="EnsureAllRegisteredIndexesLoaded"/> then
+    /// loads every registered index before a write, a workload that filters on one column paid index
+    /// maintenance for all of them — 20.000 <c>index-maint</c> calls per 10.000 updates on the five-column
+    /// <c>docs</c> shape. Registering on demand keeps exactly the indexes the workload uses.
+    /// </para>
+    /// <para>
+    /// Every genuine lookup gate in the read/write paths calls this instead of testing
+    /// <c>registeredIndexes.ContainsKey</c>, so "may this column use a hash index" has ONE answer (and the
+    /// on-demand registration happens at the same moment, in the same place, for all of them). Returning
+    /// <c>true</c> for an already-registered column (explicit <c>CREATE INDEX</c> included) means the
+    /// callers' existing <c>EnsureIndexLoaded</c> + lookup flow is unchanged.
+    /// </para>
+    /// </summary>
+    /// <param name="columnName">The column a filtered operation targets.</param>
+    /// <returns>True when a hash index serves this column — already registered, or just registered.</returns>
+    public bool EnsureAutoHashIndexRegistered(string columnName)
+    {
+        if (string.IsNullOrEmpty(columnName) || !this.Columns.Contains(columnName))
+        {
+            return false;
+        }
+
+        // Hot path: already registered (auto, or explicitly via CREATE INDEX) — no lock, mirroring the
+        // lock-free reads the lookup gates already perform on this registry.
+        if (this.registeredIndexes.ContainsKey(columnName))
+        {
+            return true;
+        }
+
+        if (!this.AutoHashIndexesEnabled)
+        {
+            return false;
+        }
+
+        var colIdx = this.Columns.IndexOf(columnName);
+        var metadata = new IndexMetadata(columnName, this.ColumnTypes[colIdx], false);
+
+        // Registration mutates the registry, so it belongs under the write lock — EXCEPT when the caller
+        // already holds it: the write paths (UPDATE/DELETE) resolve their rows through SelectInternal,
+        // which can reach here while the write lock is held, and ReaderWriterLockSlim's default
+        // non-recursive policy throws on a second EnterWriteLock (the same reason
+        // EnsureAllRegisteredIndexesLoaded documents the pre-load it performs).
+        bool ownsLock = !this.rwLock.IsWriteLockHeld;
+        if (ownsLock)
+        {
+            this.rwLock.EnterWriteLock();
+        }
+
+        try
+        {
+            if (this.registeredIndexes.ContainsKey(columnName))
+            {
+                return true; // another thread registered it while we waited
+            }
+
+            this.registeredIndexes[columnName] = metadata;
+            return true;
+        }
+        finally
+        {
+            if (ownsLock)
+            {
+                this.rwLock.ExitWriteLock();
+            }
+        }
+    }
+
+    /// <summary>
+    /// True when the record at <paramref name="recordPosition"/> is the <b>current</b> version of its row —
+    /// the exact rule the Columnar scan uses (<c>ScanRowsWithSimdAndFilterStale</c>): with a primary key
+    /// (including the hidden <c>_rowid</c> fallback every PK-less table gets), the current version is the
+    /// one the PK index points at.
+    /// <para>
+    /// Why it is one shared method: an index built by walking the data file and the scan that replaces it
+    /// must never disagree about which rows exist. The Columnar engines append a new version on a
+    /// length-changing update and leave the superseded record in the file (compaction drops it), so a
+    /// rebuild that ignores this rule indexes rows the scan does not return — measured session 71: a hash
+    /// index created <em>after</em> such an update answered <c>WHERE v = 'old'</c> with the superseded row
+    /// (1 row where SQLite returns 0).
+    /// </para>
+    /// </summary>
+    /// <param name="row">The deserialized record.</param>
+    /// <param name="recordPosition">The record's physical length-prefix offset (the value the index stores).</param>
+    /// <returns>True when the record is the row's current version (or when no witness exists).</returns>
+    internal bool IsCurrentRecordVersion(Dictionary<string, object> row, long recordPosition)
+    {
+        if (this.PrimaryKeyIndex < 0)
+        {
+            return true;
+        }
+
+        var pkColumn = this.Columns[this.PrimaryKeyIndex];
+        if (!row.TryGetValue(pkColumn, out var pkValue) || pkValue is null)
+        {
+            return true; // no PK value to compare with — the scan includes such rows too
+        }
+
+        var searchResult = this.Index.Search(pkValue.ToString() ?? string.Empty);
+        if (!searchResult.Found)
+        {
+            return false; // PK removed from the index → the row is deleted
+        }
+
+        if (searchResult.Value == 0)
+        {
+            // Position was not tracked during a batch insert — the scan includes these, so the index must too.
+            return true;
+        }
+
+        return searchResult.Value == recordPosition;
+    }
+
+    /// <summary>
     /// Checks if a hash index exists for the specified column.
     /// </summary>
     /// <param name="columnName">The column name to check.</param>
     /// <returns>True if hash index exists.</returns>
     public bool HasHashIndex(string columnName) => this.hashIndexes.ContainsKey(columnName);
+    
+    /// <summary>
+    /// Snapshot of the table's registered indexes for catalog introspection
+    /// (<c>information_schema.indexes</c>). One entry per index name; the automatic per-column hash
+    /// indexes created without a name are reported under their column name.
+    /// </summary>
+    /// <returns>Read-only snapshot: index name, indexed column, index kind ("HASH"/"BTREE"), uniqueness.</returns>
+    public IReadOnlyList<(string IndexName, string ColumnName, string IndexType, bool IsUnique)> GetIndexCatalogSnapshot()
+    {
+        this.rwLock.EnterReadLock();
+        try
+        {
+            var snapshot = new List<(string, string, string, bool)>(this.registeredIndexes.Count + this.indexNameToColumn.Count);
+            var namedColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (indexName, columnName) in this.indexNameToColumn)
+            {
+                namedColumns.Add(columnName);
+                var isUnique = this.registeredIndexes.TryGetValue(columnName, out var named) && named.IsUnique;
+                snapshot.Add((indexName, columnName, ResolveRegisteredIndexKind(columnName), isUnique));
+            }
+
+            foreach (var (columnName, metadata) in this.registeredIndexes)
+            {
+                if (namedColumns.Contains(columnName))
+                    continue;
+
+                snapshot.Add((columnName, columnName, ResolveRegisteredIndexKind(columnName), metadata.IsUnique));
+            }
+
+            return snapshot;
+        }
+        finally
+        {
+            this.rwLock.ExitReadLock();
+        }
+    }
+
+    /// <summary>Reports which index kind is maintained for a column (a B-tree wins when both exist).</summary>
+    private string ResolveRegisteredIndexKind(string columnName)
+        => this._btreeManager?.HasIndex(columnName) == true ? "BTREE" : "HASH";
     
     /// <summary>
     /// Checks if an index with the specified name exists (by name or column).

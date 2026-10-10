@@ -27,6 +27,7 @@ public partial class Storage
         if (IsInTransaction)
         {
             var dataToWrite = this.noEncryption ? plain : this.crypto.Encrypt(this.key, plain);
+            InvalidateReadEncryption(path);
             this.transactionBuffer.BufferWrite(path, dataToWrite);
             return;
         }
@@ -41,6 +42,8 @@ public partial class Storage
             var encrypted = this.crypto.Encrypt(this.key, plain);
             File.WriteAllBytes(path, encrypted);
         }
+
+        InvalidateReadEncryption(path);
     }
 
     /// <inheritdoc />
@@ -112,14 +115,25 @@ public partial class Storage
             return DecryptTableFileToPlaintext(path) ?? fileData;
         }
 
-        // Legacy single-blob whole-file encryption (meta.dat, .salt, etc.)
+        // Legacy single-blob whole-file encryption (meta.dat, .salt, etc.). The verdict is memoised:
+        // probing by "decrypt and catch" costs a full-size allocation plus an exception, and for a
+        // plaintext file that used to be the price of every single read.
+        if (!ShouldAttemptLegacyDecrypt(path))
+        {
+            return fileData;
+        }
+
         try
         {
-            return this.crypto.Decrypt(this.key, fileData);
+            byte[] plain = this.crypto.Decrypt(this.key, fileData);
+            RememberLegacyEncryption(path, encrypted: true);
+            return plain;
         }
         catch
         {
-            // Legacy plaintext file (no header, not encrypted) — return raw bytes.
+            // Legacy plaintext file (no header, not encrypted) — return raw bytes, and remember the
+            // answer so the next read does not pay for the probe again.
+            RememberLegacyEncryption(path, encrypted: false);
             return fileData;
         }
     }
@@ -129,24 +143,67 @@ public partial class Storage
     /// and rejoins them into a plaintext length-prefixed buffer. Returns null if the file
     /// doesn't exist or no complete records could be read.
     /// </summary>
-    private byte[]? DecryptTableFileToPlaintext(string path)
+    private byte[]? DecryptTableFileToPlaintext(string path) => DecryptTableFileToPlaintext(path, out _);
+
+    /// <summary>
+    /// Same as <see cref="DecryptTableFileToPlaintext(string)"/>, additionally reporting the PHYSICAL
+    /// file offset of each record in the rejoined buffer (index i = the i-th record in walk order).
+    /// Scan callers need that map because the rejoined buffer's offsets are not the file's, while the
+    /// PK index stores physical offsets.
+    /// </summary>
+    private byte[]? DecryptTableFileToPlaintext(string path, out long[]? physicalOffsets)
     {
+        physicalOffsets = null;
+
         var records = ReadAllRecords(path)?.ToList();
         if (records is null || records.Count == 0)
         {
             return null;
         }
 
+        var offsets = new long[records.Count];
         using var ms = new MemoryStream();
         Span<byte> lengthBuffer = stackalloc byte[4];
-        foreach (var (_, data) in records)
+        for (int i = 0; i < records.Count; i++)
         {
-            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, data.Length);
+            offsets[i] = records[i].RecordOffset;
+            BinaryPrimitives.WriteInt32LittleEndian(lengthBuffer, records[i].Data.Length);
             ms.Write(lengthBuffer);
-            ms.Write(data);
+            ms.Write(records[i].Data);
         }
 
+        physicalOffsets = offsets;
         return ms.ToArray();
+    }
+
+    /// <inheritdoc />
+    public byte[]? ReadBytesWithRecordOffsets(string path, bool noEncrypt, out long[]? physicalOffsets)
+    {
+        physicalOffsets = null;
+
+        // ✅ Buffered append mode: this path materialises the WHOLE file and hands out disk offsets
+        // (row-resolution fast paths slice it directly), so every pending buffered row must be on disk
+        // first. Only outside a transaction — inside one the buffer belongs to the transaction and
+        // flushing it here would make rollback impossible (callers use FlushTransactionBuffer for that).
+        if (!IsInTransaction && HasBufferedAppends(path))
+        {
+            FlushPendingAppends();
+        }
+
+        if (!File.Exists(path))
+        {
+            return null;
+        }
+
+        // Plaintext (and every legacy layout): the buffer IS the file, so the buffer offset is already
+        // the physical offset and the caller needs no map. Gated on the magic header (not on
+        // AreRecordsEncrypted) to stay recursion-free with ReadBytes.
+        if (noEncrypt || this.noEncryption || !FileHasEncryptedHeader(path))
+        {
+            return ReadBytes(path, noEncrypt);
+        }
+
+        return DecryptTableFileToPlaintext(path, out physicalOffsets);
     }
 
     /// <inheritdoc />
@@ -156,6 +213,7 @@ public partial class Storage
         if (IsInTransaction)
         {
             var dataToWrite = this.noEncryption ? data : this.crypto.Encrypt(this.key, data);
+            InvalidateReadEncryption(path);
             this.transactionBuffer.BufferWrite(path, dataToWrite);
             return;
         }
@@ -171,7 +229,8 @@ public partial class Storage
             File.WriteAllBytes(path, encrypted);
         }
         
-        // Invalidate all cached pages for this file
+        // Invalidate all cached pages for this file, and re-decide what the file is on the next read.
+        InvalidateReadEncryption(path);
         if (this.pageCache != null)
         {
             this.pageCache.Clear(flushDirty: false);

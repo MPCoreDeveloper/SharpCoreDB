@@ -1,8 +1,11 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
-    <LangVersion>14.0</LangVersion>
+    <!-- v2.1.0-RC.3: net11.0-only (C# 15 preview) with optimistic-concurrency conditional
+         appends (TryAppendEventsAsync / TryAppendEventAsync with expectedVersion). -->
+    <TargetFramework>net11.0</TargetFramework>
+    <LangVersion>preview</LangVersion>
+    <Features>$(Features);runtime-async=on</Features>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
@@ -11,7 +14,7 @@
     <NoWarn>$(NoWarn);1591;SA1101;SA1633;SA1309</NoWarn>
 
     <PackageId>SharpCoreDB.EventSourcing</PackageId>
-    <Version>2.0.0.3</Version>
+    <Version>2.1.0</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.EventSourcing</Product>
@@ -24,7 +27,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v2.0.0.3 (2026-09-04): 2.x performance-first engine line - fixed-width record default for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and reopen data-integrity hardening (empty-value overflow reload, single-file fixed-width arena markers, legacy delete purge). Full details: https://github.com/MPCoreDeveloper/SharpCoreDB/blob/master/docs/CHANGELOG.md</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.1.0-RC.3: net11.0-only (C# 15 preview) with optimistic-concurrency conditional appends - IEventStore.TryAppendEventsAsync / TryAppendEventAsync with an expectedVersion, returning ConditionalAppendResult (Conflict carries the expected and actual stream lengths). This is the append-only ledger's compare-and-set primitive: a writer that lost the race is told so and nothing is written.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>
@@ -52,7 +55,6 @@
   </ItemGroup>
 
 </Project>
-
 
 
 

@@ -1,0 +1,59 @@
+{
+  "timestamp": "2026-09-24T17:41:13.9722943Z",
+  "engine": "AppendOnly",
+  "reps": 3,
+  "inserts": 100000,
+  "reads": 10000,
+  "updates": 10000,
+  "deletes": 10000,
+  "arms": {
+    "raw": "NoEncryptMode=true (opt-out; plaintext everywhere)",
+    "default": "product default (EnableAtRestRecordEncryption=True)"
+  },
+  "raw": [
+    {
+      "InsertOpsPerSec": 157441,
+      "ReadOpsPerSec": 175161,
+      "UpdateOpsPerSec": 121750,
+      "DeleteOpsPerSec": 338028,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 167316,
+      "ReadOpsPerSec": 107534,
+      "UpdateOpsPerSec": 264804,
+      "DeleteOpsPerSec": 307953,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 156039,
+      "ReadOpsPerSec": 116121,
+      "UpdateOpsPerSec": 257277,
+      "DeleteOpsPerSec": 333529,
+      "SqlitePragmas": null
+    }
+  ],
+  "default": [
+    {
+      "InsertOpsPerSec": 140690,
+      "ReadOpsPerSec": 136742,
+      "UpdateOpsPerSec": 182235,
+      "DeleteOpsPerSec": 154512,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 145084,
+      "ReadOpsPerSec": 149692,
+      "UpdateOpsPerSec": 197169,
+      "DeleteOpsPerSec": 147559,
+      "SqlitePragmas": null
+    },
+    {
+      "InsertOpsPerSec": 150990,
+      "ReadOpsPerSec": 98270,
+      "UpdateOpsPerSec": 178254,
+      "DeleteOpsPerSec": 152007,
+      "SqlitePragmas": null
+    }
+  ]
+}

@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 /// Target: &lt; 0.05ms for lookups on 10k records.
 /// </summary>
 /// <typeparam name="TKey">The type of the index key.</typeparam>
-public sealed partial class GenericHashIndex<TKey> : IGenericIndex<TKey>
+public sealed partial class GenericHashIndex<TKey> : IGenericIndex<TKey>, ITypeErasedIndex
     where TKey : notnull, IComparable<TKey>, IEquatable<TKey>
 {
     private readonly Dictionary<TKey, List<long>> _index;
@@ -73,6 +73,20 @@ public sealed partial class GenericHashIndex<TKey> : IGenericIndex<TKey>
             .Where(kvp => kvp.Key.CompareTo(start) >= 0 && kvp.Key.CompareTo(end) <= 0)
             .SelectMany(kvp => kvp.Value);
     }
+
+    /// <summary>
+    /// Adds a key/position pair through the non-generic index view
+    /// (see <see cref="ITypeErasedIndex"/>), keeping the typed <see cref="Add(TKey, long)"/> as the API
+    /// for callers that know the key type.
+    /// </summary>
+    void ITypeErasedIndex.Add(object? key, long position) => Add((TKey)key!, position);
+
+    /// <summary>
+    /// Runs a range filter through the non-generic index view
+    /// (see <see cref="ITypeErasedIndex"/>); hash indexes filter linearly as before.
+    /// </summary>
+    IEnumerable<long> ITypeErasedIndex.FindRange(object? start, object? end) =>
+        FindRange((TKey)start!, (TKey)end!);
 
     /// <inheritdoc/>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

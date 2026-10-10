@@ -49,8 +49,15 @@ public partial class Database
         {
             try
             {
-                // ✅ Task 2.2: Compile with parameter support
-                compiledPlan = QueryCompiler.Compile(sql);
+                // ✅ Task 2.2: Compile with parameter support.
+                // Expression-tree compilation (Lambda.Compile) does not exist under Native AOT, and
+                // QueryCompiler.Compile declares that with [RequiresDynamicCode]; the guard is what the AOT
+                // analyzer needs to see, and where dynamic code is unsupported the non-compiled execution
+                // path is used (which is Compile's own documented fallback).
+                if (System.Runtime.CompilerServices.RuntimeFeature.IsDynamicCodeSupported)
+                {
+                    compiledPlan = QueryCompiler.Compile(sql);
+                }
                 
                 if (compiledPlan != null)
                 {

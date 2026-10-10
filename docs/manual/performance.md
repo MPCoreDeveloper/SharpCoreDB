@@ -151,24 +151,88 @@ the cached schema, index maintenance happens in keyed batches, and the WAL group
 batch into a single fsync. This is why SharpCoreDB inserts ~1.3–1.9x faster than LiteDB and
 within ~15% of SQLite.
 
-### 7.3.3 Bulk update/delete
-
-For `UPDATE`/`DELETE` of many rows, **always batch** rather than one statement per row:
-`db.UpdateMultiple(...)` / `db.DeleteMultiple(...)` and `ExecuteBatchSQL` amortize the
-statement-parse and WAL costs. The v2.0 batch parser uses **compiled regexes** (no per-call
-`Regex.Match`), and `DeduplicateByPrimaryKey` short-circuits redundant rows.
+**There are two `InsertBatch` overloads and the column-ordered one is measurably faster.** The
+dictionary overload allocates one `Dictionary<string, object>` per row and makes the engine do one
+name-based lookup per column per row; the array overload hands over column-ordered values aligned with
+a column list, so neither happens:
 
 ```csharp
-// ⚠️ Slow pattern (one statement per row):
+// ✅ Dictionary overload (convenient, self-describing):
+db.InsertBatch("t", new List<Dictionary<string, object>>
+{
+    new() { ["name"] = "u1", ["score"] = 1.5 },
+});
+
+// ✅ Column-ordered overload (dictionary-free; 1,10–1,25× the row rate of the one above,
+//    measured on the encrypted default posture and on a no-PK document table):
+string[] columns = ["name", "score"];
+db.InsertBatch("t", new List<object[]> { ["u1", 1.5] }, columns);
+db.Flush();
+```
+
+Both apply the same defaults, AUTO values, NOT NULL checks and index maintenance; a column omitted
+from `columns` gets the engine default (for a TEXT column that is the empty string, not NULL), and the
+internal `_rowid` column must not be listed. Engine-side allocation is identical between the two
+(a measured 2.304 vs 2.313–2.342 B/row, same file size) — the difference is the per-column name
+lookups and the caller's much smaller row objects.
+
+> **One statement per row is the slowest ladder.** Measured on one-row writes, a single
+> `ExecuteSQL("INSERT …")` costs **~25 µs/row more** than the equivalent `Table.Insert(dictionary)`
+> call — the SQL layer classifies, tokenizes, plan-caches and re-parses every statement. For per-row
+> writes prefer the Direct API or a batch; reserve one-statement-per-row SQL for the shapes that need
+> it. `DatabaseConfig.EnableBufferedAppends = true` additionally lets single-row INSERTs share one
+> append buffer (measured **25×** on 2,000 inserts), and `EnableDeferredDeleteIndexes` (default on)
+> covers the delete side.
+
+### 7.3.3 Bulk update/delete
+
+For `UPDATE`/`DELETE` of many rows, **always batch** rather than one statement per row. Two batch
+routes exist and both amortize the statement-parse and WAL costs:
+
+* **`ExecuteBatchSQL(List<string>)`** — the SQL route. The v2.0 batch parser uses **compiled regexes**
+  (no per-call `Regex.Match`), recognises the canonical single-row DML shape with a quotes-aware span
+  scan, and `DeduplicateByPrimaryKey` short-circuits redundant rows. Best when you already have SQL text.
+* **`db.UpdateBatch` / `db.DeleteBatch`** — the SQL-free route. You hand the engine the key column with
+  an already-typed value plus typed SET values, so no statement is classified, no `WHERE` string is
+  rebuilt and no literal is parsed back into a value. Best for bulk mutation from data you already hold
+  in CLR types.
+
+```csharp
+// ⚠️ Slow pattern (one statement per row, ~25 µs/row of SQL-layer work):
 for (int i = 0; i < 10_000; i++)
     db.ExecuteSQL("UPDATE t SET score = @s WHERE id = @id",
         new Dictionary<string, object?> { ["@s"] = i, ["@id"] = i });
 
-// ✅ Fast pattern (one batched call):
-db.UpdateMultiple("t",
-    new Dictionary<string, object?> { ["score"] = 0 },  // set-clause
-    new Dictionary<string, object?> { ["id"] = 1 });    // where-clause (applies to all)
+// ✅ SQL batch (statement list, one transaction):
+db.ExecuteBatchSQL(updateStatements);
+db.Flush();
+
+// ✅ SQL-free batch (typed keys and values; no SQL text at all):
+db.UpdateBatch("t", operations);   // List<(string KeyColumn, object? KeyValue, Dictionary<string, object> Values)>
+db.DeleteBatch("t", keys);         // List<(string KeyColumn, object? KeyValue)>
+db.Flush();
 ```
+
+Both `UpdateBatch` and `DeleteBatch` return the number of rows changed. The key column must be the
+primary key or carry an index for the batch to resolve through the engine's direct locate paths — an
+unindexed key column still works, through a predicate fallback. On a fixed-width table with a primary
+key and ascending keys they reach the same contiguous, single-range-write fast path the SQL route uses.
+
+**Measured (same-engine attribution, three-arm paired protocol, `docs/performance/WORKLOG.md`
+sessions 45–48): the SQL-free route is 1,5–3,5× the SQL batch route on the fair no-PK shape, 1,53× on
+UPDATE and 1,91× on DELETE in the encrypted default posture, and 1,35× / 1,16× on the no-PK `docs`
+job. It is the same engine doing the same work; what differs is the per-statement text layer. Ranges
+straddle on isolated slow reps, so treat those as medians rather than floors.**
+
+**`DELETE` index maintenance is deferred by default (v2.1).** A DELETE writes only the durable
+tombstone and skips its per-key index removal; the primary-key B-tree is rebuilt from the data file
+(dropping tombstones) on reopen — or, if `DeferredDeleteIndexThreshold` is crossed (default 100,000,
+deliberately high), at the next non-transactional delete. Readers are unaffected — a point lookup
+treats a tombstoned position as absent and a re-INSERT of a deleted key still succeeds. Measured as a
+same-session interleaved A/B on the random-key delete workload: DELETE **1.92×** faster plaintext and
+**1.33×** in the encrypted default. The observable difference is that `GetHashIndexStatistics` counts
+tombstoned entries until the index is rebuilt; set `DatabaseConfig.EnableDeferredDeleteIndexes = false`
+for the eager behaviour.
 
 ---
 
@@ -264,6 +328,9 @@ parameter tuning (`M`, `efConstruction`, `efSearch`).
 | Knob | Effect |
 |------|--------|
 | `DatabaseConfig.NoEncryptMode = true` | Removes AES-256-GCM per-record cost (use on already-encrypted volumes / benchmarks) |
+| `DatabaseConfig.EnableDeferredDeleteIndexes` (default `true`) | Defers DELETE index maintenance to the reopen rebuild — **1.92×** on random-key deletes (same-session A/B). Set `false` for eager maintenance (keeps `GetHashIndexStatistics` exact between deletes) |
+| `DatabaseConfig.DeferredDeleteIndexThreshold` (default 100,000) | Deferred DELETE keys that may accumulate before the PK B-tree is rebuilt. ⚠️ the rebuild is a **full O(n) index pass**, so keep it high relative to your delete rate — a low value cancels the deferral win (measured: **294K → 70K** ops/s when a 10,000-delete batch crossed a 10,000 threshold) |
+| `DatabaseConfig.EnableBufferedAppends` (default `false`) | Single-row INSERTs share the append buffer — one open/write/close per flush boundary instead of per row (**~512 µs → ~4.5 µs** per 64-byte record; **25×** end-to-end). Bounds via `AppendBufferFlushThresholdBytes` / `AppendBufferFlushIntervalMs` |
 | WAL durability batching (`Flush()` / `Commit(force: false)`) | Groups fsyncs; dramatically raises write throughput at the cost of a tiny durability window |
 | Append-only vs page-based storage engine | Choose per workload (append-heavy vs update-heavy) |
 | `STORAGE = COLUMNAR` | For analytic tables |
@@ -305,7 +372,8 @@ harness, and the two-run final ranges are recorded in §7.1.
 
 | Item | Expected win |
 |------|--------------|
-| **DELETE fast path + default-config overhead** | Close the remaining DELETE gap (~2.1–3.5x vs SQLite) and remove the `NoEncryptMode` file-level wrapper overhead (~1.3–1.6x on the pure default config) |
+| **DELETE fast path — landed (v2.1)** | Deferred index maintenance (default on) cut random-key DELETE to **2.19×**/1.19× (plaintext/encrypted); the remaining gap is the tombstone write plus per-statement overhead |
+| **Single-statement SQL ladder** | The SQL layer still adds ~25 µs/row over the direct API on one-row statements; the remaining cost is spread across per-statement parsing and plan-cache work |
 | **.NET 11 / C# 15** | Runtime-native async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 — free speedups in hot paths |
 | **AOT interface-dispatch improvements** | Faster interface-heavy storage paths under NativeAOT |
 

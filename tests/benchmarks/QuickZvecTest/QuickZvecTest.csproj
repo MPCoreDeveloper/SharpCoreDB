@@ -1,18 +1,18 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <OutputType>Exe</OutputType>
-    <LangVersion>14.0</LangVersion>
+    <LangVersion>preview</LangVersion>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <Version>2.0.0.3</Version>
+    <Version>2.1.0</Version>
     <IsPackable>false</IsPackable>
     <AssemblyTitle>QuickZvecTest</AssemblyTitle>
     <AssemblyCompany>MPCoreDeveloper</AssemblyCompany>
     <AssemblyCopyright>Copyright (c) 2026 MPCoreDeveloper and GitHub Copilot. All rights reserved.</AssemblyCopyright>
-    <AssemblyVersion>2.0.0.3</AssemblyVersion>
-    <FileVersion>2.0.0.3</FileVersion>
+    <AssemblyVersion>2.1.0.0</AssemblyVersion>
+    <FileVersion>2.1.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -28,5 +28,4 @@
   </ItemGroup>
 
 </Project>
-
 

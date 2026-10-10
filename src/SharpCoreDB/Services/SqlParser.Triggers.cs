@@ -149,6 +149,15 @@ public partial class SqlParser
     internal void FireTriggers(string tableName, TriggerTiming timing, TriggerEvent triggerEvent,
         Dictionary<string, object>? newRow = null, Dictionary<string, object>? oldRow = null)
     {
+        // Fast path: no triggers are registered at all (the overwhelming majority of databases).
+        // FireTriggers runs twice per INSERT/UPDATE/DELETE, and the LINQ projection below allocates a
+        // list even when it matches nothing — so the count check happens before the lock and the
+        // projection, not after.
+        if (_triggers.Count == 0)
+        {
+            return;
+        }
+
         List<TriggerDefinition> matching;
         lock (_triggerLock)
         {
@@ -191,6 +200,36 @@ public partial class SqlParser
                 ExecuteInternal(stmt.Trim(), stmtParts);
             }
         }
+    }
+
+    /// <summary>
+    /// True when at least one registered trigger could fire for the given table and event.
+    /// <para>
+    /// Used by the SQL multi-row INSERT fast path to stay off tables where per-row trigger semantics
+    /// matter: a BEFORE INSERT trigger can rewrite the row being inserted, and an AFTER INSERT trigger has
+    /// to observe it, so the rows cannot be handed to the batched core in one call.
+    /// </para>
+    /// </summary>
+    internal bool HasTriggersFor(string tableName, TriggerEvent triggerEvent)
+    {
+        if (_triggers.Count == 0)
+        {
+            return false;
+        }
+
+        lock (_triggerLock)
+        {
+            foreach (var trigger in _triggers.Values)
+            {
+                if (trigger.Event == triggerEvent
+                    && trigger.TableName.Equals(tableName, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     /// <summary>

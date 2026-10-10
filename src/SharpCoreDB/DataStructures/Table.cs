@@ -51,6 +51,9 @@ public partial class Table : ITable, IDisposable
     {
         (this.storage, this.isReadOnly) = (storage, isReadOnly);
         _config = config;
+        // §4b: seed the persisted inline capacity from the config. It lives on the table (not only in _config) because
+        // the reopen path deserializes the Table from metadata, where no config survives — see the property's docs.
+        _fixedWidthInlineValueBytes = config?.FixedWidthInlineValueBytes ?? 0;
 
         // Fixed-width record layout (out-of-line overflow): opt-in, columnar mode only.
         // When enabled, records have a constant size per schema and variable-length values live in
@@ -271,6 +274,30 @@ public partial class Table : ITable, IDisposable
         get => _fixedWidthRecords;
         set => _fixedWidthRecords = value;
     }
+
+    /// <summary>
+    /// Gets or sets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width
+    /// slot instead of writing them to the overflow arena (plan §4b).
+    /// <para>
+    /// <b>Persisted in table metadata</b>, exactly like <see cref="IsFixedWidthRecords"/>, because it is part of the
+    /// record layout rather than a runtime preference: the reopen path rebuilds each table by JSON-deserializing the
+    /// <see cref="Table"/> itself (<c>Database.Core.cs:385</c>), so <c>_config</c> does not survive the round-trip. A
+    /// table that read its own records with an inline capacity and then came back without one returned <c>DBNull</c>
+    /// for every inlined value, because the slot's inline marker (flag 2) was decoded as an overflow-arena offset.
+    /// Setting this clears the cached layout, which is computed from it.
+    /// </para>
+    /// </summary>
+    public int FixedWidthInlineValueBytes
+    {
+        get => _fixedWidthInlineValueBytes;
+        set
+        {
+            _fixedWidthInlineValueBytes = value;
+            _fixedWidthLayout = null; // the inline capacity is part of the computed layout
+        }
+    }
+
+    private int _fixedWidthInlineValueBytes;
 
     /// <summary>
     /// B6: gets the number of overflow-arena blocks reused in place via the free-list (diagnostics).
@@ -517,41 +544,13 @@ public partial class Table : ITable, IDisposable
     }
 
     /// <summary>
-    /// Parses a string data type to DataType enum.
-    /// ✅ FIX (Known Issue 6): Honors <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/>
-    /// so ALTER TABLE ADD COLUMN INTEGER maps to Int64 when the opt-in flag is enabled;
-    /// otherwise retains the legacy Int32 mapping for backward compatibility.
+    /// Resolves the engine type for a declared SQL type name (ALTER TABLE ADD COLUMN).
+    /// ✅ FIX (Known Issue 6): honours <see cref="DatabaseConfig.UseSqliteIntegerAffinity"/> and
+    /// SQLite's affinity rules through <see cref="SqlTypeAffinity.Resolve"/>, the single
+    /// implementation every DDL path shares — this used to be a second, drifting copy of the map.
     /// </summary>
     private DataType ParseDataType(string typeStr)
-    {
-        var upper = typeStr.ToUpperInvariant();
-
-        // Handle parameterized types like VECTOR(1536)
-        if (upper.StartsWith("VECTOR"))
-        {
-            return DataType.Vector;
-        }
-
-        // ✅ FIX (Known Issue 6): SQLite integer affinity (opt-in).
-        // "INT" is a SQL alias for "INTEGER" so both honor the flag.
-        var useSqliteAffinity = _config?.UseSqliteIntegerAffinity ?? false;
-
-        return upper switch
-        {
-            "INTEGER" or "INT" => useSqliteAffinity ? DataType.Long : DataType.Integer,
-            "TEXT" or "VARCHAR" or "NVARCHAR" => DataType.String,
-            "REAL" or "FLOAT" or "DOUBLE" => DataType.Real,
-            "BLOB" => DataType.Blob,
-            "BOOLEAN" or "BOOL" => DataType.Boolean,
-            "DATETIME" => DataType.DateTime,
-            "LONG" => DataType.Long,
-            "DECIMAL" => DataType.Decimal,
-            "ULID" => DataType.Ulid,
-            "GUID" => DataType.Guid,
-            "ROWREF" => DataType.RowRef,
-            _ => DataType.String,
-        };
-    }
+        => SqlTypeAffinity.Resolve(typeStr, _config?.UseSqliteIntegerAffinity ?? false);
 
     /// <summary>
     /// Rebuilds the Primary Key B-Tree index from disk by scanning all rows in the data file
@@ -825,6 +824,14 @@ public partial class Table : ITable, IDisposable
             // owning transaction has committed. No-op when there are no deferred transactional
             // deletes, so non-transactional DELETE keeps the O(delete) tombstone path.
             CompactPendingDeletes();
+
+            // NOTE: a deferred DELETE (default on) is deliberately NOT reconciled here. The reconcile
+            // is a full O(n) rebuild of the PK B-tree, so running it at every Flush costs far more
+            // than the per-key maintenance the deferral skipped — measured: DELETE raw 222,752 ->
+            // 70,248 ops/s on the random-key workload. The bounded alternative (removing only the
+            // stale keys) costs about the same as the eager path, so it would not restore the win
+            // either. The staleness is instead bounded by DeferredDeleteIndexThreshold (a high
+            // default, so the rebuild is rare) and reconciled for free by the reopen rebuild.
 
             // Flush indexes
             if (indexManager != null)

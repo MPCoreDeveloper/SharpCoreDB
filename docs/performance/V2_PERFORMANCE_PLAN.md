@@ -54,6 +54,10 @@ Unconditional `File.AppendAllText(...)` to hardcoded `D:\*.log` paths existed on
 
 ## 3. Work packages
 
+> **Write-path follow-up:** INSERT/UPDATE (and the DELETE machinery that shares it) now have their own
+> phased plan with measured baselines, acceptance targets and the open owner decisions —
+> see [`INSERT_UPDATE_PERFORMANCE_PLAN.md`](INSERT_UPDATE_PERFORMANCE_PLAN.md).
+
 | WP | Area | Scope | Status |
 |----|------|-------|--------|
 | **WP1** | Remove hot-path debug logging | SELECT, parameterized `ExecuteSQL`, batch transactions, INSERT | ✅ **DONE in v2.0.0** |
@@ -255,7 +259,7 @@ Full suite green: **1,644 tests, 0 failures** (16 skipped).
 
 - **WP1–WP7 are drop-in:** no public API changes; default behavior for existing callers is preserved (debug logging removal only stops stray `D:\*.log` writes).
 - **New fast-path APIs are additive:** e.g., reusable `PreparedStatement`/`CompiledCommand` objects, `StructRow` readers, `InsertBatchTyped` — old APIs remain untouched.
-- **.NET 11 / C# 15:** net10.0 target is kept until the ecosystem moves; `#if NET11_0_OR_GREATER` guards isolate runtime-specific code (Runtime Async, intrinsics, Zstandard).
+- **.NET 11 / C# 15:** net10.0 target is kept until the ecosystem moves; `#if NET11_0_OR_GREATER` guards isolate runtime-specific code (Runtime Async, intrinsics, Zstandard). **Superseded 2026-10-10 (owner):** the net11.0 / C# 15 line was promoted to `master` at 2.1.0 and the net10.0 line parked on `release/v2.0` — see `docs/net11/PROMOTION_TO_MAIN.md`. The `#if NET11_0_OR_GREATER` guards stay where runtime-specific code is involved; there is no multi-targeting.
 
 ---
 

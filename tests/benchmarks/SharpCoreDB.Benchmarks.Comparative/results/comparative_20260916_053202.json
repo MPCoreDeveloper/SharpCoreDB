@@ -1,0 +1,52 @@
+{
+  "SharpCoreDB (SQL)": {
+    "InsertTime": 1.191978,
+    "InsertOpsPerSec": 83894,
+    "ReadTime": 0.1469147,
+    "ReadOpsPerSec": 68066,
+    "UpdateTime": 0.1660348,
+    "UpdateOpsPerSec": 60228,
+    "DeleteTime": 0.0888629,
+    "DeleteOpsPerSec": 112532
+  },
+  "SharpCoreDB (Direct)": {
+    "InsertTime": 0.7540859,
+    "InsertOpsPerSec": 132610,
+    "ReadTime": 0.0903274,
+    "ReadOpsPerSec": 110708,
+    "UpdateTime": 0.1073653,
+    "UpdateOpsPerSec": 93139,
+    "DeleteTime": 0.0557749,
+    "DeleteOpsPerSec": 179292
+  },
+  "SharpCoreDB (StructRow)": {
+    "InsertTime": 0.8177475,
+    "InsertOpsPerSec": 122287,
+    "ReadTime": 0.1005681,
+    "ReadOpsPerSec": 99435,
+    "UpdateTime": 0,
+    "UpdateOpsPerSec": 0,
+    "DeleteTime": 0,
+    "DeleteOpsPerSec": 0
+  },
+  "SQLite": {
+    "InsertTime": 0.7720941,
+    "InsertOpsPerSec": 129517,
+    "ReadTime": 0.1020996,
+    "ReadOpsPerSec": 97943,
+    "UpdateTime": 0.0393763,
+    "UpdateOpsPerSec": 253959,
+    "DeleteTime": 0.0295535,
+    "DeleteOpsPerSec": 338369
+  },
+  "LiteDB": {
+    "InsertTime": 1.5086058,
+    "InsertOpsPerSec": 66286,
+    "ReadTime": 0.6398206,
+    "ReadOpsPerSec": 15629,
+    "UpdateTime": 0.9733414,
+    "UpdateOpsPerSec": 10273,
+    "DeleteTime": 0.6928829,
+    "DeleteOpsPerSec": 14432
+  }
+}

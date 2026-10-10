@@ -11,6 +11,37 @@ using SharpCoreDB.Interfaces;
 /// Configuration options for database performance and behavior.
 /// Uses C# 9.0+ init-only properties for immutable configuration.
 /// </summary>
+/// <remarks>
+/// ⚠️ <b>Seven properties on this class are declared — three of them also assigned by the presets below — and
+/// read by nobody.</b> They are listed here because an inert flag is not neutral: it silently removes the
+/// ability to test a hypothesis, and a caller who follows the documentation gets no effect and no warning.
+/// <para>
+/// <b>How this was found</b> (worklog session 43): every <c>public … { get; }</c> property in this file was
+/// extracted automatically and counted against every <c>.cs</c> in <c>src/</c> <i>excluding this file</i>.
+/// 49 properties, <b>7 with zero references</b>. Two of this class's flags had already been found the hard way:
+/// <c>ColumnarAutoCompactionThreshold = 0</c> does not disable compaction (<c>Table.cs:64</c> guards the
+/// assignment with <c>&gt; 0</c>), and <c>EnableHashIndexes</c> was inert until 2026-09-24, when it was given a
+/// reader in <c>SqlParser.DDL.cs</c>'s CREATE TABLE path.
+/// </para>
+/// <list type="bullet">
+/// <item><c>CollectGCAfterBatches</c> — set by <b>6 presets</b> (<c>true</c> ×4, <c>false</c> ×2, one carrying the
+/// comment "Clean up after each batch"); no reader anywhere.</item>
+/// <item><c>UseBufferedIO</c> — set <c>true</c> by <b>all 6 presets</b> <i>and</i> by the comparative benchmark's
+/// <c>BuildConfig</c>, so every benchmark arm has been claiming buffered I/O it never received; no reader
+/// anywhere.</item>
+/// <item><c>WalBatchMultiplier</c> — set by 4 presets (<c>128</c>, and <c>512</c> marked "✅ EXTREME"); no reader
+/// anywhere.</item>
+/// <item><c>EnableBTreeSelection</c>, <c>EnableSimdAndProjectionPushdown</c>, <c>EncryptionBufferSizeKB</c>,
+/// <c>ToggleEncryptionDuringBulk</c> — declared and never even assigned; no reader anywhere.</item>
+/// </list>
+/// <para>
+/// <b>Decision owed, and deliberately not taken here:</b> each of the seven is either <b>implemented</b> or
+/// <b>removed</b> from the surface and the presets. Both are real changes — implementing <c>UseBufferedIO</c>
+/// would change the I/O path under every measured cell and invalidate the campaign's numbers — so this is an
+/// owner call, not a drive-by fix. <b>No behaviour was changed by adding this note</b>; it exists so that nobody
+/// sets one of these expecting an effect, which is exactly how <c>EnableHashIndexes</c> cost a session.
+/// </para>
+/// </remarks>
 public class DatabaseConfig
 {
     /// <summary>
@@ -53,15 +84,203 @@ public class DatabaseConfig
     public bool UseSqliteIntegerAffinity { get; init; } = false;
 
     /// <summary>
-    /// Gets a value indicating whether table payload records are encrypted at rest with
-    /// per-record AES-256-GCM (opt-in; default <see langword="false"/> for full backward
-    /// compatibility). When <see langword="true"/>, NEW table data files carry an 8-byte
-    /// magic header followed by per-record ciphertext (Known Issue 1). Legacy plaintext
-    /// files and NoEncryptMode databases remain byte-for-byte unchanged and readable.
-    /// ⚠️ OPT-IN FORMAT: only enable on databases whose tables are created/opened with the
-    /// same flag, and never share such databases with tooling built before this option.
+    /// Gets a value indicating whether table payload records are encrypted at rest with per-record
+    /// AES-256-GCM. <b>Enabled by default.</b>
+    /// <para>
+    /// With this on (the default) a table's data file carries an 8-byte magic header followed by
+    /// per-record ciphertext, and the overflow arena holds ciphertext as well — so table data, arena,
+    /// metadata and transaction files are all protected. <see cref="NoEncryptMode"/> being
+    /// <see langword="true"/> is the single, documented raw-speed opt-out and leaves every file
+    /// plaintext.
+    /// </para>
+    /// <para>
+    /// Measured cost of the default versus that opt-out: ≈1.11× CREATE/INSERT, no measurable UPDATE
+    /// penalty on the contiguous paths, roughly double the file size for the per-record GCM framing,
+    /// and one whole-file decrypt per full-scan-shaped query (the scan reads the file once). Numbers in
+    /// <c>docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md</c> §3-1c and §3-1d.
+    /// </para>
+    /// <para>
+    /// ⚠️ FORMAT: a file is encrypted only when it was CREATED with this option on. A pre-existing
+    /// plaintext database stays byte-for-byte readable and is never mixed with encrypted records — but
+    /// its tables are upgraded to the encrypted format when they are compacted, because compaction
+    /// rewrites them through a brand-new file.
+    /// </para>
     /// </summary>
-    public bool EnableAtRestRecordEncryption { get; init; } = false;
+    public bool EnableAtRestRecordEncryption { get; init; } = true;
+
+    /// <summary>
+    /// <para>
+    /// Opt-in buffered append mode for the single-row INSERT path. When <c>true</c>, a row appended
+    /// outside a transaction is buffered in memory with the rest of the pending appends and written
+    /// with ONE open/write/close when a flush boundary is reached — instead of a
+    /// <see cref="System.IO.FileStream"/> open, write-through and close per row.
+    /// </para>
+    /// <para>
+    /// MEASURED: the per-row open dominates this path. A 64-byte record costs ~512 µs through the
+    /// write-through open/close, of which only ~4.5 µs is the actual buffered write; the same records
+    /// reach ~0.43 µs/row through the batched path. The whole gap is the handle, not the data.
+    /// </para>
+    /// <para>
+    /// DURABILITY TRADE (this is the reason the feature is opt-in and off by default): the default
+    /// behavior forces each record to the device before the call returns. Buffered mode hands the
+    /// bytes to the operating system at the flush boundary instead — a process crash still cannot
+    /// lose them, but a power loss can lose everything after the last flush. The window is bounded by
+    /// <see cref="AppendBufferFlushThresholdBytes"/> and <see cref="AppendBufferFlushIntervalMs"/>, and
+    /// every structural operation (commit, <c>Database.Flush()</c>, compaction, fixed-width migration,
+    /// overflow-arena compaction, <c>DROP TABLE</c>, dispose) flushes first, so the data is never
+    /// invisible to the engine — only the durability window changes.
+    /// </para>
+    /// <para>
+    /// Reads stay correct while rows are buffered: point lookups and full scans overlay the buffer, so
+    /// a row is visible to the same session the moment it is inserted.
+    /// </para>
+    /// <para>Default <c>false</c>: byte-for-byte identical behavior to the unbuffered engine.</para>
+    /// </summary>
+    public bool EnableBufferedAppends { get; init; } = false;
+
+    /// <summary>
+    /// Gets the number of payload bytes a variable-length column may store <b>inline</b> in its fixed-width record
+    /// slot instead of writing them to the overflow arena. <b>Default 24.</b>
+    /// <para>
+    /// ⚠️ <b>24 by owner decision (2026-09-22); it was 16 from 2026-09-16 to that date.</b> The 16 default was itself
+    /// blocked for a day: making it non-zero broke <c>ReopenRoundTripMatrixTests</c> on the <b>single-file</b> variant,
+    /// because that format supplied the capacity from the opening config rather than storing it, so a mismatch made
+    /// <c>SingleFileTable.IsFixedWidthDataBlock</c> classify a binary block as legacy JSON and <c>EnsureCacheLoaded</c>
+    /// threw <c>JsonException: '0x14' is an invalid start of a value</c>. That is fixed: the capacity is persisted in
+    /// the SCDB table metadata entry (<c>TableMetadataEntry.FixedWidthInlineValueBytes</c>, carved out of its reserved
+    /// bytes so the entry size and every offset are unchanged) and a reopened table takes it from there, never from
+    /// this config — which is what makes a change to this value a policy decision rather than a correctness risk.
+    /// </para>
+    /// <para>
+    /// <b>Why 24 and not more.</b> 24 removes the overflow-arena write entirely on the shapes this plan tracks (the
+    /// longest value in the benchmark schema is the 18-byte <c>user99999@test.com</c>) while 32 buys no further speed
+    /// and 20 % more file. Measured with the tracked harness on 2026-09-22, same machine and session, everything else
+    /// at product defaults: the fair-PK INSERT arm goes <b>0,63× → 0,84×</b> of a same-run SQLite over five
+    /// interleaved pairs (16 → 24), its engine allocation <b>1.923 → 1.437 B/row (−25,3 %)</b>, and the batched
+    /// multi-row shape <b>62,668 → 76,691 rows/s (+22,4 %)</b>; <c>arena-write</c>, <c>arena-append</c> and
+    /// <c>encode-scratch</c> all fall from 99.000 calls to <b>zero</b> over 100.000 rows. 32 measures 94.558 ops/s
+    /// against 24's 91.041 (inside the arm's noise) at <b>+20 % total bytes</b>, so 24 is the knee.
+    /// </para>
+    /// <para>
+    /// Context (plan §4b): the fixed-width record already implements the stable-slot + overflow model — fixed-size
+    /// columns inline, String/Blob as a 5-byte <c>[null-flag(1)][overflow offset(4)]</c> slot — so at capacity 0
+    /// *every* variable-length value, however short, costs an arena write. Measured on the batched multi-row INSERT
+    /// shape at 1,000 rows/statement (median of 5), raising this from 0 to 16 took <b>62,545 → 74,634 rows/s
+    /// (+19.3 %)</b>, <b>15.99 → 13.40 µs/row (−16.2 %)</b> and <b>4,943 → 4,348 B allocated/row (−12 %)</b>, by
+    /// halving the overflow arena (1,006,670 → 488,890 B).
+    /// </para>
+    /// <para>
+    /// Above zero, a variable slot becomes <c>[null-flag(1)][offset(4)][inline length(2)][inline payload(N)]</c> —
+    /// still a <b>constant size per schema</b>, so the position-stable record and every in-place update and delete
+    /// fast path keep working — and a payload that fits is written in the slot with <c>null-flag = 2</c>. NULL (0)
+    /// and overflow (1) keep their existing encodings and offsets, so the inline case is purely additive.
+    /// </para>
+    /// <para>
+    /// ⚠️ <b>This is part of the on-disk record layout and it costs space.</b> Every variable-length column reserves
+    /// <c>2 + N</c> extra bytes per record, so the benchmark schema's table file grew 760,000 → 1,840,000 B when this
+    /// went 0 → 16 and 1,840,000 → 2,320,000 B when it went 16 → 24. The <b>total</b> footprint (data + arena) is what
+    /// to compare, and there the 24 step is a wash on that schema (2,328,890 → 2,320,000 B, −0,4 %) and +2,0 % on the
+    /// fair-PK schema, because the arena's per-block framing disappears as the record grows. A table whose values are
+    /// <b>shorter</b> than this still pays the reserve with no arena write left to save (a 5-byte-code table grows
+    /// ~27 % in record size going 16 → 24), which is the trade this default makes on purpose: the plan's tracked
+    /// shapes gain 20-33 %, and a schema of very short values pays disk.
+    /// </para>
+    /// <para>
+    /// <b>The layout is self-describing on both storage paths, which is what makes a non-zero default safe.</b>
+    /// The value is persisted per table in metadata (<c>Table.FixedWidthInlineValueBytes</c>, written by
+    /// <c>Database.Core.cs</c>) and restored on reopen — in directory mode through the <c>Table</c> JSON round-trip, in
+    /// single-file mode through the SCDB table entry — so a reopened table decodes with the capacity it was *written*
+    /// with rather than with this config: a database created under the old default keeps its capacity-16 layout and
+    /// needs no rewrite, while new tables take whatever this is. An older build reading a new file would misread its
+    /// slots; that is a downgrade, which this format deliberately does not support (upgrade-only, owner decision).
+    /// </para>
+    /// </summary>
+    public int FixedWidthInlineValueBytes { get; init; } = 24;
+
+    /// <summary>
+    /// Gets the minimum number of bytes a single-file (<c>.scdb</c>) database adds when it has to grow its file.
+    /// <b>Default 0, which means the product default — 1 MiB since the owner decision of 2026-09-24</b>
+    /// (<c>FreeSpaceManager.MinExtensionBytesDefault</c>). Applies to the next open, never to an already-open file.
+    /// <para>
+    /// ⚠️ <b>Why this exists: the 10 MiB minimum was why any small `.scdb` database was 14,7 MB.</b> The single-file file
+    /// starts at <b>1.037 pages</b> (4.247.552 B at a 4 KiB page size: header, block registry, FSM, table directory and
+    /// the first data/overflow blocks), and the first allocation that does not fit adds
+    /// <c>max(requiredPages, currentSize / 2, minExtensionPages)</c> where <c>minExtensionPages = thisValue / pageSize</c>.
+    /// At the historical 10 MiB the minimum won for every file below 20 MB, so the first extension landed on
+    /// 1.037 + 2.560 = <b>3.597 pages = 14.733.312 B</b> — measured 2026-09-23 at <b>1, 100, 500 and 2.000 rows, both
+    /// caller shapes and both inline capacities: identical in all four cells</b>, which is what proved it was a floor
+    /// rather than growth. At the 1 MiB default the minimum stops binding on a fresh file (256 pages against the halving
+    /// term's 518), so the same database lands on <b>1.555 pages = 6.369.280 B</b>.
+    /// </para>
+    /// <para>
+    /// <b>Anything at or below ~2 MiB lands in the same place</b>, because the halving term decides it — so lowering this
+    /// further buys nothing on a small file, and raising it above ~2 MiB starts to bind again (10 MiB reproduces the old
+    /// 14,7 MB floor exactly, which is one line of configuration if you want the historical behaviour back).
+    /// </para>
+    /// <para>
+    /// Lowering it trades <b>file size</b> for <b>more, smaller extension steps</b> (each extension re-writes the block
+    /// registry and the FSM), and that trade is measured rather than assumed: the extension path is A/B-tested through the
+    /// harness's <c>SHARPCOREDB_SCDB_MIN_EXTENSION</c> switch on both a small database and a multi-extension one. It has
+    /// <b>no effect on the on-disk format</b> — the file is a whole number of pages either way, and a database grown
+    /// under one setting is read and extended under another without conversion — so it is safe to change on an existing
+    /// file.
+    /// </para>
+    /// <para>Covered by <c>SingleFileFileGrowthTests</c>: the default lands on the halving-term floor, an explicit 10 MiB
+    /// still reproduces the historical floor exactly, a value below the halving term changes nothing, and every row is
+    /// readable after each variant (including after a reopen with a different value).</para>
+    /// </summary>
+    public long SingleFileMinExtensionBytes { get; init; } = 0;
+
+    /// <summary>
+    /// Gets the pending-append threshold, in bytes, at which buffered appends are flushed
+    /// (only used when <see cref="EnableBufferedAppends"/> is enabled). Bounds both the memory the
+    /// buffer can hold and the amount of work a crash can lose. Default 1 MB.
+    /// </summary>
+    public int AppendBufferFlushThresholdBytes { get; init; } = 1024 * 1024;
+
+    /// <summary>
+    /// Gets the maximum age, in milliseconds, of an unflushed buffered append before it is flushed by
+    /// the next append on that database (only used when <see cref="EnableBufferedAppends"/> is enabled).
+    /// Together with <see cref="AppendBufferFlushThresholdBytes"/> this bounds the durability window for
+    /// slow, low-volume writers. Default 10 ms. Set to 0 to flush only on the byte threshold and on the
+    /// explicit structural boundaries.
+    /// </summary>
+    public int AppendBufferFlushIntervalMs { get; init; } = 10;
+
+    /// <summary>
+    /// Gets a value indicating whether DELETE defers index maintenance. <b>Enabled by default.</b>
+    /// <para>
+    /// When on, a DELETE writes only the durable tombstone and skips the per-key PK B-tree removal and
+    /// the per-key hash-index removal. Point lookups already treat a tombstoned position as absent (a
+    /// null read) and insert-time uniqueness verifies the stored position is live before rejecting a
+    /// re-INSERT, so a stale index entry is invisible to callers. The PK B-tree is rebuilt from the data
+    /// file (dropping tombstoned entries) on reopen and when <see cref="DeferredDeleteIndexThreshold"/>
+    /// is crossed; hash indexes rebuild on reopen. Measured on the random-key DELETE workload:
+    /// <b>2.19x</b> (plaintext) / <b>1.19x</b> (encrypted default) throughput.
+    /// </para>
+    /// Set to <see langword="false"/> for the eager behaviour (every DELETE removes its index entries
+    /// immediately), which keeps <c>GetHashIndexStatistics</c> exact between deletes.
+    /// </summary>
+    public bool EnableDeferredDeleteIndexes { get; init; } = true;
+
+    /// <summary>
+    /// Gets the number of deferred DELETE primary keys that may accumulate in the stale PK B-tree before
+    /// it is rebuilt from the data file (dropping tombstoned entries). Only used when
+    /// <see cref="EnableDeferredDeleteIndexes"/> is enabled.
+    /// <para>
+    /// ⚠️ The rebuild is a full **O(n)** pass over the data file (`RebuildPrimaryKeyIndexFromDisk`), so
+    /// this is a **memory/latency safety valve, not a maintenance schedule**: each rebuild costs about
+    /// as much as rebuilding the whole PK index, and it only pays off when it is rare relative to the
+    /// deletes it covers. The default is therefore deliberately high (100,000). Measured: with a
+    /// threshold of 10,000 a single 10,000-delete batch triggered the rebuild and the random-key DELETE
+    /// workload fell from 222,752 to 70,248 ops/s — the deferral win is lost whenever the rebuild fires
+    /// at the same frequency as the deletes. Setting it to a small value is only sensible on a table
+    /// where the whole index is cheap to rebuild.
+    /// </para>
+    /// Staleness is also bounded by the table's own key count (a B-tree holds one entry per unique key),
+    /// and a reopen rebuilds the index for free, so the practical bound is "until the next reopen".
+    /// </summary>
+    public int DeferredDeleteIndexThreshold { get; init; } = 100000;
 
     /// <summary>
     /// Gets a value indicating whether batch encryption is enabled during bulk operations.
@@ -151,6 +370,8 @@ public class DatabaseConfig
     /// <summary>
     /// Gets a value indicating whether gets whether to use buffered I/O for high-performance mode.
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set to `true` by ALL 6 presets and by the
+    // comparative benchmark's BuildConfig, so every arm has claimed buffered I/O it never received.
     public bool UseBufferedIO { get; init; } = false;
 
     /// <summary>
@@ -163,6 +384,8 @@ public class DatabaseConfig
     /// <summary>
     /// Gets a value indicating whether gets whether to perform GC.Collect after batch operations for memory cleanup.
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set by 6 presets, one of them with the
+    // comment "Clean up after each batch". Setting it changes nothing.
     public bool CollectGCAfterBatches { get; init; } = false;
 
     /// <summary>
@@ -190,6 +413,24 @@ public class DatabaseConfig
     /// Gets the WAL durability mode.
     /// FullSync uses FileStream.Flush(true) for full durability.
     /// Async relies on OS buffering for better performance.
+    /// <para>
+    /// <b>What this property does NOT do to the table append (reversed 2026-09-16).</b> For one day
+    /// (2026-09-15, §5 item 2 / A1) <c>Async</c> also disabled write-through for table appends, buffering them
+    /// exactly as <see cref="EnableBufferedAppends"/> does. That coupling was measured and removed: this
+    /// property is a <i>durability</i> statement, and six presets set it for durability reasons across opposite
+    /// append regimes — <c>BulkImport</c> and the write-once logging sink (append-only, where buffering wins:
+    /// 9.4× on 20,000 standalone single-row <c>INSERT</c> statements, 1,127.61 → 119.79 µs/row), but also the
+    /// mixed-OLTP, analytics, read-heavy and mobile configurations (which read between appends, where buffering
+    /// costs). Measured on the tuned <c>--pk</c> arm, one variable, same build, medians of 3, isolated: with
+    /// buffering engaged, <b>UPDATE 230,722 → 356,135 (+54 %)</b>, <b>DELETE 168,804 → 216,909 (+28 %)</b>,
+    /// <b>INSERT 81,344 → 99,575 (+22 %)</b>, READ flat, with SQLite's reference within 5 %. The append path
+    /// therefore writes through per record at either setting, and table-append buffering is requested only by
+    /// <see cref="EnableBufferedAppends"/> — which the bulk-oriented presets now set explicitly.
+    /// </para>
+    /// <para>
+    /// <b>Trade:</b> buffered rows are lost by a crash — process kill as well as power loss — until a
+    /// boundary flushes them, so choose <c>Async</c> only where that window is acceptable.
+    /// </para>
     /// </summary>
     public DurabilityMode WalDurabilityMode { get; init; } = DurabilityMode.FullSync;
 
@@ -233,6 +474,8 @@ public class DatabaseConfig
     /// Default: 128 (e.g., 8 cores * 128 = 1024 operations).
     /// Use higher values (256, 512) for extreme concurrency (64+ threads).
     /// </summary>
+    // ⚠️ NOT HONOURED — 0 readers in src/ (see the class <remarks>). Set by 4 presets, one of them to 512 and
+    // marked "✅ EXTREME". Setting it changes nothing.
     public int WalBatchMultiplier { get; init; } = 128;
 
     /// <summary>
@@ -358,7 +601,12 @@ public class DatabaseConfig
         UseGroupCommitWal = true,
         EnableAdaptiveWalBatching = true,
         WalBatchMultiplier = 512,          // ✅ EXTREME: ProcessorCount * 512
-        WalDurabilityMode = DurabilityMode.Async, // Fast async writes
+        WalDurabilityMode = DurabilityMode.Async, // Fast async writes (WAL only — see that property's note)
+        // Append buffering is the *other* half of the bulk trade, and since 2026-09-16 it is requested
+        // explicitly instead of being inherited from `Async`: a bulk import appends without reading in between,
+        // which is exactly the shape buffering is for (~512 µs -> ~4.5 µs per 64-byte row), whereas a reader in
+        // the loop pays 22-54 % for it.
+        EnableBufferedAppends = true,
         WalMaxBatchSize = 0,               // Adaptive (scales to 10k)
         WalMaxBatchDelayMs = 1,            // Minimal delay
         GroupCommitSize = 5000,            // ✅ LARGE: 5000 rows per commit
@@ -366,7 +614,13 @@ public class DatabaseConfig
         // Disable query cache (bulk import doesn't repeat queries)
         EnableQueryCache = false,
         
-        // Hash indexes enabled but will be built AFTER import
+        // Hash indexes are enabled. This comment previously claimed they "will be built AFTER import" — they are
+        // not: nothing in the engine defers the build, so the per-row hash maintenance is paid on every INSERT
+        // even in this preset. Measured on the multi-row batch path (2026-09-16), per row: `hash-index` 1.7 µs
+        // (10 % of the 17.2 µs/row budget) and `index-maint` (the PK B-tree insert) 2.2 µs (13 %). Deferring both
+        // to a single bulk build is priority 2 of the plan's re-derived order (§9) and the machinery for it exists
+        // — RebuildHashIndex / RebuildAllIndexesFromFile, plus ValidateBatchPrimaryKeysUpfront for the uniqueness
+        // the index would otherwise enforce — but it is NOT implemented, so this preset must not claim it.
         EnableHashIndexes = true,
         
         // ✅ VERY LARGE buffers for bulk import

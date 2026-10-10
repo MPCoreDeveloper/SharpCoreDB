@@ -6,7 +6,10 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.Intrinsics;
+using System.Runtime.Intrinsics.X86;
 
 namespace SharpCoreDB.Execution;
 
@@ -298,31 +301,62 @@ public class AggregationOptimizer : IDisposable
     }
 
     /// <summary>
-    /// Computes sum of numeric array using SIMD vectorization.
-    /// Processes 4 values at once using Vector<double>.
+    /// Computes the sum of a numeric array using explicit multi-tier SIMD intrinsics
+    /// (AVX-512 → AVX2 → SSE2 → scalar), per <c>.github/SIMD_STANDARDS.md</c>.
     /// 
     /// Expected performance: 2-3x faster than scalar loop.
     /// </summary>
     /// <param name="values">Array of values to sum</param>
     /// <returns>Sum of all values</returns>
+    [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public static double SumWithSIMD(double[] values)
     {
         if (values == null || values.Length == 0)
             return 0;
 
+        const int avx512MinElements = 1024; // AVX-512 element floor per .github/SIMD_STANDARDS.md
+
         var sum = 0.0;
         var i = 0;
+        ref double reference = ref MemoryMarshal.GetReference<double>(values);
 
-        // SIMD vectorized loop: process 4 doubles at once
-        int vectorSize = Vector<double>.Count;  // Usually 4 on modern CPUs
-        while (i <= values.Length - vectorSize)
+        // AVX-512 tier (16 doubles per iteration), gated by the element floor.
+        if (Avx512F.IsSupported && values.Length >= avx512MinElements)
         {
-            var vector = new Vector<double>(values, i);
-            sum += Vector.Sum(vector);
-            i += vectorSize;
+            Vector512<double> accumulator = Vector512<double>.Zero;
+            for (; i <= values.Length - Vector512<double>.Count; i += Vector512<double>.Count)
+            {
+                accumulator += Vector512.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+            }
+
+            sum += Vector512.Sum(accumulator);
         }
 
-        // Scalar loop for remainder (when length not divisible by 4)
+        // AVX2 tier (4 doubles per iteration).
+        if (Avx2.IsSupported && values.Length - i >= Vector256<double>.Count)
+        {
+            Vector256<double> accumulator = Vector256<double>.Zero;
+            for (; i <= values.Length - Vector256<double>.Count; i += Vector256<double>.Count)
+            {
+                accumulator += Vector256.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+            }
+
+            sum += Vector256.Sum(accumulator);
+        }
+
+        // SSE2 tier (2 doubles per iteration).
+        if (Sse2.IsSupported && values.Length - i >= Vector128<double>.Count)
+        {
+            Vector128<double> accumulator = Vector128<double>.Zero;
+            for (; i <= values.Length - Vector128<double>.Count; i += Vector128<double>.Count)
+            {
+                accumulator += Vector128.LoadUnsafe(ref Unsafe.Add(ref reference, i));
+            }
+
+            sum += Vector128.Sum(accumulator);
+        }
+
+        // Scalar tail — always required.
         while (i < values.Length)
         {
             sum += values[i];

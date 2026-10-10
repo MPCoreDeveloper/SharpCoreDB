@@ -23,6 +23,8 @@ public sealed class TableDirectoryManagerTests
 
                 var table = new Mock<ITable>(MockBehavior.Strict);
                 table.SetupGet(t => t.Name).Returns("orders");
+                // §4b: CreateTable now persists the table's inline capacity, so the strict mock needs it configured.
+                table.SetupGet(t => t.FixedWidthInlineValueBytes).Returns(0);
 
                 var columns = new List<ColumnDefinitionEntry>
                 {

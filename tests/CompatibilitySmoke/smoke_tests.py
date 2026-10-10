@@ -208,13 +208,15 @@ def test_http_metadata_discovery(
         )
         elapsed = (time.perf_counter() - t0) * 1000
         if r.status_code == 200:
-            report.add(TestResult("Metadata discovery (information_schema)", True, "columns accessible", elapsed))
-        elif r.status_code in (400, 422):
-            # Schema may not expose information_schema; note as warning rather than hard fail
-            report.add(TestResult("Metadata discovery (information_schema)", True, f"endpoint reachable (HTTP {r.status_code}; schema may require setup)", elapsed))
-        elif r.status_code == 500 and "does not exist" in r.text:
-            # information_schema is a PostgreSQL compatibility feature not yet implemented
-            report.add(TestResult("Metadata discovery (information_schema)", True, f"endpoint reachable (HTTP {r.status_code}; information_schema not implemented)", elapsed))
+            body = r.json()
+            rows = body.get("rows") or body.get("data") or []
+            columns = [c.get("name") for c in (body.get("columns") or []) if isinstance(c, dict)]
+            if len(rows) >= 1 and "table_schema" in columns and "table_name" in columns:
+                report.add(TestResult("Metadata discovery (information_schema)", True, f"{len(rows)} row(s), columns {columns}", elapsed))
+            else:
+                # A 200 without the requested metadata columns means the schema layer answered
+                # something else — that is a failure, not a pass with a note.
+                report.add(TestResult("Metadata discovery (information_schema)", False, f"HTTP 200 without metadata rows/columns: {body}", elapsed))
         else:
             report.add(TestResult("Metadata discovery (information_schema)", False, f"HTTP {r.status_code}: {r.text[:200]}", elapsed))
     except Exception as e:
@@ -347,7 +349,26 @@ def wait_for_server(base_url: str, timeout_s: int, verify: bool) -> bool:
     return False
 
 
+def _configure_output_encoding() -> None:
+    """Make console output encoding-safe.
+
+    The report prints box-drawing separators and check-mark glyphs. On a Windows
+    console with a legacy code page (cp1252/cp850) printing those raises
+    UnicodeEncodeError and aborts the run before the first test — Linux CI (UTF-8)
+    never sees it, so it is handled here instead of assumed.
+    """
+    for stream in (sys.stdout, sys.stderr):
+        reconfigure = getattr(stream, "reconfigure", None)
+        if reconfigure is None:
+            continue
+        try:
+            reconfigure(encoding="utf-8", errors="replace")
+        except (ValueError, OSError):
+            pass
+
+
 def main() -> int:
+    _configure_output_encoding()
     args = parse_args()
     base_url = f"https://{args.host}:{args.https_port}"
     verify = not args.no_verify_tls

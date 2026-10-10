@@ -390,7 +390,13 @@ public class HashIndex : IDisposable
             return;
         }
 
-        // PERF: Non-unique unsafe path — batch keys, then a single UnsafeEqualityIndex acquisition.
+        // §5.1 (2026-10-10, session 80): there is deliberately NO capacity hint here. `AddBatchKeys` is
+        // called once per index per batch, and a hint of `Count + keys.Length` makes the map rebuild its
+        // entry+bucket pair on *every* call, i.e. O(total keys) of copying per batch → quadratic across a
+        // batched INSERT loop. `Dictionary`'s own amortised doubling allocates less for the same work
+        // (4.611.325 → 3.530.478 B per 10.000-key call on the fair INSERT arm), the wall-time comparison is a
+        // wash, and a geometric hint was measured in between and rejected: artifacts/s80-final-ab-summary.txt,
+        // artifacts/s80-hint-ab-summary.txt, artifacts/s80-nohint-{1,2}.txt.
         if (_useUnsafeEqualityIndex && !_isUnique)
         {
             var keyArrays = ArrayPool<byte[]>.Shared.Rent(keys.Length);

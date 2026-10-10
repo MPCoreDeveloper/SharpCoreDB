@@ -24,6 +24,38 @@ public partial class Storage : IStorage
     private readonly PageCache? pageCache;
     private readonly int pageSize;
     private readonly ArrayPool<byte> bufferPool;
+
+    // ✅ Buffered append mode (opt-in): DatabaseConfig.EnableBufferedAppends routes single-row appends
+    // outside a transaction through the same in-memory buffer the transaction path uses, so N rows cost
+    // ONE open/write/close per flush boundary instead of one write-through open/close PER ROW (measured
+    // ~512 µs -> ~4.5 µs per 64-byte row for the write itself). Off by default: the trade is the
+    // durability window, see DatabaseConfig.EnableBufferedAppends for the full contract.
+    private readonly bool enableBufferedAppends;
+
+    /// <summary>
+    /// True when appends made OUTSIDE a transaction are buffered instead of written through — the explicit
+    /// <see cref="DatabaseConfig.EnableBufferedAppends"/> opt-in, and only that. All buffered appends share one
+    /// buffer, the same threshold/interval bounds and the same flush boundaries.
+    /// <para>
+    /// <b>Deliberately NOT derived from <see cref="DatabaseConfig.WalDurabilityMode"/> (reversed 2026-09-16).</b>
+    /// For one day, A1 (2026-09-15) made <c>Async</c> disable write-through for table appends too, on the
+    /// reasoning that a caller who asked for asynchronous WAL writes should not still pay a synchronous write
+    /// per record. That coupling was measured and removed, because <c>Async</c> is set by six presets spanning
+    /// opposite regimes — <c>BulkImport</c> but also the mixed-OLTP, analytics, read-heavy, mobile and
+    /// write-once-logging configurations — so it cannot distinguish an append that will never be read from one
+    /// that will be. A one-variable A/B on the same build (tuned <c>--pk</c> arm, medians of 3, isolated) shows
+    /// what getting it wrong costs: with buffering engaged, <b>UPDATE 230,722 → 356,135 (+54 %)</b>,
+    /// <b>DELETE 168,804 → 216,909 (+28 %)</b>, <b>INSERT 81,344 → 99,575 (+22 %)</b>, READ flat, while
+    /// SQLite's own reference moved under 5 %. Buffering costs on every phase of a workload that reads between
+    /// appends — the deferred bytes must be made visible to the next read, so the buffer buys a deferred flush
+    /// and loses the batching it was meant to win. The bulk win is real and is kept where it belongs: callers
+    /// that append without reading in between opt in through
+    /// <see cref="DatabaseConfig.EnableBufferedAppends"/>, and the bulk-oriented presets do so.
+    /// </para>
+    /// </summary>
+    private bool BuffersAppends => enableBufferedAppends;
+    private readonly long appendBufferFlushThresholdBytes;
+    private readonly int appendBufferFlushIntervalMs;
     
     // Transaction support
     private readonly TransactionBuffer transactionBuffer;
@@ -48,6 +80,18 @@ public partial class Storage : IStorage
         this.pageCache = pageCache;
         this.pageSize = config?.PageSize ?? 4096;
         this.bufferPool = ArrayPool<byte>.Shared;
+
+        // ✅ Opt-in buffered appends (default false). Registered last so the encryption flags above are
+        // already final when the append path starts consulting them.
+        this.enableBufferedAppends = config?.EnableBufferedAppends ?? false;
+        this.appendBufferFlushThresholdBytes = Math.Max(0, config?.AppendBufferFlushThresholdBytes ?? 1024 * 1024);
+        this.appendBufferFlushIntervalMs = Math.Max(0, config?.AppendBufferFlushIntervalMs ?? 10);
+
+        // §5 item 2 (A1), REVERSED the next day on measurement — see BuffersAppends for the numbers. A1 made
+        // `WalDurabilityMode = Async` disable write-through for table appends. On a workload that reads between
+        // appends that cost 22-54 % on every phase, and `Async` turned out to be set by six presets spanning
+        // opposite regimes, so it was never a usable signal for "this append will not be read back".
+        // `WalDurabilityMode` means the WAL again; table-append buffering is requested explicitly.
         
         // Initialize batch encryption configuration
         this.enableBatchEncryption = (config?.EnableBatchEncryption ?? false) && !this.noEncryption;
@@ -68,6 +112,12 @@ public partial class Storage : IStorage
     {
         lock (this.transactionLock)
         {
+            // ✅ Buffered-append safety: appends made OUTSIDE this transaction must not share the
+            // transaction's buffer, because Rollback() clears that buffer — it would silently discard
+            // rows the caller already got a position for. Flushing first gives the transaction a
+            // durable prefix. (No-op whenever nothing is pending, i.e. always in the default mode.)
+            FlushBufferedAppends();
+
             this.transactionBuffer.BeginTransaction();
         }
     }

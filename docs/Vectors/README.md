@@ -1,17 +1,19 @@
 # 🔍 SharpCoreDB Vector Search & Storage
 
-> **Status:** ✅ **PRODUCTION READY** — v1.9.5  
+> **Status:** ✅ **PRODUCTION READY** — v2.1 RC (`2.1.0-RC.3`, branch `release/v2.1.0.0-RC.3`)  
 > **Module:** `SharpCoreDB.VectorSearch` (optional, separate NuGet)  
-> **Features:** HNSW indexes, quantization, distance metrics, GraphRAG integration paths  
+> **Features:** HNSW + DiskANN indexes, quantization, distance metrics, hybrid fusion, content-verified artifacts, GraphRAG integration paths  
 > **Performance:** 50-100x faster than SQLite vector search  
-> **Requirements:** .NET 10, C# 14  
-> **Breaking Changes:** None — backward compatible
+> **Requirements:** .NET 11 (RC), C# 15 preview  
+> **Breaking Changes:** None — all v2.1 features are opt-in; net11.0-only line (net10.0 lives on `master`)
 
-## v1.9.5 changes
+## v2.1 RC changes (munarium-inspired)
 
-- Package/docs synchronized to `v1.9.5`
-- Vector workflows aligned with `SharpCoreDB.Graph.Advanced` GraphRAG guidance
-- Inherits core metadata/parser reliability improvements from SharpCoreDB v1.9.5
+- `DiskAnnIndex` + `DiskAnnConfig` — high-recall ANN index, crossover-tested against the exact `FlatIndex`.
+- `ArtifactManifest` + canonical SHA-256 `ArtifactId` + `IVerifiableIndex.Verify()` — immutable, content-verified index artifacts.
+- `HybridFusionAlpha` in `VectorSearchOptions` — lexical/vector fusion weight.
+- `BuildResult` (Success / VerificationFailed / LimitExceeded) — strict, pattern-matchable verification outcomes.
+- SQL DDL for the new index type (see `DISKANN_SQL_DDL.md`).
 
 ---
 
@@ -56,7 +58,7 @@ This is the foundation for:
 |---------|------------|------------|----------|--------|
 | **Embedded (no server)** | ✅ | ✅ | ❌ | ❌ |
 | **Encrypted storage** | ✅ AES-256-GCM | ❌ | ❌ | ❌ |
-| **Pure managed code** | ✅ C# 14 | ❌ (C) | ❌ (C) | ❌ (Python) |
+| **Pure managed code** | ✅ C# 15 | ❌ (C) | ❌ (C) | ❌ (Python) |
 | **SIMD acceleration** | ✅ AVX-512/AVX2/NEON | ✅ | ✅ | ✅ |
 | **Production-ready HNSW** | ✅ | ✅ | ✅ | ✅ |
 | **Cross-platform** | ✅ 6 RIDs | ⚠️ | ❌ | ⚠️ |
@@ -74,10 +76,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.1.0-RC.3
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 2.0.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.0-RC.3
 ```
 
 ### 2. Register Vector Search
@@ -221,11 +223,52 @@ CREATE INDEX idx_vectors_flat ON table_name(vector_col)
 USING FLAT;  -- Good for <100K vectors
 ```
 
+#### DiskANN (Vamana graph — munarium-inspired, v2.1 RC)
+```sql
+CREATE VECTOR INDEX idx_vectors_diskann ON table_name(vector_col)
+USING DISKANN;
+```
+
+The SQL DDL selects the index kind. The graph parameters are set from C# through `DiskAnnConfig`:
+
+```csharp
+var index = new DiskAnnIndex(new DiskAnnConfig
+{
+    Dimensions = 1536,
+    MaxNeighbors = 32,                 // R      — graph degree
+    ConstructionSearchListSize = 64,   // L_build — build quality
+    QuerySearchListSize = 128,         // L_search floor for every query
+    BuildPasses = 2,                   // extra passes trade build time for recall
+});
+
+// Per-query beam: raise it for recall, lower it for latency. No rebuild required.
+IReadOnlyList<VectorSearchResult> hits = index.Search(query, k: 10, searchListSize: 512);
+```
+
+`DiskAnnConfig.HighRecall(dimensions)` is a ready-made high-recall preset. The measured
+recall/latency curve at 100K vectors (0.76×–23× over the exact scan, depending on the operating
+point) is in [`PERFORMANCE_NOTES.md`](PERFORMANCE_NOTES.md).
+
 ---
 
 ## Configuration
 
-### VectorSearchOptions
+### VectorSearchOptions (updated for v2.1 RC)
+
+New properties (munarium-inspired):
+
+- `UseContentVerifiedArtifacts` — enables immutable manifest + SHA256 verification.
+- `HybridFusionAlpha` — controls lexical vs vector weight in hybrid scoring (0.0 = vector-only).
+- `BuildResult` record for type-safe build/verification outcomes.
+
+```csharp
+var options = new VectorSearchOptions
+{
+    UseContentVerifiedArtifacts = true,
+    HybridFusionAlpha = 0.6f,           // 60% lexical weight
+    // ... existing HNSW/quantization options
+};
+```
 
 ```csharp
 var options = new VectorSearchOptions
