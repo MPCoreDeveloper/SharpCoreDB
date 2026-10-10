@@ -95,6 +95,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   and install lines — and `docs/CHANGELOG.md`'s coverage entry no longer points at the deleted
   `ci-net11.yml`.
 
+### Fixed
+
+- **The parked net10.0 line had no pipeline of its own.** A workflow is loaded from the ref being pushed,
+  so `ci-net10.yml` on `master` can never run for a `release/v2.0` push or a `v2.0*` tag, and the parked
+  branch's own `ci.yml` triggers on `master`/`develop` only — so its branch pushes and PRs were
+  unbuilt. The operative copy is prepared on `fix/net10-parked-ci` (merge it fast-forward into
+  `release/v2.0`; see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md)). Its SIMD gate is left
+  to an owner decision, because the parked line still carries 33 banned `Vector<T>` usages in
+  `src/SharpCoreDB/Query/SimdFilter.cs`.
+
 ### Removed
 
 - **`package_inventory.json`** — generated `dotnet list package --include-transitive` output from an old

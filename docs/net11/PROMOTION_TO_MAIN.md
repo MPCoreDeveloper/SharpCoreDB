@@ -82,10 +82,15 @@ are fixed in the follow-up commit on this series:
   pushed, so a copy that exists only on `master` produces *no* run for a `release/v2.0` push or a `v2.0*`
   tag — this document claimed the opposite. The parked branch's own `ci.yml` still covers servicing tags
   (`tags: ['v*']`), but branch pushes and PRs to `release/v2.0` had no pipeline at all. The ready fix
-  lives on **`fix/net10-parked-ci`** (branched from `release/v2.0`), which adds that branch's own
-  `ci-net10.yml` — with the `Fail on banned portable SIMD API` step omitted, because the parked line
-  still carries one `System.Numerics.Vector<T>` usage and the checker that enforces the standard was
-  added on the net11 line. Merge it with `git switch release/v2.0 && git merge --ff-only fix/net10-parked-ci`.
+  lives on **`fix/net10-parked-ci`** (`c13405df`, one commit ahead of `release/v2.0`, fast-forward only):
+  it adds that branch's own `ci-net10.yml`, built from `master`'s copy with the SIMD gate replaced by a
+  note. **Why the gate is not in the parked copy:** `tools/check-banned-simd-api.ps1` run against
+  `release/v2.0`'s tree exits **1** — 33 banned `Vector<T>` usages, concentrated in
+  `src/SharpCoreDB/Query/SimdFilter.cs` (mostly `Vector<double>`) — so the step would fail the build job
+  and, because `pack` and `publish` depend on it, block 2.0.x servicing. **Owner decision:** either
+  cherry-pick the net11 intrinsics port onto `release/v2.0` (the documented forward-port flow below) and
+  add the step back, or ship the parked line without the gate. Merge the prepared fix with
+  `git switch release/v2.0 && git merge --ff-only fix/net10-parked-ci`.
 - **Release metadata that ships to NuGet.org still described the release candidate**: 22
   `<PackageReleaseNotes>` stamped `v2.1.0-RC.3` (17 linking to the `release/v2.1.0.0-RC.3` branch) and 21
   packed `NuGet.README.md` files, whose `dotnet add package --version 2.1.0-RC.3` lines are what a reader
