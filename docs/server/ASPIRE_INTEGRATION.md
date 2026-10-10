@@ -48,7 +48,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var db = builder.AddSharpCoreDB("db")        // ghcr.io/mpcoredeveloper/sharpcoredb-server:latest
     .WithServerContainer()
-    .WithImageTag("2.0.0.2")                 // optional pinned tag
+    .WithImageTag("2.0.0.3")                 // optional pinned tag
     .WithJwtSecret("a-secret-of-at-least-32-characters");
 
 builder.Build().Run();

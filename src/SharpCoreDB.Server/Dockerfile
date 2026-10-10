@@ -37,7 +37,7 @@ RUN dotnet publish src/SharpCoreDB.Server/SharpCoreDB.Server.csproj \
 
 # ── Stage 2: Runtime ──
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
-ARG VERSION=2.0.0.2
+ARG VERSION=2.0.0.3
 WORKDIR /app
 
 # Install runtime dependencies for health checks
