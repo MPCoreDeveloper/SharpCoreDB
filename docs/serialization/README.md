@@ -233,9 +233,11 @@ All documentation is:
 - `src/SharpCoreDB/Storage/SingleFileStorageProvider.cs` - Storage provider
 - `src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs` - File header definitions
 
-**In documentation root:**
-- `SERIALIZATION_DOCUMENTATION_COMPLETE.md` - Status report
-- `SERIALIZATION_DOCUMENTATION_SUMMARY.md` - Executive summary
+**In this directory:**
+- `BINARY_FORMAT_VISUAL_REFERENCE.md` - byte-level layout diagrams
+- `SERIALIZATION_FAQ.md` - common questions about the binary format
+- `SERIALIZATION_AND_STORAGE_GUIDE.md` - the long-form guide
+- `../storage/STORAGE_MODE_GUIDANCE.md` - which storage mode to use
 
 ---
 

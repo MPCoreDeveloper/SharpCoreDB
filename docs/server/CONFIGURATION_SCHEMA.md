@@ -1,452 +1,327 @@
-# SharpCoreDB Server Configuration Schema (v1.7.0)
+# SharpCoreDB Server Configuration Schema (2.1.0)
 
-**Supported Formats:** TOML, JSON, YAML  
-**Default File:** `appsettings.json`  
-**Environment Variables:** `SHARPCOREDB_*` prefix  
+**Format:** JSON, through ASP.NET Core configuration (`appsettings.json` by default)
+**Root section:** `Server`
+**Bound type:** `ServerConfiguration` — `src/SharpCoreDB.Server.Core/Configuration/ServerConfiguration.cs`
+**Environment variables:** nested with a double underscore, e.g. `Server__Security__JwtSecretKey`
+
+> **There is no TOML and no YAML support.** The server registers JSON configuration sources only
+> (`Microsoft.Extensions.Configuration.Json`); no TOML or YAML parser is referenced by the server or any
+> project it compiles. A `sharpcoredb.toml` or `sharpcoredb.yaml` file is **not read**, and underscorized
+> keys (`server_name`, `tls_enabled`, …) never bind to anything. Earlier revisions of this page showed
+> TOML samples built on those keys — they described a format the server cannot consume. Use JSON.
+
+Keys that are not properties of the bound type are ignored by the binder, so a typo fails silently: if a
+setting appears to have no effect, check its spelling against the tables below first.
 
 ---
 
-## Basic Server Configuration
+## 1. How configuration is loaded
 
-### TOML Format
-```toml
-[server]
-server_name = "SharpCoreDB-01"
-bind_address = "0.0.0.0"
-grpc_port = 5001
-enable_grpc = true
-enable_grpc_http3 = true
-https_api_port = 8443
-enable_https_api = true
-max_connections = 1000
-connection_timeout_seconds = 300
-default_database = "master"
+`Program.cs` builds the host with `WebApplication.CreateBuilder(args)`, which registers the standard
+providers, and adds one extra JSON file when `--appsettings` is supplied:
 
-[server.security]
-tls_enabled = true
-minimum_tls_version = "Tls12"
-tls_certificate_path = "/etc/sharpcoredb/certs/server.crt"
-tls_private_key_path = "/etc/sharpcoredb/certs/server.key"
-jwt_secret_key = "your-256-bit-secret-here"
-jwt_expiration_hours = 24
-enable_api_keys = true
+| Order | Source | Notes |
+|-------|--------|-------|
+| 1 | `appsettings.json` | content root; the shipped sample is `src/SharpCoreDB.Server/appsettings.json` |
+| 2 | `appsettings.{Environment}.json` | e.g. `appsettings.Production.json` |
+| 3 | `--appsettings <path>` / `--appsettings=<path>` | added with `optional: false` — a missing file **fails the process** instead of falling back silently |
+| 4 | Environment variables | `Server__…` nested form |
+| 5 | Command-line arguments | standard `--key=value` |
 
-[server.databases.master]
-name = "master"
-database_path = "/data/master.db"
-storage_mode = "SingleFile"
-encryption_enabled = false
-connection_pool_size = 50
-is_system_database = true
-is_read_only = false
+Later sources override earlier ones. The section is materialised with
+`builder.Configuration.GetSection("Server").Get<ServerConfiguration>()`; a missing section throws
+`InvalidOperationException("Server configuration is missing")`.
 
-[server.databases.app]
-name = "app"
-database_path = "/data/app.db"
-storage_mode = "Directory"
-encryption_enabled = true
-encryption_key_file = "/etc/sharpcoredb/keys/app.key"
-connection_pool_size = 200
-is_system_database = false
-is_read_only = false
+---
 
-[server.system_databases]
-enabled = true
-master_database_name = "master"
-model_database_name = "model"
-temp_database_name = "temp"
+## 2. Complete example
 
-[server.logging]
-level = "Information"
-file_path = "/var/log/sharpcoredb/server.log"
-max_file_size_mb = 100
-max_files = 30
-structured_logging = true
+This is the structure of the shipped `src/SharpCoreDB.Server/appsettings.json` with development values
+reduced to one database:
 
-[server.performance]
-query_cache_size_mb = 256
-connection_pool_max_idle_time_seconds = 300
-max_concurrent_queries = 500
-memory_limit_mb = 4096
-cpu_limit_cores = 4
-```
-
-### JSON Format
 ```json
 {
-  "server": {
-    "serverName": "SharpCoreDB-01",
-    "bindAddress": "0.0.0.0",
-    "grpcPort": 5001,
-    "enableGrpc": true,
-    "enableGrpcHttp3": true,
-    "httpsApiPort": 8443,
-    "enableHttpsApi": true,
-    "maxConnections": 1000,
-    "connectionTimeoutSeconds": 300,
-    "defaultDatabase": "master",
-
-    "security": {
-      "tlsEnabled": true,
-      "minimumTlsVersion": "Tls12",
-      "tlsCertificatePath": "/etc/sharpcoredb/certs/server.crt",
-      "tlsPrivateKeyPath": "/etc/sharpcoredb/certs/server.key",
-      "jwtSecretKey": "your-256-bit-secret-here",
-      "jwtExpirationHours": 24,
-      "enableApiKeys": true
-    },
-
-    "databases": {
-      "master": {
-        "name": "master",
-        "databasePath": "/data/master.db",
-        "storageMode": "SingleFile",
-        "encryptionEnabled": false,
-        "connectionPoolSize": 50,
-        "isSystemDatabase": true,
-        "isReadOnly": false
-      },
-      "app": {
-        "name": "app",
-        "databasePath": "/data/app.db",
-        "storageMode": "Directory",
-        "encryptionEnabled": true,
-        "encryptionKeyFile": "/etc/sharpcoredb/keys/app.key",
-        "connectionPoolSize": 200,
-        "isSystemDatabase": false,
-        "isReadOnly": false
+  "Logging": {
+    "LogLevel": { "Default": "Information", "Microsoft.AspNetCore": "Warning", "Grpc": "Information" }
+  },
+  "AllowedHosts": "*",
+  "Server": {
+    "ServerName": "SharpCoreDB Server (Development)",
+    "BindAddress": "0.0.0.0",
+    "GrpcPort": 5001,
+    "EnableGrpc": true,
+    "EnableHttpsApi": true,
+    "HttpsApiPort": 8443,
+    "EnableWebAdmin": false,
+    "WebAdminPath": "/admin",
+    "EnableWebSocket": true,
+    "WebSocketPath": "/ws",
+    "WebSocketMaxMessageSize": 4194304,
+    "WebSocketKeepAliveSeconds": 30,
+    "MaxConnections": 1000,
+    "ConnectionTimeoutSeconds": 300,
+    "DefaultDatabase": "master",
+    "Databases": [
+      {
+        "Name": "appdb",
+        "DatabasePath": "./data/user/appdb.scdb",
+        "StorageMode": "SingleFile",
+        "EncryptionEnabled": true,
+        "EncryptionKeyFile": "./secrets/appdb.key",
+        "ConnectionPoolSize": 50,
+        "IsSystemDatabase": false,
+        "IsReadOnly": false
       }
+    ],
+    "SystemDatabases": {
+      "Enabled": true,
+      "MasterDatabaseName": "master",
+      "ModelDatabaseName": "model",
+      "MsdbDatabaseName": "msdb",
+      "TempDbDatabaseName": "tempdb"
     },
-
-    "systemDatabases": {
-      "enabled": true,
-      "masterDatabaseName": "master",
-      "modelDatabaseName": "model",
-      "tempDatabaseName": "temp"
+    "Security": {
+      "TlsEnabled": true,
+      "TlsCertificatePath": "./certs/server.pfx",
+      "TlsPrivateKeyPath": null,
+      "MinimumTlsVersion": "Tls12",
+      "JwtSecretKey": "CHANGE-ME-in-production-must-be-at-least-32-characters-long",
+      "JwtExpirationHours": 24,
+      "EnableApiKeys": true,
+      "Users": [
+        { "Username": "admin", "PasswordHash": "<sha256-hex>", "Role": "admin" }
+      ]
     },
-
-    "logging": {
-      "level": "Information",
-      "filePath": "/var/log/sharpcoredb/server.log",
-      "maxFileSizeMb": 100,
-      "maxFiles": 30,
-      "structuredLogging": true
+    "Logging": {
+      "Level": "Information",
+      "FilePath": "./logs/sharpcoredb-server.log",
+      "MaxFileSizeMb": 100,
+      "MaxFiles": 10
     },
-
-    "performance": {
-      "queryCacheSizeMb": 256,
-      "connectionPoolMaxIdleTimeSeconds": 300,
-      "maxConcurrentQueries": 500,
-      "memoryLimitMb": 4096,
-      "cpuLimitCores": 4
+    "Performance": {
+      "QueryCacheSizeMb": 256,
+      "MaxConcurrentQueries": 500
     }
   }
 }
-```
 
 ---
 
-## Configuration Sections
+## 3. `Server` section
 
-### Server Section
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `ServerName` | string | **required** | Display name |
+| `BindAddress` | string | `0.0.0.0` | Bind address |
+| `GrpcPort` | int | `5001` | gRPC over TLS port |
+| `EnableGrpc` | bool | `true` | Flagship protocol |
+| `EnableGrpcHttp3` | bool | `true` | gRPC over HTTP/3 (QUIC) |
+| `EnableBinaryProtocol` | bool | `true` | Secondary binary protocol |
+| `BinaryProtocolPort` | int | `5433` | Binary-protocol port |
+| `EnableHttpsApi` | bool | `true` | REST/JSON over HTTPS |
+| `HttpsApiPort` | int | `8443` | REST/JSON port |
+| `EnableWebSocket` | bool | `true` | WebSocket endpoint |
+| `WebSocketPath` | string | `/ws` | WebSocket path |
+| `WebSocketMaxMessageSize` | int | `4194304` (4 MB) | Max WebSocket frame |
+| `WebSocketKeepAliveSeconds` | int | `30` | Keep-alive interval |
+| `EnableWebAdmin` | bool | `false` | Admin UI |
+| `WebAdminPath` | string | `/admin` | Admin UI path (longest-prefix match wins over the global route prefix) |
+| `MaxConnections` | int | `10000` | Maximum concurrent connections |
+| `ConnectionTimeoutSeconds` | int | `300` | Connection timeout |
+| `DefaultDatabase` | string | **required** | Database used when a client does not name one |
+| `Databases` | array | **required** | Per-database instances, see §3.1 |
+| `SystemDatabases` | object | defaults | see §3.2 |
+| `Security` | object | **required** | see §3.3 |
+| `Logging` | object | defaults | see §3.4 |
+| `Performance` | object | defaults | see §3.5 |
+| `ConnectionPool` | object | defaults | see §3.6 |
+| `TenantQuotas` | object | defaults | see §3.7 |
+| `Projections` | object | disabled | see §3.8 |
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `serverName` | string | "SharpCoreDB" | Server display name |
-| `bindAddress` | string | "0.0.0.0" | IP address to bind to |
-| `grpcPort` | int | 5001 | gRPC HTTPS port |
-| `enableGrpc` | bool | true | Enable gRPC protocol |
-| `enableGrpcHttp3` | bool | false | Enable gRPC over HTTP/3 |
-| `httpsApiPort` | int | 8443 | HTTPS REST API port |
-| `enableHttpsApi` | bool | true | Enable HTTPS REST API |
-| `maxConnections` | int | 1000 | Maximum concurrent connections |
-| `connectionTimeoutSeconds` | int | 300 | Connection timeout |
-| `defaultDatabase` | string | "master" | Default database name |
+### 3.1 `Databases` (array)
 
-### Security Section
+`Databases` is a **JSON array**, one object per hosted database — not a name-keyed object.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `tlsEnabled` | bool | true | Require TLS encryption |
-| `minimumTlsVersion` | enum | "Tls12" | Minimum TLS version (Tls12, Tls13) |
-| `tlsCertificatePath` | string | required | Path to TLS certificate (.crt/.pem) |
-| `tlsPrivateKeyPath` | string | required | Path to TLS private key |
-| `jwtSecretKey` | string | required | JWT signing secret (256-bit) |
-| `jwtExpirationHours` | int | 24 | JWT token expiration |
-| `enableApiKeys` | bool | true | Enable API key authentication |
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `Name` | string | **required** | Logical name clients use |
+| `DatabasePath` | string | **required** | Physical path (`*.scdb` for `SingleFile`) |
+| `StorageMode` | string | `SingleFile` | `SingleFile`, `Directory` or `Columnar` |
+| `EncryptionEnabled` | bool | `false` | Per-database at-rest encryption |
+| `EncryptionKeyFile` | string? | `null` | Key file for this database |
+| `EncryptionMasterPassword` | string? | `null` | Resolved master password, as an alternative to a key file |
+| `ConnectionPoolSize` | int | `1000` | Pool size for this database |
+| `IsSystemDatabase` | bool | `false` | Marks a system database |
+| `IsReadOnly` | bool | `false` | Read-only instance |
 
-### Database Configuration
+### 3.2 `SystemDatabases`
 
-Each database is configured as a named section:
+| Key | Type | Default |
+|-----|------|---------|
+| `Enabled` | bool | `true` |
+| `MasterDatabaseName` | string | `master` |
+| `ModelDatabaseName` | string | `model` |
+| `MsdbDatabaseName` | string | `msdb` |
+| `TempDbDatabaseName` | string | `tempdb` |
 
-```toml
-[server.databases.myapp]
-name = "myapp"
-database_path = "/data/myapp.db"
-storage_mode = "SingleFile"
-encryption_enabled = true
-encryption_key_file = "/keys/myapp.key"
-connection_pool_size = 100
-is_system_database = false
-is_read_only = false
-```
+### 3.3 `Security`
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `name` | string | required | Logical database name |
-| `databasePath` | string | required | File system path to database |
-| `storageMode` | enum | "SingleFile" | SingleFile, Directory, Columnar |
-| `encryptionEnabled` | bool | false | Enable AES-256-GCM encryption |
-| `encryptionKeyFile` | string | null | Path to encryption key file |
-| `connectionPoolSize` | int | 50 | Connection pool size |
-| `isSystemDatabase` | bool | false | Marks as system database |
-| `isReadOnly` | bool | false | Read-only access |
+| Key | Type | Default | Notes |
+|-----|------|---------|-------|
+| `RequireAuthentication` | bool | — | Appears in the shipped sample; **not** a property of `SecurityConfiguration` (the binder ignores it, as it does `AuthMethods`) |
+| `TlsEnabled` | bool | `true` | Setting `false` aborts startup — see §5 |
+| `MinimumTlsVersion` | string | `Tls12` | `Tls12` (allows TLS 1.2 + 1.3) or `Tls13` (1.3 only); anything else aborts startup |
+| `TlsCertificatePath` | string | **required** | `.pfx`, or `.crt`/`.pem` with a private key |
+| `TlsPrivateKeyPath` | string? | `null` | **Required** when the certificate is not a PFX |
+| `TlsCertificatePassword` | string? | `null` | For password-protected PFX files |
+| `JwtSecretKey` | string | **required** | Must be at least 32 characters — see §5 |
+| `JwtExpirationHours` | int | `24` | Token lifetime |
+| `EnableApiKeys` | bool | `true` | API-key authentication |
+| `Users` | array | `[]` | see below |
+| `EnableMutualTls` | bool | `false` | Client-certificate authentication |
+| `ClientCaCertificatePath` | string? | `null` | CA that must have signed client certificates |
+| `CertificateRoleMappings` | array | `[]` | see below |
+| `TenantEncryption` | object | disabled | see below |
 
-### System Databases
+**`Users[]`** — `Username` (required), `PasswordHash` (required, **SHA-256 hex**, not plaintext),
+`Role` (`admin` | `writer` | `reader`, default `reader`), `TenantId` (default `default`),
+`AllowedDatabases` (default `["*"]`), `ScopeVersion` (default `1`).
 
-```toml
-[server.system_databases]
-enabled = true
-master_database_name = "master"
-model_database_name = "model"
-temp_database_name = "temp"
-```
+**`CertificateRoleMappings[]`** — `Thumbprint` (required, SHA-256 hex, case-insensitive),
+`Role` (default `reader`), `Description`.
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `enabled` | bool | true | Enable system databases |
-| `masterDatabaseName` | string | "master" | Master system database |
-| `modelDatabaseName` | string | "model" | Model system database |
-| `tempDatabaseName` | string | "temp" | Temporary database |
+**`TenantEncryption`** — `Enabled` (`false`), `RequireDedicatedTenantKey` (`false`),
+`DefaultProvider` (`configuration`), `DefaultKeyReference`, `DefaultKeyReferenceByTenant` (map),
+`KeyMaterialByReference` (map, for local/dev use).
 
-### Logging Configuration
 
-```toml
-[server.logging]
-level = "Information"
-file_path = "/var/log/sharpcoredb/server.log"
-max_file_size_mb = 100
-max_files = 30
-structured_logging = true
-console_enabled = true
-console_level = "Warning"
-```
+### 3.4 `Logging`
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `level` | enum | "Information" | Minimum log level |
-| `filePath` | string | null | Log file path |
-| `maxFileSizeMb` | int | 100 | Max log file size |
-| `maxFiles` | int | 30 | Max log file count |
-| `structuredLogging` | bool | true | Enable structured logging |
-| `consoleEnabled` | bool | true | Enable console logging |
-| `consoleLevel` | enum | "Warning" | Console log level |
+Note this is `Server:Logging` (SharpCoreDB's own file logging). ASP.NET's log *filter* section is the
+separate top-level `Logging:LogLevel` documented by Microsoft.
 
-### Performance Tuning
+| Key | Type | Default |
+|-----|------|---------|
+| `Level` | string | `Information` |
+| `FilePath` | string | `/var/log/sharpcoredb/server.log` |
+| `MaxFileSizeMb` | int | `100` |
+| `MaxFiles` | int | `30` |
+| `StructuredLogging` | bool | `true` |
 
-```toml
-[server.performance]
-query_cache_size_mb = 256
-connection_pool_max_idle_time_seconds = 300
-max_concurrent_queries = 500
-memory_limit_mb = 4096
-cpu_limit_cores = 4
-enable_query_plan_caching = true
-query_plan_cache_size_mb = 128
-```
+### 3.5 `Performance`
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `queryCacheSizeMb` | int | 256 | Query result cache size |
-| `connectionPoolMaxIdleTimeSeconds` | int | 300 | Connection pool idle timeout |
-| `maxConcurrentQueries` | int | 500 | Max concurrent query execution |
-| `memoryLimitMb` | int | 4096 | Memory limit per database |
-| `cpuLimitCores` | int | 4 | CPU core limit |
-| `enableQueryPlanCaching` | bool | true | Enable query plan caching |
-| `queryPlanCacheSizeMb` | int | 128 | Query plan cache size |
+| Key | Type | Default |
+|-----|------|---------|
+| `QueryCacheSizeMb` | int | `256` |
+| `ConnectionPoolMaxIdleTimeSeconds` | int | `300` |
+| `MaxConcurrentQueries` | int | `500` |
+| `MemoryLimitMb` | long | `4096` |
+| `CpuLimitCores` | int | `4` |
 
-### Projection Runtime (Optional)
+### 3.6 `ConnectionPool`
 
-```toml
-[server.projections]
-enabled = false
-enable_hosted_worker = false
-use_persistent_checkpoints = false
-use_open_telemetry_metrics = false
-database_name = "app"
-checkpoint_table_name = "scdb_projection_checkpoints"
-runtime_database_id = "main"
-runtime_tenant_id = "default"
-from_global_sequence = 1
-batch_size = 1000
-poll_interval_milliseconds = 250
-run_on_start = true
-# max_iterations = 20 # optional; omit for continuous processing
-```
+| Key | Type | Default |
+|-----|------|---------|
+| `MinPoolSize` | int | `2` |
+| `MaxPoolSize` | int | `1000` |
+| `IdleTimeoutSeconds` | int | `300` |
+| `AcquireTimeoutSeconds` | int | `30` |
+| `EnableHealthChecks` | bool | `true` |
+| `HealthCheckIntervalSeconds` | int | `60` |
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `enabled` | bool | false | Enables projection runtime service wiring |
-| `enableHostedWorker` | bool | false | Starts projection hosted worker |
-| `usePersistentCheckpoints` | bool | false | Persists checkpoints in SharpCoreDB tables |
-| `useOpenTelemetryMetrics` | bool | false | Replaces default projection metrics with OpenTelemetry adapter |
-| `databaseName` | string | null | Database used for event store/checkpoint runtime |
-| `checkpointTableName` | string | `scdb_projection_checkpoints` | Table name for persistent checkpoints |
-| `runtimeDatabaseId` | string | `main` | Logical projection runtime database scope |
-| `runtimeTenantId` | string | `default` | Logical projection runtime tenant scope |
-| `fromGlobalSequence` | long | 1 | Start sequence when no checkpoint exists |
-| `batchSize` | int | 1000 | Projection run batch size |
-| `pollIntervalMilliseconds` | int | 250 | Background worker poll interval |
-| `runOnStart` | bool | true | Executes first projection cycle immediately |
-| `maxIterations` | int? | null | Optional bounded iterations for controlled runs |
+### 3.7 `TenantQuotas`
+
+| Key | Type | Default |
+|-----|------|---------|
+| `Enabled` | bool | `true` |
+| `DefaultMaxActiveSessions` | int | `100` |
+| `DefaultMaxRequestsPerSecond` | int | `500` |
+| `DefaultMaxStorageMb` | long | `4096` |
+| `DefaultMaxBatchSize` | int | `1000` |
+| `PlanDefaults` | map | `{}` — plan tier → `{ MaxActiveSessions, MaxRequestsPerSecond, MaxStorageMb, MaxBatchSize }` |
+
+### 3.8 `Projections` (optional)
+
+Every projection feature is off by default, so the optional package stays optional.
+
+| Key | Type | Default |
+|-----|------|---------|
+| `Enabled` | bool | `false` |
+| `EnableHostedWorker` | bool | `false` |
+| `UsePersistentCheckpoints` | bool | `false` |
+| `UseOpenTelemetryMetrics` | bool | `false` |
+| `DatabaseName` | string? | `null` (falls back to `DefaultDatabase`) |
+| `CheckpointTableName` | string | `scdb_projection_checkpoints` |
+| `RuntimeDatabaseId` | string | `main` |
+| `RuntimeTenantId` | string | `default` |
+| `FromGlobalSequence` | long | `1` |
+| `BatchSize` | int | `1000` |
+| `PollIntervalMilliseconds` | int | `250` |
+| `RunOnStart` | bool | `true` |
+| `MaxIterations` | int? | `null` (continuous) |
 
 ---
 
-## Environment Variables
+## 4. Environment variables
 
-Configuration can be overridden with environment variables:
+The nested form uses `__` between levels. These are the real names (no `SHARPCOREDB_` prefix):
 
 ```bash
-# Server settings
-export SHARPCOREDB_SERVER__SERVERNAME="Production-DB"
-export SHARPCOREDB_SERVER__MAXCONNECTIONS=2000
-
-# Security settings
-export SHARPCOREDB_SERVER__SECURITY__JWTSECRETKEY="your-secret-key"
-export SHARPCOREDB_SERVER__SECURITY__TLSCERTIFICATEPATH="/certs/server.crt"
-
-# Database settings
-export SHARPCOREDB_SERVER__DATABASES__MYAPP__CONNECTIONPOOLSIZE=500
-
-# Logging
-export SHARPCOREDB_SERVER__LOGGING__LEVEL="Debug"
+export Server__ServerName="Production-DB"
+export Server__MaxConnections=2000
+export Server__Security__JwtSecretKey="<at-least-32-characters>"
+export Server__Security__TlsCertificatePath="/certs/server.pfx"
+export Server__Databases__0__Name="appdb"
+export Server__Databases__0__DatabasePath="/data/appdb.scdb"
+export Server__Logging__Level="Debug"
 ```
+
+Array elements are addressed by index (`__0__`, `__1__`), which is why `Databases` must be an array in
+both JSON and environment-variable form.
 
 ---
 
-## Configuration Validation
+## 5. Startup validation
 
-The server validates configuration on startup:
+`Program.cs` fails fast rather than starting a half-configured server:
 
-### Required Settings
-- `server.security.tlsEnabled = true` (TLS cannot be disabled)
-- `server.security.tlsCertificatePath` (certificate required)
-- `server.security.tlsPrivateKeyPath` (private key required)
-- `server.security.jwtSecretKey` (256-bit secret required)
-- `server.defaultDatabase` (must reference existing database)
+| Check | Behaviour when violated |
+|-------|-------------------------|
+| `Server` section present | `InvalidOperationException("Server configuration is missing")` |
+| `Security:JwtSecretKey` length | `InvalidOperationException("JWT secret key must be at least 32 characters.")` |
+| `Security:TlsEnabled` | `InvalidOperationException("TLS must be enabled. Plain HTTP is not supported.")` — there is no plain-HTTP mode |
+| `Security:TlsCertificatePath` | `InvalidOperationException("TLS certificate path is required.")` |
+| `Security:TlsPrivateKeyPath` | Required unless the certificate ends in `.pfx` |
+| `Security:MinimumTlsVersion` | Only `Tls12` and `Tls13` are accepted; anything else throws |
 
-### Automatic Defaults
-- System databases are created automatically if enabled
-- Default database is created if it doesn't exist
-- Connection pools are sized based on `maxConnections`
-
-### Runtime Validation
-- Certificate files must exist and be readable
-- Database paths must be writable (unless read-only)
-- Encryption keys must be valid AES-256 keys
-- Port numbers must be available
+Members marked **required** in the schema above (`ServerName`, `DefaultDatabase`, `Databases`,
+`Security`, per-database `Name`/`DatabasePath`, `JwtSecretKey`, `TlsCertificatePath`) must be present in
+the effective configuration — the shipped `appsettings.json` sets them all.
 
 ---
 
-## Advanced Configuration
+## 6. Docker
 
-### High Availability Setup
-
-```toml
-[server]
-server_name = "SharpCoreDB-Cluster-01"
-max_connections = 5000
-
-[server.databases.shared]
-name = "shared"
-database_path = "/shared/data/shared.db"
-storage_mode = "Directory"
-encryption_enabled = true
-connection_pool_size = 1000
-
-[server.replication]
-enabled = true
-role = "primary"  # primary, secondary, arbiter
-cluster_name = "prod-cluster"
-replication_port = 5433
-sync_mode = "synchronous"  # synchronous, asynchronous
-
-[server.replication.nodes]
-node1 = "sharpcoredb-02:5433"
-node2 = "sharpcoredb-03:5433"
-node3 = "sharpcoredb-04:5433"
-```
-
-### Monitoring Integration
-
-```toml
-[server.monitoring]
-enabled = true
-prometheus_port = 9090
-metrics_prefix = "sharpcoredb"
-enable_tracing = true
-tracing_endpoint = "http://jaeger:14268/api/traces"
-
-[server.monitoring.alerts]
-high_connection_count_threshold = 800
-slow_query_threshold_ms = 1000
-memory_usage_threshold_mb = 3500
-```
-
-### Development Configuration
-
-```toml
-[server]
-server_name = "SharpCoreDB-Dev"
-max_connections = 100
-
-[server.security]
-tls_enabled = false  # Only for development!
-jwt_secret_key = "dev-secret-key-12345678901234567890123456789012"
-
-[server.logging]
-level = "Debug"
-console_enabled = true
-console_level = "Information"
-
-[server.databases.dev]
-name = "dev"
-database_path = "./data/dev.db"
-storage_mode = "SingleFile"
-encryption_enabled = false
-```
-
----
-
-## Configuration File Locations
-
-The server looks for configuration files in this order:
-
-1. `appsettings.json` (current directory)
-2. `appsettings.{Environment}.json` (e.g., `appsettings.Production.json`)
-3. `sharpcoredb.toml` (TOML format)
-4. `sharpcoredb.yaml` (YAML format)
-5. Environment variables
-6. Command line arguments
-
-### Docker Configuration
+The published image is `ghcr.io/mpcoredeveloper/sharpcoredb-server` (built by
+`.github/workflows/docker-publish.yml` on `v*` tags, excluding the parked `v2.0*` line):
 
 ```yaml
-# docker-compose.yml
-version: '3.8'
 services:
   sharpcoredb:
-    image: sharpcoredb/server:1.7.0
+    image: ghcr.io/mpcoredeveloper/sharpcoredb-server:2.1.0
     ports:
-      - "5001:5001"   # gRPC
-      - "8443:8443"   # HTTPS API
+      - "5001:5001"   # gRPC over TLS
+      - "8443:8443"   # HTTPS REST API
     volumes:
       - ./data:/data
       - ./certs:/certs
       - ./config:/app/config
     environment:
-      - SHARPCOREDB_SERVER__DATABASES__APP__DATABASEPATH=/data/app.db
-      - SHARPCOREDB_SERVER__SECURITY__TLSCERTIFICATEPATH=/certs/server.crt
+      - Server__Security__JwtSecretKey=${SHARPCOREDB_JWT_SECRET}
+      - Server__Security__TlsCertificatePath=/certs/server.pfx
+      - Server__Databases__0__Name=appdb
+      - Server__Databases__0__DatabasePath=/data/appdb.scdb
     configs:
       - source: server_config
         target: /app/appsettings.json
@@ -458,6 +333,7 @@ configs:
 
 ---
 
-**Last Updated:** January 28, 2026  
-**Configuration Version:** 1.0  
-**Supported Formats:** JSON, TOML, YAML
+**Verified against:** `src/SharpCoreDB.Server.Core/Configuration/ServerConfiguration.cs`,
+`src/SharpCoreDB.Server/Program.cs`, `src/SharpCoreDB.Server/appsettings.json` — SharpCoreDB 2.1.0.
+
+```

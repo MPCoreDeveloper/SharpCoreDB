@@ -2,79 +2,90 @@
 
 ## Overview
 
-The `.scdb` format is a **single-file, uncompressed, page-aligned storage format** for SharpCoreDB designed for maximum performance on modern SSDs. It consolidates the current multi-file architecture into a single random-access file optimized for zero-copy I/O and memory-mapping.
+The `.scdb` format is SharpCoreDB's **single-file, page-aligned storage container** and the default
+storage mode of the 2.1 line: one randomly-addressable file holding the block registry, an embedded
+write-ahead log, the table directory and the data blocks.
+
+- **Encryption** — optional AES-256-GCM covering the whole file (block data, registry, free-space map
+  and WAL). New encrypted files use `EncryptionMode = 2`; see [`ENCRYPTION.md`](./ENCRYPTION.md).
+- **Compression** — the container header is uncompressed (`ScdbFileHeader.CompressionMode` is 0 for
+  `.scdb`); columnar blocks written through the columnar adapter are Brotli-compressed by default.
+- **Integrity** — a SHA-256 checksum of the file in the header, plus a SHA-256 checksum per block
+  registry entry.
+
+Pass a `.scdb` path to select single-file mode automatically; a directory path selects the classic
+multi-file layout (`DirectoryStorageProvider`). Both are first-class in the 2.1 line.
 
 ## 📁 Files
 
-- **[SCDB_FILE_FORMAT_DESIGN.md](./FILE_FORMAT_DESIGN.md)** - Complete design specification
-- **[ScdbStructures.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs)** - Binary format definitions (C# 15 structs)
-- **[ScdbFile.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbFile.cs)** - Implementation skeleton
+- **[PRODUCTION_GUIDE.md](./PRODUCTION_GUIDE.md)** - configuration, backup, disaster recovery and tuning.
+- **[ENCRYPTION.md](./ENCRYPTION.md)** - full at-rest encryption, key model, password/key rotation.
+- **[../serialization/SERIALIZATION_AND_STORAGE_GUIDE.md](../serialization/SERIALIZATION_AND_STORAGE_GUIDE.md)** - record/column layout and free-space behaviour.
+- **[ScdbStructures.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs)** - the on-disk binary layout (`ScdbFileHeader`, `RegistryChunkHeader`, `BlockEntry`, `WalHeader`, `FreeSpaceMapHeader`).
+- **[SingleFileStorageProvider.cs](../../src/SharpCoreDB/Storage/SingleFileStorageProvider.cs)** - the engine that owns the block registry, free-space map and WAL.
+
+> ⚠️ **`Storage/Scdb/ScdbFile.cs` is a low-level prototype, not the production path.** Its
+> `ReadBlock` returns an empty span and its `WriteBlock` registers neither the block nor a WAL entry;
+> nothing in the product or the test suite uses it. Production single-file access goes through
+> `SingleFileStorageProvider` / `DatabaseOptions.CreateSingleFileDefault()` - see the Usage Examples
+> section below.
 
 ## 🎯 Design Goals
 
-1. ✅ **Zero Compression Overhead** - All data stored in native binary format
-2. ✅ **SSD-Optimized** - 4KB-aligned pages for direct I/O
-3. ✅ **Memory-Mappable** - Fixed offsets, no varints, direct struct access
-4. ✅ **Fragmentation Avoidance** - Built-in Free Space Map (FSM)
-5. ✅ **Extensible** - Reserved fields, versioned headers
-6. ✅ **Crash-Safe** - Per-block checksums, embedded WAL
-7. ✅ **Maintainable** - Self-describing format with block registry
+1. **Page-aligned** - 4 KiB pages by default (`DatabaseOptions.PageSize`, `ScdbFileHeader.PageSize`).
+2. **Memory-mappable** - fixed offsets, no varints, struct-parsed headers (`DatabaseOptions.EnableMemoryMapping`).
+3. **Fragmentation-aware** - a free-space map tracks page allocation, so `VACUUM` runs incrementally instead of rewriting the file.
+4. **Extensible** - versioned headers, reserved fields, feature flags.
+5. **Crash-safe** - embedded WAL plus per-block checksums; recovery replays from the last checkpoint.
+6. **Self-describing** - a namespaced block registry (`table:users:data`, `table:users:index:pk`) maps names to offsets.
 
-## 📊 Performance Expectations
+## 📊 Performance
 
-| Metric | Current (multi-file) | SCDB (single-file) | Improvement |
-|--------|---------------------|-------------------|-------------|
-| **Startup Time** | 100ms (100 files) | 10ms (1 file) | 10x faster |
-| **Write Throughput** | 50k ops/sec | 100k ops/sec | 2x faster |
-| **Defragmentation** | 60s full rewrite | 600ms incremental | 100x faster |
-| **Crash Recovery** | 500ms | 100ms | 5x faster |
-| **File Handles** | 100+ | 1 | 100x fewer |
+The format is what makes the measured numbers possible, and the measured numbers live in one place:
+[`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md). The current v2.1.0 publication reports, on the
+fair-`INTEGER PRIMARY KEY` arm and against SQLite in the same run:
+
+| Operation | Ratio (SharpCoreDB ÷ SQLite) | Spread across reps |
+|-----------|------------------------------|--------------------|
+| INSERT | **1,17×** (encrypted default posture) | 1,03–1,27 |
+| UPDATE | **0,53×** | 0,42–0,53 |
+
+Quote the ratios, never lone absolutes: absolute ops/sec move between runs on the same machine, and
+SQLite's own reference drifts. The raw per-rep JSON behind the publication is in
+`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/`.
 
 ## 🏗️ File Structure
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                   SCDB FILE LAYOUT                      │
-├─────────────────────────────────────────────────────────┤
-│ [0x0000] File Header (512 bytes)                        │
-│   - Magic: "SCDB\x10\x00\x00\x00"                      │
-│   - Page size: 4096 (default, tunable)                  │
-│   - Block registry offset                               │
-│   - FSM offset (Free Space Map)                         │
-│   - WAL offset (Write-Ahead Log)                        │
-│   - Table directory offset                              │
-├─────────────────────────────────────────────────────────┤
-│ [0x0200] Block Registry (variable, page-aligned)        │
-│   - Self-describing index of all blocks                 │
-│   - Namespaced block names:                             │
-│     * "table:users:data"                                │
-│     * "table:users:index:pk"                            │
-│     * "sys:fsm"                                         │
-│     * "sys:wal"                                         │
-├─────────────────────────────────────────────────────────┤
-│ [Aligned] Free Space Map (FSM)                          │
-│   - Two-level bitmap (inspired by PostgreSQL)           │
-│   - L1: 1 bit per page (allocated/free)                 │
-│   - L2: Extent map for large allocations                │
-├─────────────────────────────────────────────────────────┤
-│ [Aligned] Write-Ahead Log (WAL)                         │
-│   - Circular buffer of 4KB entries                      │
-│   - Transaction boundaries                              │
-│   - Redo/undo logs for crash recovery                   │
-├─────────────────────────────────────────────────────────┤
-│ [Aligned] Table Directory                               │
-│   - Table metadata                                      │
-│   - Schema definitions                                  │
-│   - Index pointers                                      │
-├─────────────────────────────────────────────────────────┤
-│ [Aligned] Data Blocks (namespaced)                      │
-│   - Reuses existing PageBased format (8KB pages)        │
-│   - Reuses existing Columnar format (.dat)              │
-│   - Per-block SHA-256 checksums                         │
-└─────────────────────────────────────────────────────────┘
+[0x0000]   File header - ScdbFileHeader, 512 bytes, fixed size
+           magic "SCDB\x10\x00\x00\x00" + format version (v2), page size (4096 default),
+           encryption mode + key id + nonce, file SHA-256 checksum, feature flags,
+           transaction state (last txn id, last checkpoint LSN), allocated pages,
+           RegistryRootOffset/Length, WalOffset/Length, TableDirOffset/Length
+[Registry] Block registry - growable chain of page-aligned chunks (format v2, issue #345)
+           [RegistryChunkHeader (64 B, magic "BRGC")][BlockEntry * EntryCount], each chunk
+           linking to the next via NextChunkOffset/NextChunkLength
+           BlockEntry (96 B): Name[32] "namespace:identifier:subtype", BlockType, Offset,
+           Length, Checksum[32] (SHA-256 of the block data), Flags
+[WAL]      Embedded write-ahead log - WalHeader plus fixed-size entries with head/tail offsets;
+           checkpointed in place, so there is no sidecar .wal file to back up
+[TableDir] Table directory (sys:tabledir) - table metadata, schemas, index pointers
+[Blocks]   Page-aligned data blocks - table data, indexes, columnar payloads (Brotli-compressed),
+           overflow chains; every block is page-aligned and carries its own SHA-256 checksum
 ```
 
+The metadata regions are **named blocks resolved through the registry**, not fixed offsets: the
+free-space map (`sys:fsm`), the WAL (`sys:wal`), the table directory (`sys:tabledir`) and the
+metadata payload (`sys:metadata`). Format v1 used fixed `FsmOffset`/`FsmLength` header fields; those
+two slots are now `ReservedRegion0`/`ReservedRegion1`, which is why the free-space map can grow with
+the file (see `SingleFileStorageProvider`'s dynamic-metadata path).
+
 ## 🔧 C# 15 Features Used
+
+> The snippets below illustrate the language features the implementation leans on; the authoritative
+> declarations live in [`ScdbStructures.cs`](../../src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs),
+> [`ScdbFile.cs`](../../src/SharpCoreDB/Storage/Scdb/ScdbFile.cs) and
+> [`SingleFileStorageProvider.cs`](../../src/SharpCoreDB/Storage/SingleFileStorageProvider.cs).
 
 ### 1. **Readonly Structs with Fixed Buffers**
 
@@ -109,130 +120,127 @@ public bool IsDisposed { get => field; } // Implicit backing field
 ### 3. **Primary Constructors**
 
 ```csharp
-public sealed class ScdbFile(string path, FileStream fs) : IDisposable
+// Real example: src/SharpCoreDB/Storage/Columnar/ColumnCodec.cs
+public sealed class ColumnCodec(ColumnFormat format)
 {
-    public string FilePath => path; // Direct parameter access
-    
-    public void Flush() => fs.Flush(flushToDisk: true);
+    private readonly ColumnFormat _format = format ?? throw new ArgumentNullException(nameof(format));
+
+    public byte[] EncodeColumn(string columnName, object?[] values) { /* ... */ }
 }
 ```
 
 ### 4. **Pattern Matching with Switch Expressions**
 
 ```csharp
-var fileAccess = mode switch
+// Real example: src/SharpCoreDB/Storage/Overflow/StorageStrategy.cs
+// (this StorageMode is the overflow strategy enum, not DatabaseOptions.StorageMode)
+public static string GetDescription(StorageMode mode) => mode switch
 {
-    var m when m.HasFlag(ScdbOpenMode.ReadWrite) => FileAccess.ReadWrite,
-    var m when m.HasFlag(ScdbOpenMode.Write) => FileAccess.Write,
-    _ => FileAccess.Read
+    StorageMode.Inline => "Stored inline in data page (fastest)",
+    StorageMode.Overflow => "Stored in overflow page chain (medium)",
+    StorageMode.FileStream => "Stored in external file (unlimited size)",
+    _ => "Unknown storage mode",
 };
 ```
 
 ### 5. **ReadOnlySpan<byte> for Zero-Copy Parsing**
 
 ```csharp
-public unsafe ReadOnlySpan<byte> ReadBlock(string name)
+// Real example: src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs - the header is reinterpreted in
+// place: no allocation, no copy
+[MethodImpl(MethodImplOptions.AggressiveInlining)]
+public static unsafe ScdbFileHeader Parse(ReadOnlySpan<byte> data)
 {
-    // Memory-mapped I/O: zero allocations
-    using var accessor = _mmf.CreateViewAccessor(offset, length);
-    byte* ptr = null;
-    accessor.SafeMemoryMappedViewHandle.AcquirePointer(ref ptr);
-    return new ReadOnlySpan<byte>(ptr, (int)length);
+    if (data.Length < HEADER_SIZE)
+        throw new InvalidDataException($"Header too small: {data.Length} < {HEADER_SIZE}");
+
+    fixed (byte* ptr = data)
+    {
+        return *(ScdbFileHeader*)ptr;
+    }
 }
 ```
 
 ## 🚀 Usage Examples
 
-### Opening a Database
+### Opening a database
 
 ```csharp
-// Create new .scdb file
-using var db = ScdbFile.Open("mydb.scdb", ScdbOpenMode.Create | ScdbOpenMode.ReadWrite);
+// A .scdb path selects single-file mode automatically (DatabaseExtensions.DetectStorageMode),
+// so the ordinary construction path is all you need:
+using var db = new Database(services, "./data/myapp.scdb", "your-master-password");
 
-// Open existing with memory-mapping (zero-copy reads)
-using var db = ScdbFile.Open("mydb.scdb", ScdbOpenMode.ReadWrite | ScdbOpenMode.MemoryMapped);
+db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
+db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
 ```
 
-### Writing Data
+Tuned defaults come from `DatabaseOptions.CreateSingleFileDefault()`. When you need block-level access,
+drive the provider directly - it is what owns the registry, the free-space map and the WAL:
 
 ```csharp
-var tableData = SerializeTable(userTable);
-db.WriteBlock("table:users:data", BlockType.TableData, tableData);
+var options = DatabaseOptions.CreateSingleFileDefault();          // page size, WAL pages, FSM pages
+using var provider = SingleFileStorageProvider.Open("./data/myapp.scdb", options);
 
-var indexData = SerializeIndex(primaryKeyIndex);
-db.WriteBlock("table:users:index:pk", BlockType.IndexData, indexData);
-
-db.Flush(); // Commit to disk
+await provider.WriteBlockAsync("table:users:data", payload);      // registered and WAL-logged
+var block = await provider.ReadBlockAsync("table:users:data");
+await provider.CheckpointAsync();                                 // flush the WAL into the data blocks
 ```
 
-### Reading Data
+### Block names and types
+
+Blocks are namespaced strings; the type travels in the registry entry (`BlockType`):
+
+| Block name | `BlockType` | Owner |
+|------------|-------------|-------|
+| `sys:fsm` | `FreeSpaceMap` | `FreeSpaceManager` |
+| `sys:wal` | `WriteAheadLog` | `WalManager` |
+| `sys:tabledir` | `TableDirectory` | `TableDirectoryManager` |
+| `table:<name>:data` | `TableData` | table writer |
+| `table:<name>:index:<column>` | `IndexData` | index writer |
+| `blob:*` / `temp:*` | `BlobData` / `TemporaryData` | overflow and temporary writers |
+
+### Maintenance
 
 ```csharp
-// Zero-copy read via memory mapping
-ReadOnlySpan<byte> data = db.ReadBlock("table:users:data");
-
-// Deserialize directly from span
-var table = DeserializeTable(data);
+await db.VacuumAsync(VacuumMode.Quick);        // reclaim obvious holes (the default)
+await db.VacuumAsync(VacuumMode.Incremental);  // page-by-page defragmentation
+await db.VacuumAsync(VacuumMode.Full);         // rewrite the file
 ```
 
-### Incremental VACUUM
+The `VACUUM` statement is parsed as well, so `db.ExecuteSQL("VACUUM")` works. The synchronous
+`ScdbFile.VacuumIncremental(int maxPagesToMove = 1000)` / `ScdbFile.VacuumFull()` pair belongs to the
+prototype described at the top of this page, not to the engine.
 
-```csharp
-// Background defragmentation (non-blocking)
-await db.VacuumIncrementalAsync(maxPagesToMove: 1000);
+## 📈 How it compares
 
-// Full VACUUM (creates new file)
-await db.VacuumFullAsync();
-```
+- **vs SQLite** - both are single-file, page-aligned engines. SQLite keeps its WAL in a sidecar
+  `-wal` file and its `VACUUM` is a full rewrite; `.scdb` keeps the WAL inside the database file and
+  reclaims space incrementally. On the fair-PK arm SQLite still leads on `UPDATE`/`DELETE`
+  throughput - the measured ratios and their caveats are in
+  [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md).
+- **vs LiteDB** - LiteDB is a document store (BSON with a query API); `.scdb` is a relational engine
+  with a SQL surface, so the difference is mostly the data model rather than the storage layout.
+- **vs JSON-over-files** - the format is binary and page-aligned, so there is no parse cost per read
+  and no per-table file handle.
 
-## 📈 Comparison with Other Formats
-
-### SQLite
-
-```
-✅ Single file
-✅ Page-aligned
-❌ No embedded WAL (separate file)
-❌ No FSM (fragmentation issues)
-❌ VACUUM requires full rewrite
-```
-
-### LiteDB
-
-```
-✅ Single file
-❌ No page alignment (bad for SSDs)
-❌ BSON parsing overhead
-❌ No FSM
-❌ No embedded WAL
-```
-
-### SCDB
-
-```
-✅ Single file
-✅ Page-aligned (SSD-optimized)
-✅ Embedded WAL (atomic commits)
-✅ FSM (incremental VACUUM)
-✅ Zero-copy reads (memory-mapped)
-✅ Per-block checksums
-✅ Namespaced blocks
-```
+This page deliberately limits competitor claims to what is measured or structurally verifiable; the
+numbers and the method live in [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md).
 
 ## 🔐 Security Features
 
-### 1. **Per-Block Checksums**
+### 1. **Checksums**
 
 ```csharp
-// SHA-256 checksum stored in block entry
-public readonly unsafe fixed byte Checksum[32];
+// Header: SHA-256 of the whole file, excluding this field
+public unsafe fixed byte FileChecksum[32];   // ScdbFileHeader
 
-// Validation on read
-if (!blockEntry.ValidateChecksum(blockData))
-{
-    throw new InvalidDataException("Block checksum mismatch");
-}
+// Registry entry: SHA-256 of the block data
+public unsafe fixed byte Checksum[32];       // BlockEntry
 ```
+
+`CorruptionDetector` validates at four levels - `Quick` (header only), `Standard` (header, blocks and
+checksums), `Deep` (adds the WAL) and `Paranoid` (re-reads and verifies everything) - and `RepairTool`
+acts on the resulting `CorruptionReport`, optionally taking a backup first.
 
 ### 2. **Optional Encryption (full at-rest)**
 
@@ -254,142 +262,99 @@ password & key rotation, crash-safety, AOT/Sonar compliance notes and a full wor
 ### 3. **Transaction Integrity**
 
 ```csharp
-// WAL ensures crash safety
-db.BeginTransaction();
-db.WriteBlock("table:orders:data", ...);
-db.CommitTransaction(); // Atomic via WAL checkpoint
+// The provider owns the WAL: a checkpoint is the durability boundary, and recovery replays the
+// entries written since the last checkpoint.
+await provider.CheckpointAsync();
+
+// After a crash, recovery runs through RecoveryManager (WAL replay from the last checkpoint LSN).
 ```
 
 ## 🧪 Testing Strategy
 
-### 1. **Unit Tests**
+The format is covered by the suites that must stay green on every storage change:
 
-```csharp
-[Fact]
-public void FileHeader_Parse_ValidatesCorrectly()
-{
-    var header = ScdbFileHeader.CreateDefault();
-    Span<byte> buffer = stackalloc byte[512];
-    header.WriteTo(buffer);
-    
-    var parsed = ScdbFileHeader.Parse(buffer);
-    
-    Assert.True(parsed.IsValid);
-    Assert.Equal(ScdbFileHeader.MAGIC, parsed.Magic);
-}
-```
+| Suite | What it pins |
+|-------|--------------|
+| `ReopenRoundTripMatrixTests` | close/reopen round-trips across the column shapes and index kinds |
+| `SingleFileDirectoryParityTests` | `.scdb` results equal directory-mode results for the same workload |
+| `CrashRecoveryTests` | WAL replay and recovery after a simulated crash |
+| `FixedWidthPatchTests`, `FixedWidthBulkUpdateTests`, `FixedWidthBulkDeleteTests` | in-place delta/patch paths |
+| `FormatCompatPolicyTests` | format acceptance (v1 readable, v2 written) |
 
-### 2. **Integration Tests**
+Run them with the Microsoft.Testing.Platform executable (`dotnet test` does not work in this
+repository - see `AGENTS.md`):
 
-```csharp
-[Fact]
-public void ScdbFile_WriteAndRead_RoundTrip()
-{
-    using var db = ScdbFile.Open("test.scdb", ScdbOpenMode.Create);
-    
-    var testData = Encoding.UTF8.GetBytes("Hello, SCDB!");
-    db.WriteBlock("test:data", BlockType.TableData, testData);
-    
-    var readData = db.ReadBlock("test:data");
-    
-    Assert.True(readData.SequenceEqual(testData));
-}
-```
-
-### 3. **Crash Recovery Tests**
-
-```csharp
-[Fact]
-public void ScdbFile_CrashRecovery_RestoresState()
-{
-    // Simulate crash during write
-    using (var db = ScdbFile.Open("crash.scdb", ScdbOpenMode.Create))
-    {
-        db.BeginTransaction();
-        db.WriteBlock("test:data", ...);
-        // Simulate crash (no commit)
-    }
-    
-    // Reopen and verify WAL recovery
-    using var db2 = ScdbFile.Open("crash.scdb");
-    var data = db2.ReadBlock("test:data");
-    
-    Assert.True(data.IsEmpty); // Transaction was rolled back
-}
+```powershell
+tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest 'FullyQualifiedName~ReopenRoundTripMatrixTests'
 ```
 
 ## 🛣️ Migration Path
 
-### Option 1: Parallel Support (Recommended)
+### Option 1: Parallel support (recommended)
+
+Both layouts implement one interface, `IStorageProvider` (`SingleFileStorageProvider`,
+`DirectoryStorageProvider`), and `Database` picks one from the path it is given
+(`DatabaseExtensions.DetectStorageMode`: a `.scdb` file - or any existing file - means single-file).
+`StorageFormatSwitcher` covers the case where the active provider has to change at runtime.
 
 ```csharp
-public interface IStorageProvider
-{
-    StorageMode Mode { get; } // MultiFile or SingleFile
-}
-
-// Auto-detect by file extension
-IStorageProvider storage = path.EndsWith(".scdb")
-    ? new ScdbStorageProvider(path)
-    : new MultiFileStorageProvider(path);
+// Nothing to select by hand in the normal case:
+//   "./data/mydb.scdb" -> SingleFileStorageProvider
+//   "./data/mydb"      -> DirectoryStorageProvider
+using var db = new Database(services, "./data/mydb.scdb", "your-master-password");
 ```
 
-### Option 2: Migration Tool
-
-```bash
-# Convert existing database to .scdb
-sharpcoredb migrate --from mydb/ --to mydb.scdb
-
-# Progress: 10,000 records in ~30 seconds
-# [█████████████████████████████] 100% (10,000 / 10,000)
-```
-
-### Option 3: Hybrid Mode
+### Option 2: Migration API
 
 ```csharp
-// Use .scdb for new tables, keep legacy format for old tables
-var config = new DatabaseConfig
-{
-    DefaultStorageFormat = StorageFormat.Scdb,
-    AllowLegacyFormats = true
-};
+// directory -> single file
+var toSingleFile = await DatabaseMigrator.MigrateToSingleFileAsync(
+    sourceDirectoryPath: "./data/mydb",
+    targetScdbPath: "./data/mydb.scdb",
+    password: "your-master-password",
+    progress: new Progress<double>(p => Console.WriteLine($"{p:P0}")));
+
+// single file -> directory
+var toDirectory = await DatabaseMigrator.MigrateToDirectoryAsync(
+    sourceScdbPath: "./data/mydb.scdb",
+    targetDirectoryPath: "./data/mydb-restored",
+    password: "your-master-password");
 ```
 
-## 📚 Implementation Roadmap
+The same two operations exist on a live database (`db.MigrateToSingleFileAsync`,
+`db.MigrateToDirectoryAsync`) and on `ScdbMigrator`. There is **no `sharpcoredb` CLI** in this
+repository - the migration entry points are the APIs above.
 
-### Phase 1: Core Format (Week 1-2)
+### Option 3: Hybrid deployments
 
-- [x] Define binary structures (`ScdbStructures.cs`)
-- [x] Implement file header read/write
-- [ ] Implement block registry
-- [ ] Basic read/write operations
+Storage mode is a per-database choice, not a per-table one, so a hybrid deployment keeps a directory
+database and a `.scdb` database side by side and moves a table across when it is ready.
 
-### Phase 2: FSM & Allocation (Week 3-4)
+## 📚 Implementation Status
 
-- [ ] Free Space Map implementation
-- [ ] Page allocation/deallocation
-- [ ] Extent tracking for large allocations
+The format this page describes is implemented and shipped; the phase checklist this section used to
+carry was a design-time plan for the `ScdbFile` prototype, and the engine was built along a different
+path. The mapping from that plan to shipped code:
 
-### Phase 3: WAL & Recovery (Week 5-6)
+| Planned item | Where it ships |
+|--------------|----------------|
+| Binary structures, file header read/write | `ScdbStructures.cs` (`ScdbFileHeader` 512 B, `RegistryChunkHeader` 64 B, `BlockEntry` 96 B, `WalHeader`, `FreeSpaceMapHeader`) |
+| Block registry | `Storage/BlockRegistry.cs` - growable chunk chain rooted at `ScdbFileHeader.RegistryRootOffset` (format v2, issue #345) |
+| Basic read/write operations | `SingleFileStorageProvider`, `SingleFileDatabase`, `SingleFileTable` |
+| Free Space Map, page allocation, extent tracking | `Storage/FreeSpaceManager.cs` with `Storage/Scdb/ExtentAllocator.cs` (`DatabaseOptions.FsmSizePages`, `FsmStatistics`) |
+| WAL entries, transaction logging, crash recovery, checkpoint | `Storage/WalManager.cs`, `Storage/Scdb/RecoveryManager.cs`, `SingleFileStorageProvider.CheckpointAsync` |
+| Integrate with the page-based and columnar engines | `Storage/Scdb/PageBasedAdapter.cs`, `Storage/Scdb/ColumnarAdapter.cs` |
+| Migration tool (multi-file → `.scdb`) | `Migration/DatabaseMigrator.cs`, `Storage/Scdb/ScdbMigrator.cs` |
+| Error handling, corruption detection and repair | `Storage/Scdb/ScdbExceptions.cs`, `CorruptionDetector.cs`, `RepairTool.cs` |
+| Edge-case testing, benchmarks | the canary suites listed under Testing Strategy, plus `tests/benchmarks/` |
 
-- [ ] WAL entry structure
-- [ ] Transaction logging
-- [ ] Crash recovery mechanism
-- [ ] Checkpoint implementation
+Open work is tracked in [`../../ROADMAP.md`](../../ROADMAP.md) and
+[`../PROJECT_STATUS.md`](../PROJECT_STATUS.md): this page documents the format, it is not a task list.
 
-### Phase 4: Integration (Week 7-8)
-
-- [ ] Integrate with existing `PageBasedEngine`
-- [ ] Integrate with existing `ColumnarEngine`
-- [ ] Migration tool (multi-file → .scdb)
-- [ ] Performance benchmarks
-
-### Phase 5: Production Hardening (Week 9-10)
-
-- [ ] Comprehensive error handling
-- [ ] Edge case testing
-- [ ] Corruption detection & repair
-- [ ] Documentation & examples
+**The one genuinely unfinished item** is the public `ScdbFile` prototype - its registry lookup,
+free-space allocation, block registration and WAL logging are `NOTE:`-marked stubs, and nothing in the
+product or the test suite uses it. It is listed in `ROADMAP.md` under **In Progress** so that it does
+not disappear again.
 
 ## 🤝 Contributing
 
@@ -423,10 +388,12 @@ MIT License - See LICENSE file for details.
 
 ---
 
-**Status:** ✅ Design Complete | 🚧 Implementation In Progress
+**Status:** shipped and maintained. New databases in the 2.1 line store as `.scdb`; the format is read
+by every package in the family, and `FormatCompatPolicyTests` keeps v1 files readable while new files
+are written as format v2.
 
-**Next Steps:**
-1. Review design document
-2. Implement block registry
-3. Add unit tests for struct serialization
-4. Benchmark header read/write performance
+**See also:**
+1. [`PRODUCTION_GUIDE.md`](./PRODUCTION_GUIDE.md) - configuration, backup, recovery, tuning
+2. [`ENCRYPTION.md`](./ENCRYPTION.md) - encryption model and key rotation
+3. [`../serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`](../serialization/SERIALIZATION_AND_STORAGE_GUIDE.md) - record and column layout
+4. [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md) - measured ratios and method

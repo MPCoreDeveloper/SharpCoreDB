@@ -100,3 +100,48 @@ encryption when `EnableAtRestRecordEncryption` is on.
    decisions) still needs a code-level explanation before any change.
 3. The same-window A/B tooling now exists; re-run with 3 reps to quantify the paired ratio, then
    investigate the `NoEncryptMode` mechanism in code and only then consider a change.
+
+---
+
+## Update 2026-10-11 (v2.1.0 / .NET 11, `92794084`) — the product posture, re-measured
+
+The 2026-09-04 tables above are kept as the P3 investigation record, and this file's variant list
+(`async`, `bufferedio`, `novalidate`, `noadaptive`, `hsinsert`, `plain`, `tuned`) still describes the
+switch. The default arm was re-measured on the promoted tree with the current harness —
+`pk_default_20261011_125413.json`, 3 paired reps with the arm order alternated, ratio = **SharpCoreDB
+÷ SQLite**, so **> 1,00x means SharpCoreDB is ahead**:
+
+| Operation | SharpCoreDB (default cfg) | SQLite (reference) | ratio |
+|---|---:|---:|---:|
+| INSERT | 204.263 | 174.469 | **1,17x** (1,03–1,27) |
+| READ | 134.634 | 116.916 | **1,13x** (1,12–1,15) |
+| UPDATE | 398.709 | 773.323 | **0,53x** (0,42–0,53) |
+| DELETE | 509.941 | 1.085.140 | **0,47x** (0,46–0,62) |
+
+**Two corrections, both measured in the same window.** (1) The file's warning that SQLite's own
+reference drifts still holds, and it is the reason the *direction* of the UPDATE/DELETE cells above
+differs from the 2026-09-04 reading: those references were taken while the comparator left the SQLite
+arm allocating a command and two parameters per row. With one prepared command SQLite's PK references
+are ~0,77–0,89M UPDATE and ~1,01–1,11M DELETE, i.e. **3,05x** higher than the ~270–315K / ~353–420K
+quoted earlier (performance plan §9 item 7, original jump 288.108 → 878.557 / 385.116 → 1.172.704).
+The honest reading of this arm is therefore 0,53x UPDATE and 0,47x DELETE — behind, and improved from
+the 0,39x / 0,31–0,35x this file's plan row last recorded. (2) The `[diag]` line now prints the
+**resolved** config instead of the requested parameters: the stock arm's line reads
+`noEncrypt=False autoFixedWidth=True atRest=True inline=24`, where before 2026-10-11 it printed
+`noEncrypt=True` — the harness was reporting the parameter it had passed (`true` = "no encryption"),
+not the encrypted config it had actually built, which is the opposite of what that arm measures.
+
+**Knob isolation re-run on this box and binary** (`SHARPCOREDB_PK_DEFAULT_VARIANT`, single runs, same
+window): `hsinsert` (HighSpeedInsertMode) UPDATE 408.962 — **~0 %**; `noadaptive`
+(EnableAdaptiveWalBatching off) 358.718 — **~10 % slower**, i.e. adaptive WAL batching is worth ~10 %
+on this arm; an A/B on the tuned arms (Async → FullSync) moved the fixed-width at-rest UPDATE
+291.720 → 303.282 (**+4 %**), which refutes the older +54 % FullSync hypothesis for the tuned arm as
+well. The declared differences that remain between the tuned `--pk` config and this stock arm are the
+ones no single switch isolates: page cache + capacity (10.000), memory mapping, buffered IO, WAL
+buffer 8 MiB, buffer pool 128 MiB, `CollectGCAfterBatches=false`, compiled-plan / B-tree-selection /
+SIMD-pushdown toggles, `SqlValidationMode=Disabled` and `StrictParameterValidation=false`. They are
+recorded as **declared configuration differences, not an attributed cause**: the published comparisons
+are all same-run ratios inside one configuration, so no published claim depends on cross-arm
+comparability, and single-knob deltas below ~1,3x remain unattributable outside a same-window
+interleaved A/B.
+

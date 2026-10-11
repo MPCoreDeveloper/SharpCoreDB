@@ -114,6 +114,11 @@
 ## 🔶 In Progress
 
 
+### Legacy `ScdbFile` prototype
+- **Status:** public API in the shipped package, but unused and unfinished - `ReadBlock` returns an empty span, `WriteBlock` registers neither a block nor a WAL entry, `AllocatePages` only appends, and `Flush` writes nothing
+- **What's needed:** decide its fate - finish it against `BlockRegistry` / `FreeSpaceManager` / `WalManager`, or deprecate and remove it in the next major (breaking change, so it is an owner call)
+- **Why it is listed:** `docs/scdb/README.md` used to advertise it as the way to use `.scdb`; the docs now point at `SingleFileStorageProvider`, and the class must not go back to being invisible dead API
+
 ### Visual Query Execution Plan Explorer
 - **Status:** Plan cache and optimizer internals exist; SCDMS UI not built yet
 - **What's needed:** Tree/graph view in SCDMS showing join types, cost estimates, and row counts per node — similar to pgAdmin's EXPLAIN visualizer

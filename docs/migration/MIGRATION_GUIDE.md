@@ -557,9 +557,9 @@ if (validation.IsValid)
 
 ## 📖 See Also
 
-- [SCDB File Format Design](./SCDB_FILE_FORMAT_DESIGN.md)
-- [SCDB Implementation Status](./SCDB_IMPLEMENTATION_STATUS.md)
-- [SCDB Phase 1 Implementation](./SCDB_PHASE1_IMPLEMENTATION.md)
+- [SCDB File Format Design](../scdb/README.md)
+- [SCDB Implementation Status](../scdb/README_INDEX.md)
+- [SCDB Format: Implementation Status](../scdb/README.md#-implementation-status)
 
 ---
 
@@ -1050,9 +1050,9 @@ if (validation.IsValid)
 
 ## 📖 See Also
 
-- [SCDB File Format Design](./SCDB_FILE_FORMAT_DESIGN.md)
-- [SCDB Implementation Status](./SCDB_IMPLEMENTATION_STATUS.md)
-- [SCDB Phase 1 Implementation](./SCDB_PHASE1_IMPLEMENTATION.md)
+- [SCDB File Format Design](../scdb/README.md)
+- [SCDB Implementation Status](../scdb/README_INDEX.md)
+- [Serialization and Storage Guide](../serialization/SERIALIZATION_AND_STORAGE_GUIDE.md)
 
 ---
 

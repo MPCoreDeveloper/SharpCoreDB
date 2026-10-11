@@ -688,5 +688,5 @@ The EF Core GraphRAG integration provides:
 
 For more information, see:
 - [LINQ_API_GUIDE.md](./LINQ_API_GUIDE.md) - API reference
-- [EF_CORE_INTEGRATION_SUMMARY.md](./EF_CORE_INTEGRATION_SUMMARY.md) - Architecture overview
-- [GRAPHRAG_IMPLEMENTATION_PLAN.md](./GRAPHRAG_IMPLEMENTATION_PLAN.md) - Implementation details
+- [EF_CORE_DOCUMENTATION_INDEX.md](./EF_CORE_DOCUMENTATION_INDEX.md) - Index of the EF Core documentation set
+- [GRAPH_RAG_SINGLE_SQL.md](./GRAPH_RAG_SINGLE_SQL.md) - single-query Graph RAG implementation

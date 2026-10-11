@@ -452,6 +452,6 @@ var relatedConcepts = await db.Concepts
 
 ## See Also
 
-- [SharpCoreDB EF Core Provider](../SharpCoreDB.EntityFrameworkCore/README.md)
-- [Graph Traversal Engine](../../SharpCoreDB.Graph/README.md)
-- [Performance Benchmarks](./GraphTraversalPerformanceBenchmarks.cs)
+- [SharpCoreDB EF Core Provider](../../src/SharpCoreDB.EntityFrameworkCore/README.md)
+- [Graph Traversal Engine](../../src/SharpCoreDB.Graph/README.md)
+- [Graph Traversal Tests](../../tests/SharpCoreDB.Tests/Graph/GraphTraversalEngineTests.cs)

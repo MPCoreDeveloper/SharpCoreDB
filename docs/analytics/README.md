@@ -32,7 +32,7 @@ The SharpCoreDB Analytics Engine provides high-performance data aggregation, win
 ### Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 2.0.0
+dotnet add package SharpCoreDB.Analytics --version 2.1.0
 ```
 
 ### Basic Aggregation
@@ -354,7 +354,9 @@ var filtered = await database.QueryAsync(
 );
 ```
 
-Current support and known gaps are tracked in `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.9.0.md`.
+Support for aggregate `FILTER` clauses and the known gaps against the SQLite/PostgreSQL aggregate
+syntax are covered in [`../manual/query.md`](../manual/query.md) (the SQL dialect and aggregates
+chapter). There is no separate compatibility-tracking page in this repository.
 
 ### HAVING
 Filters grouped results (WHERE applies before GROUP BY, HAVING after).
@@ -665,9 +667,9 @@ var gaps = await database.QueryAsync(
 ## See Also
 
 - [User Manual](../manual/README.md) - Complete feature guide
-- [Vector Search](../vectors/README.md) - Embedding storage
-- [Graph Algorithms](../graph/README.md) - Path finding
-- [Performance Guide](../PERFORMANCE.md) - Optimization techniques
+- [Vector Search](../Vectors/README.md) - Embedding storage
+- [GraphRAG Documentation](../graphrag/README.md) - Graph traversal, path finding
+- [Performance Guide](../manual/performance.md) - Optimization techniques
 
 ---
 

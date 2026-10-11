@@ -1,7 +1,7 @@
 # GraphRAG EF Core Integration - Documentation Index
 
 **Status:** ✅ Phase 2 complete (Phase 3 prototype)  
-**Last Updated:** 2025-02-15  
+**Last Updated:** 2026-10-10 (links audited against the 2.1.0 tree)  
 **Test Status:** Run the MTP test host to validate locally — `dotnet test` is not supported in this repo (see `docs/CONTRIBUTING.md`)
 
 ---
@@ -11,11 +11,14 @@
 | Document | Purpose | Audience |
 |----------|---------|----------|
 | [LINQ_API_GUIDE.md](#linq-api-guide) | LINQ API reference | Developers |
-| [EF_CORE_COMPLETE_GUIDE.md](#ef-core-complete-guide) | Usage guide | Developers |
-| [EF_CORE_INTEGRATION_SUMMARY.md](#ef-core-integration-summary) | Architecture summary | Tech Leads |
+| [EF_CORE_COMPLETE_GUIDE.md](#ef-core-complete-guide) | Usage guide + architecture | Developers, Tech Leads |
 | [EF_CORE_TEST_DOCUMENTATION.md](#ef-core-test-documentation) | Test suite documentation | QA Engineers |
-| [TEST_EXECUTION_REPORT.md](#test-execution-report) | Test execution template | Project Managers |
-| [COMPLETE_DELIVERY_SUMMARY.md](#delivery-summary) | Current status summary | Stakeholders |
+| [`00_START_HERE.md`](00_START_HERE.md) | Entry point and current status | Everyone |
+
+> **Audit note (2026-10-10):** this index used to list three documents that were never written —
+> `EF_CORE_INTEGRATION_SUMMARY.md`, `TEST_EXECUTION_REPORT.md` and `COMPLETE_DELIVERY_SUMMARY.md`.
+> Their content lives in the guides below (architecture in `EF_CORE_COMPLETE_GUIDE.md`, the test
+> inventory in `EF_CORE_TEST_DOCUMENTATION.md`, current status in `00_START_HERE.md` and `README.md`).
 
 ---
 
@@ -46,7 +49,7 @@
 ---
 
 ## EF Core Integration Summary
-**File:** `docs/graphrag/EF_CORE_INTEGRATION_SUMMARY.md`
+**Where:** the architecture section of `docs/graphrag/EF_CORE_COMPLETE_GUIDE.md`
 
 **Contents:**
 - Implementation overview
@@ -65,17 +68,8 @@
 
 ---
 
-## Test Execution Report
-**File:** `docs/graphrag/TEST_EXECUTION_REPORT.md`
-
-**Contents:**
-- Template for capturing test results
-- Execution notes
-
----
-
-## Delivery Summary
-**File:** `docs/graphrag/COMPLETE_DELIVERY_SUMMARY.md`
+## Delivery Status
+**Where:** [`00_START_HERE.md`](00_START_HERE.md) and [`README.md`](README.md)
 
 **Contents:**
 - Current implementation status

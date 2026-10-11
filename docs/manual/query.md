@@ -102,7 +102,7 @@ SharpCoreDB adds engine-specific keywords:
   `SELECT * FROM t WHERE key = @p` plans are resolved from the cache without re-lexing.
 
 > ⚡ **Guidance:** parameterize everything, reuse `IDatabase` instances, and keep working-set
-> statements under the cache size. See [`docs/QUERY_PLAN_CACHE.md`](../docs/QUERY_PLAN_CACHE.md).
+> statements under the cache size. See [`QUERY_PLAN_CACHE.md`](../QUERY_PLAN_CACHE.md).
 
 ## 6.7 `information_schema` metadata views
 

@@ -62,7 +62,7 @@ See [Collation Guide](../collation/COLLATION_GUIDE.md) for complete documentatio
 - [API Reference](../Vectors/README.md#api-reference)
 - [Configuration](../Vectors/README.md#configuration)
 - [Examples](../Vectors/README.md#examples)
-- [Implementation Complete Report](../Vectors/IMPLEMENTATION_COMPLETE.md)
+- [Vector Search Technical Spec](../Vectors/TECHNICAL_SPEC.md)
 
 ### [Migration Guide: SQLite Vectors → SharpCoreDB](../migration/SQLITE_VECTORS_TO_SHARPCORE.md)
 **Status:** ✅ **Production Ready**  
@@ -193,7 +193,7 @@ See [Collation Guide](../collation/COLLATION_GUIDE.md) for complete documentatio
 
 ## Need Help?
 
-- **Questions?** Check [FAQ](../FAQ.md) or open a GitHub issue
+- **Questions?** Check the [documentation index](../INDEX.md) or open a GitHub issue
 - **Performance issues?** See [Tuning Guide](../Vectors/PERFORMANCE_TUNING.md)
 - **Troubleshooting?** See [Vector Troubleshooting](../Vectors/README.md#troubleshooting)
 - **API reference?** See [Vector API Docs](../Vectors/README.md#api-reference)

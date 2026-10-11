@@ -1,5 +1,7 @@
 namespace SharpCoreDB.Tests.Documentation;
 
+using System.Text.RegularExpressions;
+
 public sealed class DocumentationConsistencyTests
 {
     [Fact]
@@ -56,6 +58,171 @@ public sealed class DocumentationConsistencyTests
         {
             Assert.False(File.Exists(file), $"Obsolete documentation file should be removed: {file}");
         }
+    }
+
+    [Fact]
+    public void DocumentationMarkdownLinks_ShouldResolveToExistingFiles()
+    {
+        // Arrange: every relative link in docs/**, resolved from the file that contains it.
+        var docsRoot = GetRepositoryFilePath("docs");
+        var failures = new List<string>();
+        var linkPattern = new Regex(@"\]\(([^)\s]+)\)", RegexOptions.Compiled);
+
+        foreach (var file in Directory.EnumerateFiles(docsRoot, "*.md", SearchOption.AllDirectories))
+        {
+            var lineNumber = 0;
+
+            foreach (var line in File.ReadLines(file))
+            {
+                lineNumber++;
+
+                foreach (Match match in linkPattern.Matches(line))
+                {
+                    var target = match.Groups[1].Value;
+
+                    if (target.StartsWith('#')
+                        || target.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        || target.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                        || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var path = target.Split('#')[0];
+
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        continue;
+                    }
+
+                    var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, path.Replace('/', Path.DirectorySeparatorChar)));
+
+                    if (!File.Exists(resolved) && !Directory.Exists(resolved))
+                    {
+                        failures.Add($"{Path.GetRelativePath(docsRoot, file)}:{lineNumber} -> {target}");
+                    }
+                }
+            }
+        }
+
+        // Act / Assert
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void DocumentationIndex_ShouldOnlyReferenceExistingDocumentationFiles()
+    {
+        // Arrange: every backticked `*.md` path listed in docs/INDEX.md must resolve from docs/.
+        var docsRoot = GetRepositoryFilePath("docs");
+        var index = File.ReadAllText(Path.Combine(docsRoot, "INDEX.md"));
+        var pathPattern = new Regex(@"`([A-Za-z0-9_][A-Za-z0-9_./\-]*\.md)`", RegexOptions.Compiled);
+        var failures = new List<string>();
+
+        // Act
+        foreach (Match match in pathPattern.Matches(index))
+        {
+            var relative = match.Groups[1].Value;
+            var resolved = Path.GetFullPath(Path.Combine(docsRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
+
+            if (!File.Exists(resolved))
+            {
+                failures.Add(relative);
+            }
+        }
+
+        // Assert
+        Assert.Empty(failures);
+    }
+
+    [Fact]
+    public void ServerConfigurationGuide_ShouldNotDocumentTomlOrYamlConfiguration()
+    {
+        // Arrange: the server registers JSON configuration sources only.
+        var content = File.ReadAllText(GetRepositoryFilePath("docs", "server", "CONFIGURATION_SCHEMA.md"));
+
+        // Act / Assert
+        // No TOML samples, and the old "Supported Formats: TOML" claim must not return. YAML is still
+        // legitimate in this file for docker-compose, so only the config-format claim is guarded.
+        Assert.DoesNotContain("```toml", content, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("Supported Formats:** TOML", content, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("no TOML", content, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void PlanCacheGuide_ShouldNotPresentInternalApisAsPublic()
+    {
+        // Arrange: Database.GetPlanCacheStats()/ClearPlanCache() are internal (InternalsVisibleTo only).
+        var content = File.ReadAllText(GetRepositoryFilePath("docs", "QUERY_PLAN_CACHE.md"));
+
+        // Act / Assert
+        Assert.DoesNotContain("db.GetPlanCacheStats()", content, StringComparison.Ordinal);
+        Assert.DoesNotContain("db.ClearPlanCache()", content, StringComparison.Ordinal);
+        Assert.Contains("internal", content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void KnownIssuesReport_ShouldCarryAVerifiedStatusForEveryItem()
+    {
+        // Arrange: the 1.9.3-era external report must annotate each item against the current tree.
+        var content = File.ReadAllText(GetRepositoryFilePath("docs", "sharpcoredb-known-issues.md"));
+        var items = Regex.Matches(content, @"^## \d+\.", RegexOptions.Multiline).Count;
+        var statusNotes = Regex.Matches(content, @"^> (✅|⚠)", RegexOptions.Multiline).Count;
+
+        // Act / Assert
+        Assert.True(items >= 6, $"Expected at least 6 numbered items, found {items}.");
+        Assert.True(
+            statusNotes >= items,
+            $"{items} items carry only {statusNotes} verified status notes (RESOLVED / STILL TRUE).");
+    }
+
+    [Fact]
+    public void DocumentationPackageReferences_ShouldResolveToRealPackages()
+    {
+        // Arrange: collect the ids that actually exist (projects + central package versions).
+        var repositoryRoot = GetRepositoryFilePath();
+        var realIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var project in Directory.EnumerateFiles(Path.Combine(repositoryRoot, "src"), "*.csproj", SearchOption.AllDirectories))
+        {
+            realIds.Add(Path.GetFileNameWithoutExtension(project));
+        }
+
+        foreach (Match match in Regex.Matches(
+            File.ReadAllText(Path.Combine(repositoryRoot, "Directory.Packages.props")),
+            "<PackageVersion Include=\"([^\"]+)\""))
+        {
+            realIds.Add(match.Groups[1].Value);
+        }
+
+        var referencePattern = new Regex(
+            @"dotnet add package ([A-Za-z0-9_.]+)|PackageReference Include=""([A-Za-z0-9_.]+)""",
+            RegexOptions.Compiled);
+        var failures = new List<string>();
+        var docsRoot = Path.Combine(repositoryRoot, "docs");
+
+        // Act
+        foreach (var file in Directory.EnumerateFiles(docsRoot, "*.md", SearchOption.AllDirectories))
+        {
+            var name = Path.GetFileName(file);
+
+            if (name is "WORKLOG.md" or "CHANGELOG.md")
+            {
+                continue;   // historical records carry ids as they were at the time
+            }
+
+            foreach (Match match in referencePattern.Matches(File.ReadAllText(file)))
+            {
+                var id = match.Groups[1].Success ? match.Groups[1].Value : match.Groups[2].Value;
+
+                if (id.StartsWith("SharpCoreDB", StringComparison.Ordinal) && !realIds.Contains(id))
+                {
+                    failures.Add($"{Path.GetRelativePath(docsRoot, file)} -> {id}");
+                }
+            }
+        }
+
+        // Assert
+        Assert.Empty(failures);
     }
 
     private static string GetRepositoryFilePath(params string[] segments)

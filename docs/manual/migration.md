@@ -35,8 +35,10 @@
 
 ## 12.4 FluentMigrator
 
-Add versioned migrations to any SharpCoreDB database with the `SharpCoreDB.FluentMigrator`
-package — see [Providers](providers.md#106-migrations-sharpcoredbfluentmigrator).
+Add versioned migrations to any SharpCoreDB database with the FluentMigrator integration that ships
+in the **`SharpCoreDB.Extensions`** package (`AddSharpCoreDBFluentMigrator()` /
+`AddSharpCoreDBFluentMigratorGrpc()` — there is no separate `SharpCoreDB.FluentMigrator` package).
+See [Providers](providers.md) §10.6 and the [FluentMigrator FAQ](../migration/README.md).
 
 ## 12.5 Check list
 

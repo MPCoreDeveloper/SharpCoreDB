@@ -4,13 +4,99 @@
 - OS: Windows 11
 - CPU: Intel i7-10850H @ 2.70GHz (6 cores/12 threads)
 - RAM: 16GB
-- Runtime: .NET 10.0.4, RyuJIT x86-64-v3
-- Benchmark Tool: BenchmarkDotNet v0.15.8
-- **Last Updated: March 14, 2026** · **v2.0.0 update: August 28, 2026**
+- Runtime: .NET 10.0.4 (the v1.x BenchmarkDotNet suite further down) · **.NET 11 (C# 15 preview), RyuJIT x86-64-v3** for the v2.1.0 comparative numbers
+- Benchmark Tool: BenchmarkDotNet v0.15.8 (v1.x suite) · `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (v2.1.0)
+- **Last Updated: March 14, 2026** · **v2.0.0 update: August 28, 2026** · **v2.1.0 update: October 11, 2026**
 
 ---
 
-## ⚡ v2.0.0 Update (August 28, 2026)
+## ⚡ v2.1.0 Update (October 11, 2026, .NET 11)
+
+Re-measured on the promoted tree `92794084` (v2.1.0) with the same harness. **Every ratio below is
+same-run** — SQLite is measured in the same process run, because its own reference drifts between
+sessions and ratios, not lone absolutes, are the comparable part. Results:
+`pk_default_20261011_125413.json` (fair-PK), `comparative_20261011_125436.json` (ladder).
+
+**Fair-PK shape, default posture (`--pk-default`: pure `DatabaseConfig`, encryption on, no harness
+flags, `id INTEGER PRIMARY KEY`) — ratio is SharpCoreDB ÷ SQLite, so > 1,00x means SharpCoreDB is
+ahead, and the range is the paired per-rep range:**
+
+| Operation | SharpCoreDB v2.1.0 (default, encrypted) | SQLite (same run) | ratio |
+|---|---:|---:|---:|
+| INSERT | **204.263** | 174.469 | **1,17x** (1,03–1,27) |
+| READ | **134.634** | 116.916 | **1,13x** (1,12–1,15) |
+| UPDATE | **398.709** | 773.323 | 0,53x (0,42–0,53) |
+| DELETE | **509.941** | 1.085.140 | 0,47x (0,46–0,62) |
+
+**Document CRUD shape (no PK, the v1.x-era workload of this file), median of 3:**
+
+| Database | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB (Direct) | 186.718 | **191.474** 🥇 | 221.092 | 326.445 |
+| SharpCoreDB (StructRow) | **187.838** | 169.684 | — | — |
+| SharpCoreDB (SQL) | 144.706 | 105.250 | 176.570 | 134.022 |
+| SQLite | 175.138 | 109.429 | **717.926** 🥇 | **975.609** 🥇 |
+| LiteDB | 70.410 | 15.774 | 11.038 | 14.880 |
+
+**What closed and what is left.** The v2.0-era warning in this file — "single-row UPDATE/DELETE vs
+SQLite (append-on-update vs in-place C records) — top v2.1 priority" — is **closed as an engine
+behaviour and honestly restated as a remaining ratio**. UPDATE/DELETE now run in place with deferred
+index maintenance (fixed-width layout is the default for new PK tables), which makes the fixed-width
+fair-PK arm **1,2–1,5× faster than the legacy variable-length arm** on UPDATE/DELETE and puts the
+default posture at 0,53× / 0,47× of SQLite — but it did **not** close the ratio, because SQLite's own
+PK references on this box are ~796–811K UPDATE and ~1,00–1,04M DELETE. Earlier publications quoted
+SQLite at ~270–315K UPDATE / ~353–420K DELETE and therefore claimed the layout was *ahead*; those
+references were measured while the harness left the SQLite arm allocating a command and two
+parameters per row, and they are superseded (SQLite's PK references rose 3,05× once the comparator
+held one prepared command — 288.108 → 878.557 UPDATE, 385.116 → 1.172.704 DELETE).
+
+> Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
+> comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
+
+### NativeAOT arm (measured October 9, 2026) — publishes and runs, buys no throughput
+
+The AOT question is a real one for this engine, because every arm pays per-row `IStorageEngine` /
+`IStorage` dispatch, so it was measured rather than assumed. The same harness was published with
+
+```bash
+dotnet publish tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -c Release -f net11.0 -r win-x64 -p:PublishAot=true
+```
+
+(native `win-x64` image, 14.023.680 bytes; run from the directory above `native\`, where `e_sqlite3.dll`
+lives) and run **as that native binary** against its own JIT build — fresh processes, identical options,
+same box, all 16 cells. Ratio is **AOT ÷ JIT**, median of the paired runs, in INSERT · READ · UPDATE ·
+DELETE order:
+
+| arm | AOT ÷ JIT | single-pair range |
+|---|---|---|
+| legacy plaintext (tuned `--pk`) | 1,00 · 0,95 · 0,88 · **1,25** | 0,82–1,38 |
+| fixed-width plaintext | 0,96 · 0,98 · 0,93 · 1,08 | 0,81–1,34 |
+| fixed-width at rest (encrypted) | 0,99 · 0,90 · 0,89 · 0,92 | 0,83–1,03 |
+| **SQLite (control, same rig)** | 1,01 · 0,98 · 0,99 · 0,99 | 0,95–1,04 |
+
+**12 of the 16 cells sit strictly below 1,00 and one at exactly 1,00.** The control is what makes the
+2–12 % READ/UPDATE deficits readable instead of box noise: AOT is marginally *behind* on SQLite's own
+cells too, so the rig is not biased toward either runtime. The only cell where AOT leads by more than
+that noise is the legacy arm's DELETE (1,25) — at n=2 AOT processes with a 0,92–1,38 pair spread, that is
+not grounds for a recommendation. **So NativeAOT is a deployment option here (image size, startup, no
+JIT) and not a speed lever**, and it needs the Visual Studio C++ workload on the build machine.
+
+Two harness defects surfaced during the measurement and are fixed in the harness (no `src/` change):
+`--pk` sampled straight from process start, so arm 1's published reps *were* the JIT ramp — which made
+AOT read **1,85× faster on UPDATE** — and the shared warm-up resolver now discards them; and the AOT
+profile killed every run at the JSON archive write (`Reflection-based serialization has been disabled`),
+pinned with `<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>`
+in the harness project. Verdict, both defects and the raw per-rep runs:
+[`docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`](performance/BEAT_SQLITE_ALL_AXES_PLAN.md) §S4 (worklog
+session 78); archived runs:
+[`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/`](../tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results)
+(`pk_comparative_20261009_20*.json`, committed in `5dda8a20`).
+
+
+---
+
+
+## ⚡ v2.0.0 Update (historical, August 28, 2026)
 
 This report covers the v1.x-era BenchmarkDotNet micro-benchmark suite. The **v2.0 performance-first
 release** additionally closed the comparative CRUD gap against SQLite/LiteDB — measured on the
@@ -21,8 +107,9 @@ release** additionally closed the comparative CRUD gap against SQLite/LiteDB —
 - **Batch INSERT is SQLite-competitive** — 91–133K vs 145–150K ops/s
 - **SIMD columnar analytics remain dominant** — `GROUP BY` SUM over 10M rows in ~2 ms
 
-Remaining known gap: single-row UPDATE/DELETE vs SQLite (append-on-update vs in-place C records) —
-top v2.1 priority.
+Remaining known gap at that time: single-row UPDATE/DELETE vs SQLite (append-on-update vs in-place C
+records) — **closed as an engine behaviour in v2.1.0** (UPDATE/DELETE now run in place with deferred
+index maintenance); see the v2.1.0 section above for where the ratio stands today.
 
 > Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
 > comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
@@ -31,7 +118,7 @@ top v2.1 priority.
 
 ## Executive Summary
 
-SharpCoreDB is a high-performance embedded database for .NET 10. This document presents comprehensive benchmark results comparing SharpCoreDB against **SQLite** and **LiteDB**.
+SharpCoreDB is a high-performance embedded database for .NET 11. This document presents comprehensive benchmark results comparing SharpCoreDB against **SQLite** and **LiteDB**.
 
 ### Key Findings
 

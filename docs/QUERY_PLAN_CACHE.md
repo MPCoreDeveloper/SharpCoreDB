@@ -26,9 +26,11 @@ db.ExecuteSQL("INSERT INTO users (name) VALUES (?)",
 db.ExecuteSQL("INSERT INTO users (name) VALUES (?)", 
     new Dictionary<string, object?> { ["@p0"] = "Bob" });
 
-// Cache statistics
-var (hits, misses, hitRate, count) = db.GetPlanCacheStats();
-// hits: 1, misses: 1, hitRate: 0.5 (50%), count: 1
+// Cache statistics — the in-engine accessor is internal
+//   Database.GetPlanCacheStats() → (Hits, Misses, HitRate, Count)
+// It is visible to the SharpCoreDB.Tests / SharpCoreDB.Benchmarks assemblies only
+// (InternalsVisibleTo), not to application code. See "Monitoring & Diagnostics"
+// below for the public alternative.
 ```
 
 ---
@@ -273,8 +275,18 @@ Result: [Entry4, Entry1, Entry2]
 
 ### Get Cache Statistics
 
+`Database.GetPlanCacheStats()` returns `(long Hits, long Misses, double HitRate, int Count)` but it is
+**`internal`** (`src/SharpCoreDB/Database/Caching/Database.PlanCaching.cs`), so application code cannot
+call it — the `SharpCoreDB.Tests` and `SharpCoreDB.Benchmarks` assemblies reach it through
+`InternalsVisibleTo`, which is how the suite asserts cache behaviour.
+
+From outside the assembly, use the public surface of the cache class
+(`src/SharpCoreDB/Services/QueryPlanCache.cs`):
+
 ```csharp
-var (hits, misses, hitRate, count) = db.GetPlanCacheStats();
+var cache = new QueryPlanCache(capacity: 2048);
+
+var (hits, misses, hitRate, count) = cache.GetStatistics();
 
 Console.WriteLine($"Cache Hits: {hits}");
 Console.WriteLine($"Cache Misses: {misses}");
@@ -293,10 +305,14 @@ Console.WriteLine($"Cached Plans: {count}");
 
 ### Clear Cache Manually
 
+`Database.ClearPlanCache()` is **`internal`** as well — the engine calls it during `Dispose` and on
+explicit reset, so you rarely need it at all. With your own cache instance the call is public:
+
 ```csharp
-// Not typically needed (automatic disposal)
-db.ClearPlanCache();
+cache.Clear();
 ```
+
+Simply disposing the database clears the engine's own plan cache.
 
 ---
 
@@ -373,7 +389,8 @@ db.ClearPlanCache();
 **Solutions:**
 1. Reduce `CompiledPlanCacheCapacity` (default: 2048)
 2. Disable caching for specific operations if needed
-3. Monitor cache size with `GetPlanCacheStats().Count`
+3. Monitor cache size with `QueryPlanCache.GetStatistics().Count` — the engine's own
+   `GetPlanCacheStats()` is `internal` and not callable from application code
 
 ### Issue: Thread Contention
 
@@ -513,10 +530,10 @@ Query plan caching provides:
 
 ## Further Reading
 
-- [Database Execution Layer](./DATABASE_ARCHITECTURE.md)
-- [Performance Benchmarks](../README.md#performance-benchmarks)
-- [Configuration Guide](./CONFIGURATION.md)
-- [Best Practices](./BEST_PRACTICES.md)
+- [Query Optimizer Architecture](./internals/OPTIMIZER_ARCHITECTURE.md)
+- [Comparative Benchmarks](./benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
+- [Optimizer Configuration & Tuning](./internals/OPTIMIZER_ARCHITECTURE.md#configuration--tuning)
+- [Performance Guide: configuration knobs](./manual/performance.md#77-configuration-knobs-that-affect-performance)
 
 ---
 
