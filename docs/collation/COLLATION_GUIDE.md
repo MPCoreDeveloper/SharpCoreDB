@@ -661,8 +661,8 @@ SELECT 'Café' = 'cafe' COLLATE UNICODE;  -- TRUE (full normalization)
 
 ## See Also
 
-- [EF Core Integration](../EFCORE_COLLATE_COMPLETE.md)
-- [Collation Performance Tests](../benchmarks/Phase5_CollationQueryPerformanceBenchmark.cs)
+- [EF Core Integration](../../src/SharpCoreDB.EntityFrameworkCore/README.md)
+- [Collation Performance Benchmark](../../tests/SharpCoreDB.Benchmarks/Phase5_CollationQueryPerformanceBenchmark.cs)
 
 ---
 

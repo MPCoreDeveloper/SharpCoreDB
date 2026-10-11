@@ -612,10 +612,10 @@ CREATE INDEX idx_embedding_flat ON documents(embedding) USING FLAT;
 
 ## Additional Resources
 
-- [SharpCoreDB Vector Search Docs](./docs/VECTOR_SEARCH.md)
-- [HNSW Algorithm Details](./docs/HNSW_ALGORITHM.md)
-- [Performance Tuning Guide](./docs/PERFORMANCE_TUNING.md)
-- [Examples: Vector Search](../Examples/VectorSearch/)
+- [SharpCoreDB Vector Search Docs](../Vectors/README.md)
+- [Vector Index and DiskANN Details](../Vectors/TECHNICAL_SPEC.md)
+- [Performance Tuning Guide](../Vectors/PERFORMANCE_TUNING.md)
+- [Example: GraphRAG with DiskANN](../Vectors/GRAPHRAG_WITH_DISKANN_EXAMPLE.md)
 
 ---
 

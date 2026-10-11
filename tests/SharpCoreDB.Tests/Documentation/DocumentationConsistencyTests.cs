@@ -1,5 +1,7 @@
 namespace SharpCoreDB.Tests.Documentation;
 
+using System.Text.RegularExpressions;
+
 public sealed class DocumentationConsistencyTests
 {
     [Fact]
@@ -56,6 +58,55 @@ public sealed class DocumentationConsistencyTests
         {
             Assert.False(File.Exists(file), $"Obsolete documentation file should be removed: {file}");
         }
+    }
+
+    [Fact]
+    public void DocumentationMarkdownLinks_ShouldResolveToExistingFiles()
+    {
+        // Arrange: every relative link in docs/**, resolved from the file that contains it.
+        var docsRoot = GetRepositoryFilePath("docs");
+        var failures = new List<string>();
+        var linkPattern = new Regex(@"\]\(([^)\s]+)\)", RegexOptions.Compiled);
+
+        foreach (var file in Directory.EnumerateFiles(docsRoot, "*.md", SearchOption.AllDirectories))
+        {
+            var lineNumber = 0;
+
+            foreach (var line in File.ReadLines(file))
+            {
+                lineNumber++;
+
+                foreach (Match match in linkPattern.Matches(line))
+                {
+                    var target = match.Groups[1].Value;
+
+                    if (target.StartsWith('#')
+                        || target.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                        || target.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                        || target.StartsWith("mailto:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    var path = target.Split('#')[0];
+
+                    if (string.IsNullOrWhiteSpace(path))
+                    {
+                        continue;
+                    }
+
+                    var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, path.Replace('/', Path.DirectorySeparatorChar)));
+
+                    if (!File.Exists(resolved) && !Directory.Exists(resolved))
+                    {
+                        failures.Add($"{Path.GetRelativePath(docsRoot, file)}:{lineNumber} -> {target}");
+                    }
+                }
+            }
+        }
+
+        // Act / Assert
+        Assert.Empty(failures);
     }
 
     private static string GetRepositoryFilePath(params string[] segments)

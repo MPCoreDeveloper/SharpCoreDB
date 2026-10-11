@@ -509,8 +509,9 @@ This report follows [METHODOLOGY.md]. Results are reproducible. See [REPRODUCING
 
 ---
 
-**Full raw data:** [results/2026-03-03-run-001/raw-data.json](link)  
-**Scripts:** [tests/benchmarks/](link)
+**Full raw data:** `tests/benchmarks/` (one directory per run; no raw-data file is checked in for the
+2026-03-03 run, so this line names the location rather than linking a missing artefact)  
+**Scripts:** `tests/benchmarks/README.md` and `tests/benchmarks/run-all.ps1`
 ```
 
 ### 8.2 Raw Data Format (JSON)

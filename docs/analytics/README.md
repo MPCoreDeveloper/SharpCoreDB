@@ -665,9 +665,9 @@ var gaps = await database.QueryAsync(
 ## See Also
 
 - [User Manual](../manual/README.md) - Complete feature guide
-- [Vector Search](../vectors/README.md) - Embedding storage
-- [Graph Algorithms](../graph/README.md) - Path finding
-- [Performance Guide](../PERFORMANCE.md) - Optimization techniques
+- [Vector Search](../Vectors/README.md) - Embedding storage
+- [GraphRAG Documentation](../graphrag/README.md) - Graph traversal, path finding
+- [Performance Guide](../manual/performance.md) - Optimization techniques
 
 ---
 

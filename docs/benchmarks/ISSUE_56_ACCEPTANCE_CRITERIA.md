@@ -184,9 +184,9 @@ Issue #56 is **done** when:
 **Benchmark Suite: SharpCoreDB vs BLite vs Zvec**
 
 - Scenarios: 9 total (4 BLite, 5 Zvec)
-- Raw data: Available in `tests/benchmarks/results/`
-- Report v1: [REPORT_V1.md](link)
-- Report v2: [REPORT_V2.md](link)
+- Raw data: Available in `tests/benchmarks/`
+- Report v1: `REPORT_V1.md` (attach the published link when closing the issue)
+- Report v2: `REPORT_V2.md` (attach the published link when closing the issue)
 - Reproducibility: Scripts available, runnable
 
 **Key Findings:**
@@ -195,9 +195,9 @@ Issue #56 is **done** when:
 - SharpCoreDB: [summary]
 
 **Links:**
-- PR: [#XXX](link)
-- Documentation: [README](link)
-- Raw data: [results/](link)
+- PR: `#XXX` (fill in the pull-request number)
+- Documentation: [benchmarks README](../../tests/benchmarks/README.md)
+- Raw data: `tests/benchmarks/`
 
 Benchmark suite is now public and reproducible. Community can validate.
 ```

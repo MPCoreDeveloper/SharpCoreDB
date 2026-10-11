@@ -1,22 +1,29 @@
 # SharpCoreDB SCDB - Production Deployment Guide
 
-**Version:** 2.0  
-**Last Updated:** 2026-01-28  
+**Version:** 2.1  
+**Last Updated:** 2026-10-11  
 **Target:** Production environments
 
 ---
+
+> Every option, method and number in this guide was checked against the shipped source. Quoted figures
+> come from measured runs - see [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md) and
+> [`../performance/WORKLOG.md`](../performance/WORKLOG.md) - never from an estimate. The option surface
+> is [`DatabaseOptions`](../../src/SharpCoreDB/DatabaseOptions.cs) and
+> [`DatabaseConfig`](../../src/SharpCoreDB/DatabaseConfig.cs); if a setting is not there, it does not exist.
 
 ## 🎯 Overview
 
 This guide covers deploying SharpCoreDB with the **SCDB (SharpCore DataBase)** single-file storage format in production environments.
 
 **SCDB Benefits:**
-- ✅ Single `.scdb` file (easy backup/restore)
-- ✅ WAL for ACID transactions
-- ✅ Crash recovery
-- ✅ Corruption detection & repair
-- ✅ 7,765x faster analytics (SIMD)
-- ✅ 1.37x faster INSERTs vs SQLite
+- ✅ Single `.scdb` file (easy backup/restore) - one file, no sidecar WAL to keep in step
+- ✅ WAL for ACID transactions - the WAL lives inside the `.scdb` file
+- ✅ Crash recovery - replay on open, pinned by `CrashRecoveryTests`
+- ✅ Corruption detection & repair - `CorruptionDetector` / `RepairTool`
+- ✅ In-place writes without a per-row index rewrite
+- ✅ Ratios against SQLite are measured per release and published with their method - see
+  [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md); only the `--pk` arm is like-for-like
 
 ---
 
@@ -35,12 +42,15 @@ This guide covers deploying SharpCoreDB with the **SCDB (SharpCore DataBase)** s
 ### Software Dependencies
 
 ```bash
-# .NET 11 Runtime (required)
+# .NET 11 Runtime (required by the 2.1 line on master)
 dotnet --version  # Should show 11.0 or higher
 
 # NuGet Package
 dotnet add package SharpCoreDB --version 2.1.0
 ```
+
+The 2.0.x servicing line on `release/v2.0` targets .NET 10 instead; match the runtime to the package
+line you deploy.
 
 ---
 
@@ -50,7 +60,6 @@ dotnet add package SharpCoreDB --version 2.1.0
 
 ```csharp
 using SharpCoreDB;
-using SharpCoreDB.Storage;
 using Microsoft.Extensions.DependencyInjection;
 
 // Configure services
@@ -58,28 +67,28 @@ var services = new ServiceCollection();
 services.AddSingleton<ICryptoService, CryptoService>();
 var provider = services.BuildServiceProvider();
 
-// Create SCDB database
-var options = new DatabaseOptions
-{
-    StorageMode = StorageMode.SingleFile,  // ✅ Use SCDB format
-    PageSize = 4096,                        // 4KB pages (default)
-    CreateImmediately = true,
-    EnableWalCheckpointing = true,          // ✅ Auto-checkpoint
-    WalCheckpointIntervalMs = 30000,        // Checkpoint every 30s
-};
+// The .scdb extension selects single-file storage (DatabaseExtensions.DetectStorageMode), so the
+// path is the only switch you need. The master password drives AES-256-GCM encryption.
+// CreateSingleFileDefault() sets StorageMode, memory mapping and quick auto-VACUUM; DatabaseConfig
+// is optional and stays null here, so the engine's own defaults apply.
+var options = DatabaseOptions.CreateSingleFileDefault();
 
 using var db = new Database(
     provider,
-    "./data/myapp.scdb",  // ✅ Single file!
+    "./data/myapp.scdb",  // ✅ Single file
     "your-master-password",
     isReadOnly: false,
-    config: options
+    config: options.DatabaseConfig
 );
 
 // Use database
 db.ExecuteSQL("CREATE TABLE users (id INTEGER PRIMARY KEY, name TEXT)");
 db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
 ```
+
+The same constructor serves both layouts: a path ending in `.scdb` (or an existing file) opens through
+`SingleFileStorageProvider`, a directory path opens through `DirectoryStorageProvider`. See
+[`README.md`](./README.md) for the file layout.
 
 ---
 
@@ -88,62 +97,88 @@ db.ExecuteSQL("INSERT INTO users VALUES (1, 'Alice')");
 ### Production-Ready Configuration
 
 ```csharp
-var config = new DatabaseOptions
+// Storage-level options live on DatabaseOptions ...
+var options = new DatabaseOptions
 {
-    // ========== SCDB Storage ==========
+    // ========== SCDB storage ==========
     StorageMode = StorageMode.SingleFile,
     PageSize = 4096,                    // 4KB pages (optimal for most workloads)
     CreateImmediately = true,
-    
-    // ========== WAL Configuration ==========
-    EnableWalCheckpointing = true,      // ✅ CRITICAL: Enable auto-checkpoint
-    WalCheckpointIntervalMs = 30000,    // Checkpoint every 30 seconds
-    WalMaxBatchSize = 100,              // Batch up to 100 operations
-    WalMaxBatchDelayMs = 10,            // Max 10ms batch delay
-    WalDurabilityMode = WalDurabilityMode.Fsync,  // ✅ Maximum durability
-    
-    // ========== Performance ==========
+    FsmSizePages = 4,                   // free-space map pages
+    BlockRegistrySizePages = 4,
+    TableDirectorySizePages = 4,
+    WalBufferSizePages = 1024,          // in-file WAL buffer, in pages
+
+    // ========== Maintenance ==========
+    AutoVacuum = true,                  // VACUUM when fragmentation crosses the threshold
+    AutoVacuumMode = VacuumMode.Quick,
+    FragmentationThreshold = 25,        // percent
+
+    // ========== File behaviour ==========
+    FileShareMode = FileShare.ReadWrite, // one Database instance per file, per process
+    UseUnbufferedIO = false,             // true bypasses the OS page cache
+    EnableMemoryMapping = true,
+};
+
+// ... and the durability, cache and write-path knobs live on DatabaseConfig.
+var config = new DatabaseConfig
+{
+    // ========== Durability ==========
+    WalDurabilityMode = DurabilityMode.FullSync,  // fsync on commit (the default)
+    WalBufferSize = 4 * 1024 * 1024,
+    EnableAdaptiveWalBatching = true,
+
+    // ========== Caches ==========
+    EnablePageCache = true,
+    PageCacheCapacity = 1024,           // pages (4 MB at 4 KB)
     EnableQueryCache = true,
     QueryCacheSize = 1000,
-    EnablePageCache = true,
-    PageCacheCapacity = 1024,           // 4 MB cache (1024 * 4KB)
-    
-    // ========== Monitoring ==========
-    EnablePerformanceMetrics = true,
+    BufferPoolSize = 32 * 1024 * 1024,
+
+    // ========== Write path ==========
+    UseGroupCommitWal = false,
+    EnableDeltaUpdates = false,
+    WorkloadHint = WorkloadHint.General,
 };
+
+using var db = new Database(provider, "./data/myapp.scdb", "your-master-password", config: config);
 ```
 
 ### Configuration by Workload
 
 #### High-Write Workload (OLTP)
 ```csharp
-var config = new DatabaseOptions
+var config = new DatabaseConfig
 {
-    PageSize = 4096,                    // Smaller pages for updates
-    WalMaxBatchSize = 50,               // Smaller batches for lower latency
-    WalCheckpointIntervalMs = 60000,    // Checkpoint every minute
+    EnableDeltaUpdates = true,          // in-place deltas instead of row rewrites
+    UseGroupCommitWal = true,           // batch commits
+    GroupCommitSize = 1000,
+    EnableAdaptiveWalBatching = true,
     PageCacheCapacity = 2048,           // 8 MB cache
+    WorkloadHint = WorkloadHint.WriteHeavy,
 };
 ```
 
 #### High-Read Workload (Analytics)
 ```csharp
-var config = new DatabaseOptions
+var config = new DatabaseConfig
 {
-    PageSize = 8192,                    // Larger pages for scans
-    EnableQueryCache = true,
-    QueryCacheSize = 5000,              // Large query cache
     PageCacheCapacity = 4096,           // 32 MB cache
+    EnableQueryCache = true,
+    QueryCacheSize = 5000,              // large query cache
+    UseMemoryMapping = true,
+    WorkloadHint = WorkloadHint.Analytics,
 };
 ```
 
 #### Balanced Workload
 ```csharp
-var config = new DatabaseOptions
+var config = new DatabaseConfig
 {
-    PageSize = 4096,                    // Standard pages
-    WalCheckpointIntervalMs = 30000,    // 30s checkpoint
     PageCacheCapacity = 1024,           // 4 MB cache
+    EnableAdaptiveWalBatching = true,
+    WalDurabilityMode = DurabilityMode.FullSync,
+    WorkloadHint = WorkloadHint.General,
 };
 ```
 
@@ -155,25 +190,29 @@ var config = new DatabaseOptions
 
 #### Daily Backups
 ```csharp
-// Simple file copy (database must be checkpointed first)
-db.ExecuteSQL("CHECKPOINT");  // Flush WAL
+// There is no separate WAL file to copy - the .scdb file is the whole database. Flush so the in-file
+// WAL is applied, then copy the file.
+db.Flush();
 File.Copy("./data/myapp.scdb", $"./backups/myapp_{DateTime.UtcNow:yyyyMMdd}.scdb");
 ```
 
-#### Hot Backup (No Downtime)
+#### Consistent copy while the database is open
 ```csharp
-// Use SCDB's built-in backup
-await db.BackupAsync("./backups/myapp_hot.scdb");
+// Flush(), then copy. The provider has no BackupAsync() - a page that shows one is out of date.
+// Reopening the copy is the only real verification that the backup is good:
+db.Flush();
+File.Copy("./data/myapp.scdb", "./backups/myapp_hot.scdb", overwrite: true);
+
+using var restored = new Database(provider, "./backups/myapp_hot.scdb", "your-master-password");
+restored.ExecuteSQL("SELECT COUNT(*) FROM users");
 ```
 
 #### Incremental Backups
 ```csharp
-// Copy WAL files separately
-var walFiles = Directory.GetFiles("./data", "*.wal");
-foreach (var wal in walFiles)
-{
-    File.Copy(wal, Path.Combine("./wal_backups", Path.GetFileName(wal)));
-}
+// The WAL lives inside the .scdb file, so there is no sidecar *.wal to ship separately. Keep a
+// rotation of full copies (the file is one unit) and shrink it with VACUUM:
+var result = await db.VacuumAsync(VacuumMode.Incremental);
+Console.WriteLine($"{result.FileSizeBefore:N0} -> {result.FileSizeAfter:N0} bytes, reclaimed {result.BytesReclaimed:N0}");
 ```
 
 ### Backup Retention Policy
@@ -187,18 +226,20 @@ Monthly backups:  Keep 12 months
 ### Disaster Recovery
 
 ```csharp
+// `storage` is the SingleFileStorageProvider the database was opened with - CorruptionDetector and
+// RepairTool take that provider, so corruption tooling applies to .scdb databases.
 // 1. Detect corruption
-using var detector = new CorruptionDetector(provider, ValidationMode.Standard);
+using var detector = new CorruptionDetector(storage, ValidationMode.Standard);
 var report = await detector.ValidateAsync();
 
 if (report.IsCorrupted)
 {
     // 2. Attempt repair
-    using var repairTool = new RepairTool(report, provider);
+    using var repairTool = new RepairTool(report, storage);
     var result = await repairTool.RepairAsync(new RepairOptions
     {
-        CreateBackup = true,              // ✅ Always backup first
-        AllowDataLoss = false,            // Conservative repair
+        CreateBackup = true,              // ✅ Always backup first (result.BackupPath records where)
+        AllowDataLoss = false,            // conservative repair
         Aggressiveness = RepairAggressiveness.Conservative,
     });
     
@@ -210,6 +251,9 @@ if (report.IsCorrupted)
 }
 ```
 
+`RepairResult` reports `IssuesRepaired`, `IssuesRemaining`, `BackupPath`, `RepairTime` and `ErrorMessage`;
+a conservative repair refuses issues the report marked unrepairable rather than guessing.
+
 ---
 
 ## 📊 Monitoring
@@ -219,24 +263,25 @@ if (report.IsCorrupted)
 ```csharp
 public class DatabaseHealthCheck : IHealthCheck
 {
-    private readonly Database _db;
-    
+    private readonly SingleFileStorageProvider _storage;
+
+    public DatabaseHealthCheck(SingleFileStorageProvider storage) => _storage = storage;
+
     public async Task<HealthCheckResult> CheckHealthAsync(
         HealthCheckContext context,
         CancellationToken cancellationToken = default)
     {
         try
         {
-            // Quick validation (header only, <1ms)
-            using var provider = GetStorageProvider();
-            using var detector = new CorruptionDetector(provider, ValidationMode.Quick);
+            // Quick validation (header + WAL, no block scans)
+            using var detector = new CorruptionDetector(_storage, ValidationMode.Quick);
             var report = await detector.ValidateAsync(cancellationToken);
-            
+
             if (report.IsCorrupted)
             {
                 return HealthCheckResult.Unhealthy($"Corruption detected: {report.Summary}");
             }
-            
+
             return HealthCheckResult.Healthy("Database is healthy");
         }
         catch (Exception ex)
@@ -247,38 +292,63 @@ public class DatabaseHealthCheck : IHealthCheck
 }
 ```
 
+`CorruptionDetector` takes the **single-file provider** (`SingleFileStorageProvider`), not a DI service
+provider - keep the instance the database was opened with and reuse it here. Validation modes: `Quick`
+(header and WAL), `Standard` (registry and block checksums), `Deep` (full byte scan), `Paranoid`
+(everything, re-verified).
+
 ### Performance Metrics
 
 ```csharp
-// Get statistics
-var stats = db.GetStatistics();
+// Storage statistics (single-file mode)
+StorageStatistics stats = db.GetStorageStatistics();
 
 Console.WriteLine($"Total Size: {stats.TotalSize:N0} bytes");
-Console.WriteLine($"Block Count: {stats.BlockCount}");
-Console.WriteLine($"Fragmentation: {stats.FragmentationPercentage:F1}%");
-Console.WriteLine($"Free Space: {stats.FreeSpaceBytes:N0} bytes");
+Console.WriteLine($"Used: {stats.UsedSpace:N0} / Free: {stats.FreeSpace:N0} bytes");
+Console.WriteLine($"Pages: {stats.PageCount}, free pages: {stats.FreePages}");
+Console.WriteLine($"Blocks: {stats.BlockCount} ({stats.DirtyBlocks} dirty)");
+Console.WriteLine($"Fragmentation: {stats.FragmentationPercent:F1}%");
+Console.WriteLine($"WAL size: {stats.WalSize:N0} bytes");
+Console.WriteLine($"Last VACUUM: {stats.LastVacuum:u}");
 
-// Performance metrics
-var metrics = db.GetPerformanceMetrics();
-Console.WriteLine($"Avg INSERT: {metrics.AvgInsertMs:F2}ms");
-Console.WriteLine($"Avg SELECT: {metrics.AvgSelectMs:F2}ms");
-Console.WriteLine($"Cache Hit Rate: {metrics.CacheHitRate:F1}%");
+// Cache statistics - the engine's live performance counters
+var (qHits, qMisses, qHitRate, qCount) = db.GetQueryCacheStatistics();
+Console.WriteLine($"Query cache: {qHitRate:P1} hit rate over {qCount} entries");
+
+var pageCache = db.GetPageCacheStatistics();
+Console.WriteLine($"Page cache: {pageCache.HitRate:P1} hit rate, {pageCache.CurrentSize}/{pageCache.Capacity} pages");
+
+// Anything else the engine exposes as name/value pairs
+foreach (var (key, value) in db.GetDatabaseStatistics())
+{
+    Console.WriteLine($"{key}: {value}");
+}
 ```
+
+There is no `db.GetStatistics()` and no `db.GetPerformanceMetrics()`: storage numbers come from
+`GetStorageStatistics()`, caches from `GetQueryCacheStatistics()` / `GetPageCacheStatistics()`. Per-stage
+write timings come from the profiler in `src/SharpCoreDB/Diagnostics/WritePathProfiler.cs`
+(the `WritePathProfilerTests` harness), and end-to-end ratios from the benchmark suite - not from a
+database-level metrics API. Fragmentation is also exposed per extent by `FreeSpaceManager.GetDetailedStatistics()`.
 
 ### Logging
 
 ```csharp
-// Enable structured logging
-var logger = LoggerFactory.Create(builder =>
-{
-    builder.AddConsole();
-    builder.AddFile("logs/sharpcoredb.log");
-}).CreateLogger<Database>();
+// Register logging on the same service provider the database is opened with
+// (`Microsoft.Extensions.Logging` for AddLogging/AddConsole).
+services.AddLogging(builder => builder.AddConsole());
+var provider = services.BuildServiceProvider();
 
-// Log critical operations
+// Log signals that exist:
 logger.LogInformation("Database opened: {Path}", dbPath);
-logger.LogWarning("Checkpoint took {Ms}ms", checkpointTime);
-logger.LogError("Corruption detected: {Severity}", report.Severity);
+
+var stats = db.GetStorageStatistics();
+logger.LogWarning("Fragmentation {Percent:F1}%, WAL {WalSize} bytes",
+    stats.FragmentationPercent, stats.WalSize);
+
+using var detector = new CorruptionDetector(storage, ValidationMode.Quick);
+var report = await detector.ValidateAsync();
+logger.LogError("Corruption detected: {Severity} - {Summary}", report.Severity, report.Summary);
 ```
 
 ---
@@ -301,48 +371,52 @@ tail -f logs/sharpcoredb.log
 
 #### Weekly Tasks
 ```csharp
-// 1. Run VACUUM to defragment
+// 1. Run VACUUM to defragment (SQL form; db.VacuumAsync(VacuumMode.Quick) is the API form)
 db.ExecuteSQL("VACUUM");
 
-// 2. Validate integrity (Standard mode, ~10ms/MB)
-using var detector = new CorruptionDetector(provider, ValidationMode.Standard);
+// 2. Validate integrity - the report carries BytesScanned/BlocksValidated/ValidationTime,
+//    so the cost is measured, not assumed
+using var detector = new CorruptionDetector(storage, ValidationMode.Standard);
 var report = await detector.ValidateAsync();
 Console.WriteLine(report.Summary);
 
-// 3. Review performance metrics
-var metrics = db.GetPerformanceMetrics();
-// Alert if INSERT time > 10ms or cache hit rate < 80%
+// 3. Review the counters that exist
+var stats = db.GetStorageStatistics();
+var (hits, misses, hitRate, count) = db.GetQueryCacheStatistics();
+// Alert on: FragmentationPercent growth, WalSize growth, query-cache hit-rate collapse
 ```
 
 #### Monthly Tasks
 ```csharp
-// 1. Deep validation (50ms/MB)
-using var detector = new CorruptionDetector(provider, ValidationMode.Deep);
+// 1. Deep validation (full byte scan - measure it on your data, do not assume a rate)
+using var detector = new CorruptionDetector(storage, ValidationMode.Deep);
 var report = await detector.ValidateAsync();
 
-// 2. Analyze growth
-var stats = db.GetStatistics();
-// Track totalSize, blockCount, fragmentation over time
+// 2. Analyse growth
+var stats = db.GetStorageStatistics();
+// Track stats.TotalSize, stats.BlockCount, stats.FragmentationPercent, stats.WalSize over time
 
-// 3. Test restore from backup
+// 3. Test restore from backup - and prove it by querying the copy
 File.Copy("./backups/latest.scdb", "./test/restore.scdb");
-// Verify can open and query
+using var restored = new Database(provider, "./test/restore.scdb", "your-master-password");
+restored.ExecuteSQL("SELECT COUNT(*) FROM users");
 ```
 
 ### VACUUM Strategy
 
 ```csharp
 // When to VACUUM:
-// - Fragmentation > 20%
+// - FragmentationPercent above your threshold (AutoVacuum + FragmentationThreshold make it automatic)
 // - After large DELETE operations
 // - Monthly maintenance
 
-var stats = db.GetStatistics();
-if (stats.FragmentationPercentage > 20)
+var stats = db.GetStorageStatistics();
+if (stats.FragmentationPercent > 20)
 {
     Console.WriteLine("Running VACUUM...");
     var result = await db.VacuumAsync(VacuumMode.Full);
-    Console.WriteLine($"Reclaimed {result.BytesReclaimed:N0} bytes");
+    Console.WriteLine($"Reclaimed {result.BytesReclaimed:N0} bytes: " +
+        $"{result.FragmentationBefore:F1}% -> {result.FragmentationAfter:F1}%, {result.DurationMs}ms");
 }
 ```
 
@@ -386,28 +460,43 @@ if (!result.Success)
 // 1. Create indexes
 db.ExecuteSQL("CREATE INDEX idx_users_email ON users(email)");
 
-// 2. Enable caches
-var config = new DatabaseOptions
+// 2. Enable caches (these live on DatabaseConfig, not DatabaseOptions)
+var config = new DatabaseConfig
 {
     EnableQueryCache = true,
+    QueryCacheSize = 4096,
     EnablePageCache = true,
-    PageCacheCapacity = 2048,  // Increase cache
+    PageCacheCapacity = 2048,  // increase cache
+    UseMemoryMapping = true,
 };
 ```
 
 #### Issue: "WAL file growing too large"
-**Cause:** Checkpointing disabled or too infrequent  
+**Cause:** A long write burst against a WAL region sized below it, or file growth from fragmentation — the WAL is applied by the provider and there is no checkpoint switch to disable  
 **Solution:**
 ```csharp
-// 1. Enable auto-checkpoint
-var config = new DatabaseOptions
+// The WAL is a region inside the .scdb file, not a sidecar file, and it is applied by the provider.
+// There is no CHECKPOINT SQL statement and no EnableWalCheckpointing option.
+// 1. Size the buffer for the burst and keep full durability
+var config = new DatabaseConfig
 {
-    EnableWalCheckpointing = true,
-    WalCheckpointIntervalMs = 30000,  // Checkpoint every 30s
+    WalDurabilityMode = DurabilityMode.FullSync,
+    WalBufferSize = 4 * 1024 * 1024,
+    EnableAdaptiveWalBatching = true,
 };
 
-// 2. Manual checkpoint
-db.ExecuteSQL("CHECKPOINT");
+var options = new DatabaseOptions
+{
+    StorageMode = StorageMode.SingleFile,
+    WalBufferSizePages = 2048,   // in-file WAL region, in pages
+};
+
+// 2. Flush pending work into the file (the API form)
+db.Flush();
+
+// 3. Shrink the file when fragmentation is the real cause
+var result = await db.VacuumAsync(VacuumMode.Quick);
+Console.WriteLine($"File after VACUUM: {result.FileSizeAfter:N0} bytes");
 ```
 
 ---
@@ -417,12 +506,13 @@ db.ExecuteSQL("CHECKPOINT");
 ### Encryption
 
 ```csharp
-// Master password encryption (AES-256)
+// Master password encryption (AES-256-GCM). The password is the key source: without it the file
+// cannot be opened, and there is no plaintext mode for a password-protected database.
 var db = new Database(
     provider,
     "./data/secure.scdb",
     "strong-master-password-here",  // ✅ Use strong password
-    config: new DatabaseOptions { /* ... */ }
+    config: new DatabaseConfig { /* DatabaseConfig, not DatabaseOptions */ }
 );
 
 // Password requirements:
@@ -434,17 +524,15 @@ var db = new Database(
 
 ### Access Control
 
-```csharp
-// User authentication
-db.CreateUser("admin", "admin-password");
-db.CreateUser("readonly", "readonly-password");
+Single-file mode has **no in-database user management**: `CreateUser` / `Login` on
+`DatabaseExtensions` throw `NotSupportedException` ("User management is not supported in single-file
+mode"). Access control therefore sits at the process and deployment boundary:
 
-// Login before operations
-if (db.Login("admin", "admin-password"))
-{
-    // Perform admin operations
-}
-```
+- the encryption key comes from the master password, so whoever holds the password holds the data
+- file-system ACLs on the `.scdb` file are the access control for local deployments
+- for multi-user access, deploy the gRPC server, which serves multiple databases and enforces
+  HTTPS/TLS (minimum TLS 1.2) - never a plain-HTTP endpoint
+- keep the password in a secrets manager, never in code or a checked-in settings file
 
 ### Network Security
 
@@ -472,7 +560,7 @@ db.ExecuteSQL($"INSERT INTO users VALUES ({id}, '{userInput}')");
 - [ ] **Indexes created** on frequently queried columns
 - [ ] **Page cache enabled** with adequate size
 - [ ] **Query cache enabled** for repeated queries
-- [ ] **WAL checkpointing** configured appropriately
+- [ ] **Durability and WAL sized** (`WalDurabilityMode`, `WalBufferSize`, `WalBufferSizePages`)
 - [ ] **Batch operations** used for bulk inserts
 - [ ] **VACUUM run** monthly or when fragmentation > 20%
 
@@ -492,7 +580,9 @@ db.ExecuteBatchSQL(statements);
 
 sw.Stop();
 Console.WriteLine($"1000 inserts: {sw.ElapsedMilliseconds}ms");
-// Target: <10ms (100k ops/sec)
+// Compare against your OWN baseline, and against SQLite measured on this machine - never against a
+// published number. Report ratios, not absolutes, and state the machine and posture (see
+// ../BENCHMARK_RESULTS.md for the method this repository uses).
 ```
 
 ---
@@ -502,7 +592,7 @@ Console.WriteLine($"1000 inserts: {sw.ElapsedMilliseconds}ms");
 ### DO ✅
 
 1. **Use `using` statements** to ensure Dispose() is called
-2. **Enable WAL checkpointing** in production
+2. **Keep `DurabilityMode.FullSync`** unless the data can be re-created after a crash
 3. **Create backups** before VACUUM or repair
 4. **Run validation** weekly (Standard mode)
 5. **Monitor fragmentation** and VACUUM when needed
@@ -513,7 +603,7 @@ Console.WriteLine($"1000 inserts: {sw.ElapsedMilliseconds}ms");
 ### DON'T ❌
 
 1. **Don't** open multiple Database instances for same file
-2. **Don't** disable WAL checkpointing in production
+2. **Don't** drop to `DurabilityMode.Async` unless losing the last commits is acceptable to you
 3. **Don't** skip backups before maintenance
 4. **Don't** use string concatenation for SQL (SQL injection)
 5. **Don't** run Deep validation on every request (too slow)
@@ -559,7 +649,8 @@ Before going live:
 
 ---
 
-**Last Updated:** 2026-01-28  
-**Version:** 2.0 (SCDB Phase 5 Complete)
+**Last Updated:** 2026-10-11  
+**Version:** 2.1 (single-file format v2 - see [`README.md`](./README.md) and
+[`../CHANGELOG.md`](../CHANGELOG.md))
 
 🎉 **You're ready for production!**

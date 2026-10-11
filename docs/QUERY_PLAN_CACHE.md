@@ -513,10 +513,10 @@ Query plan caching provides:
 
 ## Further Reading
 
-- [Database Execution Layer](./DATABASE_ARCHITECTURE.md)
-- [Performance Benchmarks](../README.md#performance-benchmarks)
-- [Configuration Guide](./CONFIGURATION.md)
-- [Best Practices](./BEST_PRACTICES.md)
+- [Query Optimizer Architecture](./internals/OPTIMIZER_ARCHITECTURE.md)
+- [Comparative Benchmarks](./benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
+- [Optimizer Configuration & Tuning](./internals/OPTIMIZER_ARCHITECTURE.md#configuration--tuning)
+- [Performance Guide: configuration knobs](./manual/performance.md#77-configuration-knobs-that-affect-performance)
 
 ---
 
