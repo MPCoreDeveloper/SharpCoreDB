@@ -21,48 +21,46 @@ A lightweight, cost-based query optimizer for SharpCoreDB with logical/physical 
 
 ## Architecture
 
-### Optimization Pipeline
+### Optimization pipeline (what `Optimization.QueryOptimizer.Optimize` does)
 
 ```
-Parse AST → Logical Plan → Optimize → Physical Plan → Execute
-            (5 phases)
+Parse AST → Logical view (shape flags, estimated rows) → Costed plan → Physical steps → Execute
+             one pass, no rewrite phases
 ```
 
-**Phase 1: Logical Planning**
-- Convert AST to logical operators (Scan, Join, Filter, Aggregate, Sort)
-- No execution decisions yet
-- Preserves query semantics
+`Optimize(SelectNode)` runs three steps, in this order:
 
-**Phase 2: Predicate Pushdown**
-- Move filters as close to data source as possible
-- Split AND-connected conditions
-- Reduce intermediate row counts
+**1. Logical view** (`BuildLogicalPlan`) — derives shape flags from the AST and an estimated row count
+from `CostEstimator.EstimateScanCost`. It does **not** rewrite the query:
+`PredicatesPushed = hasWhere || hasHaving` ("pushdown planned"), `JoinsReordered = hasJoins`
+("placeholder flag"), `SubqueriesEliminated = !hasSubquery` ("trivially eliminated"),
+`Cacheable = !hasSubquery`.
 
-**Phase 3: Subquery Elimination**
-- Convert EXISTS to semi-join
-- Convert NOT EXISTS to anti-join
-- Convert IN (SELECT) to hash semi-join
-- Inline scalar subqueries when beneficial
+**2. Costing** (`EstimateCost`) — accumulates a heuristic cost per recognised clause (base scan, then
+joins, filters, aggregates, sort) in clause order.
 
-**Phase 4: Join Reordering**
-- Estimate cost of different join orders
-- Choose order minimizing intermediate results
-- Small-to-large strategy
+**3. Physical steps** (`BuildPhysicalSteps`) — emits one `PhysicalStep` per clause it recognises:
+`TableScan`, `Filter`, `Aggregate`, `Sort`, `Project`.
 
-**Phase 5: Physical Planning**
-- Coerce logical operators to physical execution steps
-- Choose hash vs nested loop join
-- Generate execution step sequence
+> **Not part of this pipeline** (they were described here as phases 2-4 in earlier revisions):
+> predicate pushdown as a *rewrite*, `EXISTS`/`NOT EXISTS`/`IN (SELECT)` conversion to semi/anti-joins,
+> and join reordering. The first is only flagged, the second has no implementation (`SemiJoin` and
+> `AntiJoin` do not exist in the source), and the third has algorithms on two components the engine
+> does not construct. §"Optimization rules" is the authoritative table.
 
-### Component Interaction
+### Component interaction
 
 ```
-QueryOptimizer.Core
-├── CostEstimator (estimated costs & cardinality)
-├── PredicatePushdown (filter optimization)
-├── SubqueryOptimizer (EXISTS/IN/scalar elimination)
-├── JoinReorderer (join order optimization)
-└── QueryOptimizerExtensions (cache integration)
+Optimization.QueryOptimizer            ← the engine's query path (Services/QueryCompiler.cs)
+├── Optimization.CostEstimator         (scan/filter/join/aggregate/sort costs)
+└── Optimization.PhysicalStepType      (TableScan, Filter, Aggregate, Sort, Project)
+
+Database/Caching/Database.PlanCaching.cs ← compiled-plan cache (normalised SQL + parameter shape)
+└── Services.QueryPlanCache            (ConcurrentDictionary + LRU)
+
+Planning/{QueryOptimizer,CardinalityEstimator,PredicatePushdown}  ← building blocks, not wired in
+Query/CostBasedOptimizer                                          ← building block, not wired in
+Execution/{JoinExecutor,SubqueryCache,AggregationOptimizer}        ← execution side
 ```
 
 ## Components
