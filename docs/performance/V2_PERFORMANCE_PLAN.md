@@ -231,7 +231,7 @@ Full suite green: **1,644 tests, 0 failures** (16 skipped).
 ### 4.1 Runtime & JIT (automatic wins on `net11.0`)
 - **Runtime-native async (Runtime Async):** lower-overhead async, tail-merged suspension points, reduced code size, ExecutionContext-capture opt-out when no ambient state. Directly benefits `Execute*Async`, `InsertBatchAsync`, `ExecuteBatchSQLAsync`, and server paths.
 - **JIT:** bounds-check elimination, redundant checked-context removal, devirtualization, switch-expression folding, constant-folding of `SequenceEqual`, redundant branch elimination → free speedups in parser/materializer loops and index lookups.
-- **NativeAOT:** faster interface dispatch (shared dispatch helper) → better throughput for interface-heavy code paths (`IStorage`, `IStorageEngine`, `ITable`).
+- **NativeAOT:** faster interface dispatch (shared dispatch helper) → *documented* to give better throughput for interface-heavy code paths (`IStorage`, `IStorageEngine`, `ITable`). **Measured on our own workload 2026-10-09 and it does not transfer:** publishing the comparative harness with `-p:PublishAot=true` and running it against its own JIT build leaves AOT **at or behind the JIT on 12 of 16 cells**, so the expectation above is not a v2.1 win and no AOT profile ships. See [`BEAT_SQLITE_ALL_AXES_PLAN.md`](BEAT_SQLITE_ALL_AXES_PLAN.md) §S4 and `docs/BENCHMARK_RESULTS.md` §NativeAOT.
 
 ### 4.2 Hardware intrinsics
 - **AVX-VNNI-512** (x64) and **Arm SVE2** → vector search (HNSW) distance kernels and `SimdHelper` fallback/optimized paths.

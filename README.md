@@ -221,7 +221,10 @@ Headline changes, grouped by area. Everything below is in the shipped `2.1.0` pa
 - ⚡ **Compiled regexes everywhere** on hot paths; regex-free `NormalizeSql`; cached DI
 - ⚡ **Removed hidden `D:\*.log` debug writes** that throttled every SELECT/execute/transaction/INSERT
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
-  source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
+  source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0). Measured for value as
+  well: the harness's **AOT ÷ JIT** A/B leaves native AOT **at or behind the JIT on 12 of 16 cells**, so AOT is
+  a deployment option (image size, startup, no JIT) and **not** a speed lever here —
+  [`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)
 - 🛡️ **Reopen data-integrity hardening (2.0.0.2)** — empty-value overflow reload, single-file
   fixed-width arena markers, and legacy 1.x delete-after-update purge (`ReopenRoundTripMatrixTests`)
 - ✅ **Validated by the core suite on this line (1,998 tests, 0 failed, measured 2026-10-11)** — the

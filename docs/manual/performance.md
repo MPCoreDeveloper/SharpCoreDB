@@ -399,7 +399,7 @@ harness, and the two-run final ranges are recorded in §7.1.
 | **DELETE fast path — landed (v2.1)** | Deferred index maintenance (default on) cut random-key DELETE to **2.19×**/1.19× (plaintext/encrypted); the remaining gap is the tombstone write plus per-statement overhead |
 | **Single-statement SQL ladder** | The SQL layer still adds ~25 µs/row over the direct API on one-row statements; the remaining cost is spread across per-statement parsing and plan-cache work |
 | **.NET 11 / C# 15** | Runtime-native async, AVX-VNNI-512/SVE2, SIMD lane APIs, Zstandard, Decimal32/64/128 — free speedups in hot paths |
-| **AOT interface-dispatch improvements** | Faster interface-heavy storage paths under NativeAOT |
+| **AOT interface-dispatch improvements** — **measured 2026-10-09: no win** | The .NET 11 dispatch helper is *documented* to speed interface-heavy paths, but on this harness native AOT is **at or behind the JIT on 12 of 16 cells** (SQLite's own cells on the same rig read 0,98–1,01), so no AOT profile is recommended — publish AOT for deployment size and startup, not throughput. Per-cell table and both harness defects the measurement exposed: [`../BENCHMARK_RESULTS.md`](../BENCHMARK_RESULTS.md) §NativeAOT · [BEAT plan §S4](../performance/BEAT_SQLITE_ALL_AXES_PLAN.md) |
 
 Track progress in [`docs/performance/V2_PERFORMANCE_PLAN.md`](../performance/V2_PERFORMANCE_PLAN.md).
 

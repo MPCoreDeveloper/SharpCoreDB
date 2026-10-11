@@ -53,6 +53,46 @@ held one prepared command — 288.108 → 878.557 UPDATE, 385.116 → 1.172.704 
 > Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
 > comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
 
+### NativeAOT arm (measured October 9, 2026) — publishes and runs, buys no throughput
+
+The AOT question is a real one for this engine, because every arm pays per-row `IStorageEngine` /
+`IStorage` dispatch, so it was measured rather than assumed. The same harness was published with
+
+```bash
+dotnet publish tests/benchmarks/SharpCoreDB.Benchmarks.Comparative -c Release -f net11.0 -r win-x64 -p:PublishAot=true
+```
+
+(native `win-x64` image, 14.023.680 bytes; run from the directory above `native\`, where `e_sqlite3.dll`
+lives) and run **as that native binary** against its own JIT build — fresh processes, identical options,
+same box, all 16 cells. Ratio is **AOT ÷ JIT**, median of the paired runs, in INSERT · READ · UPDATE ·
+DELETE order:
+
+| arm | AOT ÷ JIT | single-pair range |
+|---|---|---|
+| legacy plaintext (tuned `--pk`) | 1,00 · 0,95 · 0,88 · **1,25** | 0,82–1,38 |
+| fixed-width plaintext | 0,96 · 0,98 · 0,93 · 1,08 | 0,81–1,34 |
+| fixed-width at rest (encrypted) | 0,99 · 0,90 · 0,89 · 0,92 | 0,83–1,03 |
+| **SQLite (control, same rig)** | 1,01 · 0,98 · 0,99 · 0,99 | 0,95–1,04 |
+
+**12 of the 16 cells sit strictly below 1,00 and one at exactly 1,00.** The control is what makes the
+2–12 % READ/UPDATE deficits readable instead of box noise: AOT is marginally *behind* on SQLite's own
+cells too, so the rig is not biased toward either runtime. The only cell where AOT leads by more than
+that noise is the legacy arm's DELETE (1,25) — at n=2 AOT processes with a 0,92–1,38 pair spread, that is
+not grounds for a recommendation. **So NativeAOT is a deployment option here (image size, startup, no
+JIT) and not a speed lever**, and it needs the Visual Studio C++ workload on the build machine.
+
+Two harness defects surfaced during the measurement and are fixed in the harness (no `src/` change):
+`--pk` sampled straight from process start, so arm 1's published reps *were* the JIT ramp — which made
+AOT read **1,85× faster on UPDATE** — and the shared warm-up resolver now discards them; and the AOT
+profile killed every run at the JSON archive write (`Reflection-based serialization has been disabled`),
+pinned with `<JsonSerializerIsReflectionEnabledByDefault>true</JsonSerializerIsReflectionEnabledByDefault>`
+in the harness project. Verdict, both defects and the raw per-rep runs:
+[`docs/performance/BEAT_SQLITE_ALL_AXES_PLAN.md`](performance/BEAT_SQLITE_ALL_AXES_PLAN.md) §S4 (worklog
+session 78); archived runs:
+[`tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results/`](../tests/benchmarks/SharpCoreDB.Benchmarks.Comparative/results)
+(`pk_comparative_20261009_20*.json`, committed in `5dda8a20`).
+
+
 ---
 
 
