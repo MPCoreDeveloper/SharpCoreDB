@@ -135,8 +135,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{D8F9
 	ProjectSection(SolutionItems) = preProject
 		scripts\build-nuget.ps1 = scripts\build-nuget.ps1
 		scripts\build-server.bat = scripts\build-server.bat
-		scripts\commit-grpc.bat = scripts\commit-grpc.bat
-		scripts\commit-server-phase1.bat = scripts\commit-server-phase1.bat
 		scripts\create-collate-issue.ps1 = scripts\create-collate-issue.ps1
 	EndProjectSection
 EndProject

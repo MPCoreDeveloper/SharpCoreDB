@@ -70,8 +70,6 @@
   <Folder Name="/scripts/">
     <File Path="scripts/build-nuget.ps1" />
     <File Path="scripts/build-server.bat" />
-    <File Path="scripts/commit-grpc.bat" />
-    <File Path="scripts/commit-server-phase1.bat" />
     <File Path="scripts/create-collate-issue.ps1" />
   </Folder>
   <Folder Name="/Solution Items/">
