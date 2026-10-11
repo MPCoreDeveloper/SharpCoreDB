@@ -162,7 +162,7 @@ public static class DatabaseBatchWalExtensions
         this Database db, 
         WalBatchConfig? config = null)
     {
-        if (config is not null)  // ✅ C# 14: is not null
+        if (config is not null)  // ✅ C# 15: is not null
         {
             db.SetBatchWalConfig(config);
         }

@@ -17,7 +17,7 @@ namespace SharpCoreDB.Services;
 /// - SqlAst.DML.cs: DML nodes (INSERT, UPDATE, DELETE, CREATE TABLE)
 /// - SqlAst.cs (this file): Main documentation and namespace organization
 /// 
-/// MODERN C# 14 FEATURES USED:
+/// MODERN C# 15 FEATURES USED:
 /// - Collection expressions: List initialization with []
 /// - Target-typed new: new() for known types
 /// - Covariant return types: out TResult in ISqlVisitor

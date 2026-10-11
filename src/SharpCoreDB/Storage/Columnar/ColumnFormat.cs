@@ -11,7 +11,7 @@ using System.IO;
 
 /// <summary>
 /// Columnar data format specification for efficient analytical queries.
-/// C# 14: Record types, primary constructors, collection expressions.
+/// C# 15: Record types, primary constructors, collection expressions.
 /// 
 /// ✅ SCDB Phase 7: Advanced Query Optimization
 /// 

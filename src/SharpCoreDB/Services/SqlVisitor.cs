@@ -83,7 +83,7 @@ namespace SharpCoreDB.Services;
 /// </list>
 /// 
 /// <para>
-/// <b>C# 14 Modernization:</b>
+/// <b>C# 15 Modernization:</b>
 /// </para>
 /// <list type="bullet">
 /// <item>Collection expressions - Cleaner list initialization: <c>List&lt;string&gt; parts = ["SELECT"];</c></item>

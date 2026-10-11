@@ -13,7 +13,7 @@ using System.Threading;
 /// CryptoBufferPool - Rent and return operations.
 /// Contains buffer rental, return logic with secure clearing.
 /// Part of the CryptoBufferPool partial class.
-/// Modern C# 14 with ObjectDisposedException.ThrowIf and pattern matching.
+/// Modern C# 15 with ObjectDisposedException.ThrowIf and pattern matching.
 /// See also: CryptoBufferPool.Core.cs, CryptoBufferPool.Diagnostics.cs
 /// </summary>
 public partial class CryptoBufferPool
@@ -59,7 +59,7 @@ public partial class CryptoBufferPool
     /// <summary>
     /// Rents a buffer for generic crypto operations.
     /// SECURITY: Buffer is cleared on return like all crypto buffers.
-    /// ✅ C# 14: ObjectDisposedException.ThrowIf and is pattern.
+    /// ✅ C# 15: ObjectDisposedException.ThrowIf and is pattern.
     /// </summary>
     /// <param name="minimumSize">The minimum required buffer size.</param>
     /// <param name="bufferType">The type of crypto buffer.</param>
@@ -67,7 +67,7 @@ public partial class CryptoBufferPool
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     private RentedCryptoBuffer RentBuffer(int minimumSize, CryptoBufferType bufferType)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 14: ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 15: ThrowIf
 
         if (minimumSize > maxBufferSize)
         {
@@ -80,7 +80,7 @@ public partial class CryptoBufferPool
         bool fromCache = false;
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is CryptoCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is CryptoCache cache)  // ✅ C# 15: is pattern
         {
             if (cache.TryRent(minimumSize, out buffer))
             {
@@ -106,7 +106,7 @@ public partial class CryptoBufferPool
     /// Returns a crypto buffer to the pool.
     /// SECURITY: ALWAYS clears buffer using CryptographicOperations.ZeroMemory.
     /// INTERNAL: Called automatically by RentedCryptoBuffer.Dispose().
-    /// ✅ C# 14: is null and is pattern matching.
+    /// ✅ C# 15: is null and is pattern matching.
     /// </summary>
     /// <param name="buffer">The buffer to return.</param>
     /// <param name="usedSize">The number of bytes actually used.</param>
@@ -115,7 +115,7 @@ public partial class CryptoBufferPool
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     internal void Return(byte[] buffer, int usedSize, CryptoBufferType bufferType, bool fromCache)
     {
-        if (disposed || buffer is null)  // ✅ C# 14: is null
+        if (disposed || buffer is null)  // ✅ C# 15: is null
         {
             return;
         }
@@ -129,13 +129,13 @@ public partial class CryptoBufferPool
         Interlocked.Add(ref bytesCleared, clearSize);
 
         // Extra paranoia for key material - clear entire buffer
-        if (bufferType is CryptoBufferType.KeyMaterial && clearSize < buffer.Length)  // ✅ C# 14: is pattern
+        if (bufferType is CryptoBufferType.KeyMaterial && clearSize < buffer.Length)  // ✅ C# 15: is pattern
         {
             CryptographicOperations.ZeroMemory(buffer.AsSpan(clearSize));
         }
 
         // Return to cache or pool
-        if (config.UseThreadLocal && threadLocalCache?.Value is CryptoCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is CryptoCache cache)  // ✅ C# 15: is pattern
         {
             if (!cache.TryReturn(buffer))
             {
@@ -151,12 +151,12 @@ public partial class CryptoBufferPool
 
     /// <summary>
     /// Gets pool statistics for monitoring and security auditing.
-    /// ✅ C# 14: Target-typed new for statistics.
+    /// ✅ C# 15: Target-typed new for statistics.
     /// </summary>
     /// <returns>Crypto buffer pool statistics.</returns>
     public CryptoBufferPoolStatistics GetStatistics()
     {
-        return new()  // ✅ C# 14: Target-typed new
+        return new()  // ✅ C# 15: Target-typed new
         {
             BuffersRented = Interlocked.Read(ref buffersRented),
             BuffersReturned = Interlocked.Read(ref buffersReturned),

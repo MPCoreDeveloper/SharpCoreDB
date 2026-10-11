@@ -37,7 +37,7 @@ public sealed class SubqueryCache
 
     /// <summary>
     /// Gets or executes a cached subquery result.
-    /// ✅ C# 14: Target-typed new, is patterns.
+    /// ✅ C# 15: Target-typed new, is patterns.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public object? GetOrExecute(
@@ -232,7 +232,7 @@ public sealed class SubqueryCache
 
 /// <summary>
 /// Cached subquery result metadata.
-/// ✅ C# 14: Required properties.
+/// ✅ C# 15: Required properties.
 /// </summary>
 internal sealed class CachedSubqueryResult
 {

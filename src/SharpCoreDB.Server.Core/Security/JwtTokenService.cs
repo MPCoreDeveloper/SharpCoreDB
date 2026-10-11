@@ -12,7 +12,7 @@ namespace SharpCoreDB.Server.Core.Security;
 
 /// <summary>
 /// Produces and validates JWT bearer tokens for gRPC clients.
-/// C# 14: Primary constructor with immutable fields.
+/// C# 15: Primary constructor with immutable fields.
 /// </summary>
 public sealed class JwtTokenService(
     string secretKey,

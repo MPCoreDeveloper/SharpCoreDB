@@ -12,7 +12,7 @@ namespace SharpCoreDB.Client;
 
 /// <summary>
 /// ADO.NET-like command for executing queries against SharpCoreDB server.
-/// C# 14: Uses primary constructor for dependencies.
+/// C# 15: Uses primary constructor for dependencies.
 /// </summary>
 public sealed class SharpCoreDBCommand(
     SharpCoreDBConnection connection,
@@ -220,7 +220,7 @@ public sealed class SharpCoreDBCommand(
 
 /// <summary>
 /// Transaction for SharpCoreDB.
-/// C# 14: Primary constructor for immutable transaction handle.
+/// C# 15: Primary constructor for immutable transaction handle.
 /// </summary>
 public sealed class SharpCoreDBTransaction(
     SharpCoreDBConnection connection,

@@ -12,7 +12,7 @@ using System.Linq.Expressions;
 
 /// <summary>
 /// Partial (filtered) index implementation.
-/// C# 14: Record types, expression trees, modern patterns.
+/// C# 15: Record types, expression trees, modern patterns.
 /// 
 /// ✅ SCDB Phase 9: Index Enhancements
 /// 

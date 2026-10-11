@@ -16,7 +16,7 @@ using System.Security.Cryptography;
 
 /// <summary>
 /// Represents a Universally Unique Lexicographically Sortable Identifier (ULID).
-/// Modern C# 14 record type with Span-based operations.
+/// Modern C# 15 record type with Span-based operations.
 /// 
 /// Location: DataStructures/Ulid.cs
 /// Purpose: Time-sortable unique identifier generation and parsing

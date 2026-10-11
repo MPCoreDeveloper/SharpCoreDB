@@ -10,7 +10,7 @@ namespace SharpCoreDB.Functional.Linq2DB.Tests;
 
 /// <summary>
 /// Tests for basic SharpCoreDB linq2db connectivity and CRUD operations.
-/// C# 14: Uses xUnit v3, primary constructors, and collection expressions.
+/// C# 15: Uses xUnit v3, primary constructors, and collection expressions.
 /// </summary>
 public sealed class BasicConnectivityTests : IClassFixture<Linq2DbTestFixture>
 {
@@ -144,7 +144,7 @@ public sealed class BasicConnectivityTests : IClassFixture<Linq2DbTestFixture>
 
 /// <summary>
 /// Test entity for basic CRUD tests.
-/// C# 14: Uses required properties and init-only setters.
+/// C# 15: Uses required properties and init-only setters.
 /// </summary>
 [Table(Name = "TestEntities")]
 public sealed class TestEntity

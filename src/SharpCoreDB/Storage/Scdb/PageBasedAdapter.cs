@@ -16,7 +16,7 @@ using SharpCoreDB.Interfaces;
 /// <summary>
 /// Adapter that integrates PageBasedEngine with SCDB SingleFileStorageProvider.
 /// Routes page operations through the unified storage layer for persistence.
-/// C# 14: Uses Lock type and modern async patterns.
+/// C# 15: Uses Lock type and modern async patterns.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 4: Provides seamless integration between page-based storage

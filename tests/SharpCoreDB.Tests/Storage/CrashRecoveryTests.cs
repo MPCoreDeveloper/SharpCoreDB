@@ -16,7 +16,7 @@ using Xunit;
 /// <summary>
 /// Crash recovery tests for Phase 3 WAL implementation.
 /// Validates zero data loss guarantee and transaction ACID properties.
-/// C# 14: Modern test patterns with async/await.
+/// C# 15: Modern test patterns with async/await.
 /// </summary>
 public sealed class CrashRecoveryTests : IDisposable
 {

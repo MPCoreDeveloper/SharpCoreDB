@@ -12,7 +12,7 @@ namespace SharpCoreDB.Server.IntegrationTests;
 /// Creates a pair of connected in-memory WebSockets for testing.
 /// Allows sending messages from one side and receiving on the other
 /// without needing a real HTTP server.
-/// C# 14: Channel-based async communication.
+/// C# 15: Channel-based async communication.
 /// </summary>
 public static class InProcessWebSocket
 {

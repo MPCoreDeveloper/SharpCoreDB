@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Manages overflow page chains for medium-sized rows (4KB-256KB).
-/// C# 14: Modern async patterns with Span&lt;T&gt; optimizations.
+/// C# 15: Modern async patterns with Span&lt;T&gt; optimizations.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: Overflow page chain management.

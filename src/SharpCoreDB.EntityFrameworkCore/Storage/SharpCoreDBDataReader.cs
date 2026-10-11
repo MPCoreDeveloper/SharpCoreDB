@@ -5,7 +5,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Data reader for SharpCoreDB query results.
-/// Modern C# 14 implementation with full functionality.
+/// Modern C# 15 implementation with full functionality.
 /// </summary>
 public class SharpCoreDBDataReader : DbDataReader
 {

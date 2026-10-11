@@ -12,7 +12,7 @@ using Xunit;
 
 /// <summary>
 /// Unit tests for FreeSpaceManager pre-allocation behavior.
-/// C# 14: Uses modern async patterns and primary constructors.
+/// C# 15: Uses modern async patterns and primary constructors.
 /// ✅ Tests exponential file growth for better I/O performance.
 /// </summary>
 public sealed class FreeSpaceManagerTests : IDisposable

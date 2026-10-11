@@ -1,6 +1,6 @@
 # SharpCoreDB.CrudApp (v2.0.0)
 
-`SharpCoreDB.CrudApp` is an ASP.NET Core MVC (.NET 10) showcase for:
+`SharpCoreDB.CrudApp` is an ASP.NET Core MVC (.NET 11) showcase for:
 
 - Encrypted single-file storage (`.scdb`, AES-256-GCM)
 - Lightweight auth via `SharpCoreDB.Identity`

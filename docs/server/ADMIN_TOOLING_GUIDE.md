@@ -61,7 +61,7 @@ Tested against SharpCoreDB v1.7.0 binary protocol (port 5433).
 
 | Driver / Library | Language | Status | Notes |
 |---|---|---|---|
-| **SharpCoreDB.Client** | C# / .NET 10 | ✅ Native | Primary recommended driver. gRPC + ADO.NET. |
+| **SharpCoreDB.Client** | C# / .NET 11 | ✅ Native | Primary recommended driver. gRPC + ADO.NET. |
 | **Npgsql** | C# / .NET | ✅ | Use via binary protocol. All standard operations work. |
 | **psycopg2** | Python | ✅ | `sslmode='require'`, port 5433. |
 | **psycopg3** | Python | ✅ | Recommended for async Python. |

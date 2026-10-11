@@ -79,7 +79,7 @@ public static class ModernSimdOptimizer
 }
 
 /// <summary>
-/// SIMD Capability levels in .NET 10.
+/// SIMD capability levels in the runtime.
 /// NOTE: Consider moving this to SimdHelper namespace in future refactoring.
 /// </summary>
 public enum SimdCapability

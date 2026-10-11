@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Data retention policy for time-series data.
-/// C# 14: Record types, required members, modern patterns.
+/// C# 15: Record types, required members, modern patterns.
 /// 
 /// ✅ SCDB Phase 8.4: Downsampling & Retention
 /// 

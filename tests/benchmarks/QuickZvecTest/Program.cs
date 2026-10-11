@@ -301,7 +301,7 @@ class Program
         Console.WriteLine("║  Zvec claims: 'searches billions of vectors in milliseconds'           ║");
         Console.WriteLine("║  Zvec hardware: typically high-end server with AVX-512                  ║");
         Console.WriteLine("║                                                                        ║");
-        Console.WriteLine("║  SharpCoreDB: pure C#/.NET 10, HNSW, tested on i7-10850H (AVX2)       ║");
+        Console.WriteLine("║  SharpCoreDB: pure C#/.NET 11, HNSW, tested on i7-10850H (AVX2)       ║");
         Console.WriteLine("║                                                                        ║");
         Console.WriteLine("║  NOTE: Zvec binary requires AVX-512 (not available on this CPU).       ║");
         Console.WriteLine("║  Zvec numbers below are from their published benchmarks on optimal HW. ║");
@@ -310,7 +310,7 @@ class Program
         Console.WriteLine("╠══════════════════════════════════════════════════════════════════════════╣");
         Console.WriteLine("║  Metric              │ SharpCoreDB (measured) │ Zvec (published)       ║");
         Console.WriteLine("╠═══════════════════════╪════════════════════════╪════════════════════════╣");
-        Console.WriteLine("║  Language             │ C# / .NET 10 (AVX2+FMA)│ C++ / SIMD (AVX-512)   ║");
+        Console.WriteLine("║  Language             │ C# / .NET 11 (AVX2+FMA)│ C++ / SIMD (AVX-512)   ║");
         Console.WriteLine("║  SIMD Distance Calc   │ ✅ System.Intrinsics   │ ✅ Native intrinsics   ║");
         Console.WriteLine("║  Index Algorithm      │ HNSW (M=16,ef=200)    │ Proxima (HNSW-based)   ║");
         Console.WriteLine("║  Platforms            │ Windows/Linux/macOS    │ Linux/macOS only       ║");

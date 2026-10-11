@@ -8,7 +8,7 @@ namespace SharpCoreDB.Data.Provider;
 
 /// <summary>
 /// Represents a SQL command to execute against a SharpCoreDB database.
-/// Modern C# 14 implementation with pattern matching and improved null handling.
+/// Modern C# 15 implementation with pattern matching and improved null handling.
 /// </summary>
 public sealed class SharpCoreDBCommand : DbCommand
 {

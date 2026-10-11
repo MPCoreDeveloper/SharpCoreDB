@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Transactions;
 /// <summary>
 /// Concrete implementation of ITransactionParticipant for SharpCoreDB instances.
 /// Wraps a database instance to participate in distributed transactions.
-/// C# 14: Primary constructors, async patterns.
+/// C# 15: Primary constructors, async patterns.
 /// </summary>
 public sealed class TransactionParticipant : ITransactionParticipant
 {

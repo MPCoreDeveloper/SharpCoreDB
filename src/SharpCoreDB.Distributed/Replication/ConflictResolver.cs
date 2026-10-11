@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Resolves conflicts that occur during replication when the same data is modified on different replicas.
 /// Supports multiple resolution strategies and custom conflict resolvers.
-/// C# 14: Primary constructors, pattern matching for strategy selection.
+/// C# 15: Primary constructors, pattern matching for strategy selection.
 /// </summary>
 public sealed class ConflictResolver
 {

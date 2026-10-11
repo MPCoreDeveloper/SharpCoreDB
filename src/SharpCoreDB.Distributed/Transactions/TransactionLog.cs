@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Transactions;
 /// <summary>
 /// Persistent log for distributed transaction events and recovery.
 /// Provides audit trail and recovery information for distributed transactions.
-/// C# 14: Async streams, collection expressions, modern I/O.
+/// C# 15: Async streams, collection expressions, modern I/O.
 /// </summary>
 public sealed class TransactionLog : IAsyncDisposable
 {

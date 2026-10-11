@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Buffers WAL entries for streaming to replicas.
 /// Provides efficient buffering with acknowledgment tracking.
-/// C# 14: Collection expressions, primary constructors.
+/// C# 15: Collection expressions, primary constructors.
 /// </summary>
 public sealed class StreamingBuffer
 {

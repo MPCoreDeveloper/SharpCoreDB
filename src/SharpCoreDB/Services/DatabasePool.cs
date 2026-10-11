@@ -10,7 +10,7 @@ using System.Collections.Concurrent;
 
 /// <summary>
 /// Provides connection pooling and reuse of Database instances.
-/// Modern C# 14 with primary constructor and collection expressions.
+/// Modern C# 15 with primary constructor and collection expressions.
 /// </summary>
 /// <param name="services">The service provider for dependency injection.</param>
 /// <param name="maxPoolSize">Maximum number of pooled connections (default 10).</param>
@@ -22,7 +22,7 @@ public sealed class DatabasePool(IServiceProvider services, int maxPoolSize = 10
 
     /// <summary>
     /// Represents a pooled database with reference counting.
-    /// Modern C# 14 with init-only setters (required removed for simplicity).
+    /// Modern C# 15 with init-only setters (required removed for simplicity).
     /// </summary>
     private sealed class PooledDatabase(IDatabase database, string connectionString)
     {
@@ -42,7 +42,7 @@ public sealed class DatabasePool(IServiceProvider services, int maxPoolSize = 10
     /// </summary>
     public IDatabase GetDatabase(string connectionString)
     {
-        ObjectDisposedException.ThrowIf(_disposed, this);  // ✅ C# 14: modern throw helper
+        ObjectDisposedException.ThrowIf(_disposed, this);  // ✅ C# 15: modern throw helper
         
         var builder = new ConnectionStringBuilder(connectionString);
         return GetDatabase(builder.DataSource, builder.Password, builder.ReadOnly);
@@ -126,7 +126,7 @@ public sealed class DatabasePool(IServiceProvider services, int maxPoolSize = 10
     /// <summary>
     /// Gets statistics about the pool.
     /// </summary>
-    public Dictionary<string, int> GetPoolStatistics() => new()  // ✅ C# 14: target-typed new
+    public Dictionary<string, int> GetPoolStatistics() => new()  // ✅ C# 15: target-typed new
     {
         ["TotalConnections"] = _pool.Count,
         ["ActiveConnections"] = _pool.Values.Count(p => p.ReferenceCount > 0),

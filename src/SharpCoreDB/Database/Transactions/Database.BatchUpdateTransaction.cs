@@ -199,7 +199,7 @@ public partial class Database
                 // queries (including those after connection close) see the committed inserts.
                 this.Flush();
 
-                Dictionary<Table, HashSet<string>> dirtyIndexesByTable = [];  // ✅ C# 14: collection expression
+                Dictionary<Table, HashSet<string>> dirtyIndexesByTable = [];  // ✅ C# 15: collection expression
 
                 foreach (var table in tables.Values)
                 {

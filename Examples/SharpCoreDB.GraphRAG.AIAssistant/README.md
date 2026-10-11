@@ -133,7 +133,7 @@ AI Response: Complete, actionable answer!
 
 ### 1. Install Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - Visual Studio 2026 or VS Code
 - DeepSeek or OpenAI API key (optional, for AI answers)
 

@@ -34,7 +34,7 @@ public partial class WalBufferPool
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public RentedBuffer Rent(int minimumSize)
     {
-        ObjectDisposedException.ThrowIf(disposed, this); // ✅ C# 14: ObjectDisposedException.ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this); // ✅ C# 15: ObjectDisposedException.ThrowIf
 
         Interlocked.Increment(ref buffersRented);
 
@@ -42,7 +42,7 @@ public partial class WalBufferPool
         bool fromCache = false;
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is BufferCache cache) // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is BufferCache cache) // ✅ C# 15: is pattern
         {
             if (cache.TryRent(minimumSize, out buffer))
             {
@@ -60,7 +60,7 @@ public partial class WalBufferPool
             buffer = bufferPool.Rent(minimumSize);
         }
 
-        return new RentedBuffer(buffer, this, minimumSize, fromCache); // ✅ C# 14: Target-typed new (implicit in ref struct)
+        return new RentedBuffer(buffer, this, minimumSize, fromCache); // ✅ C# 15: Target-typed new (implicit in ref struct)
     }
 
     /// <summary>
@@ -75,7 +75,7 @@ public partial class WalBufferPool
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void Return(byte[]? buffer, int actualSize, bool fromCache)
     {
-        if (disposed || buffer is null) // ✅ C# 14: is null pattern
+        if (disposed || buffer is null) // ✅ C# 15: is null pattern
             return;
 
         Interlocked.Increment(ref buffersReturned);
@@ -88,7 +88,7 @@ public partial class WalBufferPool
         }
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is BufferCache cache) // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is BufferCache cache) // ✅ C# 15: is pattern
         {
             if (!cache.TryReturn(buffer))
             {
@@ -106,8 +106,8 @@ public partial class WalBufferPool
     /// Gets pool statistics for monitoring and diagnostics.
     /// </summary>
     /// <returns>Pool statistics.</returns>
-    public WalBufferPoolStatistics GetStatistics() => // ✅ C# 14: Expression body
-        new() // ✅ C# 14: Target-typed new
+    public WalBufferPoolStatistics GetStatistics() => // ✅ C# 15: Expression body
+        new() // ✅ C# 15: Target-typed new
         {
             BuffersRented = Interlocked.Read(ref buffersRented),
             BuffersReturned = Interlocked.Read(ref buffersReturned),

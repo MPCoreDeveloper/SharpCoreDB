@@ -3,7 +3,7 @@ namespace SharpCoreDB.Analytics.Aggregation;
 /// <summary>
 /// Calculates standard deviation using Welford's online algorithm.
 /// Supports both population and sample standard deviation.
-/// C# 14: Uses primary constructor for immutable configuration.
+/// C# 15: Uses primary constructor for immutable configuration.
 /// </summary>
 /// <remarks>
 /// Welford's algorithm provides numerical stability by avoiding
@@ -68,7 +68,7 @@ public sealed class StandardDeviationAggregate(bool isSample = true) : IAggregat
 /// <summary>
 /// Calculates variance (standard deviation squared).
 /// Uses Welford's online algorithm for numerical stability.
-/// C# 14: Uses primary constructor for configuration.
+/// C# 15: Uses primary constructor for configuration.
 /// </summary>
 /// <remarks>
 /// Formula: σ² = Σ(xi - μ)² / N for population variance

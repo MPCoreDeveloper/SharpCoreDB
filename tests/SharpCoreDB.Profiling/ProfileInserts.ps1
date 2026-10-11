@@ -1,5 +1,5 @@
 # SharpCoreDB Insert Pipeline Profiling Scripts
-# .NET 10 Performance Analysis with dotnet-trace
+# .NET 11 Performance Analysis with dotnet-trace
 # Target: Identify insert degradation hotspots (e.g., cache misses, WAL syncs, page flushes)
 
 # ============================================================

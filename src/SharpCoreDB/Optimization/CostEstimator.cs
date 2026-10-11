@@ -140,7 +140,7 @@ public sealed class CostEstimator
 
 /// <summary>
 /// Estimated cost and cardinality for a query operation.
-/// ✅ C# 14: Init-only properties.
+/// ✅ C# 15: Init-only properties.
 /// </summary>
 public sealed class EstimatedCost
 {
@@ -157,7 +157,7 @@ public sealed class EstimatedCost
 
 /// <summary>
 /// Pre-computed table statistics for cost estimation.
-/// ✅ C# 14: Init-only properties.
+/// ✅ C# 15: Init-only properties.
 /// </summary>
 public sealed class TableStatistics
 {

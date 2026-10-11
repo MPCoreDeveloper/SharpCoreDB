@@ -12,18 +12,18 @@ using System.Threading;
 /// TemporaryBufferPool - Diagnostics, statistics, and nested types.
 /// Contains metrics, monitoring, TempBufferCache, and wrapper structs.
 /// Part of the TemporaryBufferPool partial class.
-/// Modern C# 14 with collection expressions and inline arrays.
+/// Modern C# 15 with collection expressions and inline arrays.
 /// See also: TemporaryBufferPool.Core.cs, TemporaryBufferPool.Operations.cs
 /// </summary>
 public partial class TemporaryBufferPool
 {
     /// <summary>
     /// Gets pool statistics for monitoring.
-    /// ✅ C# 14: Target-typed new for statistics object.
+    /// ✅ C# 15: Target-typed new for statistics object.
     /// </summary>
     public TemporaryBufferPoolStatistics GetStatistics()
     {
-        return new()  // ✅ C# 14: Target-typed new
+        return new()  // ✅ C# 15: Target-typed new
         {
             ByteBuffersRented = Interlocked.Read(ref byteBuffersRented),
             CharBuffersRented = Interlocked.Read(ref charBuffersRented),
@@ -37,11 +37,11 @@ public partial class TemporaryBufferPool
     /// <summary>
     /// Thread-local cache for temporary buffers.
     /// OPTIMIZATION: Separate arrays for different buffer sizes for better cache hit rate.
-    /// ✅ C# 14: Collection expressions for array initialization.
+    /// ✅ C# 15: Collection expressions for array initialization.
     /// </summary>
     private sealed class TempBufferCache : IDisposable
     {
-        private readonly byte[][] smallByteBuffers = [null, null];  // ✅ C# 14: Collection expression
+        private readonly byte[][] smallByteBuffers = [null, null];  // ✅ C# 15: Collection expression
         private readonly byte[][] mediumByteBuffers = [null, null];
         private readonly byte[][] largeByteBuffers = [null, null];
         private readonly char[][] charBuffers = [null, null, null, null];
@@ -181,7 +181,7 @@ internal enum BufferType
 /// <summary>
 /// RAII wrapper for rented temporary byte buffer.
 /// USAGE: Always use with 'using' statement.
-/// ✅ C# 14: ref struct with modern null checks.
+/// ✅ C# 15: ref struct with modern null checks.
 /// </summary>
 public ref struct RentedTempBuffer
 {
@@ -204,7 +204,7 @@ public ref struct RentedTempBuffer
 
     /// <summary>
     /// Gets the underlying byte buffer.
-    /// ✅ C# 14: Throw expression in property.
+    /// ✅ C# 15: Throw expression in property.
     /// </summary>
     public readonly byte[] ByteBuffer => buffer ?? throw new ObjectDisposedException(nameof(RentedTempBuffer));
 
@@ -219,7 +219,7 @@ public ref struct RentedTempBuffer
 
     /// <summary>
     /// Gets a span view of the buffer.
-    /// ✅ C# 14: Null-forgiving operator with pattern.
+    /// ✅ C# 15: Null-forgiving operator with pattern.
     /// </summary>
     public readonly Span<byte> AsSpan() => buffer.AsSpan();
 
@@ -235,11 +235,11 @@ public ref struct RentedTempBuffer
 
     /// <summary>
     /// Returns the buffer to the pool.
-    /// ✅ C# 14: is not null pattern.
+    /// ✅ C# 15: is not null pattern.
     /// </summary>
     public void Dispose()
     {
-        if (buffer is not null && pool is not null)  // ✅ C# 14: is not null
+        if (buffer is not null && pool is not null)  // ✅ C# 15: is not null
         {
             pool.ReturnByteBuffer(buffer, fromCache);
             buffer = null;
@@ -251,7 +251,7 @@ public ref struct RentedTempBuffer
 /// <summary>
 /// RAII wrapper for rented temporary char buffer.
 /// USAGE: Always use with 'using' statement.
-/// ✅ C# 14: ref struct with modern null checks.
+/// ✅ C# 15: ref struct with modern null checks.
 /// </summary>
 public ref struct RentedTempCharBuffer
 {
@@ -274,7 +274,7 @@ public ref struct RentedTempCharBuffer
 
     /// <summary>
     /// Gets the underlying char buffer.
-    /// ✅ C# 14: Throw expression in property.
+    /// ✅ C# 15: Throw expression in property.
     /// </summary>
     public readonly char[] CharBuffer => buffer ?? throw new ObjectDisposedException(nameof(RentedTempCharBuffer));
 
@@ -301,15 +301,15 @@ public ref struct RentedTempCharBuffer
     /// Converts the used portion to a string.
     /// ALLOCATION: Creates a new string.
     /// </summary>
-    public readonly override string ToString() => new(buffer, 0, usedSize);  // ✅ C# 14: new() for string
+    public readonly override string ToString() => new(buffer, 0, usedSize);  // ✅ C# 15: new() for string
 
     /// <summary>
     /// Returns the buffer to the pool.
-    /// ✅ C# 14: is not null pattern.
+    /// ✅ C# 15: is not null pattern.
     /// </summary>
     public void Dispose()
     {
-        if (buffer is not null && pool is not null)  // ✅ C# 14: is not null
+        if (buffer is not null && pool is not null)  // ✅ C# 15: is not null
         {
             pool.ReturnCharBuffer(buffer, fromCache);
             buffer = null;

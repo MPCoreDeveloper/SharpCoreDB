@@ -14,7 +14,7 @@ namespace SharpCoreDB.Server.Core.Tenancy;
 /// <summary>
 /// Repository for tenant catalog operations in the master database.
 /// Provides CRUD operations for tenants, database mappings, and lifecycle events.
-/// C# 14: Uses primary constructor for dependencies.
+/// C# 15: Uses primary constructor for dependencies.
 /// </summary>
 public sealed class TenantCatalogRepository(
     DatabaseInstance masterDatabase,

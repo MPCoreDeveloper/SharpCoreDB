@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Event-driven system for handling buffer lifecycle events.
 /// Provides subscription-based event handling with filtering and aggregation.
-/// C# 14: Async event handling, collection expressions, pattern matching.
+/// C# 15: Async event handling, collection expressions, pattern matching.
 /// </summary>
 public sealed class LifecycleEvents : IAsyncDisposable
 {

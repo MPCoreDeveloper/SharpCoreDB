@@ -16,7 +16,7 @@ using System.Runtime.CompilerServices;
 /// Expected improvement: 95% faster UPDATE operations (330ms → 15ms).
 /// </summary>
 /// <remarks>
-/// C# 14: Uses modern patterns (primary constructor, collection expressions, Lock class).
+/// C# 15: Uses modern patterns (primary constructor, collection expressions, Lock class).
 /// Thread-safe: Uses Lock for synchronization.
 /// Zero-allocation: Uses ArrayPool for temporary buffers.
 /// </remarks>

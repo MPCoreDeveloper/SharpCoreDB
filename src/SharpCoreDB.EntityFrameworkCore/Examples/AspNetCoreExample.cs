@@ -25,7 +25,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Examples;
 /// - Minimal API endpoints
 /// - CRUD operations
 /// - Entity relationships
-/// - Modern C# 14 patterns
+/// - Modern C# 15 patterns
 /// - RESTful API design
 /// </summary>
 public class AspNetCoreExample
@@ -316,7 +316,7 @@ public record CreateCategoryRequest(
 
 /// <summary>
 /// Product database context using SharpCoreDB.
-/// Modern C# 14 with primary constructors.
+/// Modern C# 15 with primary constructors.
 /// </summary>
 public class ProductDbContext(DbContextOptions<ProductDbContext> options) : DbContext(options)
 {

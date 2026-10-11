@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Vector clock for tracking causality in distributed systems.
 /// Used in multi-master replication to detect concurrent updates and ordering.
-/// C# 14: Primary constructors, collection expressions.
+/// C# 15: Primary constructors, collection expressions.
 /// </summary>
 public sealed class VectorClock : IEquatable<VectorClock>, IComparable<VectorClock>
 {

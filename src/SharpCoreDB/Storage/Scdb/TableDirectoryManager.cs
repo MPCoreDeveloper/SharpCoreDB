@@ -17,7 +17,7 @@ using System.Text.Json;
 /// <summary>
 /// Manages table metadata storage in single-file (.scdb) databases.
 /// Handles table directory block operations and schema persistence.
-/// C# 14: Uses modern patterns with spans and zero-allocation parsing.
+/// C# 15: Uses modern patterns with spans and zero-allocation parsing.
 /// </summary>
 internal sealed class TableDirectoryManager : IDisposable
 {

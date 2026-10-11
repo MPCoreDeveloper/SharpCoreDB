@@ -15,7 +15,7 @@ using System.Runtime.CompilerServices;
 /// Maps locale names (e.g., "tr-TR", "de-DE", "nl-NL") to <see cref="CultureInfo"/> instances
 /// and provides culture-aware string comparison, equality, and hash code operations.
 ///
-/// Thread-safe via <see cref="Lock"/> (C# 14). Caches <see cref="CompareInfo"/> for hot-path performance.
+/// Thread-safe via <see cref="Lock"/> (C# 15). Caches <see cref="CompareInfo"/> for hot-path performance.
 /// </summary>
 /// <remarks>
 /// Locale-aware comparison is 10-100x slower than ordinal. Use only when needed.

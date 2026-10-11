@@ -23,7 +23,7 @@ using System.Threading.Tasks;
 /// Thread-safe via ConcurrentDictionary.
 /// Format: [Header(64B)] [Entry1(64B)] [Entry2(64B)] ... [EntryN(64B)]
 /// ✅ Phase 1 Optimization: Batched registry flushes reduce I/O from 500 to ~10 per batch.
-/// C# 14: Uses PeriodicTimer, Lock class, and modern async patterns.
+/// C# 15: Uses PeriodicTimer, Lock class, and modern async patterns.
 /// </summary>
 internal sealed class BlockRegistry : IDisposable
 {
@@ -64,7 +64,7 @@ internal sealed class BlockRegistry : IDisposable
         _registryLength = provider.RootRegistryLength;
         _blocks = new ConcurrentDictionary<string, BlockEntry>(StringComparer.Ordinal);
         
-        // ✅ C# 14: Start periodic flush task
+        // ✅ C# 15: Start periodic flush task
         _flushTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(FLUSH_INTERVAL_MS));
         _flushTask = Task.Run(PeriodicFlushLoopAsync, _flushCts.Token);
         
@@ -172,7 +172,7 @@ internal sealed class BlockRegistry : IDisposable
     }
 
     /// <summary>
-    /// ✅ C# 14: Periodic flush background task using PeriodicTimer.
+    /// ✅ C# 15: Periodic flush background task using PeriodicTimer.
     /// Ensures dirty blocks are flushed even if threshold not reached.
     /// </summary>
     private async Task PeriodicFlushLoopAsync()

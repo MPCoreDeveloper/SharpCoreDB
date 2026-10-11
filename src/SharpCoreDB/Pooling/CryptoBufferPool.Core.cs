@@ -12,7 +12,7 @@ using System.Threading;
 /// CryptoBufferPool - Core pool infrastructure.
 /// Contains fields, constructor, configuration, and disposal logic.
 /// Part of the CryptoBufferPool partial class.
-/// Modern C# 14 with target-typed new and collection expressions.
+/// Modern C# 15 with target-typed new and collection expressions.
 /// See also: CryptoBufferPool.Operations.cs, CryptoBufferPool.Diagnostics.cs
 /// </summary>
 public partial class CryptoBufferPool : IDisposable
@@ -30,7 +30,7 @@ public partial class CryptoBufferPool : IDisposable
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CryptoBufferPool"/> class.
-    /// ✅ C# 14: Target-typed new for configuration.
+    /// ✅ C# 15: Target-typed new for configuration.
     /// </summary>
     /// <param name="maxBufferSize">Maximum buffer size for crypto operations (default: 16MB).</param>
     /// <param name="config">Optional pool configuration.</param>
@@ -39,7 +39,7 @@ public partial class CryptoBufferPool : IDisposable
         this.maxBufferSize = maxBufferSize;
         this.bufferPool = ArrayPool<byte>.Shared;
         
-        // ✅ C# 14: Target-typed new
+        // ✅ C# 15: Target-typed new
         this.config = config ?? new()
         {
             UseThreadLocal = true,
@@ -72,14 +72,14 @@ public partial class CryptoBufferPool : IDisposable
 
     /// <summary>
     /// Protected dispose method for proper IDisposable pattern.
-    /// ✅ C# 14: is not null pattern.
+    /// ✅ C# 15: is not null pattern.
     /// </summary>
     /// <param name="disposing">True if disposing managed resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!disposed)
         {
-            if (disposing && threadLocalCache is not null)  // ✅ C# 14: is not null
+            if (disposing && threadLocalCache is not null)  // ✅ C# 15: is not null
             {
                 // SECURITY: Dispose all thread-local caches to clear buffers
                 foreach (var cache in threadLocalCache.Values)

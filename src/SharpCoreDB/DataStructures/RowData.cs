@@ -11,7 +11,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Stack-allocated row representation for zero-allocation inserts.
 /// Replaces Dictionary&lt;string,object&gt; to eliminate 10K heap allocations per 10K inserts.
-/// Modern C# 14 with ref struct and Span support.
+/// Modern C# 15 with ref struct and Span support.
 /// 
 /// PERFORMANCE IMPACT:
 /// - Before: 10K Dictionary allocations = ~4 MB

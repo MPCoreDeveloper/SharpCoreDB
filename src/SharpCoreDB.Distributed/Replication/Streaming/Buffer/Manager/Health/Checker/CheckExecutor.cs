@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Efficient executor for health checks with parallel processing and resource management.
 /// Provides optimized execution with timeout handling and load balancing.
-/// C# 14: Primary constructors, parallel processing with PLINQ.
+/// C# 15: Primary constructors, parallel processing with PLINQ.
 /// </summary>
 public sealed class CheckExecutor
 {

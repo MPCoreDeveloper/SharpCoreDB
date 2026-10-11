@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// High-performance generic hash index with type-safe keys.
-/// Uses Dictionary for O(1) lookups, optimized for .NET 10 with modern C# 14.
+/// Uses Dictionary for O(1) lookups with modern C# patterns.
 /// ✅ COLLATE Phase 4: Now supports custom equality comparers for collation-aware indexing.
 /// Target: &lt; 0.05ms for lookups on 10k records.
 /// </summary>
@@ -136,7 +136,7 @@ public sealed partial class GenericHashIndex<TKey> : IGenericIndex<TKey>, ITypeE
     /// </summary>
     public void Optimize()
     {
-        // Dictionary is already pretty optimized in .NET 10
+        // Dictionary is already well optimized by the runtime
         // Could trim excess capacity in Lists if needed
         foreach (var positions in _index.Values)
         {

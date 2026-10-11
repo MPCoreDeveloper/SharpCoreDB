@@ -15,7 +15,7 @@ using System.Security.Cryptography;
 /// <summary>
 /// SCDB single-file storage format implementation.
 /// Provides zero-copy, SSD-optimized, memory-mappable storage.
-/// C# 14: Uses primary constructors, field keyword, and modern patterns.
+/// C# 15: Uses primary constructors, field keyword, and modern patterns.
 /// </summary>
 public sealed class ScdbFile : IDisposable
 {
@@ -42,7 +42,7 @@ public sealed class ScdbFile : IDisposable
 
     /// <summary>
     /// Opens or creates an SCDB file.
-    /// C# 14: Static factory method pattern with modern switch expression.
+    /// C# 15: Static factory method pattern with modern switch expression.
     /// </summary>
     /// <param name="path">Path to the .scdb file</param>
     /// <param name="mode">Open mode flags</param>

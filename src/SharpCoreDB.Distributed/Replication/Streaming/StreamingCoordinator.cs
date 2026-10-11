@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Coordinates multiple streaming pipelines across different WAL files.
 /// Provides high-level management of distributed streaming operations.
-/// C# 14: Primary constructors, collection expressions, async coordination.
+/// C# 15: Primary constructors, collection expressions, async coordination.
 /// </summary>
 public sealed class StreamingCoordinator : IAsyncDisposable
 {

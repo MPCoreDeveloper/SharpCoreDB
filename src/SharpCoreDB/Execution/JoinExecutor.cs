@@ -13,7 +13,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Iterator-based JOIN executor with streaming results.
 /// HOT PATH - Zero-allocation, no LINQ, no async.
-/// ✅ C# 14: Collection expressions, improved pattern matching, required properties.
+/// ✅ C# 15: Collection expressions, improved pattern matching, required properties.
 /// 
 /// Design:
 /// - Hash joins with fallback to nested loop joins

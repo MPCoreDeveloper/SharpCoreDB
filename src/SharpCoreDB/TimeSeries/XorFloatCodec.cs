@@ -10,7 +10,7 @@ using System.IO;
 
 /// <summary>
 /// Simplified XOR-based float compression.
-/// C# 14: Modern patterns, aggressive optimization.
+/// C# 15: Modern patterns, aggressive optimization.
 /// 
 /// ✅ SCDB Phase 8.1: Time-Series Compression
 /// 

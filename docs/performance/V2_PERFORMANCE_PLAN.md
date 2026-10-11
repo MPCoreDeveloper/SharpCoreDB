@@ -3,7 +3,7 @@
 **Status:** ✅ v2.0.0 shipped — WP1–WP7, WP9, WP9-B/C, WP9-E, WP14 complete (all committed on `release/v2.0.0.0` + `master`) · remaining items target v2.1
 **Branch:** `master` / `release/v2.0.0.0`
 **Target version:** 2.0.0.0 (shipped) → 2.1.0.0 (next)
-**Current toolchain:** .NET 10 / C# 14 (locked for v2.0.x)
+**Toolchain:** the v2.0.x line - locked to .NET 10 / C# 14 and now parked on `release/v2.0`; the 2.1.0 `master` line is `net11.0` / C# 15 preview
 **Next toolchain:** .NET 11 / C# 15 — mainstream November 2026 (planned for v2.1+)
 **Last updated:** September 2026
 

@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Sorted index for fast time range lookups.
-/// C# 14: Modern patterns, SIMD-friendly, aggressive optimization.
+/// C# 15: Modern patterns, SIMD-friendly, aggressive optimization.
 /// 
 /// ✅ SCDB Phase 8.3: Time Range Queries
 /// 

@@ -141,7 +141,7 @@ public class Phase2CDynamicPGOBenchmark
 /// <summary>
 /// Phase 2C: Generated Regex Benchmarks
 /// 
-/// Compares traditional Regex compilation vs C# 14 [GeneratedRegex]
+/// Compares traditional Regex compilation vs C# 15 [GeneratedRegex]
 /// 
 /// [GeneratedRegex] uses Roslyn to generate optimized regex code at compile-time
 /// instead of compiling regex patterns at runtime.
@@ -237,7 +237,7 @@ public partial class Phase2CGeneratedRegexBenchmark
         return result;
     }
 
-    // Generated Regex patterns using C# 14 [GeneratedRegex]
+    // Generated Regex patterns using C# 15 [GeneratedRegex]
     
     [GeneratedRegex(@"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}", 
         RegexOptions.Compiled | RegexOptions.IgnoreCase)]

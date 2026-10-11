@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Manages archival and purging of old time-series data.
-/// C# 14: Modern patterns, async-friendly, resource management.
+/// C# 15: Modern patterns, async-friendly, resource management.
 /// 
 /// ✅ SCDB Phase 8.4: Downsampling & Retention
 /// 

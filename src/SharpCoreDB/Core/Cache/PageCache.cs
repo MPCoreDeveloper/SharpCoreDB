@@ -47,7 +47,7 @@ namespace SharpCoreDB.Core.Cache;
 /// </para>
 /// 
 /// <para>
-/// <b>C# 14 Features:</b>
+/// <b>C# 15 Features:</b>
 /// </para>
 /// <list type="bullet">
 /// <item>ArgumentNullException.ThrowIfNull for parameter validation</item>

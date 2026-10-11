@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Calculates scheduling costs and optimization factors for health check intervals.
 /// Provides quantitative analysis of resource usage, risk factors, and performance trade-offs.
-/// C# 14: Primary constructors, pattern matching for cost evaluation.
+/// C# 15: Primary constructors, pattern matching for cost evaluation.
 /// </summary>
 public sealed class CostCalculator
 {

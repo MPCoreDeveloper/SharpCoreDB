@@ -10,7 +10,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// SqlParser partial class - Hash Index operations.
-/// ✅ C# 14: Modern patterns, required properties, collection expressions.
+/// ✅ C# 15: Modern patterns, required properties, collection expressions.
 /// 
 /// This file contains all hash index-related functionality:
 /// - Creating hash indexes (single and named)
@@ -60,7 +60,7 @@ public partial class SqlParser
     /// <summary>
     /// Creates a named hash index with unique constraint.
     /// Unique hash indexes enforce uniqueness and provide O(1) duplicate checking.
-    /// ✅ C# 14: Modern parameter patterns.
+    /// ✅ C# 15: Modern parameter patterns.
     /// </summary>
     /// <param name="indexName">The name of the index.</param>
     /// <param name="tableName">The table name.</param>
@@ -118,7 +118,7 @@ public partial class SqlParser
     /// <summary>
     /// Gets statistics about a hash index.
     /// Returns information about unique keys, total rows, and average rows per key.
-    /// ✅ C# 14: Tuple return type with named elements.
+    /// ✅ C# 15: Tuple return type with named elements.
     /// </summary>
     /// <param name="tableName">The table name.</param>
     /// <param name="columnName">The column name.</param>

@@ -12,7 +12,7 @@ using System.Threading;
 /// TemporaryBufferPool - Core pool management.
 /// Contains fields, constructor, configuration, and pool infrastructure.
 /// Part of the TemporaryBufferPool partial class.
-/// Modern C# 14 with collection expressions and primary constructors.
+/// Modern C# 15 with collection expressions and primary constructors.
 /// See also: TemporaryBufferPool.Operations.cs, TemporaryBufferPool.Diagnostics.cs
 /// </summary>
 public partial class TemporaryBufferPool : IDisposable
@@ -37,7 +37,7 @@ public partial class TemporaryBufferPool : IDisposable
 
     /// <summary>
     /// Initializes a new instance of the <see cref="TemporaryBufferPool"/> class.
-    /// ✅ C# 14: Target-typed new for default config.
+    /// ✅ C# 15: Target-typed new for default config.
     /// </summary>
     /// <param name="config">Optional pool configuration.</param>
     public TemporaryBufferPool(PoolConfiguration? config = null)
@@ -45,7 +45,7 @@ public partial class TemporaryBufferPool : IDisposable
         this.bytePool = ArrayPool<byte>.Shared;
         this.charPool = ArrayPool<char>.Shared;
         
-        // ✅ C# 14: Target-typed new expression
+        // ✅ C# 15: Target-typed new expression
         this.config = config ?? new()
         {
             UseThreadLocal = true,
@@ -76,14 +76,14 @@ public partial class TemporaryBufferPool : IDisposable
 
     /// <summary>
     /// Releases the unmanaged resources used by the pool and optionally releases managed resources.
-    /// ✅ C# 14: is not null pattern.
+    /// ✅ C# 15: is not null pattern.
     /// </summary>
     /// <param name="disposing">True to release both managed and unmanaged resources; false to release only unmanaged resources.</param>
     protected virtual void Dispose(bool disposing)
     {
         if (!disposed)
         {
-            if (disposing && threadLocalCache is not null)  // ✅ C# 14: is not null
+            if (disposing && threadLocalCache is not null)  // ✅ C# 15: is not null
             {
                 // Dispose all thread-local caches to clear buffers
                 foreach (var cache in threadLocalCache.Values)

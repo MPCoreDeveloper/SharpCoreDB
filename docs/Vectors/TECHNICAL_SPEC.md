@@ -609,7 +609,7 @@ Future optimization (Phase 4):
 ### Existing SharpCoreDB Patterns
 
 The codebase uses:
-- `Lock` class (C# 14) for mutual exclusion
+- `Lock` class (C# 15) for mutual exclusion
 - `ConcurrentDictionary` for concurrent access
 - `Channel<T>` for producer-consumer patterns
 - Read-only snapshots for consistent reads

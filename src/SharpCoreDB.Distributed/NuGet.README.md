@@ -114,7 +114,7 @@ await distributedDb.ExecuteAsync(
 ## Requirements
 
 - SharpCoreDB.Core v1.3.5+
-- .NET 10.0+
+- .NET 11.0+
 - Network connectivity between shard nodes
 
 ## License

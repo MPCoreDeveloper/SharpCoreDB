@@ -88,7 +88,7 @@ SharpCoreDB defines the following compiler constants based on the target platfor
 ### Android
 
 **Requirements:**
-- .NET 10 for Android (MAUI, Xamarin.Android)
+- .NET 11 for Android (MAUI, Xamarin.Android)
 - Minimum API Level: 21 (Android 5.0)
 - Recommended API Level: 29+ (Android 10+)
 
@@ -109,7 +109,7 @@ string dbPath = Path.Combine(
 ### iOS
 
 **Requirements:**
-- .NET 10 for iOS (MAUI, Xamarin.iOS)
+- .NET 11 for iOS (MAUI, Xamarin.iOS)
 - Minimum iOS Version: 12.0
 - Recommended iOS Version: 15.0+
 
@@ -243,7 +243,7 @@ dotnet build -r linux-arm -c Release
 ```bash
 # Build and deploy to Android device/emulator
 dotnet build -r android-arm64 -c Release
-adb install -r bin/Release/net10.0/android-arm64/YourApp.apk
+adb install -r bin/Release/net11.0/android-arm64/YourApp.apk
 ```
 
 ### iOS Testing
@@ -261,7 +261,7 @@ dotnet build -r iossimulator-arm64 -c Release
 dotnet publish -r linux-arm64 -c Release --self-contained
 
 # Deploy via SSH
-scp -r bin/Release/net10.0/linux-arm64/publish/* pi@raspberrypi.local:~/sharpcoredb/
+scp -r bin/Release/net11.0/linux-arm64/publish/* pi@raspberrypi.local:~/sharpcoredb/
 
 # Run on device
 ssh pi@raspberrypi.local
@@ -317,7 +317,7 @@ A: Yes, but use the `linux-arm` build. Performance will be limited on single-cor
 A: Use `win-arm64` for Raspberry Pi running Windows IoT Core.
 
 **Q: Can I use it in Unity for mobile games?**  
-A: Yes, if Unity supports .NET 10. Otherwise, use the .NET Standard builds.
+A: Yes, if Unity supports .NET 11. Otherwise, use the .NET Standard builds.
 
 **Q: Does it work on Apple Watch or Android Wear?**  
 A: Theoretically yes (using `ios-arm64` for watchOS), but not officially tested. File storage may be very limited.

@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// SqlParser partial class - Table and Column Statistics.
-/// ✅ C# 14: Modern patterns, readonly collections, collection expressions.
+/// ✅ C# 15: Modern patterns, readonly collections, collection expressions.
 /// 
 /// This file contains statistics tracking and retrieval:
 /// - Column usage tracking (for query optimization)
@@ -39,7 +39,7 @@ public partial class SqlParser
     /// <summary>
     /// Gets column usage statistics for a table.
     /// Returns a dictionary mapping column names to usage counts.
-    /// ✅ C# 14: Readonly collection return type.
+    /// ✅ C# 15: Readonly collection return type.
     /// </summary>
     /// <param name="tableName">The table name.</param>
     /// <returns>Column usage statistics, or empty if table doesn't exist.</returns>
@@ -68,7 +68,7 @@ public partial class SqlParser
 
         Console.WriteLine($"\n═══ Column Usage Statistics: {tableName} ═══");
         
-        // ✅ C# 14: LINQ with modern patterns
+        // ✅ C# 15: LINQ with modern patterns
         var sorted = usage.OrderByDescending(kv => kv.Value).ToList();
         
         foreach (var (column, count) in sorted)
@@ -108,7 +108,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Gets comprehensive table statistics.
-    /// ✅ C# 14: Tuple return with named elements.
+    /// ✅ C# 15: Tuple return with named elements.
     /// </summary>
     /// <param name="tableName">The table name.</param>
     /// <returns>Table statistics tuple, or null if table doesn't exist.</returns>
@@ -163,7 +163,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Formats byte count for human-readable display.
-    /// ✅ C# 14: Pattern matching with when clauses.
+    /// ✅ C# 15: Pattern matching with when clauses.
     /// </summary>
     private static string FormatBytes(long bytes)
     {

@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Coordinates health checks across multiple buffers with load balancing and resource management.
 /// Provides intelligent distribution of check execution based on buffer priority and system load.
-/// C# 14: Primary constructors, Channel<T> for coordination, pattern matching.
+/// C# 15: Primary constructors, Channel<T> for coordination, pattern matching.
 /// </summary>
 public sealed class CheckCoordinator : IAsyncDisposable
 {

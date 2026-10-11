@@ -268,7 +268,7 @@ public static class BufferConstants
     public static string GetSimdThresholdSummary()
     {
         return $"""
-            SIMD Optimization Thresholds (.NET 10):
+            SIMD Optimization Thresholds:
             
             Buffer Operations:
               - Copy:          >= {SIMD_BUFFER_COPY_THRESHOLD} bytes  (2-3x speedup)

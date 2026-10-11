@@ -7,7 +7,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Represents a SharpCoreDB command for Entity Framework Core.
-/// Modern C# 14 implementation with full query result support.
+/// Modern C# 15 implementation with full query result support.
 /// </summary>
 public class SharpCoreDBCommand : DbCommand
 {
@@ -19,7 +19,7 @@ public class SharpCoreDBCommand : DbCommand
     /// </summary>
     public SharpCoreDBCommand(SharpCoreDBConnection connection)
     {
-        ArgumentNullException.ThrowIfNull(connection); // ? C# 14
+        ArgumentNullException.ThrowIfNull(connection); // ? C# 15
         _connection = connection;
     }
 
@@ -112,7 +112,7 @@ public class SharpCoreDBCommand : DbCommand
     }
 
     /// <inheritdoc />
-    protected override DbParameter CreateDbParameter() => new SharpCoreDBParameter(); // ? C# 14: expression-bodied
+    protected override DbParameter CreateDbParameter() => new SharpCoreDBParameter(); // ? C# 15: expression-bodied
 
     /// <inheritdoc />
     protected override DbDataReader ExecuteDbDataReader(CommandBehavior behavior)
@@ -594,11 +594,11 @@ public class SharpCoreDBCommand : DbCommand
 
 /// <summary>
 /// Parameter collection for SharpCoreDB commands.
-/// Modern C# 14 with collection expressions.
+/// Modern C# 15 with collection expressions.
 /// </summary>
 public class SharpCoreDBParameterCollection : DbParameterCollection
 {
-    private readonly List<DbParameter> _parameters = []; // ? C# 14: collection expression
+    private readonly List<DbParameter> _parameters = []; // ? C# 15: collection expression
 
     /// <summary>Gets the number of parameters in the collection.</summary>
     public override int Count => _parameters.Count;
@@ -611,7 +611,7 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
     /// <returns>The index of the added parameter.</returns>
     public override int Add([AllowNull] object value)
     {
-        if (value is not DbParameter param) // ? C# 14: not pattern
+        if (value is not DbParameter param) // ? C# 15: not pattern
             throw new ArgumentException("Value must be a DbParameter", nameof(value));
             
         _parameters.Add(param);
@@ -716,7 +716,7 @@ public class SharpCoreDBParameterCollection : DbParameterCollection
 
 /// <summary>
 /// Parameter for SharpCoreDB commands.
-/// Modern C# 14 with init properties.
+/// Modern C# 15 with init properties.
 /// </summary>
 public class SharpCoreDBParameter : DbParameter
 {

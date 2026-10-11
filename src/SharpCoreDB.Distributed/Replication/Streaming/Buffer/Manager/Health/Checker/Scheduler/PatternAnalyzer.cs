@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Advanced pattern analyzer for buffer usage recognition and prediction.
 /// Uses statistical analysis and machine learning techniques to identify usage patterns.
-/// C# 14: Primary constructors, LINQ for data analysis, pattern matching.
+/// C# 15: Primary constructors, LINQ for data analysis, pattern matching.
 /// </summary>
 public sealed class PatternAnalyzer
 {

@@ -14,7 +14,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// Manages client sessions and authentication.
 /// Tracks active connections and enforces security policies.
-/// C# 14: Uses primary constructor and collection expressions.
+/// C# 15: Uses primary constructor and collection expressions.
 /// </summary>
 public sealed class SessionManager(
     DatabaseRegistry databaseRegistry,
@@ -280,7 +280,7 @@ public sealed class SessionManager(
 /// <summary>
 /// Represents a client database session.
 /// Tracks connection state, authentication, and active transactions.
-/// C# 14: Uses primary constructor for immutability.
+/// C# 15: Uses primary constructor for immutability.
 /// </summary>
 public sealed class ClientSession(
     string sessionId,

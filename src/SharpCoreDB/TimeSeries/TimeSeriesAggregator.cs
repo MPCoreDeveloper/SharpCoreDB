@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Time-series data aggregation engine.
-/// C# 14: Static class, aggressive optimization, SIMD-friendly.
+/// C# 15: Static class, aggressive optimization, SIMD-friendly.
 /// 
 /// ✅ SCDB Phase 8.4: Downsampling & Retention
 /// 

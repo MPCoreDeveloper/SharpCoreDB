@@ -12,7 +12,7 @@ using SharpCoreDB.Storage.Columnar;
 
 /// <summary>
 /// Cost-based query optimizer.
-/// C# 14: Primary constructors, collection expressions, modern patterns.
+/// C# 15: Primary constructors, collection expressions, modern patterns.
 /// 
 /// ✅ SCDB Phase 7.3: Query Plan Optimization
 /// 

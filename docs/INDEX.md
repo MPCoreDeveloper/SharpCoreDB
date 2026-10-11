@@ -35,6 +35,7 @@ guide explaining when SharpCoreDB is fastest.
 ## 1. Project Entry Points
 
 - `../README.md`
+- `../Examples/README.md` — runnable end-to-end samples (CQRS, EventSourcing, EF Core, FluentMigrator, multi-tenant server, OrchardCore/CRUD web, GraphRAG AI assistant)
 - `README.md`
 - `FEATURE_MATRIX.md`
 - `PROJECT_STATUS.md`
@@ -55,6 +56,7 @@ guide explaining when SharpCoreDB is fastest.
 - `../src/SharpCoreDB.Client/NuGet.README.md`
 - `../src/SharpCoreDB.Data.Provider/README.md`
 - `../src/SharpCoreDB.Data.Provider/NuGet.README.md`
+- `../src/SharpCoreDB.Data.Provider/REGISTRATION.md` — registering the ADO.NET provider in SSMS and other ADO.NET tools
 - `../src/SharpCoreDB.EntityFrameworkCore/README.md`
 - `../src/SharpCoreDB.EntityFrameworkCore/NuGet.README.md`
 - `../src/SharpCoreDB.EntityFrameworkCore/USAGE.md`
@@ -137,6 +139,7 @@ guide explaining when SharpCoreDB is fastest.
 - `Vectors/DISKANN_SQL_DDL.md` — `CREATE VECTOR INDEX … USING DISKANN` SQL DDL
 - `Vectors/MUNARIUM_INSPIRATION_PLAN.md` — munarium-inspired implementation record + phase status
 - `Vectors/MUNARIUM_GAP_ANALYSIS.md` — verified module-by-module gaps + borrowed-goodies backlog
+- `Vectors/GRAPHRAG_WITH_DISKANN_EXAMPLE.md` — end-to-end GraphRAG + DISKANN workflow: setup, DDL, conditional ingestion, hybrid query, artifact verification
 - `Vectors/PERFORMANCE_NOTES.md` — measured vector-search numbers + open performance work
 - `performance/INSERT_UPDATE_PERFORMANCE_PLAN.md` — ⭐ **Insert & Update Performance Plan** (write-path phased plan: measurement protocol, encryption-tax removal, in-place records, targets, owner decisions)
 

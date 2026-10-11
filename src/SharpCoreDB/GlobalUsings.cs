@@ -3,7 +3,7 @@
 // Licensed under the MIT License. See LICENSE file in the project root for full license information.
 // </copyright>
 
-// ✅ C# 14: Global using directives to reduce repetition across all files
+// ✅ C# 15: Global using directives to reduce repetition across all files
 // These usings are implicitly available in every .cs file in the project
 
 // System namespaces

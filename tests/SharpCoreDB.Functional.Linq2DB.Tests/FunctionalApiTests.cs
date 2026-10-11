@@ -10,7 +10,7 @@ namespace SharpCoreDB.Functional.Linq2DB.Tests;
 
 /// <summary>
 /// Tests for functional API wrapper with Option/Fin/Seq return types.
-/// C# 14: Railway-oriented programming patterns with modern C# syntax.
+/// C# 15: Railway-oriented programming patterns with modern C# syntax.
 /// </summary>
 public sealed class FunctionalApiTests : IClassFixture<Linq2DbTestFixture>
 {

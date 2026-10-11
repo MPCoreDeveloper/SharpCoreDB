@@ -243,9 +243,16 @@ annotations added here will clear their findings the same way.
 Verification for the batch: the tests project and the benchmark project both build with **0 errors**, the new
 `ScdbStructureLayoutTests` is **3/3** (it is what makes the `[InlineArray]` swap safe to believe — the offset,
 the 22 bytes and the packed size are asserted, not assumed), and the core suite is **1998 / 0 failed / 0
-errors / 0 skipped**, i.e. the 1,995 of the published baseline plus the three new facts. The only remaining step
-is a push: automatic analysis re-runs on the default branch and the two ratings should come back A. Nothing
-local can pre-verify a SonarCloud re-analysis.
+errors / 0 skipped**, i.e. the 1,995 of the published baseline plus the three new facts. The push went to `master` on
+2026-10-11 07:01:39Z as `b7bd563e`, and the analysis the platform ran on that revision (dated 07:05:54Z,
+available 07:07:36Z) came back **OK on all five conditions** — `new_reliability_rating` **1 (A)**,
+`new_security_rating` **1 (A)**, `new_maintainability_rating` 1 (A), `new_duplicated_lines_density` 1.8 %,
+`new_security_hotspots_reviewed` 100 % — with the leak period's unresolved issues down **278 → 261**, which is
+exactly the 17: **0 BUG, 0 VULNERABILITY**, and `S8233`, `S7637`, `S2077`, `S5443`, `S2245`, `S6640` and `S1244`
+at **0** apiece. That zero on `S1244`/`S2245` is also the production confirmation that the four `// NOSONAR`
+annotations held. The 261 that remain are `CODE_SMELL`s the promotion carried in; they move no rating, so the gate
+is green. Nothing local can pre-verify a SonarCloud re-analysis — this outcome is read from the platform's own
+API (`qualitygates/project_status`, `project_analyses/search`, `issues/search`), not inferred.
 
 ## GA checklist (around 2026-11-10 — the only outstanding work this decision creates)
 

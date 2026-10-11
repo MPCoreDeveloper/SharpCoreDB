@@ -510,7 +510,7 @@ public static class TypedRowBuffer
     /// <summary>
     /// ✅ PHASE 3: Pre-computed column offsets for fixed-schema tables.
     /// Enables O(1) column access instead of sequential writes.
-    /// Uses C# 14 InlineArray for stack allocation.
+    /// Uses C# 15 InlineArray for stack allocation.
     /// </summary>
     [InlineArray(16)]
     public struct ColumnOffsets

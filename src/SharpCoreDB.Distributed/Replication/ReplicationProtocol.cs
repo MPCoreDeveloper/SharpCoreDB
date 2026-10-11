@@ -9,7 +9,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Defines the replication communication protocol for SharpCoreDB.
-/// C# 14: Primary constructors, pattern matching, modern async patterns.
+/// C# 15: Primary constructors, pattern matching, modern async patterns.
 /// </summary>
 public static class ReplicationProtocol
 {

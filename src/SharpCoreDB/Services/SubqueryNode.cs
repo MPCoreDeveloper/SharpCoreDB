@@ -8,7 +8,7 @@ namespace SharpCoreDB.Services;
 /// <summary>
 /// Represents a subquery expression in the AST.
 /// HOT PATH - Zero-allocation, supports streaming execution.
-/// ✅ C# 14: Collection expressions, required properties, is patterns.
+/// ✅ C# 15: Collection expressions, required properties, is patterns.
 /// 
 /// Subquery Types:
 /// - Scalar: Returns single value (e.g., (SELECT MAX(price) FROM products))
@@ -27,13 +27,13 @@ public sealed class SubqueryExpressionNode : ExpressionNode
 {
     /// <summary>
     /// Gets or sets the SELECT statement representing the subquery.
-    /// ✅ C# 14: Required property.
+    /// ✅ C# 15: Required property.
     /// </summary>
     public required SelectNode Query { get; init; }
 
     /// <summary>
     /// Gets or sets the subquery type classification.
-    /// ✅ C# 14: Default value via property initializer.
+    /// ✅ C# 15: Default value via property initializer.
     /// </summary>
     public SubqueryType Type { get; set; } = SubqueryType.Unknown;
 
@@ -46,7 +46,7 @@ public sealed class SubqueryExpressionNode : ExpressionNode
     /// <summary>
     /// Gets or sets the list of outer column references.
     /// Only populated for correlated subqueries.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ColumnReferenceNode> OuterReferences { get; set; } = [];
 

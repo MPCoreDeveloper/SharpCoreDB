@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Core optimization engine that orchestrates pattern analysis and cost calculation
 /// for intelligent health check scheduling. Combines ML-style analysis with resource optimization.
-/// C# 14: Primary constructors, async patterns for optimization workflows.
+/// C# 15: Primary constructors, async patterns for optimization workflows.
 /// </summary>
 internal sealed class OptimizationEngine
 {

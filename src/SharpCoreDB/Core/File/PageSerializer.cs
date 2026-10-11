@@ -243,14 +243,14 @@ public static class PageSerializer
         // Serialize header
         SerializeHeader(ref header, destination);
 
-        // ✅ C# 14: Range operator for data copy
+        // ✅ C# 15: Range operator for data copy
         data.CopyTo(destination[HeaderSize..]);
 
         // Zero remaining space (SIMD-accelerated)
         int remainingSize = PageSize - HeaderSize - data.Length;
         if (remainingSize > 0)
         {
-            // ✅ C# 14: Range operator for zero fill
+            // ✅ C# 15: Range operator for zero fill
             SimdHelper.ZeroBuffer(destination[(HeaderSize + data.Length)..]);
         }
     }
@@ -269,7 +269,7 @@ public static class PageSerializer
 
         var header = DeserializeHeader(page);
         dataLength = header.EntryCount;
-        // ✅ C# 14: Range operator for extracting page data
+        // ✅ C# 15: Range operator for extracting page data
         return page[HeaderSize..(HeaderSize + dataLength)];
     }
 

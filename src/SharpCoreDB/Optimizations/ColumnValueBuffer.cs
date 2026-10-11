@@ -9,10 +9,10 @@ using System;
 using System.Runtime.CompilerServices;
 
 /// <summary>
-/// C# 14 Inline Array: Stack-allocated buffer for column values.
+/// C# 15 Inline Array: Stack-allocated buffer for column values.
 /// Eliminates heap allocations for typical table schemas (up to 16 columns).
 /// 
-/// C# 14 Feature: [InlineArray(16)] creates a struct with inline storage.
+/// C# 15 Feature: [InlineArray(16)] creates a struct with inline storage.
 /// 
 /// Performance:
 /// - Stack allocation: Zero heap cost
@@ -20,7 +20,7 @@ using System.Runtime.CompilerServices;
 /// - Speed: 2-3x faster than object[] for row processing
 /// - Typical usage: 95%+ of tables have ≤16 columns
 /// 
-/// Phase: 2C (C# 14 & .NET 10 Optimizations)
+/// Phase: 2C (performance optimizations)
 /// Added: January 2026
 /// 
 /// Example:
@@ -95,7 +95,7 @@ public struct ColumnValueBuffer
 }
 
 /// <summary>
-/// C# 14 Inline Array: Stack-allocated buffer for page positions.
+/// C# 15 Inline Array: Stack-allocated buffer for page positions.
 /// Used in index lookups to store page addresses without heap allocation.
 /// 
 /// Performance: 4 pages (4x 8-byte longs = 32 bytes) on stack.
@@ -108,7 +108,7 @@ public struct PagePositionBuffer
 }
 
 /// <summary>
-/// C# 14 Inline Array: Stack-allocated buffer for SQL token characters.
+/// C# 15 Inline Array: Stack-allocated buffer for SQL token characters.
 /// Used in tokenization without allocating intermediate strings.
 /// 
 /// Typical SQL token: ≤256 characters (table names, column names, etc.)

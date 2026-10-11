@@ -13,7 +13,7 @@ using Xunit;
 /// <summary>
 /// Comprehensive tests for ExtentAllocator (SCDB Phase 2).
 /// Tests allocation strategies, coalescing, and edge cases.
-/// C# 14: Modern test patterns with collection expressions.
+/// C# 15: Modern test patterns with collection expressions.
 /// </summary>
 public sealed class ExtentAllocatorTests : IDisposable
 {

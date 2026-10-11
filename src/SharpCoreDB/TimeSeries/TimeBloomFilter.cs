@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Bloom filter optimized for time range queries.
-/// C# 14: Inline arrays, aggressive optimization, modern patterns.
+/// C# 15: Inline arrays, aggressive optimization, modern patterns.
 /// 
 /// ✅ SCDB Phase 8.3: Time Range Queries
 /// 

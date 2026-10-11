@@ -13,7 +13,7 @@ namespace SharpCoreDB.Benchmarks;
 /// 
 /// Measures performance improvements from:
 /// - stackalloc: Stack allocation instead of heap
-/// - Collection expressions: Modern C# 14 syntax with compiler optimizations
+/// - Collection expressions: Modern C# 15 syntax with compiler optimizations
 /// 
 /// Expected improvements:
 /// - stackalloc: 2-3x for small collections
@@ -62,7 +62,7 @@ public class Phase2CInlineArraysBenchmark
     [Benchmark(Description = "List initialization - Collection expression")]
     public List<int> ListInit_CollectionExpression()
     {
-        // C# 14: Collection expression with exact allocation
+        // C# 15: Collection expression with exact allocation
         List<int> list = [..testData];
         return list;
     }
@@ -163,15 +163,15 @@ public class Phase2CCollectionExpressionsBenchmark
     }
 
     /// <summary>
-    /// Dictionary initialization: Modern C# 14 syntax
+    /// Dictionary initialization: Modern C# 15 syntax
     /// Expected: 1.2-1.5x improvement
     /// </summary>
-    [Benchmark(Description = "Dictionary - Modern C# 14")]
+    [Benchmark(Description = "Dictionary - Modern C# 15")]
     public Dictionary<string, int> Dict_Modern()
     {
         var dict = new Dictionary<string, int>();
         
-        // Modern C# 14 syntax with index operator
+        // Modern C# 15 syntax with index operator
         foreach (var (key, value) in testPairs)
         {
             dict[key] = value;

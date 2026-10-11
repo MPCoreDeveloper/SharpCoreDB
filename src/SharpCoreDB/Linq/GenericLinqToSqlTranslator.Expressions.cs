@@ -11,7 +11,7 @@ using System.Linq.Expressions;
 /// GenericLinqToSqlTranslator - Expression visitor implementations.
 /// Contains visitors for binary, unary, lambda, member, constant, and other expressions.
 /// Part of the GenericLinqToSqlTranslator partial class.
-/// Modern C# 14 with enhanced pattern matching.
+/// Modern C# 15 with enhanced pattern matching.
 /// See also: GenericLinqToSqlTranslator.Core.cs, GenericLinqToSqlTranslator.Queries.cs
 /// </summary>
 public sealed partial class GenericLinqToSqlTranslator<T> where T : class
@@ -35,7 +35,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a constant expression.
-    /// ✅ C# 14: Pattern matching with is.
+    /// ✅ C# 15: Pattern matching with is.
     /// </summary>
     private void VisitConstant(ConstantExpression expression)
     {
@@ -57,7 +57,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
     /// </summary>
     private void VisitBinary(BinaryExpression expression)
     {
-        _sql.Append('(');  // ✅ C# 14: char literal for single character
+        _sql.Append('(');  // ✅ C# 15: char literal for single character
         Visit(expression.Left);
 
         _sql.Append(' ');
@@ -70,7 +70,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a unary expression (NOT, etc.).
-    /// ✅ C# 14: is pattern matching.
+    /// ✅ C# 15: is pattern matching.
     /// </summary>
     private void VisitUnary(UnaryExpression expression)
     {
@@ -106,7 +106,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a NEW expression (anonymous types).
-    /// ✅ C# 14: Collection expressions.
+    /// ✅ C# 15: Collection expressions.
     /// </summary>
     private void VisitNew(NewExpression expression)
     {
@@ -117,7 +117,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
             if (expression.Arguments[i] is MemberExpression member)
             {
                 var columnName = GetColumnName(member.Member.Name);
-                if (expression.Members is not null && expression.Members.Count > i)  // ✅ C# 14: is not null
+                if (expression.Members is not null && expression.Members.Count > i)  // ✅ C# 15: is not null
                 {
                     var alias = expression.Members[i].Name;
                     columns.Add($"{columnName} AS {alias}");
@@ -134,7 +134,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a member initialization expression.
-    /// ✅ C# 14: Property pattern matching.
+    /// ✅ C# 15: Property pattern matching.
     /// </summary>
     private void VisitMemberInit(MemberInitExpression expression)
     {
@@ -142,7 +142,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
         var columns = new List<string>();
         foreach (var binding in expression.Bindings)
         {
-            if (binding is MemberAssignment { Expression: MemberExpression member })  // ✅ C# 14: property pattern
+            if (binding is MemberAssignment { Expression: MemberExpression member })  // ✅ C# 15: property pattern
             {
                 var columnName = GetColumnName(member.Member.Name);
                 columns.Add($"{columnName} AS {binding.Member.Name}");

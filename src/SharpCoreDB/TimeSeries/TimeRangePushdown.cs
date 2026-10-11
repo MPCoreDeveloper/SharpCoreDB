@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Time range predicate pushdown optimizer.
-/// C# 14: Modern patterns, expression optimization.
+/// C# 15: Modern patterns, expression optimization.
 /// 
 /// ✅ SCDB Phase 8.3: Time Range Queries
 /// 

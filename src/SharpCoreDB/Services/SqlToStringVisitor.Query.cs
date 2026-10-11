@@ -16,7 +16,7 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitSelectCore(SelectNode node)
     {
-        List<string> parts = ["SELECT"]; // ✅ C# 14: Collection expression
+        List<string> parts = ["SELECT"]; // ✅ C# 15: Collection expression
 
         if (node.IsDistinct)
             parts.Add("DISTINCT");
@@ -24,22 +24,22 @@ public sealed partial class SqlToStringVisitor
         var columns = node.Columns.Select(c => c.Accept(this));
         parts.Add(string.Join(", ", columns));
 
-        if (node.From is not null) // ✅ C# 14: is not null pattern
+        if (node.From is not null) // ✅ C# 15: is not null pattern
         {
             parts.Add("FROM");
             parts.Add(node.From.Accept(this));
         }
 
-        if (node.Where is not null) // ✅ C# 14: is not null pattern
+        if (node.Where is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.Where.Accept(this));
 
-        if (node.GroupBy is not null) // ✅ C# 14: is not null pattern
+        if (node.GroupBy is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.GroupBy.Accept(this));
 
-        if (node.Having is not null) // ✅ C# 14: is not null pattern
+        if (node.Having is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.Having.Accept(this));
 
-        if (node.OrderBy is not null) // ✅ C# 14: is not null pattern
+        if (node.OrderBy is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.OrderBy.Accept(this));
 
         var limitClause = _dialect.FormatLimitClause(node.Limit, node.Offset);
@@ -53,9 +53,9 @@ public sealed partial class SqlToStringVisitor
     protected override string VisitColumnCore(ColumnNode node)
     {
         if (node.IsWildcard)
-            return node.TableAlias is not null ? $"{node.TableAlias}.*" : "*"; // ✅ C# 14: is not null
+            return node.TableAlias is not null ? $"{node.TableAlias}.*" : "*"; // ✅ C# 15: is not null
 
-        var col = node.TableAlias is not null // ✅ C# 14: is not null pattern
+        var col = node.TableAlias is not null // ✅ C# 15: is not null pattern
             ? $"{_dialect.QuoteIdentifier(node.TableAlias)}.{_dialect.QuoteIdentifier(node.Name)}"
             : _dialect.QuoteIdentifier(node.Name);
 
@@ -71,7 +71,7 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitFromCore(FromNode node)
     {
-        var from = node.Subquery is not null // ✅ C# 14: is not null pattern
+        var from = node.Subquery is not null // ✅ C# 15: is not null pattern
             ? $"({node.Subquery.Accept(this)})"
             : _dialect.QuoteIdentifier(node.TableName);
 
@@ -79,13 +79,13 @@ public sealed partial class SqlToStringVisitor
             from += $" AS {_dialect.QuoteIdentifier(node.Alias)}";
 
         var joins = node.Joins.Select(j => j.Accept(this));
-        return string.Join(" ", [from, .. joins]); // ✅ C# 14: Collection expression + spread operator
+        return string.Join(" ", [from, .. joins]); // ✅ C# 15: Collection expression + spread operator
     }
 
     /// <inheritdoc/>
     protected override string VisitJoinCore(JoinNode node)
     {
-        var joinType = node.Type switch // ✅ C# 14: Switch expression
+        var joinType = node.Type switch // ✅ C# 15: Switch expression
         {
             JoinNode.JoinType.Inner => "INNER JOIN",
             JoinNode.JoinType.Left => "LEFT OUTER JOIN",
@@ -97,8 +97,8 @@ public sealed partial class SqlToStringVisitor
 
         var parts = new[] { joinType, node.Table.Accept(this) };
 
-        if (node.OnCondition is not null) // ✅ C# 14: is not null pattern
-            parts = [.. parts, $"ON {node.OnCondition.Accept(this)}"]; // ✅ C# 14: Collection expression + spread
+        if (node.OnCondition is not null) // ✅ C# 15: is not null pattern
+            parts = [.. parts, $"ON {node.OnCondition.Accept(this)}"]; // ✅ C# 15: Collection expression + spread
 
         return string.Join(" ", parts);
     }
@@ -110,14 +110,14 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitBinaryExpressionCore(BinaryExpressionNode node)
     {
-        var left = node.Left?.Accept(this) ?? "NULL"; // ✅ C# 14: Null-coalescing
+        var left = node.Left?.Accept(this) ?? "NULL"; // ✅ C# 15: Null-coalescing
         var right = node.Right?.Accept(this) ?? "NULL";
         return $"({left} {node.Operator} {right})";
     }
 
     /// <inheritdoc/>
     protected override string VisitLiteralCore(LiteralNode node) =>
-        node.Value switch // ✅ C# 14: Switch expression with pattern matching
+        node.Value switch // ✅ C# 15: Switch expression with pattern matching
         {
             null => "NULL",
             string s => $"'{s.Replace("'", "''")}'",
@@ -127,7 +127,7 @@ public sealed partial class SqlToStringVisitor
 
     /// <inheritdoc/>
     protected override string VisitColumnReferenceCore(ColumnReferenceNode node) =>
-        node.TableAlias is not null // ✅ C# 14: is not null pattern
+        node.TableAlias is not null // ✅ C# 15: is not null pattern
             ? $"{_dialect.QuoteIdentifier(node.TableAlias)}.{_dialect.QuoteIdentifier(node.ColumnName)}"
             : _dialect.QuoteIdentifier(node.ColumnName);
 
@@ -141,7 +141,7 @@ public sealed partial class SqlToStringVisitor
         var expr = node.Expression?.Accept(this) ?? "NULL";
         var op = node.IsNot ? "NOT IN" : "IN";
 
-        if (node.Subquery is not null) // ✅ C# 14: is not null pattern
+        if (node.Subquery is not null) // ✅ C# 15: is not null pattern
             return $"{expr} {op} ({node.Subquery.Accept(this)})";
 
         var values = node.Values.Select(v => v.Accept(this));

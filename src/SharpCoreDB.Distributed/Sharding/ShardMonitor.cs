@@ -9,7 +9,7 @@ namespace SharpCoreDB.Distributed.Sharding;
 
 /// <summary>
 /// Continuously monitors shard health and handles failover scenarios.
-/// C# 14: PeriodicTimer, async streams, lock keyword.
+/// C# 15: PeriodicTimer, async streams, lock keyword.
 /// </summary>
 public sealed class ShardMonitor : IAsyncDisposable
 {

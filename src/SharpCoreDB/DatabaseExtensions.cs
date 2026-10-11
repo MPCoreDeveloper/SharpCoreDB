@@ -18,7 +18,7 @@ using System.Text.RegularExpressions;
 
 /// <summary>
 /// Extension methods for configuring SharpCoreDB services.
-/// Modern C# 14 with improved service registration patterns.
+/// Modern C# 15 with improved service registration patterns.
 /// </summary>
 public static class DatabaseExtensions
 {
@@ -39,7 +39,7 @@ public static class DatabaseExtensions
 
 /// <summary>
 /// Factory for creating Database instances with dependency injection.
-/// Modern C# 14 primary constructor pattern with enhanced storage mode support.
+/// Modern C# 15 primary constructor pattern with enhanced storage mode support.
 /// </summary>
 public class DatabaseFactory(IServiceProvider services)
 {

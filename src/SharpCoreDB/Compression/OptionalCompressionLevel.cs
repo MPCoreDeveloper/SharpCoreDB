@@ -28,7 +28,7 @@ public enum OptionalCompressionLevel
     /// <summary>
     /// Best compression preset: maximum ratio, highest CPU cost.
     /// Recommended for offline archival or cold storage workloads.
-    /// Maps to CompressionLevel.SmallestSize (.NET 10+); Zstd quality 19 on net11.0.
+    /// Maps to CompressionLevel.SmallestSize; Zstd quality 19 on net11.0.
     /// </summary>
     SmallestSize = 3
 }

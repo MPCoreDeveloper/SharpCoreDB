@@ -12,7 +12,7 @@ namespace SharpCoreDB.Functional.Linq2DB;
 /// in the application for full provider initialization and certain DDL operations.
 /// For best results with SharpCoreDB-specific connection strings, prefer the functional
 /// wrapper or raw Execute for schema operations.
-/// C# 14: Simple primary style constructors with automatic mapping schema.
+/// C# 15: Simple primary style constructors with automatic mapping schema.
 /// </summary>
 public sealed class SharpCoreDBDataConnection : DataConnection
 {

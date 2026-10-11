@@ -12,7 +12,7 @@ using System.IO;
 using Xunit;
 
 /// <summary>
-/// ✅ C# 14: Unit tests for write-behind cache implementation (Task 1.3).
+/// ✅ C# 15: Unit tests for write-behind cache implementation (Task 1.3).
 /// Tests batching behavior, throughput improvement, and queue management.
 /// </summary>
 public sealed class WriteOperationQueueTests : IDisposable

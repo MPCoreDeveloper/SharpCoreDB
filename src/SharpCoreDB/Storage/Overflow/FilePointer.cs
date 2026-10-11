@@ -9,7 +9,7 @@ using System;
 
 /// <summary>
 /// Pointer to an external file in the FILESTREAM directory.
-/// C# 14: Modern record type with required properties.
+/// C# 15: Modern record type with required properties.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: FILESTREAM support for unlimited row sizes.

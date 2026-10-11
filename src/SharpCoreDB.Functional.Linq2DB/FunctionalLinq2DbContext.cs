@@ -14,7 +14,7 @@ namespace SharpCoreDB.Functional.Linq2DB;
 /// <summary>
 /// Functional adapter over linq2db operations with Option/Fin return types.
 /// Provides railway-oriented programming patterns for SharpCoreDB queries.
-/// C# 14: Uses primary constructor for immutable dependency injection.
+/// C# 15: Uses primary constructor for immutable dependency injection.
 /// </summary>
 /// <param name="connection">The underlying SharpCoreDB linq2db data connection</param>
 public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connection)
@@ -74,7 +74,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         cancellationToken.ThrowIfCancellationRequested();
 
         IQueryable<T> q = _connection.GetTable<T>().Where(predicate);
-        var list = await q.Take(1).ToListAsync(cancellationToken).ConfigureAwait(false); // Explicit Take(1) + ToListAsync for optimal linq2db translation and C# 14 overload resolution
+        var list = await q.Take(1).ToListAsync(cancellationToken).ConfigureAwait(false); // Explicit Take(1) + ToListAsync for optimal linq2db translation and C# 15 overload resolution
         var entity = list.FirstOrDefault();
 
         return Optional(entity);

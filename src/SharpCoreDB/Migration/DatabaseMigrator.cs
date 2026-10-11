@@ -21,7 +21,7 @@ using SharpCoreDB.Storage;
 /// <summary>
 /// Provides bidirectional migration between directory-based and single-file (.scdb) storage formats.
 /// Supports incremental migration with checkpoints for recovery from interruptions.
-/// C# 14: Uses modern async patterns, file scoped namespaces, and primary constructors.
+/// C# 15: Uses modern async patterns, file scoped namespaces, and primary constructors.
 /// </summary>
 public static class DatabaseMigrator
 {

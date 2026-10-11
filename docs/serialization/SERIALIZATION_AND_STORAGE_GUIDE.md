@@ -77,7 +77,7 @@ SharpCoreDB uses a **single-file binary format** (`.scdb`) for persistent storag
 ### File Header (512 bytes, fixed)
 
 ```csharp
-// C# 14 struct layout (sequential, packed)
+// C# 15 struct layout (sequential, packed)
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
 public struct ScdbFileHeader
 {
@@ -213,7 +213,7 @@ Offset  Size  Value                  Explanation
 Total: 83 bytes
 ```
 
-### Serialization Code (C# 14)
+### Serialization Code (C# 15)
 
 ```csharp
 public static class BinaryRowSerializer
@@ -1023,7 +1023,7 @@ FSM State:
 
 ### Zero Allocation Principles
 
-SharpCoreDB uses C# 14 modern features for zero-allocation:
+SharpCoreDB uses C# 15 modern features for zero-allocation:
 
 ```csharp
 // ✅ Span<T> - zero-copy slicing

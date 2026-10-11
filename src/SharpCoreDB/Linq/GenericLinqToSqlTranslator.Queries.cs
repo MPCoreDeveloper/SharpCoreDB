@@ -11,14 +11,14 @@ using System.Linq.Expressions;
 /// GenericLinqToSqlTranslator - Query method visitors.
 /// Contains visitors for LINQ query methods (Where, Select, GroupBy, OrderBy, etc.).
 /// Part of the GenericLinqToSqlTranslator partial class.
-/// Modern C# 14 with switch expressions and pattern matching.
+/// Modern C# 15 with switch expressions and pattern matching.
 /// See also: GenericLinqToSqlTranslator.Core.cs, GenericLinqToSqlTranslator.Expressions.cs
 /// </summary>
 public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 {
     /// <summary>
     /// Visits a method call expression (Where, Select, GroupBy, OrderBy, etc.).
-    /// ✅ C# 14: Switch expression pattern.
+    /// ✅ C# 15: Switch expression pattern.
     /// </summary>
     private void VisitMethodCall(MethodCallExpression expression)
     {
@@ -40,7 +40,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
             case "OrderBy":
             case "OrderByDescending":
-                VisitOrderBy(expression, methodName is "OrderByDescending");  // ✅ C# 14: is pattern
+                VisitOrderBy(expression, methodName is "OrderByDescending");  // ✅ C# 15: is pattern
                 break;
 
             case "Take":
@@ -75,7 +75,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
             default:
                 // If not a LINQ method, it might be a property method
-                if (expression.Object is not null)  // ✅ C# 14: is not null
+                if (expression.Object is not null)  // ✅ C# 15: is not null
                 {
                     VisitPropertyMethod(expression);
                 }
@@ -139,7 +139,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a GROUP BY clause with generic type support.
-    /// ✅ C# 14: Enhanced pattern matching and collection expressions.
+    /// ✅ C# 15: Enhanced pattern matching and collection expressions.
     /// </summary>
     private void VisitGroupBy(MethodCallExpression expression)
     {
@@ -162,7 +162,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
             case NewExpression newExpr:
                 {
                     // Multi-column grouping (anonymous type)
-                    // ✅ C# 14: LINQ with pattern matching
+                    // ✅ C# 15: LINQ with pattern matching
                     var columns = newExpr.Arguments
                         .OfType<MemberExpression>()
                         .Select(member => GetColumnName(member.Member.Name))
@@ -206,7 +206,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a TAKE clause (LIMIT).
-    /// ✅ C# 14: Pattern matching for constant.
+    /// ✅ C# 15: Pattern matching for constant.
     /// </summary>
     private void VisitTake(MethodCallExpression expression)
     {
@@ -214,7 +214,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
         Visit(expression.Arguments[0]);
 
         // Add LIMIT
-        if (expression.Arguments[1] is ConstantExpression { Value: int count })  // ✅ C# 14: property pattern
+        if (expression.Arguments[1] is ConstantExpression { Value: int count })  // ✅ C# 15: property pattern
         {
             _sql.Append($" LIMIT {count}");
         }
@@ -222,7 +222,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits a SKIP clause (OFFSET).
-    /// ✅ C# 14: Pattern matching for constant.
+    /// ✅ C# 15: Pattern matching for constant.
     /// </summary>
     private void VisitSkip(MethodCallExpression expression)
     {
@@ -230,7 +230,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
         Visit(expression.Arguments[0]);
 
         // Add OFFSET
-        if (expression.Arguments[1] is ConstantExpression { Value: int count })  // ✅ C# 14: property pattern
+        if (expression.Arguments[1] is ConstantExpression { Value: int count })  // ✅ C# 15: property pattern
         {
             _sql.Append($" OFFSET {count}");
         }
@@ -300,7 +300,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
         }
         else
         {
-            _sql.Append('*');  // ✅ C# 14: char literal
+            _sql.Append('*');  // ✅ C# 15: char literal
         }
 
         _sql.Append(") FROM ");
@@ -309,13 +309,13 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Visits property method calls (like string.Contains, string.StartsWith).
-    /// ✅ C# 14: Switch expression for cleaner method dispatch.
+    /// ✅ C# 15: Switch expression for cleaner method dispatch.
     /// </summary>
     private void VisitPropertyMethod(MethodCallExpression expression)
     {
         var methodName = expression.Method.Name;
 
-        if (expression.Object is not MemberExpression member)  // ✅ C# 14: is not pattern
+        if (expression.Object is not MemberExpression member)  // ✅ C# 15: is not pattern
             return;
 
         var columnName = GetColumnName(member.Member.Name);

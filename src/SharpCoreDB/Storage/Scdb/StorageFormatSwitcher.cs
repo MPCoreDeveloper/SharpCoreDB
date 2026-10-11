@@ -12,7 +12,7 @@ using System.Threading.Tasks;
 /// <summary>
 /// Enables runtime switching between storage formats.
 /// Maintains data consistency during format transitions.
-/// C# 14: Uses Lock type and modern async patterns.
+/// C# 15: Uses Lock type and modern async patterns.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 4: Cross-format compatibility layer.

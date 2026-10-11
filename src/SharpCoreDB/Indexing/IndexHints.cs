@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Index hints for query optimization.
-/// C# 14: Record types, modern patterns, enum support.
+/// C# 15: Record types, modern patterns, enum support.
 /// 
 /// ✅ SCDB Phase 9: Index Enhancements
 /// 

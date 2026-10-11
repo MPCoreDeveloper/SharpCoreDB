@@ -2,9 +2,9 @@
 
 `SharpCoreDB.Provider.Sync` is the Dotmim.Sync provider for SharpCoreDB.
 
-**Version line:** `v1.9.5`
+**Version line:** `v2.1.0`
 
-## v1.9.5 changes
+## v1.9.5 changes (historical)
 
 - Sync provider documentation aligned to `v1.9.5`
 - Clarified provider feature coverage for change tracking, metadata, and DI integration
@@ -16,7 +16,7 @@ It enables bidirectional synchronization between SharpCoreDB and Dotmim.Sync-sup
 
 - Phase 4 (Testing & Integration): ✅ Complete
 - Sync provider test suite: ✅ 84/84 passing
-- Target: `.NET 10`, `C# 14`
+- Target: `.NET 11`, `C# 15`
 
 ## Features
 

@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Advanced diagnostics for buffer pool memory usage and performance.
 /// Provides detailed analysis and troubleshooting capabilities.
-/// C# 14: Collection expressions, pattern matching for diagnostics.
+/// C# 15: Collection expressions, pattern matching for diagnostics.
 /// </summary>
 public class PoolDiagnostics
 {

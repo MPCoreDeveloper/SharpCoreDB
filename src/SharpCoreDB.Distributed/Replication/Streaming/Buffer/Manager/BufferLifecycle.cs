@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Tracks the complete lifecycle of buffer segments from allocation to deallocation.
 /// Provides comprehensive monitoring and optimization capabilities.
-/// C# 14: Primary constructors, collection expressions, pattern matching.
+/// C# 15: Primary constructors, collection expressions, pattern matching.
 /// </summary>
 public sealed class BufferLifecycle
 {

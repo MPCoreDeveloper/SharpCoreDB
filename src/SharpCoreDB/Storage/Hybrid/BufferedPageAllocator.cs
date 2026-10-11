@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Batch page allocator that pre-allocates pages in bulk for 40-50% faster inserts.
 /// Reduces FileStream write calls from 10,000 to ~100.
-/// Modern C# 14 with target-typed new and collection expressions.
+/// Modern C# 15 with target-typed new and collection expressions.
 /// 
 /// PERFORMANCE IMPACT:
 /// - Before: Allocate 1 page per insert = 10K AllocatePage calls

@@ -12,7 +12,7 @@ using System.Linq;
 using System.Text.RegularExpressions;
 
 /// <summary>
-/// ✅ C# 14: Extracts parameter information from SQL queries.
+/// ✅ C# 15: Extracts parameter information from SQL queries.
 /// Used by Phase 2 Task 2.2 to enable compilation for parameterized queries.
 /// </summary>
 internal sealed class ParameterExtractor
@@ -49,7 +49,7 @@ internal sealed class ParameterExtractor
 
     /// <summary>
     /// Extracts all parameters from a SQL query.
-    /// ✅ C# 14: Collection expression for result
+    /// ✅ C# 15: Collection expression for result
     /// ✅ Skips parameters inside SQL string literals
     /// </summary>
     /// <param name="sql">The SQL query string.</param>
@@ -64,7 +64,7 @@ internal sealed class ParameterExtractor
 
         if (matches.Count == 0)
         {
-            return [];  // ✅ C# 14: Collection expression for empty array
+            return [];  // ✅ C# 15: Collection expression for empty array
         }
 
         var parameters = new List<ParameterInfo>(matches.Count);
@@ -92,7 +92,7 @@ internal sealed class ParameterExtractor
             }
         }
 
-        return [..parameters];  // ✅ C# 14: Spread operator for collection expression
+        return [..parameters];  // ✅ C# 15: Spread operator for collection expression
     }
 
     /// <summary>

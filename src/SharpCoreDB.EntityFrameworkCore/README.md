@@ -3,7 +3,7 @@
 Entity Framework Core 10 provider for `SharpCoreDB`.
 
 **Version:** `v1.9.5`
-**Target framework:** `.NET 10`  
+**Target framework:** `.NET 11`  
 **Status:** Production-ready provider package
 
 

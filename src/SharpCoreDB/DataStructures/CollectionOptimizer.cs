@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 namespace SharpCoreDB.DataStructures;
 
 /// <summary>
-/// Phase 2C Optimization: Collection handling with modern C# 14 patterns.
+/// Phase 2C Optimization: Collection handling with modern C# 15 patterns.
 /// 
 /// Demonstrates optimal collection patterns:
 /// - Collection expressions for optimal allocation + modern syntax
@@ -33,7 +33,7 @@ public class CollectionOptimizer
     private const int MAX_STACK_ALLOCATION = 256;
 
     /// <summary>
-    /// Creates optimal list using C# 14 collection expressions.
+    /// Creates optimal list using C# 15 collection expressions.
     /// Compiler allocates exact capacity (no over-allocation).
     /// </summary>
     /// <typeparam name="T">Item type</typeparam>
@@ -42,7 +42,7 @@ public class CollectionOptimizer
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static List<T> CreateOptimalList<T>(IReadOnlyList<T> items)
     {
-        // C# 14: Collection expression with exact allocation
+        // C# 15: Collection expression with exact allocation
         // Compiler optimizes this to right-sized allocation!
         List<T> list = [..items];
         return list;
@@ -88,7 +88,7 @@ public class CollectionOptimizer
     }
 
     /// <summary>
-    /// Creates a dictionary using C# 14 patterns.
+    /// Creates a dictionary using C# 15 patterns.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     public static Dictionary<K, V> CreateOptimalDictionary<K, V>(
@@ -96,7 +96,7 @@ public class CollectionOptimizer
     {
         var dict = new Dictionary<K, V>();
         
-        // Modern C# 14: Dictionary initializer with index syntax
+        // Modern C# 15: Dictionary initializer with index syntax
         foreach (var (key, value) in items)
         {
             dict[key] = value;  // Modern indexer syntax
@@ -144,7 +144,7 @@ public class CollectionOptimizer
         public static List<Dictionary<string, object>> BuildResultsOptimally(
             IEnumerable<Dictionary<string, object>> rows)
         {
-            // C# 14: Spread operator with collection expression
+            // C# 15: Spread operator with collection expression
             // Exact capacity, modern syntax!
             List<Dictionary<string, object>> results = [..rows];
             return results;

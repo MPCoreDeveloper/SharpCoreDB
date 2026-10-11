@@ -11,7 +11,7 @@ namespace SharpCoreDB.Analytics.AI;
 /// <summary>
 /// Integration with external AI services for enhanced analytics.
 /// Supports OpenAI, Azure OpenAI, and other AI providers.
-/// C# 14: Primary constructors, async patterns, collection expressions.
+/// C# 15: Primary constructors, async patterns, collection expressions.
 /// </summary>
 public sealed class AIServiceIntegration : IAsyncDisposable
 {

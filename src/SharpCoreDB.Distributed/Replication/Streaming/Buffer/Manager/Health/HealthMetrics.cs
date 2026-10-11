@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Comprehensive health metrics collection for buffer monitoring.
 /// Tracks health check performance, failure rates, and trends.
-/// C# 14: Collection expressions, primary constructors.
+/// C# 15: Collection expressions, primary constructors.
 /// </summary>
 public class HealthMetrics
 {

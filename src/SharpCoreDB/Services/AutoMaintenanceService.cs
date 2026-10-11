@@ -8,7 +8,7 @@ using SharpCoreDB.Interfaces;
 
 /// <summary>
 /// Provides automatic VACUUM and WAL checkpointing functionality.
-/// C# 14: Uses PeriodicTimer for background scheduling, Interlocked for lock-free counters.
+/// C# 15: Uses PeriodicTimer for background scheduling, Interlocked for lock-free counters.
 /// </summary>
 public sealed class AutoMaintenanceService : IDisposable, IAsyncDisposable
 {

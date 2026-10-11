@@ -15,7 +15,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Encodes and decodes columnar data with support for various compression formats.
-/// C# 14: Primary constructors, file-scoped namespaces, async patterns.
+/// C# 15: Primary constructors, file-scoped namespaces, async patterns.
 /// 
 /// ✅ SCDB Phase 7: Advanced Query Optimization
 /// 

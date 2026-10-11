@@ -11,7 +11,7 @@ Phase 6.3 adds comprehensive observability to SharpCoreDB's GraphRAG capabilitie
 - **Real-time metrics** - Track traversal performance, cache efficiency, and optimizer accuracy
 - **Distributed tracing** - OpenTelemetry integration for microservices observability
 - **Zero overhead when disabled** - <0.1% performance impact when metrics are off
-- **Thread-safe collection** - Concurrent metrics aggregation with C# 14 Lock class
+- **Thread-safe collection** - Concurrent metrics aggregation with C# 15 Lock class
 - **Production-ready** - Atomic snapshots, global state management, and efficient export
 
 ---

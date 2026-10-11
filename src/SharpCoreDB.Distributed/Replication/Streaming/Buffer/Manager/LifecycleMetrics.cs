@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Performance metrics for buffer lifecycle operations.
 /// Provides detailed timing and throughput analysis.
-/// C# 14: Collection expressions, pattern matching, performance counters.
+/// C# 15: Collection expressions, pattern matching, performance counters.
 /// </summary>
 public sealed class LifecycleMetrics
 {

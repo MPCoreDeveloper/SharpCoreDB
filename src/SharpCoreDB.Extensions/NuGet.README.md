@@ -1,6 +1,6 @@
 # SharpCoreDB NuGet Package
 
-This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
+This package is part of SharpCoreDB, a high-performance embedded database for .NET 11 (`net11.0`, the 2.1.0 line).
 
 
 ## What's New in v1.9.5 (archived; current release 2.1.0)

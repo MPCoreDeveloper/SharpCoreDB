@@ -15,13 +15,13 @@ using SharpCoreDB.Storage;
 /// <summary>
 /// Recovery manager for crash recovery using WAL replay.
 /// Implements REDO-only recovery (no UNDO needed with write-ahead guarantee).
-/// C# 14: Modern async patterns with Lock type.
+/// C# 15: Modern async patterns with Lock type.
 /// </summary>
 internal sealed class RecoveryManager : IDisposable
 {
     private readonly SingleFileStorageProvider _provider;
     private readonly WalManager _walManager;
-    private readonly Lock _recoveryLock = new();  // ✅ C# 14: Lock type
+    private readonly Lock _recoveryLock = new();  // ✅ C# 15: Lock type
     private bool _disposed;
 
     public RecoveryManager(SingleFileStorageProvider provider, WalManager walManager)
@@ -299,7 +299,7 @@ internal sealed class WalAnalysisResult
 
 /// <summary>
 /// Information about recovery process.
-/// C# 14: Record struct with required properties.
+/// C# 15: Record struct with required properties.
 /// </summary>
 public readonly record struct RecoveryInfo
 {

@@ -9,7 +9,7 @@ namespace SharpCoreDB.Services;
 /// SqlAst - Core infrastructure and visitor pattern.
 /// Contains base classes, interfaces, and visitor definitions.
 /// Part of the SqlAst partial class infrastructure.
-/// Modern C# 14 with covariant returns and pattern matching.
+/// Modern C# 15 with covariant returns and pattern matching.
 /// See also: SqlAst.Nodes.cs, SqlAst.DML.cs
 /// </summary>
 public static partial class SqlAst
@@ -20,7 +20,7 @@ public static partial class SqlAst
 
 /// <summary>
 /// Generic visitor interface for SQL AST nodes with type-safe return values.
-/// ✅ C# 14: Covariant return type (out TResult).
+/// ✅ C# 15: Covariant return type (out TResult).
 /// </summary>
 /// <typeparam name="TResult">The return type of visit operations.</typeparam>
 public interface ISqlVisitor<out TResult>
@@ -98,7 +98,7 @@ public interface ISqlVisitor : ISqlVisitor<object?>
 
 /// <summary>
 /// Abstract base class for SQL AST nodes.
-/// ✅ C# 14: Required members could be used in derived classes.
+/// ✅ C# 15: Required members could be used in derived classes.
 /// </summary>
 public abstract class SqlNode
 {
@@ -109,7 +109,7 @@ public abstract class SqlNode
 
     /// <summary>
     /// Accepts a visitor for the visitor pattern.
-    /// ✅ C# 14: Generic visitor pattern with covariant returns.
+    /// ✅ C# 15: Generic visitor pattern with covariant returns.
     /// </summary>
     /// <typeparam name="TResult">The return type of the visitor.</typeparam>
     /// <param name="visitor">The visitor instance.</param>

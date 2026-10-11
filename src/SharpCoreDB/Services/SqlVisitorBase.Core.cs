@@ -15,7 +15,7 @@ using System.Collections.Generic;
 /// <typeparam name="TResult">The return type of visit operations.</typeparam>
 public abstract partial class SqlVisitorBase<TResult> : ISqlVisitor<TResult>
 {
-    private readonly List<string> _errors = []; // ✅ C# 14: Collection expression
+    private readonly List<string> _errors = []; // ✅ C# 15: Collection expression
     private readonly bool _throwOnError;
 
     /// <summary>
@@ -47,7 +47,7 @@ public abstract partial class SqlVisitorBase<TResult> : ISqlVisitor<TResult>
     /// </summary>
     protected void RecordError(string message, SqlNode? node = null)
     {
-        var errorMsg = node is not null // ✅ C# 14: is not null pattern
+        var errorMsg = node is not null // ✅ C# 15: is not null pattern
             ? $"[Position {node.Position}] {message}"
             : message;
         _errors.Add(errorMsg);

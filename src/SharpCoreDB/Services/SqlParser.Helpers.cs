@@ -669,15 +669,6 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Performs basic SQL sanitization by escaping single quotes.
-    /// WARNING: This is NOT sufficient for preventing SQL injection. Always use parameterized queries.
-    /// </summary>
-    private static string SanitizeSql(string sql)
-    {
-        return sql.Replace("'", "''");
-    }
-
-    /// <summary>
     /// Parses a COLLATE clause and returns (CollationType, localeName) tuple.
     /// ✅ Phase 9: Supports LOCALE("xx_XX") syntax for culture-specific collations.
     /// Examples:

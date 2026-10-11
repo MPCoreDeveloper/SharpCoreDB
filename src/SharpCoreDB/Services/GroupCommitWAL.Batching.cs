@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 /// GroupCommitWAL - Batch commit operations.
 /// Contains CommitAsync, background worker, and adaptive batching logic.
 /// Part of the GroupCommitWAL partial class.
-/// Modern C# 14 with ObjectDisposedException.Throw and pattern matching.
+/// Modern C# 15 with ObjectDisposedException.Throw and pattern matching.
 /// See also: GroupCommitWAL.Core.cs, GroupCommitWAL.Diagnostics.cs
 /// </summary>
 public partial class GroupCommitWAL
@@ -22,7 +22,7 @@ public partial class GroupCommitWAL
     /// <summary>
     /// Asynchronously commits data to the WAL.
     /// Returns a task that completes when the data has been durably written (batched with other commits).
-    /// ✅ C# 14: ObjectDisposedException.Throw.
+    /// ✅ C# 15: ObjectDisposedException.Throw.
     /// </summary>
     /// <param name="data">The data to commit.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
@@ -30,7 +30,7 @@ public partial class GroupCommitWAL
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public async Task<bool> CommitAsync(ReadOnlyMemory<byte> data, CancellationToken cancellationToken = default)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 14: ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 15: ThrowIf
 
         // Create WAL record with checksum
         var record = new WalRecord(data);
@@ -55,7 +55,7 @@ public partial class GroupCommitWAL
     /// Batches multiple pending commits into a single fsync operation for improved throughput.
     /// Uses adaptive batch sizing based on queue depth for optimal concurrency performance.
     /// Reuses buffer across batches to reduce GC pressure by 10-15%.
-    /// ✅ C# 14: is null pattern and is pattern matching.
+    /// ✅ C# 15: is null pattern and is pattern matching.
     /// </summary>
     private async Task BackgroundCommitWorker(CancellationToken cancellationToken)
     {
@@ -121,7 +121,7 @@ public partial class GroupCommitWAL
                         }
                     }
 
-                    if (batch.Count is 0)  // ✅ C# 14: is pattern
+                    if (batch.Count is 0)  // ✅ C# 15: is pattern
                     {
                         continue;
                     }
@@ -131,9 +131,9 @@ public partial class GroupCommitWAL
 
                     // Optimized: Only reallocate if current buffer too small
                     // Grow to at least 64KB to amortize allocations
-                    if (buffer is null || bufferSize < totalSize)  // ✅ C# 14: is null
+                    if (buffer is null || bufferSize < totalSize)  // ✅ C# 15: is null
                     {
-                        if (buffer is not null)  // ✅ C# 14: is not null
+                        if (buffer is not null)  // ✅ C# 15: is not null
                         {
                             pool.Return(buffer, clearArray: true);
                         }
@@ -153,7 +153,7 @@ public partial class GroupCommitWAL
                     await fileStream.WriteAsync(buffer.AsMemory(0, offset), cancellationToken);
 
                     // Flush based on durability mode
-                    if (durabilityMode is DurabilityMode.FullSync)  // ✅ C# 14: is pattern
+                    if (durabilityMode is DurabilityMode.FullSync)  // ✅ C# 15: is pattern
                     {
                         // Force flush to physical disk (guarantees durability)
                         await Task.Run(() => fileStream.Flush(flushToDisk: true), cancellationToken);
@@ -192,7 +192,7 @@ public partial class GroupCommitWAL
         finally
         {
             // Return buffer once at shutdown
-            if (buffer is not null)  // ✅ C# 14: is not null
+            if (buffer is not null)  // ✅ C# 15: is not null
             {
                 pool.Return(buffer, clearArray: true);
             }
@@ -237,7 +237,7 @@ public partial class GroupCommitWAL
             
             // Log adjustment for diagnostics
             Console.WriteLine(
-                $"[GroupCommitWAL:{instanceId[..8]}] " +  // ✅ C# 14: Range operator instead of Substring
+                $"[GroupCommitWAL:{instanceId[..8]}] " +  // ✅ C# 15: Range operator instead of Substring
                 $"Batch size adjusted: {oldBatchSize} → {newBatchSize} " +
                 $"(queue has items: {hasQueuedItems})");
         }
@@ -248,11 +248,11 @@ public partial class GroupCommitWAL
     /// <summary>
     /// Clears the WAL file after successful checkpoint.
     /// Note: This method has design limitations. Create a new GroupCommitWAL instance instead.
-    /// ✅ C# 14: ObjectDisposedException.Throw.
+    /// ✅ C# 15: ObjectDisposedException.Throw.
     /// </summary>
     public async Task ClearAsync()
     {
-        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 14: ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 15: ThrowIf
 
         // Signal old worker to stop
         await cts.CancelAsync();
@@ -265,7 +265,7 @@ public partial class GroupCommitWAL
         catch (TimeoutException)
         {
             // Log warning but continue
-            Console.WriteLine($"[GroupCommitWAL:{instanceId[..8]}] Warning: Background worker did not stop within timeout");  // ✅ C# 14: Range
+            Console.WriteLine($"[GroupCommitWAL:{instanceId[..8]}] Warning: Background worker did not stop within timeout");  // ✅ C# 15: Range
         }
 
         // Truncate file

@@ -10,7 +10,7 @@ using System.Security.Cryptography;
 
 /// <summary>
 /// Insert performance optimizations for achieving 20-30% of SQLite performance.
-/// Modern C# 14 implementation with collection expressions and primary constructors.
+/// Modern C# 15 implementation with collection expressions and primary constructors.
 /// </summary>
 public static class InsertOptimizations
 {
@@ -85,7 +85,7 @@ public static class InsertOptimizations
     /// <summary>
     /// Buffered AES encryption optimization.
     /// Expected gain: ~20-30% (175ms → 120-140ms).
-    /// Primary constructor with modern C# 14.
+    /// Primary constructor with modern C# 15.
     /// </summary>
     public sealed class BufferedAesEncryption(byte[] key, int bufferSizeKB = 32) : IDisposable
     {
@@ -165,7 +165,7 @@ public static class InsertOptimizations
     /// <summary>
     /// Combined optimizer applying all three optimizations.
     /// Expected total gain: 70-80% (252ms → 50-75ms).
-    /// Modern C# 14 with primary constructor.
+    /// Modern C# 15 with primary constructor.
     /// </summary>
     public sealed class CombinedInsertOptimizer(
         bool enableEncryption = false,

@@ -1,6 +1,6 @@
 # Vector Search Performance Tuning Guide
 
-> **Applies to:** SharpCoreDB.VectorSearch 1.2.0+ | .NET 10 | C# 14
+> **Applies to:** SharpCoreDB.VectorSearch 1.2.0+ | .NET 11 (`net11.0`, the 2.1.0 line) | C# 15
 
 ---
 

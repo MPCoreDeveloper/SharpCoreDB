@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Adaptive index manager - self-tuning indexes based on query patterns.
-/// C# 14: Primary constructors, modern patterns, auto-tuning.
+/// C# 15: Primary constructors, modern patterns, auto-tuning.
 /// 
 /// ✅ SCDB Phase 9: Index Enhancements
 /// 

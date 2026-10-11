@@ -13,7 +13,7 @@ using System.Threading;
 
 /// <summary>
 /// Manages time-series bucket lifecycle.
-/// C# 14: Lock class, primary constructors, modern patterns.
+/// C# 15: Lock class, primary constructors, modern patterns.
 /// 
 /// ✅ SCDB Phase 8.2: Bucket Storage System
 /// 

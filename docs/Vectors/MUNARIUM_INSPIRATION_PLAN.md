@@ -7,7 +7,7 @@
 
 Everything is pure managed C# / .NET 11 — no Rust, no FFI, no Tantivy.
 
-> **Branch model:** this branch is the **net11.0 / C# 15 preview** line (2.1 RC). The **net10.0 / C# 14** line lives on `master` as the v2.0 stable packages (e.g. `SharpCoreDB` 2.0.0.3). The v2.1 branch never carries a net10.0 target.
+> **Branch model:** `master` is the **net11.0 / C# 15 preview** line at 2.1.0. The **net10.0 / C# 14** line is parked on `release/v2.0` as the v2.0 stable packages (e.g. `SharpCoreDB` 2.0.0.3). The v2.1 line never carries a net10.0 target.
 
 ## 1. What we took (inspiration, not a port)
 

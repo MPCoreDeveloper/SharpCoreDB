@@ -9,7 +9,7 @@ Complete technical documentation explaining how SharpCoreDB serializes records, 
 
 Everything you need to know about SharpCoreDB's storage format:
 - 📁 File format (.scdb) structure
-- 🔄 Record serialization mechanics (with C# 14 code)
+- 🔄 Record serialization mechanics (with C# 15 code)
 - 🔤 String handling & size constraints (variable-length, UTF-8, Unicode)
 - 📊 Free Space Management (FSM two-level bitmap)
 - 📑 Block Registry (O(1) lookups)
@@ -215,7 +215,7 @@ Emoji:    "🚀" → 4 bytes ✅
 ## ✅ Verification
 
 All documentation is:
-- ✅ Based on actual SharpCoreDB C# 14 code
+- ✅ Based on actual SharpCoreDB C# 15 code
 - ✅ Includes real code examples
 - ✅ Contains hex dumps and binary layouts
 - ✅ Answers all serialization questions

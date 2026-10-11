@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Columnar storage with compression.
-/// C# 14: Modern patterns, compression codecs, cache-friendly layout.
+/// C# 15: Modern patterns, compression codecs, cache-friendly layout.
 /// 
 /// ✅ SCDB Phase 7.2: Advanced Query Optimization - Columnar Storage
 /// 

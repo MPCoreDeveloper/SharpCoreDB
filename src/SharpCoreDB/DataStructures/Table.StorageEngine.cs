@@ -75,7 +75,7 @@ public partial class Table
     /// <exception cref="InvalidOperationException">Thrown when storage is null.</exception>
     private IStorageEngine CreateColumnarEngine(string databasePath)
     {
-        if (storage is null) // ✅ C# 14 pattern
+        if (storage is null) // ✅ C# 15 pattern
         {
             throw new InvalidOperationException(
                 $"Cannot create columnar storage engine for table '{Name}': IStorage instance is null. " +
@@ -126,7 +126,7 @@ public partial class Table
     /// </summary>
     /// <returns>The storage engine type or null if not initialized.</returns>
     public StorageEngineType? GetStorageEngineType()
-        => _storageEngine?.EngineType; // ✅ C# 14 expression-bodied
+        => _storageEngine?.EngineType; // ✅ C# 15 expression-bodied
 
     /// <summary>
     /// Gets storage engine performance metrics (for monitoring/diagnostics).
@@ -134,14 +134,14 @@ public partial class Table
     /// </summary>
     /// <returns>Performance metrics or null if not initialized.</returns>
     public StorageEngineMetrics? GetStorageEngineMetrics()
-        => _storageEngine?.GetMetrics(); // ✅ C# 14 expression-bodied
+        => _storageEngine?.GetMetrics(); // ✅ C# 15 expression-bodied
 
     /// <summary>
     /// Disposes the storage engine (called from Table.Dispose).
     /// </summary>
     private void DisposeStorageEngine()
     {
-        _storageEngine?.Dispose(); // ✅ C# 14 null-conditional
+        _storageEngine?.Dispose(); // ✅ C# 15 null-conditional
         _storageEngine = null;
     }
 }

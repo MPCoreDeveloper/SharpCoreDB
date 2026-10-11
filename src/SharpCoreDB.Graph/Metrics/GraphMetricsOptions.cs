@@ -2,7 +2,7 @@ namespace SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Configuration options for graph metrics collection.
-/// C# 14: Primary constructor with init-only properties.
+/// C# 15: Primary constructor with init-only properties.
 /// </summary>
 public sealed class GraphMetricsOptions
 {

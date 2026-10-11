@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Reads WAL entries from storage for streaming to replicas.
-/// C# 14: Primary constructors, async streams, Span<T> for zero-copy reading.
+/// C# 15: Primary constructors, async streams, Span<T> for zero-copy reading.
 /// </summary>
 public sealed class WALReader : IAsyncDisposable
 {

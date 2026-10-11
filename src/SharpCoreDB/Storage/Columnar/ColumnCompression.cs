@@ -12,7 +12,7 @@ using System.Linq;
 
 /// <summary>
 /// Compression codecs for columnar data storage.
-/// C# 14: Primary constructors, collection expressions, inline arrays.
+/// C# 15: Primary constructors, collection expressions, inline arrays.
 /// 
 /// ✅ SCDB Phase 7: Advanced Query Optimization
 /// 

@@ -53,7 +53,7 @@ public enum VacuumMode
 
 /// <summary>
 /// Configuration options for database creation and opening.
-/// C# 14: Uses field keyword and primary constructor patterns.
+/// C# 15: Uses field keyword and primary constructor patterns.
 /// </summary>
 public sealed class DatabaseOptions
 {

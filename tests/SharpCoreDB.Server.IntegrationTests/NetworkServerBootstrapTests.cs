@@ -21,7 +21,7 @@ namespace SharpCoreDB.Server.IntegrationTests;
 /// copies of them. The server host registers both repositories as singletons (the API, gRPC and binary
 /// endpoints resolve those same instances), so a second copy inside the server would initialize a
 /// schema nothing serves and split the tenant-security audit store in two.
-/// C# 14: Uses collection expressions.
+/// C# 15: Uses collection expressions.
 /// </summary>
 public sealed class NetworkServerBootstrapTests : IAsyncLifetime
 {

@@ -14,7 +14,7 @@ using System.Text.Json;
 
 /// <summary>
 /// Database implementation - Prepared statements partial class.
-/// Modern C# 14 with compiled query support for zero-parse execution.
+/// Modern C# 15 with compiled query support for zero-parse execution.
 /// 
 /// Location: Database/Execution/Database.PreparedStatements.cs
 /// Purpose: Prepared statement preparation and execution (sync + async)
@@ -176,7 +176,7 @@ public partial class Database
         ArgumentNullException.ThrowIfNull(stmt);
         ArgumentNullException.ThrowIfNull(parameters);
         
-        Dictionary<string, object?> paramDict = [];  // ✅ C# 14: collection expression
+        Dictionary<string, object?> paramDict = [];  // ✅ C# 15: collection expression
         for (int i = 0; i < parameters.Length; i++)
         {
             paramDict[i.ToString()] = parameters[i];

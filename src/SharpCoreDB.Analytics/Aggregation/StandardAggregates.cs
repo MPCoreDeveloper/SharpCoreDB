@@ -151,7 +151,7 @@ public sealed class MaxAggregate : IAggregateFunction
 /// <summary>
 /// Factory for creating aggregate function instances.
 /// Supports both basic and advanced aggregates.
-/// C# 14: Uses switch expressions for clean factory pattern.
+/// C# 15: Uses switch expressions for clean factory pattern.
 /// </summary>
 public static class AggregateFactory
 {

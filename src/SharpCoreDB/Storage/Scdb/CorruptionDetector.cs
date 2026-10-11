@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Detects corruption in SCDB files using multiple validation strategies.
-/// C# 14: Uses modern async patterns and Span<T> for zero-allocation validation.
+/// C# 15: Uses modern async patterns and Span<T> for zero-allocation validation.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 5: Production-ready corruption detection.

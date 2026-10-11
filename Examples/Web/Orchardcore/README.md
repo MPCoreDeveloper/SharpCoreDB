@@ -8,7 +8,7 @@ This example demonstrates how to use SharpCoreDB with OrchardCore CMS.
 
 ## Requirements
 
-- .NET 10.0 or later
+- .NET 11.0 or later
 - OrchardCore 3.0.0-preview-18884 (targets .NET 10)
 - Access to OrchardCore preview NuGet feed (if needed)
 

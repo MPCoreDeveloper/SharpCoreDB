@@ -10,7 +10,7 @@ namespace SharpCoreDB.Server.Core.Observability;
 /// <summary>
 /// Production-grade health check service with detailed diagnostics.
 /// Provides server health monitoring for external systems.
-/// C# 14: Primary constructor with collection expressions.
+/// C# 15: Primary constructor with collection expressions.
 /// </summary>
 public sealed class HealthCheckService(
     DatabaseRegistry databaseRegistry,
@@ -101,7 +101,7 @@ public sealed class HealthCheckService(
 
 /// <summary>
 /// Detailed server health information for external monitoring.
-/// C# 14: Required properties with init accessors.
+/// C# 15: Required properties with init accessors.
 /// </summary>
 public sealed class ServerHealthInfo
 {
@@ -128,7 +128,7 @@ public sealed class ServerHealthInfo
 
 /// <summary>
 /// Garbage collection metrics.
-/// C# 14: Required properties.
+/// C# 15: Required properties.
 /// </summary>
 public sealed class GarbageCollectionMetrics
 {

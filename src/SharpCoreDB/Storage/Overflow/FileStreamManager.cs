@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Manages external file storage for FILESTREAM data.
-/// C# 14: Modern async patterns with file-scoped namespace.
+/// C# 15: Modern async patterns with file-scoped namespace.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: FILESTREAM manager for unlimited row sizes.

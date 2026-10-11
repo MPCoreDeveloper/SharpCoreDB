@@ -11,10 +11,10 @@ using System.Linq;
 using System.Text.RegularExpressions;
 
 /// <summary>
-/// C# 14 & .NET 10 Performance Optimizations for SQL Parsing.
+/// Performance optimizations for SQL parsing.
 /// Uses source-generated regex patterns for compile-time optimization.
 /// 
-/// .NET 10 Feature: [GeneratedRegex] compiles patterns at build time.
+/// [GeneratedRegex] compiles patterns at build time.
 /// Eliminates runtime regex compilation overhead.
 /// 
 /// Performance Improvements:
@@ -22,13 +22,13 @@ using System.Text.RegularExpressions;
 /// - All parses: 1.5-2x faster (optimized generated code)
 /// - Memory: 0 allocations for regex compilation
 /// 
-/// Phase: 2C (C# 14 & .NET 10 Optimizations)
+/// Phase: 2C (performance optimizations)
 /// Added: January 2026
 /// </summary>
 public static partial class SqlParserPerformanceOptimizations
 {
     /// <summary>
-    /// .NET 10 Generated Regex: Compile-time SQL WHERE clause extraction.
+    /// Generated regex: Compile-time SQL WHERE clause extraction.
     /// Pattern: WHERE ... (ORDER|GROUP|LIMIT|;|EOF)
     /// 
     /// Performance: 1.5-2x faster than runtime Regex().
@@ -42,7 +42,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetWhereClauseRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract FROM table name.
+    /// Generated regex: Extract FROM table name.
     /// Pattern: FROM [table_name]
     /// </summary>
     [GeneratedRegex(
@@ -51,7 +51,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetFromTableRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract ORDER BY clause.
+    /// Generated regex: Extract ORDER BY clause.
     /// Pattern: ORDER BY [columns] (LIMIT|;|EOF)
     /// </summary>
     [GeneratedRegex(
@@ -60,7 +60,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetOrderByRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract GROUP BY clause.
+    /// Generated regex: Extract GROUP BY clause.
     /// Pattern: GROUP BY [columns]
     /// </summary>
     [GeneratedRegex(
@@ -69,7 +69,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetGroupByRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract LIMIT value.
+    /// Generated regex: Extract LIMIT value.
     /// Pattern: LIMIT [number]
     /// </summary>
     [GeneratedRegex(
@@ -78,7 +78,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetLimitRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract OFFSET value.
+    /// Generated regex: Extract OFFSET value.
     /// Pattern: OFFSET [number]
     /// </summary>
     [GeneratedRegex(
@@ -87,7 +87,7 @@ public static partial class SqlParserPerformanceOptimizations
     private static partial Regex GetOffsetRegex();
 
     /// <summary>
-    /// .NET 10 Generated Regex: Extract SELECT columns.
+    /// Generated regex: Extract SELECT columns.
     /// Pattern: SELECT [columns] FROM...
     /// </summary>
     [GeneratedRegex(

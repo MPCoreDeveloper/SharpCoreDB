@@ -7,7 +7,7 @@ namespace SharpCoreDB.Storage.Scdb;
 
 /// <summary>
 /// Free Space Manager statistics for monitoring and debugging.
-/// C# 14: Record struct with required properties for compile-time safety.
+/// C# 15: Record struct with required properties for compile-time safety.
 /// </summary>
 public readonly record struct FsmStatistics
 {

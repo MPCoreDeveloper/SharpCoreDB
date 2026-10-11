@@ -5,7 +5,7 @@ namespace SharpCoreDB.Data.Provider;
 
 /// <summary>
 /// Collection of parameters for a <see cref="SharpCoreDBCommand"/>.
-/// Modern C# 14 implementation with collection expressions and pattern matching.
+/// Modern C# 15 implementation with collection expressions and pattern matching.
 /// </summary>
 public sealed class SharpCoreDBParameterCollection : DbParameterCollection
 {

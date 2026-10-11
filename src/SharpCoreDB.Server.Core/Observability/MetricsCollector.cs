@@ -12,7 +12,7 @@ namespace SharpCoreDB.Server.Core.Observability;
 /// <summary>
 /// Centralized metrics collection for SharpCoreDB server.
 /// Tracks gRPC performance, database operations, and resource utilization.
-/// C# 14: Primary constructor with immutable dependencies.
+/// C# 15: Primary constructor with immutable dependencies.
 /// </summary>
 public sealed class MetricsCollector : IDisposable
 {

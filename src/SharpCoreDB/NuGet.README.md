@@ -106,9 +106,9 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 ✅ **Encrypted** - AES-256-GCM encryption built-in  
 ✅ **SQL Support** - Full SQL syntax, prepared statements  
 ✅ **High Performance** - 6.5x faster than SQLite for bulk operations  
-✅ **Modern C# 14** - Latest language features, NativeAOT ready  
+✅ **Modern C# 15** - Latest language features, NativeAOT ready  
 ✅ **Cross-Platform** - Windows, Linux, macOS, ARM64 native  
-✅ **Production Ready** - 1,468+ tests, zero known critical bugs  
+✅ **Production Ready** - 1,995 tests, zero known critical bugs  
 ✅ **Multi-Language** - .NET, Python, JavaScript/TypeScript clients  
 
 ## 📊 Performance

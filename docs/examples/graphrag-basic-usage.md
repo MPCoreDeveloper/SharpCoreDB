@@ -16,7 +16,7 @@ This tutorial shows you how to get started with GraphRAG (Graph Retrieval-Augmen
 
 ## Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - SharpCoreDB 1.7.0+
 - SharpCoreDB.VectorSearch 1.7.0+ (for GraphRAG features)
 

@@ -11,7 +11,7 @@ namespace SharpCoreDB.Server.Core.Security;
 /// <summary>
 /// Repository for persisting row-level isolation policies in the master database.
 /// Follows the same schema bootstrap pattern as <see cref="DatabaseGrantsRepository"/>.
-/// C# 14: Uses primary constructor for dependency injection.
+/// C# 15: Uses primary constructor for dependency injection.
 /// </summary>
 public sealed class RowLevelPolicyRepository(
     DatabaseInstance masterDatabase,

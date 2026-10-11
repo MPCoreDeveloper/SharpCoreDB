@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Manages a streaming session for a single replica.
 /// Handles connection lifecycle, heartbeat, and session state.
-/// C# 14: Primary constructors, pattern matching, async streams.
+/// C# 15: Primary constructors, pattern matching, async streams.
 /// </summary>
 public sealed class StreamingSession : IAsyncDisposable
 {

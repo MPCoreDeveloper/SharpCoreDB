@@ -1,7 +1,7 @@
 # SharpCoreDB.EntityFrameworkCore - Usage Guide
 
 **Version:** `v1.9.5`
-**Target:** `.NET 10` / `C# 14`
+**Target:** `.NET 11` / `C# 15`
 
 This guide focuses on the maintained EF Core provider workflow for SharpCoreDB.
 

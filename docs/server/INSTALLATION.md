@@ -2,7 +2,7 @@
 
 **Version:** 1.7.0  
 **Platforms:** Windows, Linux, macOS, Docker  
-**Requirements:** .NET 10 Runtime
+**Requirements:** .NET 11 Runtime
 
 ---
 

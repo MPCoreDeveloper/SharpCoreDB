@@ -1,10 +1,10 @@
 # SharpCoreDB Server Documentation
 
-SharpCoreDB Server turns SharpCoreDB into a **real network database server** for .NET 10.
+SharpCoreDB Server turns SharpCoreDB into a **real network database server** for .NET 11.
 
-**Version line:** `v1.9.5`
+**Version line:** `v2.1.0`
 
-## v1.9.5 highlights
+## Highlights
 
 - gRPC-first server runtime over HTTPS (HTTP/2 + HTTP/3)
 - Multi-database hosting with system-database security model

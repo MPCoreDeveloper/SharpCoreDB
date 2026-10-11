@@ -13,7 +13,7 @@ This guide shows how to integrate OpenAI's embedding models with GraphRAG for se
 - OpenAI API key with sufficient credits
 - SharpCoreDB.Graph.Advanced 2.0.0+
 - SharpCoreDB.VectorSearch 1.3.5+
-- .NET 10 SDK
+- .NET 11 SDK
 
 ## Step 1: Setup OpenAI Client
 

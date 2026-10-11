@@ -53,7 +53,7 @@ public enum WebSocketMessageType
 
 /// <summary>
 /// Incoming WebSocket message from the client.
-/// C# 14: Records for immutable DTOs.
+/// C# 15: Records for immutable DTOs.
 /// </summary>
 public sealed record WebSocketRequest
 {
@@ -142,7 +142,7 @@ public sealed record WebSocketResponse
 
 /// <summary>
 /// Shared JSON serializer options for the WebSocket protocol.
-/// C# 14: Lazy singleton.
+/// C# 15: Lazy singleton.
 /// </summary>
 public static class WebSocketJsonOptions
 {

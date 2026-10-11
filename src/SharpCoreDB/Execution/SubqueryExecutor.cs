@@ -44,7 +44,7 @@ public sealed class SubqueryExecutor
 
     /// <summary>
     /// Executes a scalar subquery and returns a single value.
-    /// ✅ C# 14: is patterns, ArgumentNullException.ThrowIfNull
+    /// ✅ C# 15: is patterns, ArgumentNullException.ThrowIfNull
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public object? ExecuteScalar(

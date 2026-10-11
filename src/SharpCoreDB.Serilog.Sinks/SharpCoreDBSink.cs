@@ -7,7 +7,7 @@ namespace SharpCoreDB.Serilog.Sinks;
 
 /// <summary>
 /// Serilog sink that writes log events to a SharpCoreDB database.
-/// C# 14: Uses ExecuteBatchSQLAsync which routes through InsertBatch for optimal storage engine throughput.
+/// C# 15: Uses ExecuteBatchSQLAsync which routes through InsertBatch for optimal storage engine throughput.
 /// Follows zero-allocation principles in hot paths where possible.
 /// </summary>
 public sealed class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
@@ -51,7 +51,7 @@ public sealed class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
 
     /// <summary>
     /// Emits a batch of log events to the database.
-    /// C# 14: Uses ExecuteBatchSQLAsync which internally routes INSERT statements
+    /// C# 15: Uses ExecuteBatchSQLAsync which internally routes INSERT statements
     /// through InsertBatch for optimal storage engine throughput.
     /// </summary>
     /// <param name="batch">The batch of log events to write.</param>
@@ -168,7 +168,7 @@ public sealed class SharpCoreDBSink : IBatchedLogEventSink, IDisposable
     }
 
     /// <summary>
-    /// Ensures the log table exists. Thread-safe via C# 14 Lock class with double-check pattern.
+    /// Ensures the log table exists. Thread-safe via C# 15 Lock class with double-check pattern.
     /// </summary>
     private void EnsureTableCreated()
     {

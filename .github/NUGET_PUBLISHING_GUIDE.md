@@ -244,13 +244,13 @@ Ensure each `.csproj` has:
 <PropertyGroup>
   <PackageId>SharpCoreDB</PackageId>
   <Title>SharpCoreDB - High Performance Database Engine</Title>
-  <Description>A .NET 10 high-performance database engine with zero-allocation principles</Description>
+  <Description>A .NET 11 high-performance database engine with zero-allocation principles</Description>
   <Authors>MPCoreDeveloper</Authors>
   <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
   <PackageLicenseExpression>MIT</PackageLicenseExpression>
   <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
   <RepositoryType>git</RepositoryType>
-  <PackageTags>database;performance;dotnet10;sharpcoredb</PackageTags>
+  <PackageTags>database;performance;dotnet11;sharpcoredb</PackageTags>
 </PropertyGroup>
 ```
 

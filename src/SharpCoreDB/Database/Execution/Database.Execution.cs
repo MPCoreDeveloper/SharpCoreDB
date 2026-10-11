@@ -15,7 +15,7 @@ using System.Text.Json;
 
 /// <summary>
 /// Database implementation - Execution partial class.
-/// Handles SQL execution with modern C# 14 patterns and async support.
+/// Handles SQL execution with modern C# 15 patterns and async support.
 /// 
 /// Location: Database/Execution/Database.Execution.cs
 /// Purpose: SQL command execution (sync + async), query execution, compiled queries
@@ -225,7 +225,7 @@ public partial class Database
             return;
         }
 
-        Dictionary<string, object?> paramDict = [];  // ✅ C# 14: Collection expression
+        Dictionary<string, object?> paramDict = [];  // ✅ C# 15: Collection expression
         for (int i = 0; i < parameters.Length; i++)
         {
             paramDict[$"@p{i}"] = parameters[i];

@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Streams WAL entries to replicas in real-time.
-/// C# 14: Channel<T> for async coordination, primary constructors.
+/// C# 15: Channel<T> for async coordination, primary constructors.
 /// </summary>
 public sealed class WALStreamer : IAsyncDisposable
 {

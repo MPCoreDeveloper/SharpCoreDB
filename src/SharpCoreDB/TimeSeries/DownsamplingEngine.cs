@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Automatic downsampling engine for time-series data.
-/// C# 14: Primary constructors, async patterns, modern C#.
+/// C# 15: Primary constructors, async patterns, modern C#.
 /// 
 /// ✅ SCDB Phase 8.4: Downsampling & Retention
 /// 

@@ -6,7 +6,7 @@ namespace SharpCoreDB.Data.Provider;
 /// <summary>
 /// Data adapter for SharpCoreDB, enabling DataSet/DataTable operations.
 /// Required for SQL Server Management Studio (SSMS) integration.
-/// Modern C# 14 implementation.
+/// Modern C# 15 implementation.
 /// </summary>
 public sealed class SharpCoreDBDataAdapter : DbDataAdapter
 {

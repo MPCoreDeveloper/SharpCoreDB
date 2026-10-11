@@ -198,7 +198,7 @@ dotnet run
 
 ## 📋 Requirements
 
-- **.NET 10** or higher
+- **.NET 11** or higher
 - **SharpCoreDB** v1.4.0+
 - **Dotmim.Sync** v1.3.0+
 - Database-specific providers (SQL Server, PostgreSQL, etc.)

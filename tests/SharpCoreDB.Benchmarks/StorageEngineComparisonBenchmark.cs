@@ -234,7 +234,7 @@ public class StorageEngineComparisonBenchmark
     [IterationCleanup]
     public void IterationCleanup()
     {
-        // ✅ C# 14: Collection expression for database list
+        // ✅ C# 15: Collection expression for database list
         IDatabase?[] databases = [scSinglePlainDb, scSingleEncDb];
         Database?[] directoryDatabases = [appendOnlyDb, pageBasedDb, scDirPlainDb, scDirEncDb];
         
@@ -372,7 +372,7 @@ public class StorageEngineComparisonBenchmark
 
     private static void ExecuteSharpCoreInsertIDatabase(IDatabase db, int startId)
     {
-        // ✅ C# 14: Collection expression for better performance
+        // ✅ C# 15: Collection expression for better performance
         List<string> inserts = [];
         
         for (int i = 0; i < InsertBatchSize; i++)
@@ -770,14 +770,14 @@ public class StorageEngineComparisonBenchmark
 
     /// <summary>
     /// ✅ DIAGNOSTIC: Validates database integrity by performing a simple query.
-    /// Uses modern C# 14 pattern matching and collection expressions.
+    /// Uses modern C# 15 pattern matching and collection expressions.
     /// Returns true if database is healthy, false if checksum/corruption detected.
     /// </summary>
     private static bool ValidateDatabaseIntegrity(IDatabase db, string dbName)
     {
         try
         {
-            // ✅ C# 14: Collection expression for simple queries
+            // ✅ C# 15: Collection expression for simple queries
             string[] validationQueries =
             [
                 "SELECT COUNT(*) FROM bench_records",
@@ -793,7 +793,7 @@ public class StorageEngineComparisonBenchmark
         }
         catch (InvalidDataException ex) when (ex.Message.Contains("Checksum"))
         {
-            // ✅ C# 14: Pattern matching with when clause
+            // ✅ C# 15: Pattern matching with when clause
             Console.WriteLine($"[ValidateDatabaseIntegrity] ❌ Checksum error in {dbName}: {ex.Message}");
             return false;
         }
@@ -813,7 +813,7 @@ public class StorageEngineComparisonBenchmark
     {
         Console.WriteLine("[GlobalCleanup] Validating database integrity before shutdown...");
         
-        // ✅ C# 14: Collection expression with tuple literals
+        // ✅ C# 15: Collection expression with tuple literals
         (IDatabase? db, string name)[] singleFileDatabases =
         [
             (scSinglePlainDb, "Single-Plain"),

@@ -12,7 +12,7 @@ namespace SharpCoreDB;
 
 /// <summary>
 /// Database implementation - Statistics partial class.
-/// Handles cache and database statistics with modern C# 14 patterns.
+/// Handles cache and database statistics with modern C# 15 patterns.
 /// 
 /// Location: Database/Core/Database.Statistics.cs
 /// Purpose: Query/page cache statistics, database metrics, table statistics
@@ -63,7 +63,7 @@ public partial class Database
     /// <returns>A dictionary containing database statistics.</returns>
     public Dictionary<string, object> GetDatabaseStatistics()
     {
-        Dictionary<string, object> stats = new()  // ✅ C# 14: target-typed new
+        Dictionary<string, object> stats = new()  // ✅ C# 15: target-typed new
         {
             ["TablesCount"] = tables.Count,
             ["IsReadOnly"] = isReadOnly,

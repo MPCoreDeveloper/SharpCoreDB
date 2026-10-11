@@ -17,7 +17,7 @@ namespace SharpCoreDB.Server.Core.Grpc;
 /// <summary>
 /// gRPC interceptor for JWT token validation, certificate auth, RBAC, tenant-aware authorization,
 /// and database grants enforcement. Supports both Bearer JWT tokens and client certificates (mutual TLS).
-/// C# 14: Primary constructor with immutable dependencies.
+/// C# 15: Primary constructor with immutable dependencies.
 /// </summary>
 public sealed class GrpcAuthorizationInterceptor(
     JwtTokenService tokenService,

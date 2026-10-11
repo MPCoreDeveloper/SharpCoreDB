@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Bitmap-based free page tracker for O(1) free page allocation.
 /// Replaces O(n) linear scan in FindPageWithSpace.
-/// Modern C# 14 with SIMD potential and target-typed new.
+/// Modern C# 15 with SIMD potential and target-typed new.
 /// 
 /// PERFORMANCE IMPACT:
 /// - Before: O(n) scan through all pages = 15-20% CPU

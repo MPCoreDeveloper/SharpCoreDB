@@ -39,7 +39,7 @@ namespace SharpCoreDB.Services;
 /// </list>
 /// 
 /// <para>
-/// <b>C# 14 Features:</b>
+/// <b>C# 15 Features:</b>
 /// </para>
 /// <list type="bullet">
 /// <item>Collection expressions for list initialization</item>

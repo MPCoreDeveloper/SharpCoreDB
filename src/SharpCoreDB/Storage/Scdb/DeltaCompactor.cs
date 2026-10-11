@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 /// <summary>
 /// Delta compaction manager for merging delta updates into full records (Phase 3.3).
 /// Prevents excessive delta chains that degrade read performance.
-/// C# 14: Uses modern async patterns and Lock type.
+/// C# 15: Uses modern async patterns and Lock type.
 /// </summary>
 public sealed class DeltaCompactor : IDisposable
 {

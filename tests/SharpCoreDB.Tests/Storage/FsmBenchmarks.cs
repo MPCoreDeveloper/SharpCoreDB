@@ -15,7 +15,7 @@ using Xunit;
 /// <summary>
 /// Performance benchmarks for FreeSpaceManager and ExtentAllocator (SCDB Phase 2).
 /// Validates O(log n) allocation performance and strategy comparison.
-/// C# 14: Modern test patterns with xUnit.
+/// C# 15: Modern test patterns with xUnit.
 /// </summary>
 [Collection("PerformanceTests")]
 [Trait("Category", "Performance")]

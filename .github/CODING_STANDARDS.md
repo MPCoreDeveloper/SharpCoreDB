@@ -1,7 +1,7 @@
 # SharpCoreDB Coding Standards (.NET 11 / C# 15 preview)
 
 **Version:** 1.1
-**Target Framework:** .NET 11 (`net11.0` on the v2.1 line; `master` keeps the .NET 10 / C# 14 stable packages)
+**Target Framework:** .NET 11 (`net11.0` on `master` since 2.1.0; the .NET 10 / C# 14 stable packages are parked on `release/v2.0`)
 **Language Version:** C# 15 preview
 
 > **Mandatory:** All new code and refactorings MUST use modern C# 15 preview features and patterns where applicable.
@@ -79,7 +79,7 @@ public class Table
     
     public void Validate()
     {
-        // C# 14: Access backing field directly
+        // C# 15: Access backing field directly
         if (string.IsNullOrEmpty(field))
         {
             field = "DefaultTable";
@@ -100,7 +100,7 @@ public class StorageProvider
             if (value < 0) throw new ArgumentOutOfRangeException(nameof(value));
             _dirtyCount = value;
             
-            // C# 14: Use 'field' in custom setter if needed
+            // C# 15: Use 'field' in custom setter if needed
             OnDirtyCountChanged(field);
         }
     }
@@ -242,7 +242,7 @@ public void AddOrUpdate(string key, Entry value)
 
 **✅ DO:**
 ```csharp
-// C# 14: params with any collection type
+// C# 15: params with any collection type
 public void ExecuteBatch(params IEnumerable<string> statements)
 {
     foreach (var sql in statements)
@@ -280,7 +280,7 @@ public void ExecuteBatch(params string[] statements) { }
 
 **✅ DO:**
 ```csharp
-// C# 14: Explicit extension declaration
+// C# 15: Explicit extension declaration
 public implicit extension TableExtensions for Table
 {
     public void FlushOptimized()
@@ -716,7 +716,7 @@ public async Task FlushAsync_WithDirtyBlocks_ShouldPersistToDisk()
 ```csharp
 /// <summary>
 /// Writes a block of data to the storage provider with optional batching.
-/// C# 14: Uses modern async patterns with cancellation support.
+/// C# 15: Uses modern async patterns with cancellation support.
 /// </summary>
 /// <param name="blockName">Unique identifier for the block.</param>
 /// <param name="data">Data to write. Must not be empty.</param>
@@ -882,5 +882,6 @@ Before submitting a PR, verify:
 ---
 
 **Version History:**
+- v1.2 (2026-10-10): The five `// C# 14:` example labels in this document moved to `C# 15` with the 2.1.0 promotion - the current line is `net11.0` / C# 15 preview. The parked-line note at the top, the dated v1.0 entry below and the external course title are deliberately unchanged.
 - v1.1 (2026-09-24): Retargeted to .NET 11 / C# 15 preview for the v2.1 line; title, language-version and reference claims corrected (the feature catalogue itself is unchanged).
 - v1.0 (2025-01-28): Initial release for C# 14 / .NET 10

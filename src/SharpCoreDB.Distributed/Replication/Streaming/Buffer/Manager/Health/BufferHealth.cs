@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Comprehensive health assessment for buffer segments.
 /// Provides corruption detection, integrity validation, and health monitoring.
-/// C# 14: Primary constructors, pattern matching, Span<T> for validation.
+/// C# 15: Primary constructors, pattern matching, Span<T> for validation.
 /// </summary>
 public sealed class BufferHealth
 {

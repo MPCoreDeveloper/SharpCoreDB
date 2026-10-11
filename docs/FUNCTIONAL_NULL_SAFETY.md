@@ -258,7 +258,7 @@ All claims above are backed by **14 passing tests** you can run right now.
 
 ### Prerequisites
 
-- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
+- [.NET 11 SDK](https://dotnet.microsoft.com/download/dotnet/11.0)
 - Clone the repository:
   ```bash
   git clone https://github.com/MPCoreDeveloper/SharpCoreDB.git

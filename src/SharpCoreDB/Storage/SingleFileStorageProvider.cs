@@ -21,7 +21,7 @@ using System.Threading.Channels;
 using System.Threading.Tasks;
 
 /// <summary>
-/// ✅ C# 14: Inline array for SHA256 checksum (32 bytes, zero heap allocation).
+/// ✅ C# 15: Inline array for SHA256 checksum (32 bytes, zero heap allocation).
 /// Used in hot paths to avoid allocating byte arrays for checksums.
 /// </summary>
 [InlineArray(32)]
@@ -31,7 +31,7 @@ file struct ChecksumBuffer
 }
 
 /// <summary>
-/// ✅ C# 14: Write operation record for batching disk writes (Task 1.3).
+/// ✅ C# 15: Write operation record for batching disk writes (Task 1.3).
 /// Used by write-behind cache to queue and batch operations efficiently.
 /// </summary>
 internal sealed record WriteOperation
@@ -59,7 +59,7 @@ internal sealed record WriteOperation
 /// <summary>
 /// Single-file storage provider using .scdb format.
 /// Features: Zero-copy reads, memory-mapped I/O, WAL, FSM, encryption.
-/// C# 14: Uses modern async patterns, primary constructors, field keyword.
+/// C# 15: Uses modern async patterns, primary constructors, field keyword.
 /// ✅ Phase 1 Optimized: Batched registry flush + pre-computed checksums.
 /// </summary>
 public sealed class SingleFileStorageProvider : IStorageProvider
@@ -76,7 +76,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     private readonly TableDirectoryManager _tableDirectoryManager;
     private readonly ConcurrentDictionary<string, BlockMetadata> _blockCache;
     private readonly Lock _transactionLock = new();
-    // ✅ C# 14 / .NET 10: async-friendly gate to serialize I/O and registry updates without blocking threads
+    // ✅ C# 15 / .NET 10: async-friendly gate to serialize I/O and registry updates without blocking threads
     private readonly SemaphoreSlim _ioGate = new(1, 1);
     // ✅ Phase 3 Fix: Flush signal to immediately trigger batch processing
     private readonly SemaphoreSlim _flushSignal = new(0, 1);
@@ -88,7 +88,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
     // ✅ Phase 3.3: Delta-update optimization - track dirty pages
     private readonly DirtyPageTracker _dirtyTracker = new();
     
-    // ✅ C# 14: Write-behind cache for batched disk writes (Task 1.3)
+    // ✅ C# 15: Write-behind cache for batched disk writes (Task 1.3)
     private Channel<WriteOperation> _writeQueue = Channel.CreateBounded<WriteOperation>(
         new BoundedChannelOptions(1000) { FullMode = BoundedChannelFullMode.Wait });
     private Task _writeWorkerTask;
@@ -157,7 +157,7 @@ public sealed class SingleFileStorageProvider : IStorageProvider
         _walManager = new WalManager(this, header.WalOffset, header.WalLength, options.WalBufferSizePages);
         _tableDirectoryManager = new TableDirectoryManager(this, header.TableDirOffset, header.TableDirLength);
         
-        // ✅ C# 14: Start write-behind worker task (Task 1.3)
+        // ✅ C# 15: Start write-behind worker task (Task 1.3)
         _writeWorkerTask = Task.Run(ProcessWriteQueueAsync, _writeCts.Token);
     }
 
@@ -1255,7 +1255,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     }
 
     /// <summary>
-    /// ✅ C# 14: Background task for write-behind cache processing.
+    /// ✅ C# 15: Background task for write-behind cache processing.
     /// Batches write operations for optimal disk throughput.
     /// 
     /// Performance: Reduces disk I/O by ~50% through write batching.
@@ -1263,7 +1263,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
     /// </summary>
     private async Task ProcessWriteQueueAsync()
     {
-        // ✅ C# 14: Collection expression for batch list
+        // ✅ C# 15: Collection expression for batch list
         List<WriteOperation> batch = [];
 
         try
@@ -3056,7 +3056,7 @@ internal BlockRegistry BlockRegistry => _blockRegistry;
 }
 
 /// <summary>
-/// ✅ C# 14: Stream wrapper for block access with offset and length bounds.
+/// ✅ C# 15: Stream wrapper for block access with offset and length bounds.
 /// Provides filesystem-like read/write operations for a specific block region.
 /// </summary>
 internal sealed class BlockStream : Stream

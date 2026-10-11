@@ -16,7 +16,7 @@ linq2db adapter for `SharpCoreDB.Functional`.
 - ✅ Compile-time safe queries with full IntelliSense
 - ✅ Low memory/CPU overhead (no EF-style tracking)
 - ✅ Bulk operations via `BulkCopyAsync`
-- ✅ Native AOT and .NET 10/C# 14
+- ✅ Native AOT and .NET 11/C# 15
 - ✅ Railway-oriented error handling (`Fin<T>`)
 
 ---

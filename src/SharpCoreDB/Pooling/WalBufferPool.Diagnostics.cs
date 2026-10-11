@@ -60,7 +60,7 @@ public partial class WalBufferPool
         {
             if (count < entries.Length)
             {
-                entries[count++] = new BufferEntry { Buffer = buffer }; // ✅ C# 14: Target-typed new
+                entries[count++] = new BufferEntry { Buffer = buffer }; // ✅ C# 15: Target-typed new
                 return true;
             }
 
@@ -74,7 +74,7 @@ public partial class WalBufferPool
         {
             for (int i = 0; i < count; i++)
             {
-                if (entries[i].Buffer is not null) // ✅ C# 14: is not null pattern
+                if (entries[i].Buffer is not null) // ✅ C# 15: is not null pattern
                 {
                     Array.Clear(entries[i].Buffer, 0, entries[i].Buffer.Length);
                     entries[i] = default;
@@ -133,7 +133,7 @@ public ref struct RentedBuffer
     /// WARNING: Buffer may be larger than requested size.
     /// </summary>
     public readonly byte[] Buffer => buffer 
-        ?? throw new ObjectDisposedException(nameof(RentedBuffer)); // ✅ C# 14: Throw expression
+        ?? throw new ObjectDisposedException(nameof(RentedBuffer)); // ✅ C# 15: Throw expression
 
     /// <summary>
     /// Gets or sets the number of bytes actually used.
@@ -144,8 +144,8 @@ public ref struct RentedBuffer
         readonly get => usedSize;
         set
         {
-            ArgumentOutOfRangeException.ThrowIfNegative(value); // ✅ C# 14: ThrowIfNegative
-            if (buffer is not null && value > buffer.Length) // ✅ C# 14: is not null
+            ArgumentOutOfRangeException.ThrowIfNegative(value); // ✅ C# 15: ThrowIfNegative
+            if (buffer is not null && value > buffer.Length) // ✅ C# 15: is not null
                 throw new ArgumentOutOfRangeException(nameof(value), "UsedSize exceeds buffer length");
             
             usedSize = value;
@@ -156,25 +156,25 @@ public ref struct RentedBuffer
     /// Gets a span view of the buffer.
     /// OPTIMIZED: Zero-allocation access to buffer data.
     /// </summary>
-    public readonly Span<byte> AsSpan() => buffer.AsSpan(); // ✅ C# 14: Expression body
+    public readonly Span<byte> AsSpan() => buffer.AsSpan(); // ✅ C# 15: Expression body
 
     /// <summary>
     /// Gets a span view of the used portion of the buffer.
     /// OPTIMIZED: Zero-allocation access to used data only.
     /// </summary>
-    public readonly Span<byte> UsedSpan() => buffer.AsSpan(0, usedSize); // ✅ C# 14: Expression body
+    public readonly Span<byte> UsedSpan() => buffer.AsSpan(0, usedSize); // ✅ C# 15: Expression body
 
     /// <summary>
     /// Gets a memory view of the buffer.
     /// OPTIMIZED: Zero-allocation async-compatible access.
     /// </summary>
-    public readonly Memory<byte> AsMemory() => buffer.AsMemory(); // ✅ C# 14: Expression body
+    public readonly Memory<byte> AsMemory() => buffer.AsMemory(); // ✅ C# 15: Expression body
 
     /// <summary>
     /// Gets a memory view of the used portion.
     /// OPTIMIZED: Zero-allocation async-compatible access to used data only.
     /// </summary>
-    public readonly Memory<byte> UsedMemory() => buffer.AsMemory(0, usedSize); // ✅ C# 14: Expression body
+    public readonly Memory<byte> UsedMemory() => buffer.AsMemory(0, usedSize); // ✅ C# 15: Expression body
 
     /// <summary>
     /// Returns the buffer to the pool.
@@ -183,7 +183,7 @@ public ref struct RentedBuffer
     /// </summary>
     public void Dispose()
     {
-        if (buffer is not null && pool is not null) // ✅ C# 14: is not null pattern
+        if (buffer is not null && pool is not null) // ✅ C# 15: is not null pattern
         {
             pool.Return(buffer, usedSize, fromCache);
             buffer = null;
@@ -235,12 +235,12 @@ public class WalBufferPoolStatistics
     /// <summary>
     /// Gets the cache hit rate (0.0 to 1.0).
     /// </summary>
-    public double CacheHitRate => CacheHits + CacheMisses > 0 // ✅ C# 14: Expression body
+    public double CacheHitRate => CacheHits + CacheMisses > 0 // ✅ C# 15: Expression body
         ? (double)CacheHits / (CacheHits + CacheMisses)
         : 0.0;
 
     /// <summary>
     /// Gets the number of buffers currently outstanding.
     /// </summary>
-    public long OutstandingBuffers => BuffersRented - BuffersReturned; // ✅ C# 14: Expression body
+    public long OutstandingBuffers => BuffersRented - BuffersReturned; // ✅ C# 15: Expression body
 }

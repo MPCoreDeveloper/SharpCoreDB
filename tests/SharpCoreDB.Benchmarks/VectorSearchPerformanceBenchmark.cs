@@ -29,7 +29,7 @@ using SharpCoreDB.VectorSearch;
 /// - 100K vectors: ~1-2ms search latency
 /// - 1M vectors: ~2-5ms search latency (with quantization, ~0.5-2ms)
 /// 
-/// ✅ C# 14: Collection expressions, primary constructors.
+/// ✅ C# 15: Collection expressions, primary constructors.
 /// </summary>
 [SimpleJob(runtimeMoniker: RuntimeMoniker.Net80)]
 [MemoryDiagnoser]

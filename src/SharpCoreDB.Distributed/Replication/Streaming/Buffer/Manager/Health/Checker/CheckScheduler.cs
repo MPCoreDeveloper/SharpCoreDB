@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Intelligent scheduler for health checks with priority-based execution.
 /// Provides adaptive scheduling based on buffer usage patterns and health status.
-/// C# 14: Primary constructors, PeriodicTimer for scheduling.
+/// C# 15: Primary constructors, PeriodicTimer for scheduling.
 /// </summary>
 public sealed class CheckScheduler
 {

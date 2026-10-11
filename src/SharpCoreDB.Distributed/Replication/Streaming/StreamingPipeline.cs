@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Orchestrates the end-to-end WAL streaming pipeline.
 /// Manages the flow from WAL reading to replica transmission.
-/// C# 14: Async streams, Channel<T> coordination, primary constructors.
+/// C# 15: Async streams, Channel<T> coordination, primary constructors.
 /// </summary>
 public sealed class StreamingPipeline : IAsyncDisposable
 {

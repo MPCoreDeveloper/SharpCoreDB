@@ -7,7 +7,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Tracks the replication state for a master-slave relationship.
-/// C# 14: Primary constructors, collection expressions, modern patterns.
+/// C# 15: Primary constructors, collection expressions, modern patterns.
 /// </summary>
 public sealed class ReplicationState(string masterNodeId, string replicaNodeId)
 {

@@ -3,13 +3,13 @@
 
 # SharpCoreDB
 
-**High-Performance Encrypted Database for .NET 10**  
+**High-Performance Encrypted Database for .NET 11**  
 **Embedded engine + production gRPC server in one ecosystem**
 
 [![GitHub stars](https://img.shields.io/github/stars/MPCoreDeveloper/SharpCoreDB?style=for-the-badge)](https://github.com/MPCoreDeveloper/SharpCoreDB/stargazers)
 [![NuGet](https://img.shields.io/nuget/v/SharpCoreDB?style=for-the-badge)](https://www.nuget.org/packages/SharpCoreDB)
 [![NuGet downloads](https://img.shields.io/nuget/dt/SharpCoreDB?style=for-the-badge)](https://www.nuget.org/packages/SharpCoreDB)
-[![.NET 10](https://img.shields.io/badge/.NET-10-blue?style=for-the-badge)](https://dotnet.microsoft.com/download)
+[![.NET 11](https://img.shields.io/badge/.NET-11-blue?style=for-the-badge)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)](https://opensource.org/licenses/MIT)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Linux%20%7C%20macOS-informational?style=for-the-badge)](#)
 [![Roadmap](https://img.shields.io/badge/Roadmap-View%20Plan-blueviolet?style=for-the-badge)](./ROADMAP.md)
@@ -24,8 +24,8 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by a **1,916-test core suite** (0 failed; **2,897 tests across
-  16 suites** in total) and **backward compatibility**
+- A production-focused stack validated by the **core suite on the promoted tree (1,995 tests, 0 failed)**,
+  the **RC.3 sweep of 2,897 tests across 16 suites**, and **backward compatibility**
 
 > **Current release: v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
 > NuGet.org** (all 27 packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
@@ -67,7 +67,7 @@ Use it when you need:
 - **One stack, two deployment models**: embedded and server mode
 - **Performance-first design**: SIMD acceleration, zero-allocation read paths, optimized query paths
 - **Security by default**: TLS 1.2+, JWT, optional mTLS, RBAC, encrypted single-file storage
-- **Modern .NET 10-native**: C# 14, optional ecosystem packages, production-ready modules
+- **Modern .NET 11-native**: C# 15, optional ecosystem packages, production-ready modules
 
 ### Quick comparison
 
@@ -121,7 +121,7 @@ Headline changes:
 - ⚡ **Removed hidden `D:\*.log` debug writes** that throttled every SELECT/execute/transaction/INSERT
 - 🛡️ **Native AOT readiness** — AOT-safe `TypeConverter`, `Option<T>` reader, `[RequiresDynamicCode]` annotations,
   source-generated DTOs/JSON (`tools/SharpCoreDB.AotSmoke` publishes + runs, exit 0)
-- ✅ validated by a **1,916-test core suite (0 failed)** — **2,897 tests across 16 suites** in total (CQRS 64, VectorSearch 248, EF Core 116, Provider.Sync 135, Search 58, HybridSearch 6, Functional.Linq2DB 24, …)
+- ✅ validated by the **core suite on the promoted tree (1,995 tests, 0 failed)** — the **RC.3 sweep covered 2,897 tests across 16 suites** (CQRS 64, VectorSearch 248, EF Core 116, Provider.Sync 135, Search 58, HybridSearch 6, Functional.Linq2DB 24, …)
 - 🛡️ **Envelope encryption + full at-rest metadata encryption** — password-based per-file DEK (PBKDF2-HMAC-SHA256), encrypted block registry / FSM / WAL, key & password rotation APIs (#341 follow-on)
 - 🗜️ **Block-level Brotli/GZip compression** for single-file (`.scdb`) storage — transparent, per-block, applied before encryption / removed after decryption (#344)
 - ⚙️ **Configurable metadata region sizing** — `FsmSizePages` / `BlockRegistrySizePages` / `TableDirectorySizePages` remove the 512 MB single-file ceiling; byte-based file extension (~10 MB regardless of `PageSize`) (#345)
@@ -234,7 +234,7 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0
 > `ghcr.io/mpcoredeveloper/sharpcoredb-server` container image. The packable server-side libraries are
 > `SharpCoreDB.Server.Core` (hosting) and `SharpCoreDB.Server.Protocol` (wire contracts).
 
-### v2.0.0.2 — stable (`master`, net10.0 / C# 14)
+### v2.0.0.3 — stable (parked on `release/v2.0`, net10.0 / C# 14)
 
 ```bash
 # Core

@@ -13,15 +13,15 @@ using System.Text;
 /// GenericLinqToSqlTranslator - Core translation infrastructure.
 /// Contains fields, main translation logic, and helper methods.
 /// Part of the GenericLinqToSqlTranslator partial class.
-/// Modern C# 14 with collection expressions and primary constructors.
+/// Modern C# 15 with collection expressions and primary constructors.
 /// See also: GenericLinqToSqlTranslator.Expressions.cs, GenericLinqToSqlTranslator.Queries.cs
 /// </summary>
 /// <typeparam name="T">The entity type being queried.</typeparam>
 public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 {
     private readonly StringBuilder _sql = new();
-    private readonly List<object?> _parameters = [];  // ✅ C# 14: collection expression
-    private readonly Dictionary<string, string> _propertyToColumnMap = [];  // ✅ C# 14: collection expression
+    private readonly List<object?> _parameters = [];  // ✅ C# 15: collection expression
+    private readonly Dictionary<string, string> _propertyToColumnMap = [];  // ✅ C# 15: collection expression
     private int _parameterIndex;
 
     /// <summary>
@@ -38,16 +38,16 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
         Visit(expression);
 
-        return (_sql.ToString(), [.. _parameters]);  // ✅ C# 14: spread operator
+        return (_sql.ToString(), [.. _parameters]);  // ✅ C# 15: spread operator
     }
 
     /// <summary>
     /// Visits an expression node with pattern matching dispatch.
-    /// ✅ C# 14: Enhanced pattern matching.
+    /// ✅ C# 15: Enhanced pattern matching.
     /// </summary>
     private void Visit(Expression? expression)
     {
-        if (expression is null)  // ✅ C# 14: is null pattern
+        if (expression is null)  // ✅ C# 15: is null pattern
             return;
 
         switch (expression.NodeType)
@@ -102,7 +102,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Gets the SQL operator for an expression type.
-    /// ✅ C# 14: Switch expression.
+    /// ✅ C# 15: Switch expression.
     /// </summary>
     private static string GetOperator(ExpressionType nodeType) => nodeType switch
     {
@@ -122,7 +122,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
     /// </summary>
     private static Expression StripQuotes(Expression expression)
     {
-        while (expression.NodeType is ExpressionType.Quote)  // ✅ C# 14: is pattern
+        while (expression.NodeType is ExpressionType.Quote)  // ✅ C# 15: is pattern
         {
             expression = ((UnaryExpression)expression).Operand;
         }
@@ -131,7 +131,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Gets the table name for type T.
-    /// ✅ C# 14: Simplified logic.
+    /// ✅ C# 15: Simplified logic.
     /// </summary>
     private static string GetTableName()
     {
@@ -166,7 +166,7 @@ public sealed partial class GenericLinqToSqlTranslator<T> where T : class
 
     /// <summary>
     /// Gets the value from an expression.
-    /// ✅ C# 14: Pattern matching.
+    /// ✅ C# 15: Pattern matching.
     /// </summary>
     private static object? GetExpressionValue(Expression expression)
     {

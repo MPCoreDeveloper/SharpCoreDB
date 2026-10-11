@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 using SharpCoreDB.DataStructures;
 
 /// <summary>
-/// C# 14 & .NET 10 Performance Optimizations for Database class.
+/// Performance optimizations for the Database class.
 /// Contains optimized query execution and async methods.
 /// 
 /// Performance Improvements:
@@ -22,7 +22,7 @@ using SharpCoreDB.DataStructures;
 /// - Async/ValueTask: Reduced allocations (1.5-2x)
 /// - WHERE clause caching: Compiled expression reuse (50-100x for repeated)
 /// 
-/// Phase: 2C (C# 14 & .NET 10 Optimizations)
+/// Phase: 2C (performance optimizations)
 /// Added: January 2026
 /// </summary>
 public partial class Database

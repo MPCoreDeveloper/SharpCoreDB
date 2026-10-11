@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Diagnostic extension for JoinExecutor to debug JOIN issues.
-/// ✅ C# 14: Modern patterns and debugging helpers.
+/// ✅ C# 15: Modern patterns and debugging helpers.
 /// </summary>
 public static class JoinExecutorDiagnostics
 {

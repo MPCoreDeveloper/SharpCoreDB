@@ -11,7 +11,7 @@ using System.Runtime.CompilerServices;
 using SharpCoreDB.Optimizations;
 
 /// <summary>
-/// C# 14 & .NET 10 Performance Optimizations for Table class.
+/// Performance optimizations for the Table class.
 /// Contains optimized query execution methods using advanced language features.
 /// 
 /// Performance Improvements:
@@ -20,14 +20,14 @@ using SharpCoreDB.Optimizations;
 /// - Collection expressions: Efficient allocation (1.2-1.5x)
 /// - SIMD operations: Vectorized filtering (1.5-2x)
 /// 
-/// Phase: 2C (C# 14 & .NET 10 Optimizations)
+/// Phase: 2C (performance optimizations)
 /// Added: January 2026
 /// </summary>
 public partial class Table
 {
     /// <summary>
     /// Optimized INSERT using ref readonly to avoid Dictionary copy overhead.
-    /// C# 14 Feature: ref readonly parameters eliminate struct copying.
+    /// C# 15 Feature: ref readonly parameters eliminate struct copying.
     /// 
     /// Performance: 2-3x faster than traditional Insert() for large dictionaries.
     /// </summary>
@@ -86,7 +86,7 @@ public partial class Table
 
     /// <summary>
     /// Inline array helper for column value buffering.
-    /// Uses C# 14 [InlineArray(16)] for stack allocation.
+    /// Uses C# 15 [InlineArray(16)] for stack allocation.
     /// Eliminates heap allocations for rows with ≤16 columns.
     /// 
     /// Performance: 2-3x faster, zero GC pressure.

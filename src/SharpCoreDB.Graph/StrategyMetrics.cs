@@ -6,7 +6,7 @@ namespace SharpCoreDB.Graph;
 
 /// <summary>
 /// Internal metrics collected during traversal execution.
-/// C# 14: Record struct for zero-allocation internal metrics.
+/// C# 15: Record struct for zero-allocation internal metrics.
 /// </summary>
 internal readonly record struct StrategyMetrics
 {

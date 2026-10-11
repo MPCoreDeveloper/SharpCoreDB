@@ -9,7 +9,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Storage;
 
 /// <summary>
 /// Represents a SharpCoreDB database connection for Entity Framework Core.
-/// Modern C# 14 implementation with improved resource management.
+/// Modern C# 15 implementation with improved resource management.
 /// </summary>
 public class SharpCoreDBConnection : DbConnection
 {
@@ -26,8 +26,8 @@ public class SharpCoreDBConnection : DbConnection
     /// <param name="connectionString">The connection string.</param>
     public SharpCoreDBConnection(IServiceProvider services, string connectionString)
     {
-        ArgumentNullException.ThrowIfNull(services); // ? C# 14
-        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString); // ? C# 14
+        ArgumentNullException.ThrowIfNull(services); // ? C# 15
+        ArgumentException.ThrowIfNullOrWhiteSpace(connectionString); // ? C# 15
         
         _services = services;
         _connectionStringBuilder = new ConnectionStringBuilder(connectionString);
@@ -67,7 +67,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Closed)
             return;
 
-        if (_database is not null && _pool is not null) // ? C# 14: not pattern
+        if (_database is not null && _pool is not null) // ? C# 15: not pattern
         {
             _pool.ReturnDatabase(_database);
         }
@@ -95,7 +95,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Open)
             return;
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
+        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 15
 
         // ✅ CRITICAL FIX: Reuse existing database instance if available.
         // EF Core opens/closes the connection multiple times during a single DbContext lifecycle
@@ -113,7 +113,7 @@ public class SharpCoreDBConnection : DbConnection
         if (usePooling)
         {
             _pool = _services.GetService<DatabasePool>();
-            _pool ??= new DatabasePool(_services, maxPoolSize: 10); // ? C# 14: ??= operator
+            _pool ??= new DatabasePool(_services, maxPoolSize: 10); // ? C# 15: ??= operator
 
             _database = _pool.GetDatabase(ConnectionString);
         }
@@ -135,7 +135,7 @@ public class SharpCoreDBConnection : DbConnection
         if (_state == ConnectionState.Open)
             return;
 
-        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 14
+        ArgumentException.ThrowIfNullOrWhiteSpace(_connectionStringBuilder.DataSource, nameof(DataSource)); // ? C# 15
 
         // ✅ CRITICAL FIX: Reuse existing database instance if available.
         if (_database is not null)
@@ -176,7 +176,7 @@ public class SharpCoreDBConnection : DbConnection
     }
 
     /// <inheritdoc />
-    protected override DbCommand CreateDbCommand() => new SharpCoreDBCommand(this); // ? C# 14: expression-bodied
+    protected override DbCommand CreateDbCommand() => new SharpCoreDBCommand(this); // ? C# 15: expression-bodied
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)

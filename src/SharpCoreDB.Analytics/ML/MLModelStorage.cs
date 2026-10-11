@@ -10,7 +10,7 @@ namespace SharpCoreDB.Analytics.ML;
 /// <summary>
 /// Storage interface for machine learning models in SharpCoreDB.
 /// Provides CRUD operations for model persistence and versioning.
-/// C# 14: Async patterns, collection expressions.
+/// C# 15: Async patterns, collection expressions.
 /// </summary>
 public sealed class MLModelStorage
 {

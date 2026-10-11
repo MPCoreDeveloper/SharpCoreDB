@@ -41,7 +41,7 @@ Feature suggestions are welcome! Please create an issue with:
 ## Development Setup
 
 ### Prerequisites
-- .NET 10 SDK or later
+- .NET 11 SDK or later
 - Git
 - A code editor (Visual Studio 2026, VS Code, or Rider)
 
@@ -107,7 +107,7 @@ SharpCoreDB/
 - Write unit tests for new functionality
 
 ### C# Style Guide
-- Use C# 14 features where appropriate
+- Use C# 15 features where appropriate
 - Follow .NET naming conventions
 - Use `var` for local variables when type is obvious
 - Place braces on new lines (Allman style)

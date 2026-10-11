@@ -17,7 +17,7 @@ SIMD-accelerated vector similarity search for `SharpCoreDB`.
 - Distance metrics and vector query optimization
 - Quantization support (scalar and binary)
 - Vector serialization/storage support
-- Designed for semantic search and RAG pipelines on .NET 10
+- Designed for semantic search and RAG pipelines on .NET 11
 
 ## Changes in v1.9.5
 

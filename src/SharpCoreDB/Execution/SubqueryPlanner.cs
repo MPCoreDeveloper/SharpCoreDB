@@ -41,7 +41,7 @@ public sealed class SubqueryPlanner
 
     /// <summary>
     /// Plans subquery execution for a SELECT statement.
-    /// ✅ C# 14: Collection expressions, is patterns.
+    /// ✅ C# 15: Collection expressions, is patterns.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public SubqueryExecutionPlan Plan(SelectNode query)
@@ -215,7 +215,7 @@ public sealed class SubqueryPlanner
 
 /// <summary>
 /// Execution plan for subqueries.
-/// ✅ C# 14: Collection expressions.
+/// ✅ C# 15: Collection expressions.
 /// </summary>
 public sealed class SubqueryExecutionPlan
 {
@@ -234,7 +234,7 @@ public sealed class SubqueryExecutionPlan
 
 /// <summary>
 /// Classified subquery with execution metadata.
-/// ✅ C# 14: Required properties.
+/// ✅ C# 15: Required properties.
 /// </summary>
 public sealed class ClassifiedSubquery
 {

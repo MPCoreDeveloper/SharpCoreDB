@@ -29,7 +29,7 @@ public sealed class SubqueryClassifier
 {
     /// <summary>
     /// Classifies a subquery relative to an outer query.
-    /// ✅ C# 14: Target-typed new, is patterns.
+    /// ✅ C# 15: Target-typed new, is patterns.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public SubqueryClassification Classify(SubqueryExpressionNode subquery, SelectNode outerQuery)
@@ -231,7 +231,7 @@ public sealed class SubqueryClassifier
 
 /// <summary>
 /// Result of subquery classification.
-/// ✅ C# 14: Collection expressions, required properties.
+/// ✅ C# 15: Collection expressions, required properties.
 /// </summary>
 public sealed class SubqueryClassification
 {

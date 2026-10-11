@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Detects orphaned files and missing file references.
-/// C# 14: Modern async patterns with collection expressions.
+/// C# 15: Modern async patterns with collection expressions.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: Orphan detection for FILESTREAM data.

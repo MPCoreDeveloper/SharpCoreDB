@@ -74,7 +74,7 @@ public sealed partial class PageCache
     /// <inheritdoc/>
     public void FlushPage(int pageId, Action<int, ReadOnlySpan<byte>> flushFunc)
     {
-        ArgumentNullException.ThrowIfNull(flushFunc); // ✅ C# 14: ArgumentNullException.ThrowIfNull
+        ArgumentNullException.ThrowIfNull(flushFunc); // ✅ C# 15: ArgumentNullException.ThrowIfNull
 
         if (pageTable.TryGetValue(pageId, out var frame) && frame.IsDirty && frame.TryLatch())
         {
@@ -94,9 +94,9 @@ public sealed partial class PageCache
     /// <inheritdoc/>
     public void FlushAll(Action<int, ReadOnlySpan<byte>> flushFunc)
     {
-        ArgumentNullException.ThrowIfNull(flushFunc); // ✅ C# 14: ArgumentNullException.ThrowIfNull
+        ArgumentNullException.ThrowIfNull(flushFunc); // ✅ C# 15: ArgumentNullException.ThrowIfNull
 
-        foreach (var (_, frame) in pageTable) // ✅ C# 14: Tuple deconstruction
+        foreach (var (_, frame) in pageTable) // ✅ C# 15: Tuple deconstruction
         {
             if (frame.IsDirty && frame.TryLatch())
             {
@@ -137,7 +137,7 @@ public sealed partial class PageCache
             }
 
             // Flush if dirty
-            if (frame.IsDirty && flushFunc is not null) // ✅ C# 14: is not pattern
+            if (frame.IsDirty && flushFunc is not null) // ✅ C# 15: is not pattern
             {
                 flushFunc(pageId, frame.Buffer);
                 statistics.IncrementFlushes();
@@ -156,18 +156,18 @@ public sealed partial class PageCache
     /// <inheritdoc/>
     public void Clear(bool flushDirty = false, Action<int, ReadOnlySpan<byte>>? flushFunc = null)
     {
-        if (flushDirty && flushFunc is not null) // ✅ C# 14: is not pattern
+        if (flushDirty && flushFunc is not null) // ✅ C# 15: is not pattern
         {
             FlushAll(flushFunc);
         }
 
-        foreach (var (key, frame) in pageTable) // ✅ C# 14: Tuple deconstruction
+        foreach (var (key, frame) in pageTable) // ✅ C# 15: Tuple deconstruction
         {
             if (frame.TryLatch())
             {
                 try
                 {
-                    if (frame.PinCount is 0) // ✅ C# 14: is pattern with constant
+                    if (frame.PinCount is 0) // ✅ C# 15: is pattern with constant
                     {
                         pageTable.TryRemove(key, out _);
                         Interlocked.Decrement(ref currentSize);

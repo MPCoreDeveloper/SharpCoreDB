@@ -397,7 +397,7 @@ InvalidOperationException: Scalar subquery returned multiple rows
 - ✅ **Cache-aware**: Non-correlated subqueries cached automatically
 - ✅ **Thread-safe**: All components support concurrent access
 - ✅ **Production-ready**: Comprehensive error handling and validation
-- ✅ **C# 14**: Uses latest features (collection expressions, required properties, is patterns)
+- ✅ **C# 15**: Uses latest features (collection expressions, required properties, is patterns)
 
 ## Summary
 

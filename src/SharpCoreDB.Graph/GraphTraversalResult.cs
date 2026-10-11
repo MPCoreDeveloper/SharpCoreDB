@@ -8,7 +8,7 @@ using SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Result of a graph traversal operation with optional metrics.
-/// C# 14: Primary constructor with init-only properties.
+/// C# 15: Primary constructor with init-only properties.
 /// ✅ Phase 6.3: Added metrics support for observability.
 /// </summary>
 public sealed class GraphTraversalResult

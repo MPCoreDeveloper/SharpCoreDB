@@ -17,7 +17,7 @@ using System.Threading.Tasks;
 /// GroupCommitWAL - Core infrastructure.
 /// Contains fields, constructor, and initialization logic.
 /// Part of the GroupCommitWAL partial class.
-/// Modern C# 14 with target-typed new and enhanced patterns.
+/// Modern C# 15 with target-typed new and enhanced patterns.
 /// See also: GroupCommitWAL.Batching.cs, GroupCommitWAL.Diagnostics.cs
 /// </summary>
 public partial class GroupCommitWAL : IDisposable
@@ -31,7 +31,7 @@ public partial class GroupCommitWAL : IDisposable
     private readonly Channel<PendingCommit> commitQueue;
     private readonly Task backgroundWorker;
     private readonly CancellationTokenSource cts;
-    private bool disposed;  // ✅ C# 14: Removed unnecessary = false
+    private bool disposed;  // ✅ C# 15: Removed unnecessary = false
 
     // Configuration
     private int currentBatchSize;  // Mutable for adaptive scaling
@@ -39,7 +39,7 @@ public partial class GroupCommitWAL : IDisposable
     private readonly bool enableAdaptiveBatching;
 
     // Statistics
-    private long totalCommits;  // ✅ C# 14: Removed unnecessary = 0
+    private long totalCommits;  // ✅ C# 15: Removed unnecessary = 0
     private long totalBatches;
     private long totalBytesWritten;
     private long totalBatchAdjustments;
@@ -47,18 +47,18 @@ public partial class GroupCommitWAL : IDisposable
 
     /// <summary>
     /// Represents a pending commit request with its completion source.
-    /// ✅ C# 14: Target-typed new for TaskCompletionSource.
+    /// ✅ C# 15: Target-typed new for TaskCompletionSource.
     /// </summary>
     private sealed class PendingCommit
     {
         public WalRecord Record { get; set; }
-        public TaskCompletionSource<bool> CompletionSource { get; set; } = new();  // ✅ C# 14: Target-typed new
+        public TaskCompletionSource<bool> CompletionSource { get; set; } = new();  // ✅ C# 15: Target-typed new
     }
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GroupCommitWAL"/> class.
     /// Creates instance-specific WAL file and starts background commit worker.
-    /// ✅ C# 14: Target-typed new for UnboundedChannelOptions.
+    /// ✅ C# 15: Target-typed new for UnboundedChannelOptions.
     /// </summary>
     /// <param name="dbPath">The database path.</param>
     /// <param name="durabilityMode">The durability mode (FullSync or Async).</param>
@@ -93,7 +93,7 @@ public partial class GroupCommitWAL : IDisposable
 
         // Create file stream with appropriate options
         var options = FileOptions.Asynchronous;
-        if (durabilityMode is DurabilityMode.FullSync)  // ✅ C# 14: is pattern
+        if (durabilityMode is DurabilityMode.FullSync)  // ✅ C# 15: is pattern
         {
             options |= FileOptions.WriteThrough; // OS-level write-through
         }
@@ -106,7 +106,7 @@ public partial class GroupCommitWAL : IDisposable
             bufferSize: 64 * 1024, // 64KB buffer
             options);
 
-        // ✅ C# 14: Target-typed new for UnboundedChannelOptions
+        // ✅ C# 15: Target-typed new for UnboundedChannelOptions
         this.commitQueue = Channel.CreateUnbounded<PendingCommit>(new()
         {
             SingleReader = true, // Only background worker reads

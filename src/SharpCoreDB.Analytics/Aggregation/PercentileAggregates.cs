@@ -3,7 +3,7 @@ namespace SharpCoreDB.Analytics.Aggregation;
 /// <summary>
 /// Calculates median (50th percentile).
 /// Requires buffering all values for sorting.
-/// C# 14: Uses collection expressions for initialization.
+/// C# 15: Uses collection expressions for initialization.
 /// </summary>
 /// <remarks>
 /// Median is the middle value when data is sorted.
@@ -65,7 +65,7 @@ public sealed class MedianAggregate : IAggregateFunction
 /// <summary>
 /// Calculates arbitrary percentile (0.0 - 1.0).
 /// Uses linear interpolation for accuracy.
-/// C# 14: Uses primary constructor for configuration.
+/// C# 15: Uses primary constructor for configuration.
 /// </summary>
 /// <remarks>
 /// Percentile calculation using linear interpolation:

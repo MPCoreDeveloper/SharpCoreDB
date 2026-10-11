@@ -1315,7 +1315,7 @@ public sealed class Issue227_CreateProducts : global::FluentMigrator.Migration
 
 /// <summary>
 /// Reproduces the exact procedure reported in issue #227:
-/// 1. Create a .NET 10 project with SharpCoreDB.Extensions
+/// 1. Create a .NET 11 project with SharpCoreDB.Extensions
 /// 2. Register an embedded IDatabase (single-file mode)
 /// 3. Call services.AddSharpCoreDBFluentMigrator(runner => runner.AddSQLite())
 /// 4. Call migrationRunner.MigrateUp()

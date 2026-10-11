@@ -3,7 +3,7 @@ namespace SharpCoreDB.Analytics.Aggregation;
 /// <summary>
 /// Calculates the mode (most frequently occurring value).
 /// Uses Dictionary to track value frequencies.
-/// C# 14: Uses collection expressions for initialization.
+/// C# 15: Uses collection expressions for initialization.
 /// </summary>
 /// <remarks>
 /// Mode is the value that appears most often in a dataset.

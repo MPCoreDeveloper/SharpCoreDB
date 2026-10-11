@@ -2,7 +2,7 @@ namespace SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Immutable snapshot of A* heuristic performance metrics.
-/// C# 14: Record struct for zero-allocation snapshots.
+/// C# 15: Record struct for zero-allocation snapshots.
 /// </summary>
 public readonly record struct HeuristicMetrics
 {

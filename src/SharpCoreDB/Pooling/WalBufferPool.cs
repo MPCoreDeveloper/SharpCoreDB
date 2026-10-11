@@ -80,7 +80,7 @@ namespace SharpCoreDB.Pooling;
 /// </code>
 /// 
 /// <para>
-/// <b>C# 14 Features:</b>
+/// <b>C# 15 Features:</b>
 /// </para>
 /// <list type="bullet">
 /// <item>ArgumentOutOfRangeException.ThrowIfNegativeOrZero - Parameter validation</item>

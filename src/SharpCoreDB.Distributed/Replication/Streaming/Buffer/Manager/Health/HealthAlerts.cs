@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Alert generation and notification system for buffer health issues.
 /// Provides configurable alerting with severity-based notifications.
-/// C# 14: Primary constructors, pattern matching, async event handling.
+/// C# 15: Primary constructors, pattern matching, async event handling.
 /// </summary>
 public sealed class HealthAlerts : IAsyncDisposable
 {

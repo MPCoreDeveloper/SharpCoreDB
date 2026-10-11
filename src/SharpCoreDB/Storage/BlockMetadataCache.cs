@@ -11,7 +11,7 @@ using System.Collections.Generic;
 using System.Threading;
 
 /// <summary>
-/// ✅ C# 14: LRU cache for block metadata using Lock class.
+/// ✅ C# 15: LRU cache for block metadata using Lock class.
 /// Phase 3.2: Reduces registry lookups by caching frequently accessed block entries.
 /// 
 /// Performance: Cache hit = O(1), zero-allocation, MRU move in O(1)
@@ -36,7 +36,7 @@ public sealed class BlockMetadataCache
 {
     private readonly Dictionary<string, CacheEntry> _cache = [];
     private readonly LinkedList<string> _lru = new();
-    private readonly Lock _cacheLock = new(); // C# 14
+    private readonly Lock _cacheLock = new(); // C# 15
     private const int MAX_CACHE_SIZE = 1000;
     
     // Performance counters

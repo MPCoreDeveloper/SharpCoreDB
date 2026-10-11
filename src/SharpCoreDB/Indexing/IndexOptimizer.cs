@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Index optimizer for composite index strategies.
-/// C# 14: Record types, modern patterns, selectivity estimation.
+/// C# 15: Record types, modern patterns, selectivity estimation.
 /// 
 /// ✅ SCDB Phase 9: Index Enhancements
 /// 

@@ -21,7 +21,7 @@ using SharpCoreDB.ColumnStorage;
 /// <summary>
 /// Adapter for columnar storage integration with SCDB SingleFileStorageProvider.
 /// Stores columns as separate blocks for efficient analytics queries.
-/// C# 14: Uses modern async patterns and Brotli compression.
+/// C# 15: Uses modern async patterns and Brotli compression.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 4: Enables ColumnStore to persist to SCDB format.

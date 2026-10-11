@@ -161,7 +161,7 @@ Memory                  Memory
 
 ```
 Profile runs saved to:
-  SharpCoreDB.Profiling\bin\Release\net10.0\
+  SharpCoreDB.Profiling\bin\Release\net11.0\
 
 Report files (.diagsession):
   - Baseline_PageBased.diagsession
@@ -258,4 +258,4 @@ After profiling and optimization:
 
 **Last Updated:** 2025-01-16  
 **Visual Studio:** 2026  
-**Framework:** .NET 10
+**Framework:** .NET 11

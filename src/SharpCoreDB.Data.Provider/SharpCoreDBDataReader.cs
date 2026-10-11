@@ -8,7 +8,7 @@ namespace SharpCoreDB.Data.Provider;
 /// <summary>
 /// Data reader for SharpCoreDB query results.
 /// Wraps the List&lt;Dictionary&lt;string, object&gt;&gt; results from ExecuteQuery.
-/// Modern C# 14 implementation with pattern matching and collection expressions.
+/// Modern C# 15 implementation with pattern matching and collection expressions.
 /// </summary>
 public sealed class SharpCoreDBDataReader : DbDataReader
 {

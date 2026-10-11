@@ -9,7 +9,7 @@ using System;
 
 /// <summary>
 /// Time-series bucket for partitioned storage.
-/// C# 14: Record types, required members, modern patterns.
+/// C# 15: Record types, required members, modern patterns.
 /// 
 /// ✅ SCDB Phase 8.2: Bucket Storage System
 /// 

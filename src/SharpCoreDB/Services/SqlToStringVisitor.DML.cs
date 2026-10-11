@@ -16,7 +16,7 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitInsertCore(InsertNode node)
     {
-        List<string> parts = ["INSERT INTO", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 14: Collection expression
+        List<string> parts = ["INSERT INTO", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 15: Collection expression
 
         if (node.Columns.Any())
         {
@@ -24,7 +24,7 @@ public sealed partial class SqlToStringVisitor
             parts.Add($"({cols})");
         }
 
-        if (node.SelectStatement is not null) // ✅ C# 14: is not null pattern
+        if (node.SelectStatement is not null) // ✅ C# 15: is not null pattern
         {
             parts.Add(node.SelectStatement.Accept(this));
         }
@@ -40,13 +40,13 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitUpdateCore(UpdateNode node)
     {
-        List<string> parts = ["UPDATE", _dialect.QuoteIdentifier(node.TableName), "SET"]; // ✅ C# 14: Collection expression
+        List<string> parts = ["UPDATE", _dialect.QuoteIdentifier(node.TableName), "SET"]; // ✅ C# 15: Collection expression
 
         var sets = node.Assignments.Select(kv =>
             $"{_dialect.QuoteIdentifier(kv.Key)} = {kv.Value.Accept(this)}");
         parts.Add(string.Join(", ", sets));
 
-        if (node.Where is not null) // ✅ C# 14: is not null pattern
+        if (node.Where is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.Where.Accept(this));
 
         return string.Join(" ", parts);
@@ -55,9 +55,9 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitDeleteCore(DeleteNode node)
     {
-        List<string> parts = ["DELETE FROM", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 14: Collection expression
+        List<string> parts = ["DELETE FROM", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 15: Collection expression
 
-        if (node.Where is not null) // ✅ C# 14: is not null pattern
+        if (node.Where is not null) // ✅ C# 15: is not null pattern
             parts.Add(node.Where.Accept(this));
 
         return string.Join(" ", parts);
@@ -66,7 +66,7 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitCreateTableCore(CreateTableNode node)
     {
-        List<string> parts = ["CREATE TABLE"]; // ✅ C# 14: Collection expression
+        List<string> parts = ["CREATE TABLE"]; // ✅ C# 15: Collection expression
 
         if (node.IfNotExists)
             parts.Add("IF NOT EXISTS");
@@ -79,7 +79,7 @@ public sealed partial class SqlToStringVisitor
             if (c.IsPrimaryKey) def += " PRIMARY KEY";
             if (c.IsAutoIncrement) def += " AUTO";
             if (c.IsNotNull) def += " NOT NULL";
-            if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 14: is not null
+            if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 15: is not null
             if (c.Collation != CollationType.Binary) def += $" COLLATE {c.Collation.ToString().ToUpperInvariant()}"; // ✅ COLLATE Phase 2
             return def;
         });
@@ -92,13 +92,13 @@ public sealed partial class SqlToStringVisitor
     /// <inheritdoc/>
     protected override string VisitAlterTableCore(AlterTableNode node)
     {
-        List<string> parts = ["ALTER TABLE", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 14: Collection expression
+        List<string> parts = ["ALTER TABLE", _dialect.QuoteIdentifier(node.TableName)]; // ✅ C# 15: Collection expression
 
         switch (node.Operation)
         {
             case AlterTableOperation.AddColumn:
                 parts.Add("ADD COLUMN");
-                if (node.Column is not null) // ✅ C# 14: is not null pattern
+                if (node.Column is not null) // ✅ C# 15: is not null pattern
                 {
                     var c = node.Column;
                     var def = $"{_dialect.QuoteIdentifier(c.Name)} {c.DataType}";
@@ -106,7 +106,7 @@ public sealed partial class SqlToStringVisitor
                     if (c.IsAutoIncrement) def += " AUTO";
                     if (c.IsNotNull) def += " NOT NULL";
                     if (c.IsUnique) def += " UNIQUE";
-                    if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 14: is not null
+                    if (c.DefaultValue is not null) def += $" DEFAULT {c.DefaultValue}"; // ✅ C# 15: is not null
                     parts.Add(def);
                 }
                 break;

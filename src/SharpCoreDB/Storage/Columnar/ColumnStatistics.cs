@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Statistics collection and analysis for columnar data.
-/// C# 14: Records, primary constructors, collection expressions.
+/// C# 15: Records, primary constructors, collection expressions.
 /// 
 /// ✅ SCDB Phase 7: Advanced Query Optimization
 /// 

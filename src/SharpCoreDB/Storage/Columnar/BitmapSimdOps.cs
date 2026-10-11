@@ -13,7 +13,7 @@ using System.Runtime.Intrinsics.X86;
 
 /// <summary>
 /// SIMD-accelerated operations on null bitmaps.
-/// C# 14: Modern SIMD patterns, aggressive optimization.
+/// C# 15: Modern SIMD patterns, aggressive optimization.
 /// 
 /// ✅ SCDB Phase 7.2: Bitmap SIMD Operations
 /// 

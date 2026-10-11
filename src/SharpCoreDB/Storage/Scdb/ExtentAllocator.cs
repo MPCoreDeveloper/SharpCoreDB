@@ -15,16 +15,16 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Extent allocator for efficient contiguous page allocation.
 /// Uses best-fit and first-fit strategies to minimize fragmentation.
-/// C# 14: Primary constructor, collection expressions, modern patterns.
+/// C# 15: Primary constructor, collection expressions, modern patterns.
 /// 
 /// Purpose: Shared by FreeSpaceManager (Phase 2) and OverflowPageManager (Phase 6).
-/// Performance: O(log n) allocation via SortedSet (C# 14 optimization).
+/// Performance: O(log n) allocation via SortedSet (C# 15 optimization).
 /// ✅ PERFORMANCE FIX: Changed from List to SortedSet for O(log n) insert/delete instead of O(n log n) sorting.
 /// </summary>
 public sealed class ExtentAllocator : IDisposable
 {
-    private readonly SortedSet<FreeExtent> _freeExtents = new(FreeExtentComparer.Instance);  // ✅ C# 14: SortedSet for O(log n) performance
-    private readonly Lock _allocationLock = new();        // ✅ C# 14: Lock type
+    private readonly SortedSet<FreeExtent> _freeExtents = new(FreeExtentComparer.Instance);  // ✅ C# 15: SortedSet for O(log n) performance
+    private readonly Lock _allocationLock = new();        // ✅ C# 15: Lock type
     private bool _isDirty;
     private bool _disposed;
 
@@ -439,7 +439,7 @@ public sealed class ExtentAllocator : IDisposable
 
 /// <summary>
 /// Allocation strategy for extent allocator.
-/// C# 14: Enum for strategy selection.
+/// C# 15: Enum for strategy selection.
 /// </summary>
 public enum AllocationStrategy : byte
 {
@@ -455,7 +455,7 @@ public enum AllocationStrategy : byte
 
 /// <summary>
 /// Comparer for FreeExtent to enable SortedSet ordering by StartPage.
-/// ✅ C# 14: Singleton pattern for comparer.
+/// ✅ C# 15: Singleton pattern for comparer.
 /// </summary>
 file sealed class FreeExtentComparer : IComparer<FreeExtent>
 {

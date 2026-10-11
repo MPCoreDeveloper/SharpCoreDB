@@ -3,7 +3,7 @@
   
   # SharpCoreDB
   
-  High-performance encrypted embedded + network-capable database engine for .NET 10.
+  High-performance encrypted embedded + network-capable database engine for .NET 11.
 
   **Version:** `v1.9.5`
   **Package:** `SharpCoreDB`

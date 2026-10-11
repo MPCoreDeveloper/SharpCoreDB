@@ -16,7 +16,7 @@ namespace SharpCoreDB.Linq;
 /// - GenericLinqToSqlTranslator.Queries.cs: Query method visitors (Where, Select, GroupBy, OrderBy, etc.)
 /// - GenericLinqToSqlTranslator.cs (this file): Main documentation and class declaration
 /// 
-/// MODERN C# 14 FEATURES USED:
+/// MODERN C# 15 FEATURES USED:
 /// - Collection expressions: List of T = [] instead of new List of T()
 /// - Enhanced pattern matching: is null, is not null, property patterns
 /// - Spread operator: [.. collection]

@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Cost-based query optimizer.
-/// C# 14: Modern patterns, cost estimation, join ordering.
+/// C# 15: Modern patterns, cost estimation, join ordering.
 /// 
 /// ✅ SCDB Phase 7.3: Advanced Query Optimization - Cost-Based Optimizer
 /// 

@@ -11,7 +11,7 @@ using System.Linq;
 
 /// <summary>
 /// Materialized view for pre-computed query results.
-/// C# 14: Record types, modern patterns, refresh strategies.
+/// C# 15: Record types, modern patterns, refresh strategies.
 /// 
 /// ✅ SCDB Phase 7.5: Advanced Query Optimization - Materialized Views
 /// 

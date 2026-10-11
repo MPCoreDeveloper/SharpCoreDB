@@ -481,4 +481,4 @@ public List<Dictionary<string, object>> Execute(PhysicalPlan plan)
 - **Cache-Friendly**: Struct-based nodes in PhysicalPlan enable plan reuse
 - **Extensible**: Easy to add new optimizer rules by creating new transformation classes
 - **Production-Ready**: Handles edge cases, null checks, error conditions
-- **.NET 10 + C# 14**: Uses latest features (init properties, required, patterns)
+- **.NET 11 + C# 15**: Uses latest features (init properties, required, patterns)

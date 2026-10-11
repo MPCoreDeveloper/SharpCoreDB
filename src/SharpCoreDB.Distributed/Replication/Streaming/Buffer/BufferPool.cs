@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// High-performance buffer pool for WAL streaming operations.
 /// Provides efficient memory reuse to minimize GC pressure and allocations.
-/// C# 14: Primary constructors, Span<T> for zero-copy operations.
+/// C# 15: Primary constructors, Span<T> for zero-copy operations.
 /// </summary>
 public sealed class BufferPool : IDisposable
 {

@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Repairs corruption in SCDB files with automatic backup and rollback.
-/// C# 14: Uses modern async patterns with progress reporting.
+/// C# 15: Uses modern async patterns with progress reporting.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 5: Production-ready corruption repair.

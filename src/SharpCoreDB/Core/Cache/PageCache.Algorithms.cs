@@ -28,7 +28,7 @@ public sealed partial class PageCache
         }
 
         // Create new frame
-        PageFrame newFrame = new(pageId, pageSize, memoryPool); // ✅ C# 14: Target-typed new
+        PageFrame newFrame = new(pageId, pageSize, memoryPool); // ✅ C# 15: Target-typed new
         
         // Latch immediately
         if (!newFrame.TryLatch())
@@ -39,7 +39,7 @@ public sealed partial class PageCache
         try
         {
             // Load data if function provided
-            if (loadFunc is not null) // ✅ C# 14: is not pattern
+            if (loadFunc is not null) // ✅ C# 15: is not pattern
             {
                 var data = loadFunc(pageId);
                 data.CopyTo(newFrame.Buffer);
@@ -99,7 +99,7 @@ public sealed partial class PageCache
             int nextHand = (currentHand + 1) % capacity;
             Interlocked.CompareExchange(ref clockHand, nextHand, currentHand);
 
-            if (frame is null) // ✅ C# 14: is null pattern
+            if (frame is null) // ✅ C# 15: is null pattern
                 continue;
 
             // Check if page can be evicted
@@ -120,7 +120,7 @@ public sealed partial class PageCache
                     continue;
 
                 // CLOCK algorithm: check and update clock bit
-                if (frame.ClockBit is 1) // ✅ C# 14: is pattern with constant
+                if (frame.ClockBit is 1) // ✅ C# 15: is pattern with constant
                 {
                     // Recently accessed, give second chance
                     frame.ClockBit = 0;
@@ -131,7 +131,7 @@ public sealed partial class PageCache
                 int pageId = frame.PageId;
                 
                 // Flush if dirty
-                if (frame.IsDirty && flushFunc is not null) // ✅ C# 14: is not pattern
+                if (frame.IsDirty && flushFunc is not null) // ✅ C# 15: is not pattern
                 {
                     var data = flushFunc(pageId);
                     data.CopyTo(frame.Buffer);
@@ -167,7 +167,7 @@ public sealed partial class PageCache
     {
         for (int i = 0; i < capacity; i++)
         {
-            if (Volatile.Read(ref frames[i]) is null) // ✅ C# 14: is null pattern
+            if (Volatile.Read(ref frames[i]) is null) // ✅ C# 15: is null pattern
                 return i;
         }
 
@@ -182,7 +182,7 @@ public sealed partial class PageCache
         int pinnedCount = 0;
         int dirtyCount = 0;
 
-        foreach (var (_, frame) in pageTable) // ✅ C# 14: Tuple deconstruction
+        foreach (var (_, frame) in pageTable) // ✅ C# 15: Tuple deconstruction
         {
             if (frame.PinCount > 0) pinnedCount++;
             if (frame.IsDirty) dirtyCount++;

@@ -20,7 +20,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// Main network server for SharpCoreDB.
 /// Manages connections, authentication, TLS policy, and hosted databases.
-/// C# 14: Uses primary constructor for dependency injection.
+/// C# 15: Uses primary constructor for dependency injection.
 /// </summary>
 public sealed class NetworkServer(
     IOptions<ServerConfiguration> configuration,

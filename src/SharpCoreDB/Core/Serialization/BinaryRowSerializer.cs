@@ -15,7 +15,7 @@ using System.Text;
 /// <summary>
 /// High-performance binary row serializer using custom format.
 /// CRITICAL: 3x faster than JSON serialization!
-/// Uses modern C# 14 patterns with Span, ArrayPool, and minimal allocations.
+/// Uses modern C# 15 patterns with Span, ArrayPool, and minimal allocations.
 /// ✅ PERF: Caches column name bytes to avoid per-row Encoding.UTF8.GetBytes allocations.
 /// </summary>
 public static class BinaryRowSerializer

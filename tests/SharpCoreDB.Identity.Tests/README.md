@@ -231,5 +231,5 @@ MIT License - See root LICENSE file for details.
 
 **Last Updated:** 2026-03-09  
 **Test Framework:** xUnit v3.2.2  
-**Target Framework:** .NET 10.0  
-**Language:** C# 14
+**Target Framework:** .NET 11.0  
+**Language:** C# 15

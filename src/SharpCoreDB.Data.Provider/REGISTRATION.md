@@ -57,7 +57,7 @@ The SharpCoreDB Data Provider can be registered for use in:
 
 ## Registration Options
 
-### Option 1: Programmatic Registration (.NET 10+)
+### Option 1: Programmatic Registration (.NET 11+)
 **Note:** This registers the provider **only for your running application**. It is NOT available in SSMS or other tools.
 
 For modern .NET applications:

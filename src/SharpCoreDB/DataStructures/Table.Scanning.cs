@@ -63,7 +63,7 @@ public partial class Table
                 break;
             }
             
-            // ✅ C# 14: Range operator - extract length prefix span first
+            // ✅ C# 15: Range operator - extract length prefix span first
             var lengthSpan = dataSpan[filePosition..(filePosition + 4)];
             int recordLength = System.Buffers.Binary.BinaryPrimitives.ReadInt32LittleEndian(lengthSpan);
 
@@ -101,7 +101,7 @@ public partial class Table
                 break;
             }
             
-            // ✅ C# 14: Range operator for record data extraction
+            // ✅ C# 15: Range operator for record data extraction
             int dataOffset = filePosition + 4;
             ReadOnlySpan<byte> recordData = dataSpan[dataOffset..(dataOffset + recordLength)];
 
@@ -147,7 +147,7 @@ public partial class Table
             {
                 try
                 {
-                    // ✅ C# 14: Range operator for typed value parsing
+                    // ✅ C# 15: Range operator for typed value parsing
                     var value = ReadTypedValueFromSpan(recordData[offset..], this.ColumnTypes[i], out int bytesRead);
                     row[this.Columns[i]] = value;
                     offset += bytesRead;

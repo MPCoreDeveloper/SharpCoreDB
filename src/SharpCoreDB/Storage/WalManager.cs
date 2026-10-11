@@ -374,7 +374,7 @@ internal sealed class WalManager : IDisposable
 
     /// <summary>
     /// Serializes WalEntry to byte buffer with checksum.
-    /// C# 14: Uses modern unsafe code patterns.
+    /// C# 15: Uses modern unsafe code patterns.
     /// Format: Lsn(8) + TxId(8) + Timestamp(8) + Op(2) + BlockIdx(2) + PageId(8) + DataLen(2) + Checksum(32) + Data(4000)
     /// </summary>
     private static unsafe void SerializeWalEntry(Span<byte> buffer, WalEntry entry, ReadOnlySpan<byte> payload)

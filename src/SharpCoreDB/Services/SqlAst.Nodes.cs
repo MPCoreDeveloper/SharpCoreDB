@@ -9,7 +9,7 @@ namespace SharpCoreDB.Services;
 /// SqlAst - Query node types.
 /// Contains SELECT, FROM, JOIN, WHERE, ORDER BY, GROUP BY, HAVING and expression nodes.
 /// Part of the SqlAst partial class infrastructure.
-/// Modern C# 14 with collection expressions and target-typed new.
+/// Modern C# 15 with collection expressions and target-typed new.
 /// See also: SqlAst.Core.cs, SqlAst.DML.cs
 /// </summary>
 public static partial class SqlAst
@@ -19,13 +19,13 @@ public static partial class SqlAst
 
 /// <summary>
 /// Represents a SELECT statement.
-/// ✅ C# 14: Collection expressions for list initialization.
+/// ✅ C# 15: Collection expressions for list initialization.
 /// </summary>
 public class SelectNode : SqlNode
 {
     /// <summary>
     /// Gets or sets the list of selected columns.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ColumnNode> Columns { get; set; } = [];
 
@@ -170,7 +170,7 @@ public class ParameterNode : ExpressionNode
 
 /// <summary>
 /// Represents a FROM clause with optional JOINs.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class FromNode : SqlNode
 {
@@ -186,7 +186,7 @@ public class FromNode : SqlNode
 
     /// <summary>
     /// Gets or sets the list of JOINs.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<JoinNode> Joins { get; set; } = [];
 
@@ -201,7 +201,7 @@ public class FromNode : SqlNode
 
 /// <summary>
 /// Represents a JOIN clause.
-/// ✅ C# 14: Target-typed new for default instance.
+/// ✅ C# 15: Target-typed new for default instance.
 /// </summary>
 public class JoinNode : SqlNode
 {
@@ -233,7 +233,7 @@ public class JoinNode : SqlNode
 
     /// <summary>
     /// Gets or sets the table to join.
-    /// ✅ C# 14: Target-typed new.
+    /// ✅ C# 15: Target-typed new.
     /// </summary>
     public FromNode Table { get; set; } = new();
 
@@ -248,13 +248,13 @@ public class JoinNode : SqlNode
 
 /// <summary>
 /// Represents a WHERE clause.
-/// ✅ C# 14: Target-typed new.
+/// ✅ C# 15: Target-typed new.
 /// </summary>
 public class WhereNode : SqlNode
 {
     /// <summary>
     /// Gets or sets the condition expression.
-    /// ✅ C# 14: Target-typed new.
+    /// ✅ C# 15: Target-typed new.
     /// </summary>
     public ExpressionNode Condition { get; set; } = new BinaryExpressionNode();
 
@@ -321,7 +321,7 @@ public class ColumnReferenceNode : ExpressionNode
 
 /// <summary>
 /// Represents an IN expression.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class InExpressionNode : ExpressionNode
 {
@@ -332,7 +332,7 @@ public class InExpressionNode : ExpressionNode
 
     /// <summary>
     /// Gets or sets the list of values.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ExpressionNode> Values { get; set; } = [];
 
@@ -352,13 +352,13 @@ public class InExpressionNode : ExpressionNode
 
 /// <summary>
 /// Represents an ORDER BY clause.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class OrderByNode : SqlNode
 {
     /// <summary>
     /// Gets or sets the list of order by items.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<OrderByItem> Items { get; set; } = [];
 
@@ -368,13 +368,13 @@ public class OrderByNode : SqlNode
 
 /// <summary>
 /// Represents an item in the ORDER BY clause.
-/// ✅ C# 14: Target-typed new.
+/// ✅ C# 15: Target-typed new.
 /// </summary>
 public class OrderByItem
 {
     /// <summary>
     /// Gets or sets the column reference.
-    /// ✅ C# 14: Target-typed new.
+    /// ✅ C# 15: Target-typed new.
     /// </summary>
     public ColumnReferenceNode Column { get; set; } = new();
 
@@ -392,13 +392,13 @@ public class OrderByItem
 
 /// <summary>
 /// Represents a GROUP BY clause.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class GroupByNode : SqlNode
 {
     /// <summary>
     /// Gets or sets the list of grouping columns.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ColumnReferenceNode> Columns { get; set; } = [];
 
@@ -408,13 +408,13 @@ public class GroupByNode : SqlNode
 
 /// <summary>
 /// Represents a HAVING clause.
-/// ✅ C# 14: Target-typed new.
+/// ✅ C# 15: Target-typed new.
 /// </summary>
 public class HavingNode : SqlNode
 {
     /// <summary>
     /// Gets or sets the condition expression.
-    /// ✅ C# 14: Target-typed new.
+    /// ✅ C# 15: Target-typed new.
     /// </summary>
     public ExpressionNode Condition { get; set; } = new BinaryExpressionNode();
 
@@ -424,7 +424,7 @@ public class HavingNode : SqlNode
 
 /// <summary>
 /// Represents a function call.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class FunctionCallNode : ExpressionNode
 {
@@ -435,7 +435,7 @@ public class FunctionCallNode : ExpressionNode
 
     /// <summary>
     /// Gets or sets the function arguments.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ExpressionNode> Arguments { get; set; } = [];
 

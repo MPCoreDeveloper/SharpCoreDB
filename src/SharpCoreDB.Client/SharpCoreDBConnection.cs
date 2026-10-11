@@ -12,7 +12,7 @@ namespace SharpCoreDB.Client;
 
 /// <summary>
 /// ADO.NET-like connection to SharpCoreDB network server.
-/// C# 14: Uses primary constructor for immutability.
+/// C# 15: Uses primary constructor for immutability.
 /// </summary>
 public sealed class SharpCoreDBConnection : IAsyncDisposable
 {
@@ -221,7 +221,7 @@ public enum ConnectionState
 
 /// <summary>
 /// Parses SharpCoreDB connection strings.
-/// C# 14: Primary constructor for immutable parser.
+/// C# 15: Primary constructor for immutable parser.
 /// </summary>
 public sealed class ConnectionStringParser(string connectionString)
 {

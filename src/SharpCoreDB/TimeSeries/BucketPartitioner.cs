@@ -11,7 +11,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Time-based bucket partitioner.
-/// C# 14: Static class, aggressive optimization, modern patterns.
+/// C# 15: Static class, aggressive optimization, modern patterns.
 /// 
 /// ✅ SCDB Phase 8.2: Bucket Storage System
 /// 

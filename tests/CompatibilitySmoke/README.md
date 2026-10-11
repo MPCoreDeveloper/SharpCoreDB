@@ -22,7 +22,7 @@ The smoke tests cover three compatibility layers:
 
 | Requirement | Notes |
 |---|---|
-| **.NET 10 SDK** | Required to build and run the server |
+| **.NET 11 SDK** | Required to build and run the server |
 | **Python 3.10+** | Required to run `smoke_tests.py` |
 | **`requests` package** | `pip install requests` (auto-installed by the PowerShell runner) |
 | **`dotnet dev-certs`** | Ships with .NET SDK; used to generate the test TLS certificate |

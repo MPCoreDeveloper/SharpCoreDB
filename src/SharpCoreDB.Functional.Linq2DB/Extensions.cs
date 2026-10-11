@@ -6,7 +6,7 @@ namespace SharpCoreDB.Functional.Linq2DB;
 
 /// <summary>
 /// Extension methods for SharpCoreDB linq2db integration (linq2db 6+).
-/// C# 14: Clean fluent APIs.
+/// C# 15: Clean fluent APIs.
 /// </summary>
 public static class Extensions
 {

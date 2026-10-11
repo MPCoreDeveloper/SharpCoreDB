@@ -33,15 +33,15 @@ public sealed partial class PageCache : IPageCache
     /// <param name="pageSize">Size of each page in bytes (default 4096).</param>
     public PageCache(int capacity, int pageSize = 4096)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity); // ✅ C# 14: ArgumentOutOfRangeException.ThrowIfNegativeOrZero
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(capacity); // ✅ C# 15: ArgumentOutOfRangeException.ThrowIfNegativeOrZero
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(pageSize);
 
         this.capacity = capacity;
         this.pageSize = pageSize;
         this.memoryPool = MemoryPool<byte>.Shared;
-        this.pageTable = new(); // ✅ C# 14: Target-typed new
+        this.pageTable = new(); // ✅ C# 15: Target-typed new
         this.frames = new PageFrame[capacity];
-        this.statistics = new(); // ✅ C# 14: Target-typed new
+        this.statistics = new(); // ✅ C# 15: Target-typed new
         this.clockHand = 0;
         this.currentSize = 0;
     }
@@ -65,7 +65,7 @@ public sealed partial class PageCache : IPageCache
             return;
 
         // Flush and dispose all frames
-        foreach (var (_, frame) in pageTable) // ✅ C# 14: Tuple deconstruction in foreach
+        foreach (var (_, frame) in pageTable) // ✅ C# 15: Tuple deconstruction in foreach
         {
             frame.Dispose();
         }

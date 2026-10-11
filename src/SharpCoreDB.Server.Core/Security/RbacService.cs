@@ -12,7 +12,7 @@ namespace SharpCoreDB.Server.Core.Security;
 /// <summary>
 /// Role-Based Access Control service.
 /// Maps roles to permissions and enforces authorization for gRPC methods and REST endpoints.
-/// C# 14: Primary constructor, collection expressions, pattern matching.
+/// C# 15: Primary constructor, collection expressions, pattern matching.
 /// </summary>
 public sealed class RbacService(ILogger<RbacService> logger)
 {

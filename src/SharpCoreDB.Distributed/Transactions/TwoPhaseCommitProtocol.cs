@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Transactions;
 /// <summary>
 /// Implements the Two-Phase Commit (2PC) protocol for distributed transactions.
 /// Handles prepare, commit, and abort phases with proper error handling and recovery.
-/// C# 14: Primary constructors, Channel<T> for message passing, async coordination.
+/// C# 15: Primary constructors, Channel<T> for message passing, async coordination.
 /// </summary>
 public sealed class TwoPhaseCommitProtocol : IAsyncDisposable
 {

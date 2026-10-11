@@ -10,7 +10,7 @@ namespace SharpCoreDB.Analytics.ML;
 /// <summary>
 /// Represents a machine learning model stored in SharpCoreDB.
 /// Supports model metadata, versioning, and execution capabilities.
-/// C# 14: Primary constructors, collection expressions.
+/// C# 15: Primary constructors, collection expressions.
 /// </summary>
 public sealed class MLModel
 {

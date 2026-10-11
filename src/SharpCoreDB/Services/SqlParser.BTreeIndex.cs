@@ -10,7 +10,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// SqlParser partial class - B-Tree Index operations.
-/// ✅ C# 14: Modern patterns, required properties, collection expressions.
+/// ✅ C# 15: Modern patterns, required properties, collection expressions.
 /// 
 /// This file contains all B-Tree index-related functionality:
 /// - Creating B-Tree indexes (single and named)
@@ -64,7 +64,7 @@ public partial class SqlParser
     /// <summary>
     /// Creates a named B-Tree index with unique constraint.
     /// Unique B-Tree indexes enforce uniqueness and support range queries on unique columns.
-    /// ✅ C# 14: Modern parameter patterns.
+    /// ✅ C# 15: Modern parameter patterns.
     /// </summary>
     /// <param name="indexName">The name of the index.</param>
     /// <param name="tableName">The table name.</param>

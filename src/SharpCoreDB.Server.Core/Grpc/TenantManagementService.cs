@@ -14,7 +14,7 @@ namespace SharpCoreDB.Server.Core.Grpc;
 /// <summary>
 /// gRPC service implementation for tenant provisioning and management.
 /// Handles runtime tenant creation, deletion, and provisioning status queries.
-/// C# 14: Uses primary constructor for dependency injection.
+/// C# 15: Uses primary constructor for dependency injection.
 /// </summary>
 public sealed class TenantManagementGrpcService(
     TenantProvisioningService provisioningService,

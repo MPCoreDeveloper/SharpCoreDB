@@ -1,8 +1,8 @@
 # SharpCoreDB.Graph.Advanced API Reference
 
 **Version:** 1.7.0 (Phase 12 Complete)  
-**Target Framework:** .NET 10  
-**Language:** C# 14
+**Target Framework:** .NET 11  
+**Language:** C# 15
 
 ## Overview
 

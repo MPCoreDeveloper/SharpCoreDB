@@ -12,7 +12,7 @@ using System.Collections.Generic;
 /// <summary>
 /// Tracks which 4KB pages within blocks have been modified.
 /// Enables delta-updates instead of full block rewrites.
-/// ✅ C# 14: Uses modern Lock class and collection expressions.
+/// ✅ C# 15: Uses modern Lock class and collection expressions.
 /// ✅ Performance Optimization: Reduces I/O by 95% for UPDATE operations.
 /// </summary>
 public sealed class DirtyPageTracker

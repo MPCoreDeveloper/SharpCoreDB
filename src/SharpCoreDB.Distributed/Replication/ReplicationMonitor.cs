@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Monitors replication synchronization metrics and performance.
 /// Provides real-time statistics on replication health and performance.
-/// C# 14: Primary constructors, collection expressions, interpolated strings.
+/// C# 15: Primary constructors, collection expressions, interpolated strings.
 /// </summary>
 public sealed class ReplicationMonitor : IAsyncDisposable
 {

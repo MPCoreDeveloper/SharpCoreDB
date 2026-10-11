@@ -16,7 +16,7 @@ namespace SharpCoreDB.Server;
 /// <summary>
 /// REST API controller for SharpCoreDB operations (tertiary protocol).
 /// Provides HTTP/JSON endpoints for database access.
-/// C# 14: Primary constructor, pattern matching, collection expressions.
+/// C# 15: Primary constructor, pattern matching, collection expressions.
 /// </summary>
 [ApiController]
 [Route("api/v1")]

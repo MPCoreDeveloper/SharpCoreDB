@@ -12,7 +12,7 @@ using System.Linq.Expressions;
 
 /// <summary>
 /// Expression (computed column) index implementation.
-/// C# 14: Record types, expression trees, caching.
+/// C# 15: Record types, expression trees, caching.
 /// 
 /// ✅ SCDB Phase 9: Index Enhancements
 /// 

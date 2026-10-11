@@ -11,7 +11,7 @@ using System.IO;
 /// <summary>
 /// Gorilla compression codec for float64 values.
 /// Based on Facebook's Gorilla paper (2015).
-/// C# 14: Modern patterns, aggressive optimization.
+/// C# 15: Modern patterns, aggressive optimization.
 /// 
 /// ✅ SCDB Phase 8.1: Time-Series Compression
 /// 

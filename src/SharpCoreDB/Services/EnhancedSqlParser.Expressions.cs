@@ -12,7 +12,7 @@ using System.Text.RegularExpressions;
 /// <summary>
 /// Expression, literal, and operator parsing methods for EnhancedSqlParser.
 /// Handles complex expressions, literals, operators, function calls, IN clauses, and subqueries.
-/// ✅ C# 14: is patterns, collection expressions.
+/// ✅ C# 15: is patterns, collection expressions.
 /// </summary>
 public partial class EnhancedSqlParser
 {

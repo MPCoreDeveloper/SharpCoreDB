@@ -6,7 +6,7 @@ namespace SharpCoreDB.Data.Provider;
 /// <summary>
 /// Represents a transaction to be performed at a SharpCoreDB database.
 /// Uses SharpCoreDB's batch update mechanism for transaction support.
-/// Modern C# 14 implementation.
+/// Modern C# 15 implementation.
 /// </summary>
 public sealed class SharpCoreDBTransaction : DbTransaction
 {

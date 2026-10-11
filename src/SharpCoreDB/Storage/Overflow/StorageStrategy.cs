@@ -9,7 +9,7 @@ using System;
 
 /// <summary>
 /// Determines optimal storage strategy for row data based on size.
-/// C# 14: Modern static class with expression-bodied members.
+/// C# 15: Modern static class with expression-bodied members.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: 3-tier storage strategy.

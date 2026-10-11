@@ -36,11 +36,11 @@ public partial class WalBufferPool : IDisposable
     /// <param name="config">Optional pool configuration.</param>
     public WalBufferPool(int defaultBufferSize = 4 * 1024 * 1024, PoolConfiguration? config = null)
     {
-        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(defaultBufferSize); // ✅ C# 14: ThrowIfNegativeOrZero
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(defaultBufferSize); // ✅ C# 15: ThrowIfNegativeOrZero
 
         this.defaultBufferSize = defaultBufferSize;
         bufferPool = ArrayPool<byte>.Shared;
-        this.config = config ?? new() // ✅ C# 14: Target-typed new
+        this.config = config ?? new() // ✅ C# 15: Target-typed new
         {
             UseThreadLocal = true,
             ThreadLocalCapacity = 2, // WAL typically needs 1-2 buffers per thread
@@ -74,7 +74,7 @@ public partial class WalBufferPool : IDisposable
         if (disposed)
             return;
 
-        if (disposing && threadLocalCache is not null) // ✅ C# 14: is not null pattern
+        if (disposing && threadLocalCache is not null) // ✅ C# 15: is not null pattern
         {
             // SECURITY: Dispose all thread-local caches to clear buffers
             foreach (var cache in threadLocalCache.Values)

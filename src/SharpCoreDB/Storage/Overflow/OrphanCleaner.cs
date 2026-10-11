@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Cleans up orphaned files and recovers missing files from backup.
-/// C# 14: Modern async patterns with collection expressions.
+/// C# 15: Modern async patterns with collection expressions.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 6: Orphan cleanup and recovery.

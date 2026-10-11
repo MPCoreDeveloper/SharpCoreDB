@@ -55,7 +55,7 @@
 dotnet add package SharpCoreDB.Data.Provider --version 2.0.0.0
 ```
 
-**Requirements:** .NET 10.0+
+**Requirements:** .NET 11.0+
 
 ---
 

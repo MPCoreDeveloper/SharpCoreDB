@@ -26,7 +26,7 @@ This guide covers deploying SharpCoreDB with the **SCDB (SharpCore DataBase)** s
 
 | Component | Minimum | Recommended |
 |-----------|---------|-------------|
-| **.NET Runtime** | .NET 10 | .NET 10+ |
+| **.NET Runtime** | .NET 11 | .NET 11+ |
 | **RAM** | 512 MB | 2 GB+ |
 | **Disk** | SSD (100 MB/s) | NVMe (500 MB/s) |
 | **CPU** | 2 cores | 4+ cores |
@@ -35,7 +35,7 @@ This guide covers deploying SharpCoreDB with the **SCDB (SharpCore DataBase)** s
 ### Software Dependencies
 
 ```bash
-# .NET 10 Runtime (required)
+# .NET 11 Runtime (required)
 dotnet --version  # Should show 10.0 or higher
 
 # NuGet Package
@@ -547,7 +547,7 @@ Console.WriteLine($"1000 inserts: {sw.ElapsedMilliseconds}ms");
 
 Before going live:
 
-- [ ] .NET 10 runtime installed
+- [ ] .NET 11 runtime installed
 - [ ] Configuration reviewed and tested
 - [ ] Backup strategy in place
 - [ ] Health checks configured

@@ -21,7 +21,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// gRPC service implementation for SharpCoreDB.
 /// Handles all database operations with streaming support.
-/// C# 14: Uses primary constructor for dependency injection.
+/// C# 15: Uses primary constructor for dependency injection.
 /// </summary>
 public sealed class DatabaseService(
     DatabaseRegistry databaseRegistry,

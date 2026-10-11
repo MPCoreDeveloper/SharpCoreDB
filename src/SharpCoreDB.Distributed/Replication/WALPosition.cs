@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Represents a position in the WAL file for replication tracking.
 /// Immutable struct for thread-safe position management.
-/// C# 14: Struct with primary constructor, implements comparison operators.
+/// C# 15: Struct with primary constructor, implements comparison operators.
 /// </summary>
 public readonly struct WALPosition : IComparable<WALPosition>, IEquatable<WALPosition>
 {

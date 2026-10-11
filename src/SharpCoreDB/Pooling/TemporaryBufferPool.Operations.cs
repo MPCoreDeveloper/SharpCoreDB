@@ -12,7 +12,7 @@ using System.Threading;
 /// TemporaryBufferPool - Rent and return operations.
 /// Contains buffer rental, return logic, and thread-local cache operations.
 /// Part of the TemporaryBufferPool partial class.
-/// Modern C# 14 with throw expressions and pattern matching.
+/// Modern C# 15 with throw expressions and pattern matching.
 /// See also: TemporaryBufferPool.Core.cs, TemporaryBufferPool.Diagnostics.cs
 /// </summary>
 public partial class TemporaryBufferPool
@@ -44,14 +44,14 @@ public partial class TemporaryBufferPool
     /// <summary>
     /// Rents a byte buffer of the specified minimum size.
     /// PERFORMANCE: Use predefined sizes (Small/Medium/Large) when possible for better cache reuse.
-    /// ✅ C# 14: ObjectDisposedException.ThrowIf and modern null checks.
+    /// ✅ C# 15: ObjectDisposedException.ThrowIf and modern null checks.
     /// </summary>
     /// <param name="minimumSize">The minimum required buffer size.</param>
     /// <returns>A rented temporary byte buffer.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public RentedTempBuffer RentByteBuffer(int minimumSize)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 14: ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 15: ThrowIf
 
         Interlocked.Increment(ref byteBuffersRented);
 
@@ -59,7 +59,7 @@ public partial class TemporaryBufferPool
         bool fromCache = false;
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 15: is pattern
         {
             if (cache.TryRentByteBuffer(minimumSize, out buffer))
             {
@@ -83,14 +83,14 @@ public partial class TemporaryBufferPool
     /// <summary>
     /// Rents a char buffer for string operations.
     /// USAGE: String building, UTF-8 to char conversion, text processing.
-    /// ✅ C# 14: ObjectDisposedException.ThrowIf.
+    /// ✅ C# 15: ObjectDisposedException.ThrowIf.
     /// </summary>
     /// <param name="minimumSize">The minimum required buffer size.</param>
     /// <returns>A rented temporary char buffer.</returns>
     [MethodImpl(MethodImplOptions.AggressiveOptimization)]
     public RentedTempCharBuffer RentCharBuffer(int minimumSize)
     {
-        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 14: ThrowIf
+        ObjectDisposedException.ThrowIf(disposed, this);  // ✅ C# 15: ThrowIf
 
         Interlocked.Increment(ref charBuffersRented);
         
@@ -98,7 +98,7 @@ public partial class TemporaryBufferPool
         bool fromCache = false;
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 15: is pattern
         {
             if (cache.TryRentCharBuffer(minimumSize, out buffer))
             {
@@ -122,12 +122,12 @@ public partial class TemporaryBufferPool
     /// <summary>
     /// Returns a byte buffer to the pool.
     /// INTERNAL: Called automatically by RentedTempBuffer.Dispose().
-    /// ✅ C# 14: is null pattern for early return.
+    /// ✅ C# 15: is null pattern for early return.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void ReturnByteBuffer(byte[] buffer, bool fromCache)
     {
-        if (disposed || buffer is null) return;  // ✅ C# 14: is null
+        if (disposed || buffer is null) return;  // ✅ C# 15: is null
 
         // Optionally clear if configured
         if (config.ClearBuffersOnReturn)
@@ -136,7 +136,7 @@ public partial class TemporaryBufferPool
         }
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 15: is pattern
         {
             if (!cache.TryReturnByteBuffer(buffer))
             {
@@ -152,12 +152,12 @@ public partial class TemporaryBufferPool
     /// <summary>
     /// Returns a char buffer to the pool.
     /// INTERNAL: Called automatically by RentedTempCharBuffer.Dispose().
-    /// ✅ C# 14: is null pattern for early return.
+    /// ✅ C# 15: is null pattern for early return.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     internal void ReturnCharBuffer(char[] buffer, bool fromCache)
     {
-        if (disposed || buffer is null) return;  // ✅ C# 14: is null
+        if (disposed || buffer is null) return;  // ✅ C# 15: is null
 
         // Optionally clear if configured
         if (config.ClearBuffersOnReturn)
@@ -166,7 +166,7 @@ public partial class TemporaryBufferPool
         }
 
         // Try thread-local cache first
-        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 14: is pattern
+        if (config.UseThreadLocal && threadLocalCache?.Value is TempBufferCache cache)  // ✅ C# 15: is pattern
         {
             if (!cache.TryReturnCharBuffer(buffer))
             {

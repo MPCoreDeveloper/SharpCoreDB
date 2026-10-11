@@ -5,7 +5,7 @@ namespace SharpCoreDB.EntityFrameworkCore;
 
 /// <summary>
 /// Options extension for configuring SharpCoreDB with Entity Framework Core.
-/// Modern C# 14 with primary constructors and init properties.
+/// Modern C# 15 with primary constructors and init properties.
 /// </summary>
 public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
 {
@@ -25,7 +25,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     protected SharpCoreDBOptionsExtension(SharpCoreDBOptionsExtension copyFrom)
         : base(copyFrom)
     {
-        ArgumentNullException.ThrowIfNull(copyFrom); // ? C# 14
+        ArgumentNullException.ThrowIfNull(copyFrom); // ? C# 15
         _connectionString = copyFrom._connectionString;
     }
 
@@ -55,7 +55,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
     /// </summary>
     public override void ApplyServices(IServiceCollection services)
     {
-        ArgumentNullException.ThrowIfNull(services); // ? C# 14
+        ArgumentNullException.ThrowIfNull(services); // ? C# 15
 
         // Register EF Core services for SharpCoreDB
         services.AddEntityFrameworkSharpCoreDB();
@@ -77,7 +77,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
         }
     }
 
-    private sealed class ExtensionInfo(IDbContextOptionsExtension extension) : DbContextOptionsExtensionInfo(extension) // ? C# 14: Primary constructor
+    private sealed class ExtensionInfo(IDbContextOptionsExtension extension) : DbContextOptionsExtensionInfo(extension) // ? C# 15: Primary constructor
     {
         private string? _logFragment;
 
@@ -98,7 +98,7 @@ public class SharpCoreDBOptionsExtension : RelationalOptionsExtension
 
         public override void PopulateDebugInfo(IDictionary<string, string> debugInfo)
         {
-            ArgumentNullException.ThrowIfNull(debugInfo); // ? C# 14
+            ArgumentNullException.ThrowIfNull(debugInfo); // ? C# 15
             debugInfo["SharpCoreDB:ConnectionString"] = (Extension.ConnectionString?.GetHashCode() ?? 0).ToString();
         }
     }

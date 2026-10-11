@@ -4,7 +4,7 @@ namespace SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Thread-safe metrics collector for graph operations.
-/// C# 14: Lock class for synchronization, Interlocked for counters.
+/// C# 15: Lock class for synchronization, Interlocked for counters.
 /// PERF: Zero allocation in hot paths, <1% overhead when enabled.
 /// ✅ GraphRAG Phase 6.3: OpenTelemetry integration for standard observability.
 /// </summary>
@@ -47,7 +47,7 @@ public sealed class GraphMetricsCollector
     private long _overEstimates;
     private long _heuristicEvaluationTicks;
     
-    // C# 14: Lock class for snapshot generation
+    // C# 15: Lock class for snapshot generation
     private readonly Lock _snapshotLock = new();
     
     private bool _enabled;
@@ -289,7 +289,7 @@ public sealed class GraphMetricsCollector
     
     /// <summary>
     /// Get atomic snapshot of current metrics.
-    /// C# 14: Lock class for thread-safe snapshot.
+    /// C# 15: Lock class for thread-safe snapshot.
     /// </summary>
     public MetricSnapshot GetSnapshot()
     {

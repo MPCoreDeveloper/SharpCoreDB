@@ -9,7 +9,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Caches parsed SQL queries for improved performance.
-/// .NET 10 optimizations: AggressiveInlining, AggressiveOptimization for hot paths.
+/// Optimizations: AggressiveInlining, AggressiveOptimization for hot paths.
 /// </summary>
 public class QueryCache
 {
@@ -74,7 +74,7 @@ public class QueryCache
 
     /// <summary>
     /// Gets or adds a cached query.
-    /// .NET 10: AggressiveInlining for hot path - called on every query.
+    /// AggressiveInlining for hot path - called on every query.
     /// </summary>
     /// <returns></returns>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]

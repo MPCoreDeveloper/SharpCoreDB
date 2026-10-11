@@ -17,7 +17,7 @@ YesSql provider integration for `SharpCoreDB`.
 - SharpCoreDB-backed storage for document-oriented patterns
 - Works with OrchardCore/YesSql style usage
 - Uses SharpCoreDB encryption and performance characteristics
-- .NET 10 compatible provider components
+- .NET 11 compatible provider components
 
 ## Changes in v1.9.5
 

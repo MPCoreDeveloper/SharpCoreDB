@@ -10,7 +10,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Unified time-series compression facade.
-/// C# 14: Modern patterns, collection expressions.
+/// C# 15: Modern patterns, collection expressions.
 /// 
 /// ✅ SCDB Phase 8.1: Time-Series Compression
 /// 

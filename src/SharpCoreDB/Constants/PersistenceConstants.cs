@@ -6,7 +6,7 @@ namespace SharpCoreDB.Constants;
 
 /// <summary>
 /// Constants for database persistence.
-/// Modern C# 14 with binary serialization support.
+/// Modern C# 15 with binary serialization support.
 /// </summary>
 public static class PersistenceConstants
 {

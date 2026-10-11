@@ -14,7 +14,7 @@ namespace SharpCoreDB.Examples.TimeSeries;
 /// <summary>
 /// High-performance metrics collection engine using SharpCoreDB.
 /// Collects CPU, memory, and disk metrics at configurable intervals.
-/// C# 14: Primary constructor, Lock class, collection expressions.
+/// C# 15: Primary constructor, Lock class, collection expressions.
 /// </summary>
 public sealed class MetricsCollector(IDatabase database, CancellationToken cancellationToken) : IAsyncDisposable
 {
@@ -25,7 +25,7 @@ public sealed class MetricsCollector(IDatabase database, CancellationToken cance
 
     /// <summary>
     /// Initializes the Metrics table with time-series optimized schema.
-    /// Thread-safe double-check pattern using C# 14 Lock class.
+    /// Thread-safe double-check pattern using C# 15 Lock class.
     /// </summary>
     private void InitializeMetricsTable()
     {

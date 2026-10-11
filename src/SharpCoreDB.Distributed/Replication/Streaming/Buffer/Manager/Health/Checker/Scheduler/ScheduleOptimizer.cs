@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Intelligent optimizer for health check scheduling based on usage patterns and system conditions.
 /// Provides ML-style optimization algorithms for optimal check timing and resource utilization.
-/// C# 14: Primary constructors, pattern matching, advanced analytics.
+/// C# 15: Primary constructors, pattern matching, advanced analytics.
 /// </summary>
 public sealed class ScheduleOptimizer
 {

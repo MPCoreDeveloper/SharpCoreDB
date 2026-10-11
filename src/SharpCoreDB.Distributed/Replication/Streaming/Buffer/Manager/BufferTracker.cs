@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Comprehensive tracker for buffer usage patterns and statistics.
 /// Provides detailed insights into buffer allocation, usage, and performance.
-/// C# 14: Collection expressions, pattern matching, advanced analytics.
+/// C# 15: Collection expressions, pattern matching, advanced analytics.
 /// </summary>
 public sealed class BufferTracker
 {

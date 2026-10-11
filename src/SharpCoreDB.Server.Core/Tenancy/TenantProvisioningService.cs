@@ -14,7 +14,7 @@ namespace SharpCoreDB.Server.Core.Tenancy;
 /// <summary>
 /// Orchestrates tenant provisioning and deprovisioning workflows.
 /// Handles idempotency, rollback, and lifecycle tracking for multi-database tenants.
-/// C# 14: Uses primary constructor and modern patterns.
+/// C# 15: Uses primary constructor and modern patterns.
 /// </summary>
 public sealed class TenantProvisioningService(
     DatabaseRegistry databaseRegistry,

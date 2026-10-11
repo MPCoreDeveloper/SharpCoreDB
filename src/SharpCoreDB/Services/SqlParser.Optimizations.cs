@@ -11,7 +11,7 @@ using System.Collections.Generic;
 
 /// <summary>
 /// SqlParser partial class - Query and Update Optimizations.
-/// ✅ C# 14: Modern patterns, required properties, collection expressions.
+/// ✅ C# 15: Modern patterns, required properties, collection expressions.
 /// 
 /// This file contains optimization paths for common operations:
 /// - Primary key-based single-column updates

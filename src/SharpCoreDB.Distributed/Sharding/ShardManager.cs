@@ -7,7 +7,7 @@ namespace SharpCoreDB.Distributed.Sharding;
 
 /// <summary>
 /// Manages shard metadata and configuration for distributed SharpCoreDB.
-/// C# 14: Primary constructors, collection expressions, modern patterns.
+/// C# 15: Primary constructors, collection expressions, modern patterns.
 /// </summary>
 public sealed class ShardManager
 {

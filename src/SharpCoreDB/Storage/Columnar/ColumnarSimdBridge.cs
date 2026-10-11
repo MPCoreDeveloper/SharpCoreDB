@@ -12,7 +12,7 @@ using SharpCoreDB.Services;
 
 /// <summary>
 /// Bridge between Phase 7.1 columnar format and existing SIMD infrastructure.
-/// C# 14: Primary constructors, collection expressions, modern async patterns.
+/// C# 15: Primary constructors, collection expressions, modern async patterns.
 /// 
 /// ✅ SCDB Phase 7.2: SIMD Integration (No Duplication)
 /// 

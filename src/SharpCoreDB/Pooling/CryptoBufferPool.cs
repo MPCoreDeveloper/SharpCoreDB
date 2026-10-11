@@ -17,7 +17,7 @@ namespace SharpCoreDB.Pooling;
 /// - CryptoBufferPool.Diagnostics.cs: Statistics, CryptoCache, RentedCryptoBuffer, enums
 /// - CryptoBufferPool.cs (this file): Main documentation and class declaration
 /// 
-/// MODERN C# 14 FEATURES USED:
+/// MODERN C# 15 FEATURES USED:
 /// - ObjectDisposedException.ThrowIf: Modern disposal checking
 /// - Target-typed new: new() for known types
 /// - Enhanced pattern matching: is null, is not null, is pattern

@@ -3,7 +3,7 @@ namespace SharpCoreDB.Analytics.Aggregation;
 /// <summary>
 /// Calculates Pearson correlation coefficient between two variables.
 /// Uses online algorithm to avoid buffering all values.
-/// C# 14: Uses primary constructor for configuration.
+/// C# 15: Uses primary constructor for configuration.
 /// </summary>
 /// <remarks>
 /// Pearson correlation measures linear relationship between two variables:
@@ -108,7 +108,7 @@ public sealed class CorrelationAggregate : IAggregateFunction
 /// <summary>
 /// Calculates covariance between two variables.
 /// Supports both population and sample covariance.
-/// C# 14: Uses primary constructor for configuration.
+/// C# 15: Uses primary constructor for configuration.
 /// </summary>
 /// <remarks>
 /// Covariance measures how two variables vary together:

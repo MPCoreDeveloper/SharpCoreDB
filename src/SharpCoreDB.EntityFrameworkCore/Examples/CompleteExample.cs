@@ -8,7 +8,7 @@ namespace SharpCoreDB.EntityFrameworkCore.Examples;
 
 /// <summary>
 /// Complete example demonstrating SharpCoreDB with Entity Framework Core.
-/// Modern C# 14 patterns: primary constructors, collection expressions, pattern matching.
+/// Modern C# 15 patterns: primary constructors, collection expressions, pattern matching.
 /// </summary>
 public class CompleteExample
 {
@@ -61,7 +61,7 @@ public class CompleteExample
         Console.WriteLine($"? Retrieved blog: {retrievedBlog?.Title}");
 
         // UPDATE
-        if (retrievedBlog is not null) // ? C# 14: not pattern
+        if (retrievedBlog is not null) // ? C# 15: not pattern
         {
             retrievedBlog.Title = "My Updated Tech Blog";
             await context.SaveChangesAsync();
@@ -274,7 +274,7 @@ public class Post
 
 /// <summary>
 /// Blog database context using SharpCoreDB.
-/// Modern C# 14 with primary constructors.
+/// Modern C# 15 with primary constructors.
 /// </summary>
 public class BlogDbContext(DbContextOptions<BlogDbContext> options) : DbContext(options)
 {

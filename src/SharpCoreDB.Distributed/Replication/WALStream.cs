@@ -10,7 +10,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Provides streaming interface for WAL entries to replicas.
-/// C# 14: Async streams, Channel<T> for producer-consumer pattern.
+/// C# 15: Async streams, Channel<T> for producer-consumer pattern.
 /// </summary>
 public sealed class WALStream : IAsyncDisposable
 {

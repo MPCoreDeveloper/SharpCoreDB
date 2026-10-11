@@ -9,7 +9,7 @@ namespace SharpCoreDB.Server.IntegrationTests;
 
 /// <summary>
 /// Minimal ServerCallContext for unit/integration testing without a real gRPC server.
-/// C# 14: Collection expressions, primary constructor patterns.
+/// C# 15: Collection expressions, primary constructor patterns.
 /// </summary>
 public sealed class TestServerCallContext : ServerCallContext
 {
@@ -49,7 +49,7 @@ public sealed class TestServerCallContext : ServerCallContext
 
 /// <summary>
 /// In-memory IServerStreamWriter for capturing gRPC server-streaming responses.
-/// C# 14: Collection expressions.
+/// C# 15: Collection expressions.
 /// </summary>
 /// <typeparam name="T">Response message type.</typeparam>
 public sealed class TestServerStreamWriter<T> : IServerStreamWriter<T>

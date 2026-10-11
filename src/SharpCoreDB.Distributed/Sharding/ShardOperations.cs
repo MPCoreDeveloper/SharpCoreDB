@@ -14,7 +14,7 @@ namespace SharpCoreDB.Distributed.Sharding;
 
 /// <summary>
 /// Provides basic operations for managing database shards.
-/// C# 14: Async methods, collection expressions, modern error handling.
+/// C# 15: Async methods, collection expressions, modern error handling.
 /// </summary>
 public sealed class ShardOperations
 {

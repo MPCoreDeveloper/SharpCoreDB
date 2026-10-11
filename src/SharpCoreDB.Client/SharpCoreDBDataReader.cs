@@ -14,7 +14,7 @@ namespace SharpCoreDB.Client;
 /// <summary>
 /// ADO.NET DataReader for SharpCoreDB network server query results.
 /// Streams results from gRPC server streaming call.
-/// C# 14: Uses async streaming and pattern matching.
+/// C# 15: Uses async streaming and pattern matching.
 /// </summary>
 public sealed class SharpCoreDBDataReader : DbDataReader
 {

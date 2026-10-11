@@ -12,7 +12,7 @@ using System.Linq;
 
 /// <summary>
 /// SqlParser partial class - adds IN expression evaluation support for AstExecutor.
-/// ✅ C# 14: Uses collection expressions, modern null patterns, and pattern matching.
+/// ✅ C# 15: Uses collection expressions, modern null patterns, and pattern matching.
 /// 
 /// This file provides static helper methods that can be called from the AstExecutor nested class
 /// to evaluate InExpressionNode in WHERE clauses for queries with JOINs.
@@ -22,7 +22,7 @@ public partial class SqlParser
     /// <summary>
     /// Evaluates an IN expression (e.g., column IN (1, 2, 3) or column NOT IN (1, 2, 3)).
     /// Supports value lists and GRAPH_TRAVERSE expressions.
-    /// ✅ C# 14: Uses collection expressions and modern patterns.
+    /// ✅ C# 15: Uses collection expressions and modern patterns.
     /// ✅ GraphRAG Phase 1: Supports IN (GRAPH_TRAVERSE(...)) for graph filtering.
     /// </summary>
     /// <param name="inExpr">The IN expression node to evaluate.</param>
@@ -112,7 +112,7 @@ public partial class SqlParser
     /// <summary>
     /// Compares two values for equality, handling type conversions and nulls.
     /// ✅ COLLATE Phase 3: Now supports collation-aware string comparisons.
-    /// ✅ C# 14: Uses pattern matching and modern null checks.
+    /// ✅ C# 15: Uses pattern matching and modern null checks.
     /// Supports SQL-style comparisons:
     /// - NULL comparisons
     /// - Numeric type conversions (int vs decimal, etc.)
@@ -156,7 +156,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Checks if a value is a numeric type.
-    /// ✅ C# 14: Uses pattern matching with 'or' for multiple types.
+    /// ✅ C# 15: Uses pattern matching with 'or' for multiple types.
     /// </summary>
     /// <param name="value">The value to check.</param>
     /// <returns>True if the value is numeric, false otherwise.</returns>

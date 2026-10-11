@@ -14,7 +14,7 @@ using System.Runtime.CompilerServices;
 /// <summary>
 /// Delta encoding/decoding for efficient record updates (Phase 3.3).
 /// Encodes only changed fields instead of full records.
-/// C# 14: Uses Span-based operations for zero-allocation processing.
+/// C# 15: Uses Span-based operations for zero-allocation processing.
 /// </summary>
 public static class DeltaCodec
 {

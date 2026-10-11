@@ -7,7 +7,7 @@ namespace SharpCoreDB.Distributed.Sharding;
 
 /// <summary>
 /// Routes queries to appropriate shards based on shard key values.
-/// C# 14: Primary constructors, pattern matching, collection expressions.
+/// C# 15: Primary constructors, pattern matching, collection expressions.
 /// </summary>
 public sealed class ShardRouter(ShardManager shardManager, ShardKey shardKey)
 {

@@ -10,7 +10,7 @@ var builder = DistributedApplication.CreateBuilder(args);
 
 var db = builder.AddSharpCoreDB("db")
     .WithServerContainer()
-    .WithImageTag("2.0.0.3")
+    .WithImageTag("2.1.0")
     .WithJwtSecret("replace-with-a-secret-of-at-least-32-characters");
 
 builder.Build().Run();

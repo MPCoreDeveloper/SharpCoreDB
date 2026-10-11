@@ -15,7 +15,7 @@ namespace SharpCoreDB.Server.Core.Security;
 /// Validates client certificates for mutual TLS authentication.
 /// Maps certificate thumbprints to <see cref="DatabaseRole"/> via configuration,
 /// falling back to the certificate Subject CN for identity.
-/// C# 14: Primary constructor, pattern matching, collection expressions.
+/// C# 15: Primary constructor, pattern matching, collection expressions.
 /// </summary>
 public sealed class CertificateAuthenticationService(
     IOptions<ServerConfiguration> configuration,

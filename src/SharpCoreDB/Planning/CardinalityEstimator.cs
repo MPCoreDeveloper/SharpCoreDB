@@ -11,7 +11,7 @@ using SharpCoreDB.Storage.Columnar;
 
 /// <summary>
 /// Cardinality estimation for query optimization.
-/// C# 14: Primary constructors, modern patterns.
+/// C# 15: Primary constructors, modern patterns.
 /// 
 /// ✅ SCDB Phase 7.3: Query Plan Optimization
 /// 

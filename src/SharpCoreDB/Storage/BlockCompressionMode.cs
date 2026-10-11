@@ -31,7 +31,7 @@ public enum BlockCompressionMode
     /// Zstandard compression (excellent speed/ratio balance).
     /// Best for: general-purpose database blocks, telemetry, mixed workloads.
     /// Requires .NET 11+ (System.IO.Compression.ZstandardStream).
-    /// On .NET 10, using this mode will throw NotSupportedException.
+    /// On this runtime, using this mode will throw NotSupportedException.
     /// </summary>
     Zstd = 3
 }

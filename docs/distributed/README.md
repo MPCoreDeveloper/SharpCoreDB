@@ -1,8 +1,8 @@
 # SharpCoreDB.Distributed Documentation
 
-**Version line:** `v1.9.5`
+**Version line:** `v2.1.0`
 
-## v1.9.5 changes
+## v1.9.5 changes (historical)
 
 - Distributed package/docs synchronized to `v1.9.5`
 - Replication + transaction primitives aligned with current implementation

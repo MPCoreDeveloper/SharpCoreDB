@@ -1,6 +1,6 @@
 # SharpCoreDB NuGet Package
 
-This package is part of SharpCoreDB, a high-performance embedded database for .NET 10.
+This package is part of SharpCoreDB, a high-performance embedded database for .NET 11 (`net11.0`, the 2.1.0 line).
 
 
 ## Patch updates in v1.9.5 (archived; current release 2.1.0)
@@ -19,7 +19,7 @@ See the main repository for usage examples.
 # SharpCoreDB.Graph 2.1.0
 **Lightweight Graph Traversal Engine**
 
-A* pathfinding and graph algorithms **30-50% faster than alternatives** with pure managed C# 14 code.
+A* pathfinding and graph algorithms **30-50% faster than alternatives** with pure managed C# 15 code.
 
 ## ✨ What's New in v1.9.5 (archived; current release 2.1.0)
 
@@ -34,7 +34,7 @@ A* pathfinding and graph algorithms **30-50% faster than alternatives** with pur
 - **A* Pathfinding**: Efficient shortest-path algorithms
 - **Graph Traversal**: BFS, DFS, and custom traversal patterns
 - **ROWREF Adjacency**: Natural foreign key relationships as graphs
-- **Pure C# 14**: No external dependencies, NativeAOT ready
+- **Pure C# 15**: No external dependencies, NativeAOT ready
 - **Performance**: 30-50% improvement over alternatives
 
 ## 🎯 Use Cases

@@ -13,7 +13,7 @@ namespace SharpCoreDB.Server.Core.Security;
 /// When policies are registered, reads are filtered and writes are validated
 /// so that each tenant sees only its own rows. The engine is disabled by default
 /// and does not affect databases without registered policies.
-/// C# 14: Uses primary constructor and collection expressions.
+/// C# 15: Uses primary constructor and collection expressions.
 /// </summary>
 public sealed class RowLevelPolicyEngine(
     ILogger<RowLevelPolicyEngine> logger)

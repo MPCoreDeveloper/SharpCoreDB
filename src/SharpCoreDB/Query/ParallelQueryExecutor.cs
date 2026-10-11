@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// Parallel query executor for multi-threaded query processing.
-/// C# 14: Primary constructor, async/await, Parallel LINQ, partitioning.
+/// C# 15: Primary constructor, async/await, Parallel LINQ, partitioning.
 /// 
 /// ✅ SCDB Phase 7.4: Advanced Query Optimization - Parallel Execution
 /// 

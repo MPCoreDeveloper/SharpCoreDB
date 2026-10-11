@@ -14,7 +14,7 @@ using System.Threading.Tasks;
 /// <summary>
 /// Migrates databases from Directory storage format to SCDB SingleFile format.
 /// Supports streaming migration for large databases with progress reporting.
-/// C# 14: Uses modern async patterns and IProgress for reporting.
+/// C# 15: Uses modern async patterns and IProgress for reporting.
 /// </summary>
 /// <remarks>
 /// ✅ SCDB Phase 4: Enables seamless migration from legacy multi-file databases

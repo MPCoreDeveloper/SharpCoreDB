@@ -15,7 +15,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// Manages hosted database instances and their lifecycle.
 /// Provides database lookup, connection pooling, and resource management.
-/// C# 14: Uses primary constructor for dependency injection.
+/// C# 15: Uses primary constructor for dependency injection.
 /// </summary>
 public sealed class DatabaseRegistry(
     IOptions<ServerConfiguration> configuration,
@@ -392,7 +392,7 @@ public sealed class DatabaseRegistry(
 
 /// <summary>
 /// Represents a hosted database instance with connection pooling.
-/// C# 14: Uses primary constructor for configuration.
+/// C# 15: Uses primary constructor for configuration.
 /// </summary>
 public sealed class DatabaseInstance(
     DatabaseInstanceConfiguration config,
@@ -497,7 +497,7 @@ public sealed class DatabaseInstance(
 
 /// <summary>
 /// Production-grade connection pool with min/max sizing, idle eviction, and wait-with-timeout.
-/// C# 14: Primary constructor, Lock keyword, collection expressions.
+/// C# 15: Primary constructor, Lock keyword, collection expressions.
 /// </summary>
 public sealed class ConnectionPool : IAsyncDisposable
 {
@@ -719,7 +719,7 @@ public sealed class ConnectionPool : IAsyncDisposable
 
 /// <summary>
 /// Pooled database connection with automatic return to pool and idle tracking.
-/// C# 14: Primary constructor, async dispose.
+/// C# 15: Primary constructor, async dispose.
 /// </summary>
 public sealed class PooledConnection(
     Database database,

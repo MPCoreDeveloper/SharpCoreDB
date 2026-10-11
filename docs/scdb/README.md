@@ -7,7 +7,7 @@ The `.scdb` format is a **single-file, uncompressed, page-aligned storage format
 ## 📁 Files
 
 - **[SCDB_FILE_FORMAT_DESIGN.md](./FILE_FORMAT_DESIGN.md)** - Complete design specification
-- **[ScdbStructures.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs)** - Binary format definitions (C# 14 structs)
+- **[ScdbStructures.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbStructures.cs)** - Binary format definitions (C# 15 structs)
 - **[ScdbFile.cs](../../src/SharpCoreDB/Storage/Scdb/ScdbFile.cs)** - Implementation skeleton
 
 ## 🎯 Design Goals
@@ -74,7 +74,7 @@ The `.scdb` format is a **single-file, uncompressed, page-aligned storage format
 └─────────────────────────────────────────────────────────┘
 ```
 
-## 🔧 C# 14 Features Used
+## 🔧 C# 15 Features Used
 
 ### 1. **Readonly Structs with Fixed Buffers**
 
@@ -102,7 +102,7 @@ public readonly struct ScdbFileHeader
 private bool _disposed;
 public bool IsDisposed => _disposed;
 
-// After (C# 14):
+// After (C# 15):
 public bool IsDisposed { get => field; } // Implicit backing field
 ```
 

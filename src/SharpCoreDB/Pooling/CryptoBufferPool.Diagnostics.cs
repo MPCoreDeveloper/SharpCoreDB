@@ -12,7 +12,7 @@ using System.Security.Cryptography;
 /// CryptoBufferPool - Diagnostics, statistics, and nested types.
 /// Contains CryptoCache, RentedCryptoBuffer, enums, and statistics types.
 /// Part of the CryptoBufferPool partial class.
-/// Modern C# 14 with primary constructors and collection expressions.
+/// Modern C# 15 with primary constructors and collection expressions.
 /// See also: CryptoBufferPool.Core.cs, CryptoBufferPool.Operations.cs
 /// </summary>
 public partial class CryptoBufferPool
@@ -20,7 +20,7 @@ public partial class CryptoBufferPool
     /// <summary>
     /// Thread-local cache for crypto buffers.
     /// SECURITY: All buffers are cleared when removed from cache.
-    /// ✅ C# 14: Primary constructor.
+    /// ✅ C# 15: Primary constructor.
     /// </summary>
     /// <param name="capacity">Cache capacity.</param>
     private sealed class CryptoCache(int capacity) : IDisposable
@@ -71,7 +71,7 @@ public partial class CryptoBufferPool
             // SECURITY: Clear all cached buffers
             for (int i = 0; i < count; i++)
             {
-                if (buffers[i] is not null)  // ✅ C# 14: is not null
+                if (buffers[i] is not null)  // ✅ C# 15: is not null
                 {
                     CryptographicOperations.ZeroMemory(buffers[i]);
                     buffers[i] = null;
@@ -125,7 +125,7 @@ public enum CryptoBufferType
 /// RAII wrapper for rented crypto buffer.
 /// SECURITY: Automatically clears buffer on disposal using secure memory clearing.
 /// USAGE: ALWAYS use with 'using' statement to ensure proper cleanup.
-/// ✅ C# 14: Throw expressions and is not null patterns.
+/// ✅ C# 15: Throw expressions and is not null patterns.
 /// </summary>
 public ref struct RentedCryptoBuffer
 {
@@ -157,10 +157,10 @@ public ref struct RentedCryptoBuffer
     /// Gets the underlying buffer array.
     /// SECURITY: Buffer will be cleared on disposal.
     /// WARNING: Do not store references to this buffer beyond disposal.
-    /// ✅ C# 14: Throw expression.
+    /// ✅ C# 15: Throw expression.
     /// </summary>
     public readonly byte[] Buffer => buffer 
-        ?? throw new ObjectDisposedException(nameof(RentedCryptoBuffer));  // ✅ C# 14: ?? throw
+        ?? throw new ObjectDisposedException(nameof(RentedCryptoBuffer));  // ✅ C# 15: ?? throw
 
     /// <summary>
     /// Gets or sets the number of bytes actually used.
@@ -172,7 +172,7 @@ public ref struct RentedCryptoBuffer
         readonly get => usedSize;
         set
         {
-            if (value < 0 || (buffer is not null && value > buffer.Length))  // ✅ C# 14: is not null
+            if (value < 0 || (buffer is not null && value > buffer.Length))  // ✅ C# 15: is not null
             {
                 throw new ArgumentOutOfRangeException(nameof(value));
             }
@@ -210,11 +210,11 @@ public ref struct RentedCryptoBuffer
     /// Returns the buffer to the pool with secure clearing.
     /// SECURITY: Buffer is cleared using CryptographicOperations.ZeroMemory.
     /// IDEMPOTENT: Safe to call multiple times.
-    /// ✅ C# 14: is not null pattern.
+    /// ✅ C# 15: is not null pattern.
     /// </summary>
     public void Dispose()
     {
-        if (buffer is not null && pool is not null)  // ✅ C# 14: is not null
+        if (buffer is not null && pool is not null)  // ✅ C# 15: is not null
         {
             pool.Return(buffer, usedSize, bufferType, fromCache);
             buffer = null;

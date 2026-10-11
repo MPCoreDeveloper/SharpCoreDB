@@ -5,7 +5,7 @@ namespace SharpCoreDB.Data.Provider;
 
 /// <summary>
 /// Command builder for generating INSERT, UPDATE, and DELETE commands automatically.
-/// Modern C# 14 implementation.
+/// Modern C# 15 implementation.
 /// </summary>
 public sealed class SharpCoreDBCommandBuilder : DbCommandBuilder
 {

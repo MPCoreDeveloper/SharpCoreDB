@@ -11,7 +11,7 @@
 dotnet add package SharpCoreDB --version 2.0.0
 ```
 
-The engine targets **.NET 10** and **C# 14**. No native dependencies, no external processes —
+The engine targets **.NET 11** and **C# 15**. No native dependencies, no external processes —
 a single managed assembly (optional RID-specific packages for x64/ARM64).
 
 ## 1.2 Open a database

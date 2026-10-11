@@ -1,6 +1,6 @@
 # Storage Mode Guidance — v1.7.2
 
-**Applies to:** SharpCoreDB v1.7.0+ (.NET 10 / C# 14)
+**Applies to:** SharpCoreDB v1.7.0+ on the current `net11.0` / C# 15 line (2.1.0+); the `net10.0` / C# 14 line is parked on `release/v2.0`
 
 ---
 

@@ -19,7 +19,7 @@ namespace SharpCoreDB.Server.Core.WebSockets;
 /// <summary>
 /// Handles a single WebSocket connection.
 /// Authenticates via JWT, executes SQL, and streams results as JSON frames.
-/// C# 14: Primary constructor, pattern matching, async streams.
+/// C# 15: Primary constructor, pattern matching, async streams.
 /// </summary>
 public sealed class WebSocketHandler(
     DatabaseRegistry databaseRegistry,

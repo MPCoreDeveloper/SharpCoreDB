@@ -2,7 +2,7 @@ namespace SharpCoreDB.Graph.Metrics;
 
 /// <summary>
 /// Immutable snapshot of all graph metrics at a point in time.
-/// C# 14: Record struct for zero-allocation snapshots.
+/// C# 15: Record struct for zero-allocation snapshots.
 /// </summary>
 public readonly record struct MetricSnapshot
 {

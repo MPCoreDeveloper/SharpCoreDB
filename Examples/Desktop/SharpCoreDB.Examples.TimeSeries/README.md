@@ -60,7 +60,7 @@ Every 5 seconds, it collects these metrics, batches them together, and persists 
 1. INITIALIZATION (Startup)
    ↓
    MetricsCollector creates Metrics table
-   (thread-safe with C# 14 Lock class)
+   (thread-safe with C# 15 Lock class)
 
 2. COLLECTION LOOP (Every 5 seconds) ♾️ INFINITE
    ↓
@@ -166,10 +166,10 @@ public sealed class MetricsCollector(
     CancellationToken cancellationToken)
 ```
 
-- **Primary Constructor** — C# 14 pattern for cleaner code
+- **Primary Constructor** — C# 15 pattern for cleaner code
 - **IAsyncDisposable** — Proper resource cleanup
 - **PeriodicTimer** — High-precision 5-second intervals
-- **Lock class** — Thread-safe initialization (C# 14)
+- **Lock class** — Thread-safe initialization (C# 15)
 
 **How collection works:**
 ```
@@ -295,7 +295,7 @@ CREATE INDEX idx_metrics_type_timestamp
 ## 🚀 Running the Example
 
 ### Prerequisites
-- .NET 10.0 SDK
+- .NET 11.0 SDK
 - Windows 7+ (for Performance Counters)
 - ~10 MB disk space
 
@@ -414,7 +414,7 @@ Open `metrics.scdb` in the **SCDMS** management UI — see
 | Query result | ~1 MB (1000 metrics) |
 | Total process | ~50-100 MB |
 
-## 📚 C# 14 Features Used
+## 📚 C# 15 Features Used
 
 ### 1. Primary Constructors
 ```csharp
@@ -429,7 +429,7 @@ public sealed class MetricsCollector(
 
 ### 2. Lock Class (replacing object)
 ```csharp
-private readonly Lock _initLock = new();  // C# 14
+private readonly Lock _initLock = new();  // C# 15
 lock (_initLock) { /* thread-safe code */ }
 
 // Instead of:
@@ -538,7 +538,7 @@ After studying this example, you'll understand:
 ✅ **Time-Series Databases** — How to structure time-series data  
 ✅ **Indexing** — Why composite indexes speed up queries  
 ✅ **Async/Await** — End-to-end async patterns  
-✅ **C# 14** — Modern language features  
+✅ **C# 15** — Modern language features  
 ✅ **Performance** — Achieving 10,000+ ops/second  
 ✅ **Security** — Encryption at rest  
 ✅ **Resource Management** — Proper cleanup with IAsyncDisposable  
@@ -564,7 +564,7 @@ After studying this example, you'll understand:
 ## 📖 References
 
 - [SharpCoreDB GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
-- [C# 14 Features](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14)
+- [C# 15 Features](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14)
 - [System.Threading.PeriodicTimer](https://learn.microsoft.com/en-us/dotnet/api/system.threading.periodictimer)
 - [Time-Series Database Design](https://en.wikipedia.org/wiki/Time_series_database)
 

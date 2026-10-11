@@ -33,10 +33,10 @@ public partial class Database : IMetadataProvider
     {
         if (tables is null || tables.Count == 0)
         {
-            return [];  // ✅ C# 14: collection expression
+            return [];  // ✅ C# 15: collection expression
         }
 
-        List<TableInfo> list = new(tables.Count);  // ✅ C# 14: target-typed new
+        List<TableInfo> list = new(tables.Count);  // ✅ C# 15: target-typed new
         foreach (var kvp in tables)
         {
             list.Add(new TableInfo
@@ -55,13 +55,13 @@ public partial class Database : IMetadataProvider
 
         if (!tables.TryGetValue(tableName, out var table))
         {
-            return [];  // ✅ C# 14: collection expression
+            return [];  // ✅ C# 15: collection expression
         }
 
         var columns = table.Columns;
         var types = table.ColumnTypes;
         var collations = table.ColumnCollations;
-        List<ColumnInfo> list = new(columns.Count);  // ✅ C# 14: target-typed new
+        List<ColumnInfo> list = new(columns.Count);  // ✅ C# 15: target-typed new
 
         for (int i = 0; i < columns.Count; i++)
         {

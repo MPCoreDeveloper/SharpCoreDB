@@ -149,8 +149,9 @@
 - ⬜ **True C# 15 union types** for `BuildResult` — deferred to .NET 11 GA (currently a `record` hierarchy).
 
 ### .NET 11 / C# 15 line (v2.1)
->> **Branch model:** `release/v2.1.0.0-*` is **net11.0-only** with **C# 15 preview** (the current 2.1 RC line).
->> `master` stays on **net10.0 / C# 14** as the v2.0 stable packages.
+>> **Branch model:** **`master` is the net11.0 / C# 15 line** (the 2.1 line, promoted 2026-10-10 —
+>> see `docs/net11/PROMOTION_TO_MAIN.md`). The v2.0 stable packages stay on **net10.0 / C# 14**, parked
+>> on `release/v2.0`.
 
 - Runtime Async enabled on the core project (`Features=runtime-async=on`)
 - Native Zstandard compression (`ZstandardStream`) with quality presets + frame checksum

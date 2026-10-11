@@ -49,7 +49,7 @@ OrderManagement/
 ## 🚀 Running the Demo
 
 ### Prerequisites
-- .NET 10 SDK
+- .NET 11 SDK
 - SharpCoreDB.EventSourcing package
 
 ### Build and Run

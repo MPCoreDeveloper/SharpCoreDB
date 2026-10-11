@@ -118,7 +118,7 @@ public interface IDapperRepository<TEntity, TKey> where TEntity : class
 
 /// <summary>
 /// Base repository implementation using Dapper.
-/// C# 14: Uses primary constructor.
+/// C# 15: Uses primary constructor.
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
@@ -287,7 +287,7 @@ public class DapperRepository<TEntity, TKey>(IDatabase database, string tableNam
 
 /// <summary>
 /// Read-only repository for query-only scenarios.
-/// C# 14: Uses primary constructor.
+/// C# 15: Uses primary constructor.
 /// </summary>
 /// <typeparam name="TEntity">The entity type.</typeparam>
 /// <typeparam name="TKey">The key type.</typeparam>
@@ -342,7 +342,7 @@ public class ReadOnlyDapperRepository<TEntity, TKey>(IDatabase database, string 
 
 /// <summary>
 /// Unit of Work pattern for managing transactions across repositories.
-/// C# 14: Uses primary constructor.
+/// C# 15: Uses primary constructor.
 /// </summary>
 public class DapperUnitOfWork(IDatabase database) : IDisposable
 {

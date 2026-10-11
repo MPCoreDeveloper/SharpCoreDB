@@ -9,7 +9,7 @@ namespace SharpCoreDB.Services;
 /// SqlAst - DML (Data Manipulation Language) nodes.
 /// Contains INSERT, UPDATE, DELETE, and CREATE TABLE statement nodes.
 /// Part of the SqlAst partial class infrastructure.
-/// Modern C# 14 with collection expressions and target-typed new.
+/// Modern C# 15 with collection expressions and target-typed new.
 /// See also: SqlAst.Core.cs, SqlAst.Nodes.cs
 /// </summary>
 public static partial class SqlAst
@@ -71,7 +71,7 @@ public enum InsertOnConflictAction
 
 /// <summary>
 /// Represents an INSERT statement.
-/// ✅ C# 14: Collection expressions.
+/// ✅ C# 15: Collection expressions.
 /// </summary>
 public class InsertNode : SqlNode
 {
@@ -109,13 +109,13 @@ public class InsertNode : SqlNode
 
     /// <summary>
     /// Gets or sets the list of columns.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<string> Columns { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the list of values.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ExpressionNode> Values { get; set; } = [];
 
@@ -136,7 +136,7 @@ public class InsertNode : SqlNode
 
 /// <summary>
 /// Represents an UPDATE statement.
-/// ✅ C# 14: Collection expression for Dictionary.
+/// ✅ C# 15: Collection expression for Dictionary.
 /// </summary>
 public class UpdateNode : SqlNode
 {
@@ -147,7 +147,7 @@ public class UpdateNode : SqlNode
 
     /// <summary>
     /// Gets or sets the SET assignments.
-    /// ✅ C# 14: Collection expression for Dictionary.
+    /// ✅ C# 15: Collection expression for Dictionary.
     /// </summary>
     public Dictionary<string, ExpressionNode> Assignments { get; set; } = [];
 
@@ -191,7 +191,7 @@ public class DeleteNode : SqlNode
 
 /// <summary>
 /// Represents a CREATE TABLE statement.
-/// ✅ C# 14: Collection expression.
+/// ✅ C# 15: Collection expression.
 /// </summary>
 public class CreateTableNode : SqlNode
 {
@@ -202,19 +202,19 @@ public class CreateTableNode : SqlNode
 
     /// <summary>
     /// Gets or sets the column definitions.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ColumnDefinition> Columns { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the foreign key constraints.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<ForeignKeyDefinition> ForeignKeys { get; set; } = [];
 
     /// <summary>
     /// Gets or sets the CHECK constraints.
-    /// ✅ C# 14: Collection expression.
+    /// ✅ C# 15: Collection expression.
     /// </summary>
     public List<string> CheckConstraints { get; set; } = [];
 

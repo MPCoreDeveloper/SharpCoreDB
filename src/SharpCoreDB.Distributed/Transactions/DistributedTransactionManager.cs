@@ -12,7 +12,7 @@ namespace SharpCoreDB.Distributed.Transactions;
 /// <summary>
 /// Manages distributed transactions across multiple database nodes/shards.
 /// Implements two-phase commit protocol for atomic distributed operations.
-/// C# 14: Primary constructors, Channel<T> for coordination, async patterns.
+/// C# 15: Primary constructors, Channel<T> for coordination, async patterns.
 /// </summary>
 public sealed class DistributedTransactionManager : IAsyncDisposable
 {

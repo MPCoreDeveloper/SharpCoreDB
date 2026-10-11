@@ -40,7 +40,7 @@ public partial class SqlParser
     /// <summary>
     /// Detects actual SQL parameters (@p0, :param, ?) excluding @ symbols inside string literals.
     /// CRITICAL: Prevents false positives from email addresses like 'test@example.com'.
-    /// Handles both single quotes and escaped quotes ('') from SanitizeSql.
+    /// Handles both single quotes and escaped quotes ('') inside string literals.
     /// </summary>
     private static bool HasActualParameters(string sql)
     {
@@ -123,7 +123,7 @@ public partial class SqlParser
 
     /// <summary>
     /// Internal method to execute a SQL statement.
-    /// ✅ MODERNIZED: Uses C# 14 pattern matching with string equality checking.
+    /// ✅ MODERNIZED: Uses C# 15 pattern matching with string equality checking.
     /// </summary>
     /// <param name="sql">The SQL statement to execute.</param>
     /// <param name="parts">The parsed SQL parts.</param>
@@ -138,14 +138,14 @@ public partial class SqlParser
         // §11 instrumentation (2026-09-16): the two uppercased word copies the dispatch switch needs.
         long classifyStart = Diagnostics.WritePathProfiler.Stamp();
 
-        // ✅ C# 14: Use pattern matching with ordinal string comparison
+        // ✅ C# 15: Use pattern matching with ordinal string comparison
         var firstWord = parts[0].ToUpperInvariant();
         var secondWord = parts.Length > 1 ? parts[1].ToUpperInvariant() : string.Empty;
 
         Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Classify, classifyStart);
 
         // Route to appropriate handler based on command type using modern switch
-        // ✅ C# 14: Tuple pattern matching for SQL command dispatch
+        // ✅ C# 15: Tuple pattern matching for SQL command dispatch
         switch ((firstWord, secondWord))
         {
             case (SqlConstants.CREATE, SqlConstants.TABLE):
@@ -272,7 +272,7 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Executes INSERT statement with modern C# 14 patterns.
+    /// Executes INSERT statement with modern C# 15 patterns.
     /// Uses StringBuilder and modern null-coalescing patterns.
     /// ✅ FIXED: Now properly handles multi-row INSERT like VALUES (1, 'a'), (2, 'b')
     /// ✅ AUTO-ROWID: Skips internal _rowid column when user doesn't specify it.
@@ -862,7 +862,7 @@ public partial class SqlParser
         var col = whereTokens[0];
         var table = this.tables[tableName];
 
-        // ✅ C# 14: Switch expression for plan selection
+        // ✅ C# 15: Switch expression for plan selection
         return (table.HasHashIndex(col), table.PrimaryKeyIndex >= 0 && table.Columns[table.PrimaryKeyIndex] == col) switch
         {
             (true, _) => $"Hash index lookup on {col}",
@@ -899,7 +899,7 @@ public partial class SqlParser
     /// Executes SELECT statement and returns results.
     /// OPTIMIZED: Removed Console.WriteLine from hot path (5-10% faster in production).
     /// ✅ FIXED: Now handles subqueries in SELECT and FROM clauses correctly by routing to EnhancedSqlParser.
-    /// ✅ MODERNIZED: Uses modern C# 14 patterns.
+    /// ✅ MODERNIZED: Uses modern C# 15 patterns.
     /// </summary>
 #pragma warning disable S1172 // Remove unused method parameter
     private List<Dictionary<string, object>> ExecuteSelectQuery(string sql, string[] parts, bool noEncrypt)
@@ -1065,7 +1065,7 @@ public partial class SqlParser
 
         // Apply limit and offset
         if (offset.HasValue && offset.Value > 0)
-            results = [.. results.Skip(offset.Value)]; // ✅ C# 14: Collection expression with spread
+            results = [.. results.Skip(offset.Value)]; // ✅ C# 15: Collection expression with spread
 
         if (limit.HasValue && limit.Value > 0)
             results = [.. results.Take(limit.Value)];
@@ -1096,7 +1096,7 @@ public partial class SqlParser
         // ✅ FIX: Pass WHERE clause to table.Select() so EvaluateCondition() can handle IN operator correctly
         var allRows = this.tables[tableName].Select(whereStr, orderBy: null, asc: true, noEncrypt: false);
 
-        return [new Dictionary<string, object> { { "cnt", (long)allRows.Count } }]; // ✅ C# 14: Collection expression
+        return [new Dictionary<string, object> { { "cnt", (long)allRows.Count } }]; // ✅ C# 15: Collection expression
     }
 
     /// <summary>

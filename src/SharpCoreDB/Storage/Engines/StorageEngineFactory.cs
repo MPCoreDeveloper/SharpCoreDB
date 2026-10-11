@@ -10,7 +10,7 @@ using System;
 
 /// <summary>
 /// Factory for creating storage engine instances based on configuration.
-/// ✅ C# 14: Static class with modern pattern matching
+/// ✅ C# 15: Static class with modern pattern matching
 /// </summary>
 public static class StorageEngineFactory
 {
@@ -31,14 +31,14 @@ public static class StorageEngineFactory
         IStorage? storage,
         string databasePath)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath); // ✅ C# 14
+        ArgumentException.ThrowIfNullOrWhiteSpace(databasePath); // ✅ C# 15
         
         // ✅ NEW: Auto-select based on WorkloadHint
-        var actualEngineType = engineType is StorageEngineType.Auto && config is not null // ✅ C# 14 pattern
+        var actualEngineType = engineType is StorageEngineType.Auto && config is not null // ✅ C# 15 pattern
             ? config.GetOptimalStorageEngine()
             : engineType;
         
-        return actualEngineType switch // ✅ C# 14 switch expression
+        return actualEngineType switch // ✅ C# 15 switch expression
         {
             StorageEngineType.AppendOnly => CreateAppendOnlyEngine(storage, databasePath),
             StorageEngineType.PageBased => CreatePageBasedEngine(databasePath, config),
@@ -56,7 +56,7 @@ public static class StorageEngineFactory
     /// <exception cref="ArgumentNullException">Thrown when storage is null.</exception>
     private static IStorageEngine CreateAppendOnlyEngine(IStorage? storage, string databasePath)
     {
-        ArgumentNullException.ThrowIfNull(storage); // ✅ C# 14 - caller info automatic
+        ArgumentNullException.ThrowIfNull(storage); // ✅ C# 15 - caller info automatic
         return new AppendOnlyEngine(storage, databasePath);
     }
 
@@ -69,7 +69,7 @@ public static class StorageEngineFactory
     /// <param name="config">Optional database configuration for auto-tuning.</param>
     /// <returns>Configured PageBasedEngine instance.</returns>
     private static IStorageEngine CreatePageBasedEngine(string databasePath, DatabaseConfig? config)
-        => new PageBasedEngine(databasePath, config); // ✅ C# 14 expression-bodied
+        => new PageBasedEngine(databasePath, config); // ✅ C# 15 expression-bodied
 
     /// <summary>
     /// Creates a columnar storage engine for analytics workloads.

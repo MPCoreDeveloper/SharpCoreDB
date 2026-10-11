@@ -17,7 +17,7 @@ namespace SharpCoreDB.Pooling;
 /// - TemporaryBufferPool.Diagnostics.cs: Statistics, monitoring, nested types (TempBufferCache, wrappers)
 /// - TemporaryBufferPool.cs (this file): Main documentation and class declaration
 /// 
-/// MODERN C# 14 FEATURES USED:
+/// MODERN C# 15 FEATURES USED:
 /// - ObjectDisposedException.ThrowIf: Modern disposal checking
 /// - Target-typed new: new() for known types
 /// - Collection expressions: Array initialization with []

@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Core health monitoring engine for continuous buffer health surveillance.
 /// Provides automated health checking with intelligent scheduling and alerting.
-/// C# 14: Primary constructors, Channel<T> for async coordination, pattern matching.
+/// C# 15: Primary constructors, Channel<T> for async coordination, pattern matching.
 /// </summary>
 public sealed class HealthChecker : IAsyncDisposable
 {

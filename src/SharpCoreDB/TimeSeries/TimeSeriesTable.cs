@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 
 /// <summary>
 /// High-level time-series table API.
-/// C# 14: Primary constructors, async patterns, modern C#.
+/// C# 15: Primary constructors, async patterns, modern C#.
 /// 
 /// ✅ SCDB Phase 8.2: Bucket Storage System
 /// 

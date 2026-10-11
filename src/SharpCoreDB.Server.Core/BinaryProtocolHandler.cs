@@ -21,7 +21,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// Handles PostgreSQL-compatible binary protocol connections.
 /// Implements the PostgreSQL wire protocol for maximum compatibility.
-/// C# 14: Uses primary constructor and collection expressions.
+/// C# 15: Uses primary constructor and collection expressions.
 /// </summary>
 public sealed class BinaryProtocolHandler(
     DatabaseRegistry databaseRegistry,

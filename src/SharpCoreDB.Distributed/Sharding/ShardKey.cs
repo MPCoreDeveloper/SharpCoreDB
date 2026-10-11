@@ -8,7 +8,7 @@ namespace SharpCoreDB.Distributed.Sharding;
 /// <summary>
 /// Abstract base class for shard key strategies.
 /// Defines how data is distributed across shards.
-/// C# 14: Abstract class with covariant return types.
+/// C# 15: Abstract class with covariant return types.
 /// </summary>
 public abstract class ShardKey
 {

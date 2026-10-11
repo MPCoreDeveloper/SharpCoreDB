@@ -17,7 +17,7 @@ using SharpCoreDB.DataStructures;
 /// <summary>
 /// Benchmarks for Phase 7: JOIN operations with collation support.
 /// Measures performance impact of collation-aware JOIN comparisons.
-/// ✅ C# 14: Collection expressions, primary constructors, required properties.
+/// ✅ C# 15: Collection expressions, primary constructors, required properties.
 /// </summary>
 [SimpleJob(runtimeMoniker: RuntimeMoniker.Net80)] // ✅ Use Net80 (latest supported by BenchmarkDotNet)
 [MemoryDiagnoser]

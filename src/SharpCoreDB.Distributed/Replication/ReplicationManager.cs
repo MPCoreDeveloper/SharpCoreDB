@@ -11,7 +11,7 @@ namespace SharpCoreDB.Distributed.Replication;
 
 /// <summary>
 /// Main coordinator for database replication across distributed nodes.
-/// C# 14: Primary constructors, async streams, Channel<T> for coordination.
+/// C# 15: Primary constructors, async streams, Channel<T> for coordination.
 /// </summary>
 public sealed class ReplicationManager : IAsyncDisposable
 {

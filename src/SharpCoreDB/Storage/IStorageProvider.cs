@@ -13,7 +13,7 @@ using System.Threading.Tasks;
 /// <summary>
 /// Abstraction for storage providers (directory-based or single-file).
 /// Provides unified interface for different storage backends.
-/// C# 14: Uses modern async patterns and ReadOnlySpan for zero-copy.
+/// C# 15: Uses modern async patterns and ReadOnlySpan for zero-copy.
 /// </summary>
 public interface IStorageProvider : IDisposable, IAsyncDisposable
 {

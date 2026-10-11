@@ -20,7 +20,7 @@ using System.Threading.Tasks;
 /// - GroupCommitWAL.Diagnostics.cs: Statistics, recovery, utilities
 /// - GroupCommitWAL.cs (this file): Dispose pattern
 /// 
-/// MODERN C# 14 FEATURES USED:
+/// MODERN C# 15 FEATURES USED:
 /// - ObjectDisposedException.ThrowIf: Modern disposal checking
 /// - Target-typed new: new() for known types
 /// - Enhanced pattern matching: is null, is not null, is pattern

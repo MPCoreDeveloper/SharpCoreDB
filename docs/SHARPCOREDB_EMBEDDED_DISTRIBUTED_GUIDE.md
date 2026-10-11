@@ -2,7 +2,7 @@
 
 **Document Version:** 1.0  
 **Date:** February 4, 2026  
-**Target Frameworks:** .NET 10 | C# 14  
+**Target Frameworks:** .NET 11 | C# 15  
 **Project Type:** Razor Pages Web Application  
 **Status:** 🎯 Production-Ready
 

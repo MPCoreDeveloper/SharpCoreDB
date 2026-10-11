@@ -17,7 +17,7 @@ using Xunit;
 /// <summary>
 /// Tests for Phase 7: JOIN operations with collation support.
 /// Verifies that JOIN conditions respect column collations.
-/// ✅ C# 14: Collection expressions, required properties, modern test patterns.
+/// ✅ C# 15: Collection expressions, required properties, modern test patterns.
 /// </summary>
 public sealed class CollationJoinTests
 {

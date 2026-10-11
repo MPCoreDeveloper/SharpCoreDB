@@ -14,7 +14,7 @@ namespace SharpCoreDB.Provider.YesSql;
 /// <summary>
 /// Extension methods for configuring YesSql to use SharpCoreDB.
 /// Uses the Sqlite provider as base but with SharpCoreDB ADO.NET provider underneath.
-/// Compatible with OrchardCore CMS and .NET 10.
+/// Compatible with OrchardCore CMS and .NET 11.
 /// </summary>
 public static class SharpCoreDbConfigurationExtensions
 {

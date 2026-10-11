@@ -9,7 +9,7 @@ using SharpCoreDB.Services;
 using Xunit;
 
 /// <summary>
-/// ✅ C# 14: Unit tests for ParameterExtractor.
+/// ✅ C# 15: Unit tests for ParameterExtractor.
 /// Tests parameter extraction, validation, and handling of various SQL patterns.
 /// </summary>
 public sealed class ParameterExtractorTests

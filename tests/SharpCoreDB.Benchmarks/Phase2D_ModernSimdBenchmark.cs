@@ -10,7 +10,7 @@ namespace SharpCoreDB.Benchmarks;
 /// Phase 2D Monday: Modern SIMD Optimization Benchmarks
 /// 
 /// Compares traditional scalar operations vs modern Vector128/Vector256 operations.
-/// Uses .NET 10 optimized Vector APIs.
+/// Uses runtime-optimized Vector APIs.
 /// 
 /// Expected improvements:
 /// - Vector256 sum: 2-3x faster

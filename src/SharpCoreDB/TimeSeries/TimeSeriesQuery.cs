@@ -12,7 +12,7 @@ using System.Runtime.CompilerServices;
 
 /// <summary>
 /// Time-series query execution engine.
-/// C# 14: Modern patterns, streaming results, aggressive optimization.
+/// C# 15: Modern patterns, streaming results, aggressive optimization.
 /// 
 /// ✅ SCDB Phase 8.3: Time Range Queries
 /// 

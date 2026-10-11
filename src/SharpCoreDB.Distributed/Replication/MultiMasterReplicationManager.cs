@@ -12,7 +12,7 @@ namespace SharpCoreDB.Distributed.Replication;
 /// <summary>
 /// Manages multi-master replication across multiple database nodes.
 /// Supports concurrent writes to multiple masters with automatic conflict resolution.
-/// C# 14: Primary constructors, Channel<T> for async coordination, pattern matching.
+/// C# 15: Primary constructors, Channel<T> for async coordination, pattern matching.
 /// </summary>
 public sealed class MultiMasterReplicationManager : IAsyncDisposable
 {

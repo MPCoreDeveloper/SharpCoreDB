@@ -2,7 +2,7 @@
 
 **Package:** `SharpCoreDB.Client`  
 **Protocol:** gRPC (primary, recommended) · REST (secondary)  
-**Target:** .NET 10 / C# 14
+**Target:** .NET 11 / C# 15
 
 ---
 

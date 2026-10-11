@@ -20,7 +20,7 @@ namespace SharpCoreDB.Server.IntegrationTests;
 /// Provides an in-process server environment for integration testing.
 /// Bootstraps DatabaseRegistry, SessionManager, and DatabaseService
 /// without requiring network ports or TLS certificates.
-/// C# 14: Primary constructor, collection expressions.
+/// C# 15: Primary constructor, collection expressions.
 /// </summary>
 public sealed class TestServerFixture : IAsyncLifetime
 {

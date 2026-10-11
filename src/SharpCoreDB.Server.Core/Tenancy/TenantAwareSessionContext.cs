@@ -12,7 +12,7 @@ namespace SharpCoreDB.Server.Core;
 /// <summary>
 /// Extends session management with tenant-aware authorization.
 /// Enforces database grants on top of RBAC for multi-tenant deployments.
-/// C# 14: Uses primary constructor.
+/// C# 15: Uses primary constructor.
 /// </summary>
 public sealed class TenantAwareSessionContext(
     ClientSession session,

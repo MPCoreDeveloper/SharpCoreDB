@@ -14,7 +14,7 @@ namespace SharpCoreDB.Tests;
 /// <summary>
 /// Tests for insert performance optimizations.
 /// Goal: Achieve 50-55ms for 10K inserts (within 20-30% of SQLite's 42ms).
-/// Modern C# 14 with collection expressions and primary constructors.
+/// Modern C# 15 with collection expressions and primary constructors.
 /// </summary>
 [Trait("Category", "Performance")]
 public sealed class InsertOptimizationsTests : IDisposable
