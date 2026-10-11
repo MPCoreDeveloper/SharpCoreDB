@@ -13,8 +13,7 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 
 ## Policy
 
-- Never push. Commit locally to a feature branch such as `perf/autonomous-YYYYMMDD`; never commit to
-  `master` or `release/*` (Brief §9).
+
 - Never force-push, rewrite history, delete the worklog, change `global.json`, modify release/version
   metadata or package versions, or pack/publish.
 - Never disable encryption to win, and never trade durability — WAL semantics, crash-consistency and
@@ -100,6 +99,16 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
   draft document resolved when roadmap work completes.
 
 <!-- /bmad:context -->
+
+## Push and landing — amended by the owner, 2026-10-11 (deliberately outside the managed block)
+
+- The agent may **push feature branches** (`perf/autonomous-*`), open and update pull requests, and keep a
+  feature branch current with `master`. The blanket "Never push / never commit to `master`" line was
+  removed from the managed block above (which a `bmad-project-context` refresh replaces) and from Brief
+  §9; this section is where that decision persists.
+- **Merging into `master` or `release/*` stays an owner action.** That push runs `pack` and "Push to
+  NuGet.org" (`.github/workflows/ci.yml`), and `pack/publish` is still a standing rail — so the agent
+  prepares the branch and the pull request and stops there.
 
 ## Working rules that outrank convenience (owner directive, 2026-09-26 — deliberately outside the managed block)
 
