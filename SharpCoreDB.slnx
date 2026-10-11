@@ -73,9 +73,6 @@
     <File Path="scripts/commit-grpc.bat" />
     <File Path="scripts/commit-server-phase1.bat" />
     <File Path="scripts/create-collate-issue.ps1" />
-    <File Path="scripts/docs-cleanup.bat" />
-    <File Path="scripts/docs-cleanup.ps1" />
-    <File Path="scripts/docs-cleanup.sh" />
     <File Path="scripts/docs-commit.bat" />
   </Folder>
   <Folder Name="/Solution Items/">
