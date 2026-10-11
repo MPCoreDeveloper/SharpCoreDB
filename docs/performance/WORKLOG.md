@@ -5186,3 +5186,14 @@ Nothing in the repository explains a stall: no `.git/*.lock`, no fsmonitor daemo
 - Commit: the doc fix and the test hardening as two commits that are each green on their own (fix first, then the guard that would have caught it), pushed to `perf/autonomous-20261011`, and the landing PR is opened from it so the runners verify the fix rather than this box claiming it.
 - NEXT: unchanged queue head — session 81's `NEXT:` §5.1 INSERT item (i), the identity-remap fast path for `InsertBatch(table, rows, columns)` when the column order already matches the table order (112 B/row on the array arm).
 
+
+### 2026-10-11 (session 85 — addendum 3) — verified by the runners, not by this box: PR #448 is green and the coverage floor is evaluated again
+
+- Session: 85 (same session, addendum 3 — the verification half of addendum 2; no source change beyond it).
+- Command(s): `git push origin perf/autonomous-20261011` (`d0c75081..62908c7a`), `gh pr create --base master --head perf/autonomous-20261011` → **PR #448**, then `gh run list --branch perf/autonomous-20261011` / `gh run view <id> --json jobs` until every run completed.
+- Verdict: **GREEN on the runners.** On `62908c7a`, `CI/CD Pipeline` run `38163780903` completed with every job `success` — `Build and Test` on windows-latest, ubuntu-latest and macos-latest, and `Coverage (net11.0)` (job `114541977186`) — and `Compatibility Smoke Tests` succeeded. Both failures addendum 2 diagnosed are gone: ubuntu passes the link test, and the coverage job no longer exits 2, it evaluates the floor again: `TOTAL 60529 lines, 27819 covered, 45.96%` → `PASS measured 45.96%, floor 18.00%` (job log kept at `artifacts/ci-coverage-green.log`).
+- Why a PR and not a push to `master`: CI runs on pushes to `master`/`develop` only, plus pull requests (`.github/workflows/ci.yml` lines 5-12), so this branch's own pushes were "verified" by `Automatic Dependency Submission` alone. A fix for a red runner has to be run by the runners before it can be called fixed — which is also why the red→green proof in addendum 2 was set up to fail on Windows rather than only on ubuntu.
+- Confirmed while reading the skip reason, because it changes what merging means: on a green push to `master` the `pack` and `publish` jobs run (`if: github.event_name == 'push' && github.ref == 'refs/heads/master'`). They were skipped on `204d9f8a` only because their `needs: build` leg had failed, and on the previous green master push (run `38130514269`) both ran and succeeded. Merging PR #448 as a merge commit therefore publishes packages to NuGet.org — an owner action, and the reason the agent stops at the open PR.
+- Commit: this addendum, on `perf/autonomous-20261011`; PR #448 is left open and green for the owner.
+- NEXT: unchanged queue head — session 81's `NEXT:` §5.1 INSERT item (i), the identity-remap fast path for `InsertBatch(table, rows, columns)` when the column order already matches the table order (112 B/row on the array arm).
+
