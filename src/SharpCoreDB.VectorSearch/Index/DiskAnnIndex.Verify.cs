@@ -71,7 +71,9 @@ public sealed partial class DiskAnnIndex
         }
 
         int queries = Math.Clamp(numQueries, 1, liveSlots.Count);
-        var rng = new Random(RngSeed ^ 0x11);
+        // Fixed seed: the verification sample has to be the same sample on every run and every machine, or the
+        // reported recall moves on its own and stops being comparable between builds.
+        var rng = new Random(RngSeed ^ 0x11); // NOSONAR:S2245 - reproducible verification sample, not security.
         int dims = _config.Dimensions;
         long hits = 0;
         long total = 0;

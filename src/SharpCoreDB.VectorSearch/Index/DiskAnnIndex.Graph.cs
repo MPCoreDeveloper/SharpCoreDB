@@ -62,7 +62,9 @@ public sealed partial class DiskAnnIndex
             liveSlots,
             s =>
             {
-                var rng = new Random(RngSeed + s);
+                // The seed is a fixed constant and the graph must be reproducible run to run and machine to
+                // machine, so a cryptographic RNG would break the index rather than harden it.
+                var rng = new Random(RngSeed + s); // NOSONAR:S2245 - deterministic graph seeding, not security.
                 for (int e = 0; e < r; e++)
                 {
                     int t = liveSlots[rng.Next(liveSlots.Count)];
@@ -188,7 +190,10 @@ public sealed partial class DiskAnnIndex
         foreach (int s in liveSlots)
         {
             float distance = DistanceToSlot(centroid, s);
-            if (distance < bestDistance || (distance == bestDistance && _ids[s] < _ids[best]))
+            // The tie-break is deliberately exact: it fires only when two slots are equidistant, and the strict
+            // `_ids` comparison below it is what makes the medoid (and therefore the built graph) deterministic.
+            // A tolerance would silently change which slot wins.
+            if (distance < bestDistance || (distance == bestDistance && _ids[s] < _ids[best])) // NOSONAR:S1244 - exact tie-break, not an approximate comparison.
             {
                 bestDistance = distance;
                 best = s;

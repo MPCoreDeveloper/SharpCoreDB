@@ -10,9 +10,10 @@ on:
   pull_request:
     branches: [ 'release/v2.0' ]
 
+# Least privilege at the workflow level: the release job below re-declares `packages: write` for itself, so
+# no build or test job carries a package-writing token (Sonar S8233).
 permissions:
   contents: read
-  packages: write
 
 env:
   DOTNET_VERSION: '10.0.x'
@@ -242,6 +243,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: pack
     if: github.event_name == 'push' && github.ref == 'refs/heads/release/v2.0'
+    # The only job that hands packages out of the run, so it is where the workflow-level `packages: write`
+    # now lives (Sonar S8233). The push itself authenticates with NUGET_API_KEY, not with GITHUB_TOKEN.
+    permissions:
+      contents: read
+      packages: write
 
     steps:
     - name: Checkout

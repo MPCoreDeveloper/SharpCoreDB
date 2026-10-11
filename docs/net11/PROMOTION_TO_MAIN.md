@@ -159,6 +159,94 @@ failing test cannot be named, and no file differs between it and the green runs.
 tree are green (core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24). Local runs now always pass
 `-result-trx`, so a recurrence names itself instead of leaving a bare count behind.
 
+### Metadata sweep follow-up (2026-10-10, after the push)
+
+The promotion refreshed the *build* metadata (`Directory.Build.props`, `Directory.Packages.props`, each
+package's `.csproj`) and was validated by building, packing and publishing — none of which can see a
+claim that lives in prose. A repo-wide grep for the retired line's tokens, run afterwards, found it still
+presented as current in **52 files**: the front page (4 places, plus a stale test count, 1,916 to 1,995 on
+this tree), `ROADMAP.md`, `CODING_STANDARDS.md`, ~12 shipped package READMEs (`NuGet.README.md` install
+snippets still pinning `2.1.0-rc.*`, TFM and language lines, the `Aspire` image tag `2.0.0.3` against
+`2.1.0`), ~14 `docs/**` requirement pages — including the load-bearing runtime requirement in
+`docs/server/INSTALLATION.md` — the publish-guide template, both `.runsettings` TFMs, `PLATFORM_SUPPORT.md`,
+`SharpCoreDB.nuspec` (16 `net10.0` lib paths, tags, the `Microsoft.Data.Sqlite` floor), the `Examples/**`
+and `tests/**` guides, and the decorative `// .NET 10` / `// C# 14` source labels. All corrected here.
+
+One user-visible defect fell out of the same pass rather than the grep: the PostgreSQL handshake answered
+`server_version` from a `const` literal, `SharpCoreDB 1.7.0 on .NET 10 (PostgreSQL protocol …)`, so every
+client of the shipped `2.1.0` server read the pre-promotion product version *and* runtime. It is now derived
+from `AssemblyInformationalVersion` and `Environment.Version.Major`, pinned by
+`PgCatalogServiceTests.TryHandleCatalogQuery_Version_ReportsCurrentRuntimeAndProductVersion` (it fails
+against the old literal, passes after the change — both runs recorded in the session that fixed it).
+Integration suite 19 / 0 failed, core suite green under the CI filter.
+
+The label number in that paragraph was the reached-by-hand count, not the total. A follow-up sweep measured the
+remainder and swept it: **589 `C# 14` labels across 260 `.cs` files**. The substitution was byte-level on purpose -
+those label lines carry check-mark decoration, so an ASCII-slice rewrite corrupts them - and it was verified
+line-for-line: in all 260 files every changed line is a `C# 14` -> `C# 15` label and nothing else, and the
+non-ASCII byte count of each file is unchanged. The same pass fixed the stale `C# 14` prose claims in `.md`
+and corrected the two `master`-pointer sentences the flip had outdated.
+
+One of the 589 labels is not a comment: the BenchmarkDotNet `Description = "Dictionary - Modern C# 14"` in
+`Phase2C_InlineArraysCollectionExpressionsBenchmark.cs`. That benchmark's report name now reads `C# 15`, which
+is the point of the sweep; nothing in the repository keys on the string, and the three stale
+`TestResults/AotNet*/*.xml` artifacts that still contain it are gitignored output of past runs.
+
+Deliberately left alone, so nobody "corrects" it later:
+
+- Historical and dated records: `STABILITY_REPORT.md`, the parked-line comment in `SharpCoreDB.csproj`, the
+  changelog's `2.0.0.x` sections, and `ci-net10.yml`, whose *name* is the truthful net10 label.
+- `#if NET10_0` blocks in `src/**` and the `net10.0` rows of the multi-targeting matrices: dead on this
+  line, but the parked line still compiles them.
+- Upstream facts that merely mention a net10-era version (e.g. the `Microsoft.Data.Sqlite` pin OrchardCore
+  brings).
+- `SharpCoreDB.nuspec` and the root `NuGet.README.md` are on no pack path in this repository, yet they are
+  the files a maintainer reads, so they are kept in sync deliberately rather than left to rot.
+- The sweep changed claims about *the current line only*; every "on .NET 10" that describes the parked
+  `release/v2.0` line is correct as written.
+- The `.md` counterpart of the same sweep fixed **26 stale `C# 14` claims in 11 files** - 21 in ten requirement pages and guides, plus the five `// C# 14:` example labels in `.github/CODING_STANDARDS.md` (whose parked-line note, dated v1.0 history entry and an external course title stayed). `master`-pointer sentences that the flip made stale (`docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md`, the toolchain line of `docs/performance/V2_PERFORMANCE_PLAN.md`) were corrected in place.
+
+## The quality gate the promotion tripped, and what it was actually complaining about
+
+SonarCloud's automatic analysis ran on the promotion's merge commit (`58f297e9`, 2026-10-10 18:14) and the
+project's quality gate came back **ERROR** on two conditions: `new_reliability_rating` = 3 (C, an A is
+required) and `new_security_rating` = 4 (D, an A is required). Maintainability (A), duplication (1.8 % against
+a 3 % limit) and hotspots reviewed (100 %) passed, and there is no coverage condition at all: automatic
+analysis does not collect coverage, which is also why the gate that failed is *not* the 18 % floor job (that
+one is CI-based and lives in `ci.yml`).
+
+Both failing conditions were read from `qualitygates/project_status`, and their causes from
+`issues/search?sinceLeakPeriod=true`, which listed **4 MAJOR bugs and 13 vulnerabilities on new code**. The
+promotion's own commits had made the whole 2.1 line "new code", so the gate was measuring the release rather
+than the docs sweep that followed it. All 17 were addressed in the same session — the per-rule list, with the
+mechanism used for each, is in the changelog — and none of them was fixed by weakening what the code
+guarantees:
+
+- **Four are deliberate and stay as they are**, annotated `// NOSONAR:<rule>` with the reason: the scalar
+  double equality that must agree with the SIMD lanes' per-lane `==`, the medoid's exact equidistance
+  tie-break, and the two seeded `Random`s that make the DiskANN graph reproducible. A cryptographic RNG there
+  would break index determinism, and an epsilon on either comparison would make the scalar path and the vector
+  path disagree about the same input.
+- **The rest are real changes**: a field that was tested and then re-read is now pattern-bound; the harness's
+  hand-rolled aggregation (carrying an emptiness test the analyzer could prove always true) now goes through
+  the existing `MedianArm` helper; the three SQL-text interpolations in the harness are validated and prebuilt
+  instead of assembled at the call site; the harness's temp directory is private and owner-only; workflow-level
+  `packages: write` is scoped to the publishing job; `codecov/codecov-action` is pinned to a commit SHA; the
+  `unsafe fixed` reserved region became an `[InlineArray(22)]` region; and the skill scripts' draws and hashes
+  moved to the platform CSPRNG and SHA-256.
+
+`// NOSONAR` is not a hope on this project either — it can be checked against the platform's own data.
+`Database.Batch.cs` reports `S3776` on lines 1050, 962, 1359, 1436 and 1749, and *not* on 710 and 1217, which are
+exactly its two NOSONAR-annotated lines (the same holds for its `S125` and `S1481` annotations), so the four
+annotations added here will clear their findings the same way.
+
+Verification for the batch: the tests project and the benchmark project both build with **0 errors**, the new
+`ScdbStructureLayoutTests` is **3/3** (it is what makes the `[InlineArray]` swap safe to believe — the offset,
+the 22 bytes and the packed size are asserted, not assumed), and the core suite is **1998 / 0 failed / 0
+errors / 0 skipped**, i.e. the 1,995 of the published baseline plus the three new facts. The only remaining step
+is a push: automatic analysis re-runs on the default branch and the two ratings should come back A. Nothing
+local can pre-verify a SonarCloud re-analysis.
+
 ## GA checklist (around 2026-11-10 — the only outstanding work this decision creates)
 
 1. `global.json`: `11.0.100-rc.1.26425.128` → `11.0.100`; drop `allowPrerelease`.
@@ -168,16 +256,18 @@ tree are green (core 1,995 · VectorSearch 248 · EF Core 116 · linq2db 24). Lo
    (`docs/net11/UNION_TYPES_DESIGN.md`), still never retrofitted onto existing result types.
 4. Re-run the write-path regression gate on the GA runtime and record a fresh baseline; rebuild the Docker
    image once `sdk:11.0` / `aspnet:11.0` resolve to the GA images.
-5. The shipped `2.1.0` metadata is already refreshed — version fields, `<PackageReleaseNotes>`,
-   `NuGet.README.md`, descriptions and tags (see [After the flip](#after-the-flip-2026-10-10)); what
-   remains is the release *narrative*: the announcement text and the `README.md` / `PROJECT_STATUS.md`
-   release text for the tag.
+5. The shipped `2.1.0` *build* metadata is refreshed — version fields, `<PackageReleaseNotes>`,
+   descriptions and tags (see [After the flip](#after-the-flip-2026-10-10)) — and the prose that still
+   claimed the retired line was corrected after the push rather than during it (metadata sweep follow-up
+   below); note that the README text embedded in the already-published `2.1.0` packages is immutable and
+   only changes with the next version published. What remains is the release *narrative*: the announcement
+   text and the `README.md` / `PROJECT_STATUS.md` release text for the tag.
 
 ## What must not be done
 
 - No **branch rename** and no default-branch pointer change: a rename stops the CI workflows matching their
   branch filters *and* hands the net11 commits to a net10 pipeline in one move (BEAT §9 row 9).
-- Never merge the net11 line into a `master` that still builds `net10.0` / C# 14 — net11-only API and C# 15
+- Never merge the net11 line into a `net10.0` / C# 14 line — net11-only API and C# 15
   syntax would land in a line that cannot compile it. The flip makes that premise false by replacing
   `master`'s content, which is exactly why the net10 line is parked first.
 - No encryption, durability or WAL semantics change rides on this promotion; the storage format is

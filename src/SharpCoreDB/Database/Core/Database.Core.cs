@@ -24,7 +24,7 @@ using System.Threading;
 
 /// <summary>
 /// Database implementation - Core partial class with fields and initialization.
-/// Modern C# 14 with collection expressions, primary constructors, and async patterns.
+/// Modern C# 15 with collection expressions, primary constructors, and async patterns.
 /// 
 /// Location: Database/Core/Database.Core.cs
 /// Purpose: Core initialization, field declarations, Load/Save metadata, Dispose pattern
@@ -52,7 +52,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private readonly DatabaseConfig? config;
     private readonly QueryCache? queryCache;
     private readonly PageCache? pageCache;
-    private readonly Lock _walLock = new();  // ✅ C# 14: Lock type + target-typed new
+    private readonly Lock _walLock = new();  // ✅ C# 15: Lock type + target-typed new
     private readonly ConcurrentDictionary<string, CachedQueryPlan> _preparedPlans = new();
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
@@ -81,7 +81,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     
     private readonly string _instanceId = Guid.NewGuid().ToString("N");
     
-    private bool _disposed;  // ✅ C# 14: No explicit = false needed
+    private bool _disposed;  // ✅ C# 15: No explicit = false needed
 
     // Batch UPDATE transaction state is now in Database.BatchUpdateTransaction.cs
     // (shared per-dbPath via ConcurrentDictionary so all Database instances for the same file
@@ -135,7 +135,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         DatabaseConfig? config = null,
         IStorageProvider? storageProvider = null)
     {
-        ArgumentNullException.ThrowIfNull(services);  // ✅ C# 14: Modern validation
+        ArgumentNullException.ThrowIfNull(services);  // ✅ C# 15: Modern validation
         ArgumentException.ThrowIfNullOrWhiteSpace(dbPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(masterPassword);
 
@@ -156,7 +156,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         // Initialize PageCache if enabled
         if (this.config.EnablePageCache)
         {
-            pageCache = new(this.config.PageCacheCapacity, this.config.PageSize);  // ✅ C# 14: target-typed new
+            pageCache = new(this.config.PageCacheCapacity, this.config.PageSize);  // ✅ C# 15: target-typed new
         }
         
         // ✅ UNIFIED: Create IStorage instance (underlying low-level storage with WAL)
@@ -267,7 +267,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         }
 
         // ✅ CRITICAL: If metadata file exists but cannot be decrypted, abort
-        if (metaExists && metaJson is null)  // ✅ C# 14: is null pattern
+        if (metaExists && metaJson is null)  // ✅ C# 15: is null pattern
         {
             throw new InvalidOperationException(
                 "Failed to decrypt database metadata. The master password may be incorrect or the database file is corrupted.");
@@ -383,7 +383,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             var table = JsonSerializer.Deserialize(
                 JsonSerializer.Serialize(tableDict, MetadataJsonOptions.GetTypeInfo<Dictionary<string, object>>()),
                 MetadataJsonOptions.GetTypeInfo<Table>());
-            if (table is not null)  // ✅ C# 14: is not null pattern
+            if (table is not null)  // ✅ C# 15: is not null pattern
             {
                 // Backward compatibility: older metadata may not include StorageMode.
                 // Infer PAGE_BASED when table data file uses the .pages convention.
@@ -432,12 +432,14 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 // theirs). One-way: a config asking for a lower capacity never rewrites anything, and a read-only open
                 // never does either — until the rewrite happens, the STORED capacity stays authoritative for reading,
                 // which is what makes an interrupted or skipped upgrade harmless.
+                // `config` is bound by the pattern instead of being tested and then re-read: the field is read
+                // once, so no path can observe a null between the guard and the two uses below.
                 else if (!isReadOnly &&
                          table.IsFixedWidthRecords &&
-                         config is not null &&
-                         table.FixedWidthInlineValueBytes < config.FixedWidthInlineValueBytes)
+                         config is { } fixedWidthConfig &&
+                         table.FixedWidthInlineValueBytes < fixedWidthConfig.FixedWidthInlineValueBytes)
                 {
-                    if (table.MigrateToInlineCapacity(config.FixedWidthInlineValueBytes) > 0)
+                    if (table.MigrateToInlineCapacity(fixedWidthConfig.FixedWidthInlineValueBytes) > 0)
                     {
                         migratedAnyTable = true;
                     }

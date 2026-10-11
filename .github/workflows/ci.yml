@@ -14,9 +14,10 @@ on:
   # while pack/publish stay push-to-master only.
   workflow_dispatch:
 
+# Least privilege at the workflow level: the release job below re-declares `packages: write` for itself, so
+# no build, test or coverage job carries a package-writing token (Sonar S8233).
 permissions:
   contents: read
-  packages: write
 
 env:
   # .NET 11 SDK pin. `include-prerelease` stays until the GA SDK ships (2026-11-10); after that the value
@@ -221,7 +222,9 @@ jobs:
     # flagging these uploads would leave those statuses with no data (`if_no_uploads: error`).
     - name: Upload to Codecov
       if: ${{ !cancelled() }}
-      uses: codecov/codecov-action@v5
+      # Pinned to a commit SHA rather than the moving `v5` tag (Sonar S7637): a tag can be repointed at a
+      # different commit, a SHA cannot. Bump deliberately, with the release notes of the new version.
+      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: artifacts/coverage/*.cobertura.xml
@@ -309,6 +312,11 @@ jobs:
     runs-on: ubuntu-latest
     needs: pack
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    # The only job that hands packages out of the run, so it is where the workflow-level `packages: write`
+    # now lives (Sonar S8233). The push itself authenticates with NUGET_API_KEY, not with GITHUB_TOKEN.
+    permissions:
+      contents: read
+      packages: write
 
     steps:
     - name: Checkout

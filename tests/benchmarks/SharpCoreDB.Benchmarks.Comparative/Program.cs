@@ -87,9 +87,66 @@ class Program
     static string SqlitePragmaBanner() => string.Join(", ", SqlitePragmas());
 
     /// <summary>
-    /// Where this harness puts its data files. Defaults to the OS temp path, but
-    /// <c>SHARPCOREDB_BENCH_TEMP</c> overrides it — and that override is what makes a Defender path
-    /// exclusion actually <em>effective</em>.
+    /// The statement that applies one regime entry, built and validated here instead of at the SQL call site.
+    /// A pragma name and its value are SQL identifiers/literals that SQLite cannot parameterize, so building
+    /// the text where it is executed would mean pasting a value into SQL (Sonar S2077) — and the regime can be
+    /// set from outside the process by <c>SHARPCOREDB_SQLITE_PRAGMAS</c>. Both halves are validated, so a
+    /// malformed override fails loudly here rather than being sent to the engine.
+    /// </summary>
+    static string SqlitePragmaStatement(string pragma)
+    {
+        var eq = pragma.IndexOf('=');
+        return eq < 0
+            ? $"PRAGMA {ValidatedPragmaName(pragma)}"
+            : $"PRAGMA {ValidatedPragmaName(pragma)}={ValidatedPragmaValue(pragma[(eq + 1)..])}";
+    }
+
+    /// <summary>
+    /// The read-back statement for one regime entry: the name alone, so SQLite REPORTS the value it actually
+    /// took rather than being asked to take it a second time.
+    /// </summary>
+    static string SqlitePragmaReadback(string pragma) => $"PRAGMA {ValidatedPragmaName(pragma)}";
+
+    /// <summary>
+    /// The name half of a <c>name=value</c> pragma, validated as a SQLite identifier: ASCII letters, digits
+    /// and <c>_</c>, not starting with a digit. Anything else (whitespace, <c>;</c>, quotes) is rejected —
+    /// that is the only control available for a name that cannot be parameterized.
+    /// </summary>
+    static string ValidatedPragmaName(string pragma)
+    {
+        var eq = pragma.IndexOf('=');
+        var name = (eq < 0 ? pragma : pragma[..eq]).Trim();
+        var valid = name.Length > 0 && (char.IsAsciiLetter(name[0]) || name[0] == '_')
+            && name.All(c => char.IsAsciiLetter(c) || char.IsAsciiDigit(c) || c == '_');
+        if (!valid)
+        {
+            throw new InvalidOperationException(
+                $"{SqlitePragmaEnvVar} contains an invalid pragma name: '{name}'. Expected entries such as 'journal_mode=WAL'.");
+        }
+
+        return name;
+    }
+
+    /// <summary>
+    /// The value half of a <c>name=value</c> pragma, validated as a single token: no whitespace and no
+    /// <c>;</c>, so one regime entry can never become two statements.
+    /// </summary>
+    static string ValidatedPragmaValue(string value)
+    {
+        var trimmed = value.Trim();
+        if (trimmed.Length == 0 || trimmed.Any(c => c == ';' || char.IsWhiteSpace(c)))
+        {
+            throw new InvalidOperationException(
+                $"{SqlitePragmaEnvVar} contains an invalid pragma value: '{trimmed}'. Expected a single token such as 'WAL'.");
+        }
+
+        return trimmed;
+    }
+
+    /// <summary>
+    /// Where this harness puts its data files: a private subdirectory of the OS temp path, created on first
+    /// use, unless <c>SHARPCOREDB_BENCH_TEMP</c> overrides it — and that override is what makes a Defender
+    /// path exclusion actually <em>effective</em>.
     /// <para>
     /// The ambient <c>TEMP</c> cannot be relied on for this. The harness is launched by whatever shell
     /// runs it, and that shell's environment block may predate the exclusion — an agent's shell, for
@@ -109,7 +166,20 @@ class Program
             return configured;
         }
 
-        return Path.GetTempPath();
+        // The OS temp root is world-writable (/tmp on Unix), so the harness owns a directory underneath it and
+        // restricts that directory to the current user instead of writing into the shared root (Sonar S5443).
+        var privateDir = Path.Combine(Path.GetTempPath(), "SharpCoreDB.Benchmarks.Comparative");
+        if (OperatingSystem.IsWindows())
+        {
+            Directory.CreateDirectory(privateDir);
+        }
+        else
+        {
+            // Owner-only from the moment it exists, rather than chmod-ed after the fact.
+            Directory.CreateDirectory(privateDir, UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
+        }
+
+        return privateDir;
     }
 
     static async Task Main(string[] args)
@@ -141,7 +211,7 @@ class Program
         // an exclusion that does nothing (plan §6.7).
         Console.WriteLine($"REGIME (data dir): {BenchTempDirectory()}"
             + (Environment.GetEnvironmentVariable("SHARPCOREDB_BENCH_TEMP") is null
-                ? "  [OS temp - set SHARPCOREDB_BENCH_TEMP to move it onto an excluded path]"
+                ? "  [private dir under the OS temp - set SHARPCOREDB_BENCH_TEMP to move it onto an excluded path]"
                 : "  [from SHARPCOREDB_BENCH_TEMP]"));
 
         // Optional: --readtest → focused SQL-vs-Direct read micro-benchmark (median of N runs).
@@ -2048,21 +2118,25 @@ class Program
     /// </summary>
     static void ConfigureSqliteReference(SqliteConnection conn, BenchmarkResult result)
     {
+        // The regime is resolved once per reference connection. Both the applied and the read-back statements
+        // are built here (see SqlitePragmaStatement) and handed over verbatim below, so no SQL text is glued
+        // together at the ExecuteNonQuery call sites.
         var plannedPragmas = SqlitePragmas();
-        foreach (var pragma in plannedPragmas)
+        var applyStatements = plannedPragmas.Select(SqlitePragmaStatement).ToArray();
+        for (int i = 0; i < applyStatements.Length; i++)
         {
             using var pragmaCmd = conn.CreateCommand();
-            pragmaCmd.CommandText = $"PRAGMA {pragma}";
+            pragmaCmd.CommandText = applyStatements[i];
             pragmaCmd.ExecuteNonQuery();
         }
 
         var effectivePragmas = new List<string>(plannedPragmas.Length);
-        foreach (var pragma in plannedPragmas)
+        var readbackStatements = plannedPragmas.Select(SqlitePragmaReadback).ToArray();
+        for (int i = 0; i < readbackStatements.Length; i++)
         {
-            var name = pragma.Split('=', 2)[0].Trim();
             using var readCmd = conn.CreateCommand();
-            readCmd.CommandText = $"PRAGMA {name}";
-            effectivePragmas.Add($"{name}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
+            readCmd.CommandText = readbackStatements[i];
+            effectivePragmas.Add($"{ValidatedPragmaName(plannedPragmas[i])}={readCmd.ExecuteScalar()?.ToString() ?? "(no value)"}");
         }
 
         result.SqlitePragmas = string.Join(", ", effectivePragmas);
@@ -2101,6 +2175,16 @@ class Program
     /// columns here is what MATCHES the index sets instead of assuming they match.
     /// </summary>
     static readonly string[] FairNiAllColumns = ["name", "email", "age", "score", "data"];
+
+    /// <summary>
+    /// The index DDL the fair arm runs on the SQLite side: one statement per column of
+    /// <see cref="FairNiAllColumns"/>, built once from that list. An index name and a column are SQL
+    /// identifiers, which cannot be parameterized, so the statement text is fixed here rather than pasted
+    /// into SQL at the call site (Sonar S2077). Declared after the columns it derives from, so the static
+    /// initializer sees them.
+    /// </summary>
+    static readonly string[] FairNiIndexStatements =
+        [.. FairNiAllColumns.Select(c => $"CREATE INDEX idx_fni_{c} ON {FairNiTable}({c})")];
 
     /// <summary>
     /// The fair arm's statement lists, built <b>once</b> and reused. Plain harness work must not sit inside a
@@ -2432,6 +2516,16 @@ class Program
         };
 
     /// <summary>
+    /// The comparator's regime as an arm records it: the pragma set the SQLite runs of that arm were opened
+    /// with. Every run in an arm is opened with the same regime, so the first one speaks for the arm — and the
+    /// guard is real here, because this helper takes a list rather than knowing the loop that filled it. (The
+    /// call sites used to spell the test out inline, where the analyzer could prove it always true for a list
+    /// that had just been filled.)
+    /// </summary>
+    static string? ArmRegime(List<BenchmarkResult> runs) =>
+        runs.Count > 0 ? runs[0].SqlitePragmas : null;
+
+    /// <summary>
     /// Runs two arms as <b>discarded warm-up reps followed by interleaved measured reps</b>, and returns
     /// the two per-rep lists in order. This is the whole protocol in one place: the warm-up
     /// (<see cref="ResolveWarmupReps"/>, default 3) so a cold first rep cannot charge only the managed hot
@@ -2611,12 +2705,6 @@ class Program
         }
         Console.WriteLine();
 
-        static int MedianOps(IEnumerable<int> xs)
-        {
-            var sorted = xs.OrderBy(x => x).ToArray();
-            return sorted.Length == 0 ? 0 : sorted[sorted.Length / 2];
-        }
-
         static double Paired(int a, int b) => b > 0 ? a / (double)b : 0;
 
         static (double Median, double Min, double Max) Spread(List<double> xs)
@@ -2625,24 +2713,13 @@ class Program
             return sorted.Length == 0 ? (0, 0, 0) : (sorted[sorted.Length / 2], sorted[0], sorted[sorted.Length - 1]);
         }
 
-        var scdb = new BenchmarkResult
-        {
-            Reps = reps,
-            InsertOpsPerSec = MedianOps(scdbRuns.Select(r => r.InsertOpsPerSec)),
-            ReadOpsPerSec = MedianOps(scdbRuns.Select(r => r.ReadOpsPerSec)),
-            UpdateOpsPerSec = MedianOps(scdbRuns.Select(r => r.UpdateOpsPerSec)),
-            DeleteOpsPerSec = MedianOps(scdbRuns.Select(r => r.DeleteOpsPerSec)),
-        };
-        var sqlite = new BenchmarkResult
-        {
-            Reps = reps,
-            InsertOpsPerSec = MedianOps(sqliteRuns.Select(r => r.InsertOpsPerSec)),
-            ReadOpsPerSec = MedianOps(sqliteRuns.Select(r => r.ReadOpsPerSec)),
-            UpdateOpsPerSec = MedianOps(sqliteRuns.Select(r => r.UpdateOpsPerSec)),
-            DeleteOpsPerSec = MedianOps(sqliteRuns.Select(r => r.DeleteOpsPerSec)),
-            // S1: the comparator's regime travels with the comparator, even through this aggregation.
-            SqlitePragmas = sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null,
-        };
+        // Both arms are collapsed through the shared MedianArm helper rather than inline: it is the aggregation
+        // the rest of the harness reports through ("same aggregation everywhere", so no archive can describe a
+        // run differently from the console report), and it takes the dead emptiness test out of the call site —
+        // `reps` is 3 or the positive SHARPCOREDB_BENCH_REPS value, so the first run always exists.
+        var scdb = MedianArm(scdbRuns);
+        // S1: the comparator's regime travels with the comparator, even through this aggregation.
+        var sqlite = MedianArm(sqliteRuns, ArmRegime(sqliteRuns));
 
         var ratioInsert = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.InsertOpsPerSec, b.InsertOpsPerSec)).ToList();
         var ratioRead = scdbRuns.Zip(sqliteRuns, (a, b) => Paired(a.ReadOpsPerSec, b.ReadOpsPerSec)).ToList();
@@ -2786,7 +2863,7 @@ class Program
         {
             ["SharpCoreDB (SQL batch, fair no-PK)"] = MedianArm(sqlRuns),
             ["SharpCoreDB (SQL-free batch, fair no-PK)"] = MedianArm(batchRuns),
-            ["SQLite (reference, fair no-PK)"] = MedianArm(sqliteRuns, sqliteRuns.Count > 0 ? sqliteRuns[0].SqlitePragmas : null),
+            ["SQLite (reference, fair no-PK)"] = MedianArm(sqliteRuns, ArmRegime(sqliteRuns)),
         };
         var path = Path.Combine(ResultsDirectory(), $"fair_ni_batch_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
@@ -2889,7 +2966,7 @@ class Program
         {
             ["SharpCoreDB (SQL batch)"] = MedianArm(sqlRuns),
             ["SharpCoreDB (SQL-free batch)"] = MedianArm(batchRuns),
-            ["SQLite (reference)"] = MedianArm(referenceRuns, referenceRuns.Count > 0 ? referenceRuns[0].SqlitePragmas : null),
+            ["SQLite (reference)"] = MedianArm(referenceRuns, ArmRegime(referenceRuns)),
         };
         var path = Path.Combine(ResultsDirectory(), $"{archivePrefix}_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json");
         File.WriteAllText(path, JsonSerializer.Serialize(results, new JsonSerializerOptions { WriteIndented = true }));
@@ -2992,10 +3069,10 @@ class Program
             // Match the index set. SharpCoreDB's Columnar CREATE TABLE auto-registers a hash index per
             // column, so SQLite gets one index per column here. Without this the SET column would be
             // indexed on our side and unindexed on SQLite's — the asymmetry S2's verdict identified.
-            foreach (var column in FairNiAllColumns)
+            foreach (var statement in FairNiIndexStatements)
             {
                 using var idxCmd = conn.CreateCommand();
-                idxCmd.CommandText = $"CREATE INDEX idx_fni_{column} ON {FairNiTable}({column})";
+                idxCmd.CommandText = statement;
                 idxCmd.ExecuteNonQuery();
             }
 
@@ -4069,7 +4146,7 @@ class Program
         Console.WriteLine();
 
         var scdb = MedianArm(runsScDb);
-        var sqlite = MedianArm(runsSqlite, runsSqlite.Count > 0 ? runsSqlite[0].SqlitePragmas : null);
+        var sqlite = MedianArm(runsSqlite, ArmRegime(runsSqlite));
 
         // The per-phase table and the one-line gap readout that used to live here are superseded by
         // ReportPaired above, which prints the same medians plus the paired ranges the protocol requires.

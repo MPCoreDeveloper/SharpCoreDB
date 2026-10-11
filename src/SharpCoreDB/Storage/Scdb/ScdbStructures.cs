@@ -13,7 +13,7 @@ using System.Security.Cryptography;
 
 /// <summary>
 /// SCDB file header structure (512 bytes, fixed size).
-/// Uses C# 14 struct for zero-allocation parsing.
+/// Uses C# 15 struct for zero-allocation parsing.
 /// All offsets are 64-bit for files greater than 4GB.
 /// </summary>
 [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -870,6 +870,18 @@ public struct TableDirectoryHeader
 }
 
 /// <summary>
+/// The 22-byte reserved region of <see cref="TableMetadataEntry"/> (offset 0x92). Declared as an
+/// <see cref="InlineArrayAttribute"/> buffer instead of an <c>unsafe fixed</c> one: identical size and
+/// identical offsets (both are 1-byte-aligned runs of 22 bytes), but the header needs no unsafe context
+/// (Sonar S6640).
+/// </summary>
+[InlineArray(22)]
+public struct TableMetadataEntryReservedRegion
+{
+    private byte _element0;
+}
+
+/// <summary>
 /// Table metadata entry (256 bytes).
 /// Describes a single table in the database.
 /// Extended to include full schema information.
@@ -932,8 +944,12 @@ public struct TableMetadataEntry
     /// </summary>
     public int FixedWidthInlineValueBytes;   // 0x8E: §4b inline capacity (was part of Reserved)
 
-    /// <summary>Reserved for future use</summary>
-    public unsafe fixed byte Reserved[22];  // 0x92: Reserved
+    /// <summary>
+    /// Reserved for future use, as an <see cref="InlineArrayAttribute"/> region (22 bytes at 0x92). Same
+    /// bytes and same offset as the <c>unsafe fixed byte[22]</c> it replaced, so the upgrade-only format
+    /// contract above is unchanged; nothing reads or writes the region.
+    /// </summary>
+    public TableMetadataEntryReservedRegion Reserved;  // 0x92: Reserved
 
     /// <summary>Structure size in bytes</summary>
     public const int SIZE = 256;

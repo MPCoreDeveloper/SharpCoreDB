@@ -36,9 +36,13 @@ import csv
 import hashlib
 import html
 import json
-import random
+import secrets
 import sys
 from pathlib import Path
+
+# Sonar S2245: the random draw comes from the platform CSPRNG (secrets.SystemRandom) rather than the
+# Mersenne-Twister default, so a "pick N at random" is not predictable from the process state.
+_RNG = secrets.SystemRandom()
 
 DEFAULT_FILE = Path(__file__).resolve().parent.parent / "assets" / "brain-methods.csv"
 FIELDS = ("category", "technique_name", "description", "detail", "provenance", "good_for", "audience")
@@ -223,7 +227,9 @@ def category_style(cat: str) -> tuple[str, str]:
     style = _CATEGORY_STYLES.get(cat)
     if style and style.get("hue"):
         return style["hue"], style.get("glyph") or _FALLBACK_GLYPH
-    deg = int(hashlib.md5(cat.encode("utf-8")).hexdigest(), 16) % 360
+    # Sonar S4790: the hash only derives a stable hue for a category, so a collision-resistant digest is
+    # free here and keeps the value stable for the same input (any change would be a cosmetic reshuffle).
+    deg = int(hashlib.sha256(cat.encode("utf-8")).hexdigest(), 16) % 360
     return _hsl_hex(deg, 0.58, 0.52), _FALLBACK_GLYPH
 
 
@@ -473,9 +479,17 @@ SELECTOR_TEMPLATE = r"""<!DOCTYPE html>
     return techBoxes.filter(function(b){ return !b.checked && !b.dataset.lead && !picked[b.dataset.name]; });
   }
 
+  function randIndex(n){
+    // Draw from the platform CSPRNG rather than Math.random (Sonar S2245): the page runs in a browser,
+    // where window.crypto is always available.
+    var buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return buf[0] % n;
+  }
+
   function sample(arr, n){
     var a = arr.slice(), out = [];
-    while (out.length < n && a.length){ out.push(a.splice(Math.floor(Math.random() * a.length), 1)[0]); }
+    while (out.length < n && a.length){ out.push(a.splice(randIndex(a.length), 1)[0]); }
     return out;
   }
 
@@ -769,7 +783,7 @@ def main(argv: list[str] | None = None) -> int:
             print("# no techniques match", file=sys.stderr)
             return 1
         n = max(0, min(args.n, len(pool)))  # clamp: never crash on a negative or oversized -n
-        print(fmt_list(random.sample(pool, n), args.json))
+        print(fmt_list(_RNG.sample(pool, n), args.json))
     elif args.cmd == "html":
         if not args.out:
             print(

@@ -35,6 +35,7 @@ import argparse
 import csv
 import json
 import random
+import secrets
 import sys
 from pathlib import Path
 
@@ -128,11 +129,16 @@ def exclude(rows: list[dict], names: list[str] | None) -> list[dict]:
     return [r for r in rows if r["method_name"].lower() not in skip]
 
 
+# Sonar S2245: the random draw and the shuffles come from the platform CSPRNG (secrets.SystemRandom), not
+# the Mersenne-Twister default, so a "pick N at random" is not predictable from the process state.
+_RNG = secrets.SystemRandom()
+
+
 def spread_sample(rows: list[dict], n: int, rng: random.Random | None = None) -> list[dict]:
     """Draw n methods with maximum category diversity: shuffle the categories,
     take one random method per category round-robin, wrapping only when there
     are fewer categories than picks."""
-    rng = rng or random
+    rng = rng or _RNG
     by_cat: dict[str, list[dict]] = {}
     for r in rows:
         by_cat.setdefault(r["category"], []).append(r)
@@ -224,7 +230,7 @@ def main(argv: list[str] | None = None) -> int:
             print("# no methods match", file=sys.stderr)
             return 1
         n = max(0, min(args.n, len(pool)))  # clamp: never crash on a negative or oversized -n
-        picks = spread_sample(pool, n) if args.spread else random.sample(pool, n)
+        picks = spread_sample(pool, n) if args.spread else _RNG.sample(pool, n)
         print(fmt_rows(picks, args.json))
     return 0
 

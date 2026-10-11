@@ -361,7 +361,10 @@ public static class SimdFilter
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private static bool Matches(double value, double lo, double hi, MaskOp op) => op switch
     {
-        MaskOp.Equal => value == lo,
+        // Exact equality on purpose: the vector bodies above compare with Vector128/256/512.Equals, which is
+        // a per-lane IEEE `==`. An epsilon here would make the scalar tail report a different match set than
+        // the SIMD body for the same input — a results bug, not a fix.
+        MaskOp.Equal => value == lo, // NOSONAR:S1244 - must agree with the vector lanes' exact per-lane `==`.
         MaskOp.GreaterThan => value > lo,
         _ => value >= lo && value < hi,
     };

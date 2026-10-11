@@ -256,9 +256,17 @@
     return techBoxes.filter(function(b){ return !b.checked && !b.dataset.lead && !picked[b.dataset.name]; });
   }
 
+  function randIndex(n){
+    // Draw from the platform CSPRNG rather than Math.random (Sonar S2245): the page runs in a browser,
+    // where window.crypto is always available.
+    var buf = new Uint32Array(1);
+    crypto.getRandomValues(buf);
+    return buf[0] % n;
+  }
+
   function sample(arr, n){
     var a = arr.slice(), out = [];
-    while (out.length < n && a.length){ out.push(a.splice(Math.floor(Math.random() * a.length), 1)[0]); }
+    while (out.length < n && a.length){ out.push(a.splice(randIndex(a.length), 1)[0]); }
     return out;
   }
 
