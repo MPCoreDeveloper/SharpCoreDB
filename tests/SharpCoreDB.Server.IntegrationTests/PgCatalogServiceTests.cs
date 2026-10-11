@@ -69,6 +69,30 @@ public sealed class PgCatalogServiceTests : IAsyncLifetime
     }
 
     [Fact]
+    public void TryHandleCatalogQuery_Version_ReportsCurrentRuntimeAndProductVersion()
+    {
+        // Arrange — the advertised string must be derived, not a stale literal: it used to say
+        // "SharpCoreDB 1.7.0 on .NET 10" on a 2.1.0 / .NET 11 build.
+        var service = _fixture.GetPgCatalogService();
+        var db = _fixture.DatabaseRegistry!.GetDatabase("testdb")!.Database;
+        var productVersion = typeof(SharpCoreDB.Server.Core.Catalog.PgCatalogService)
+            .Assembly.GetName().Version!.ToString(3);
+
+        // Act
+        var handled = service.TryHandleCatalogQuery(
+            "SELECT version()",
+            db, "testdb", "admin",
+            out var rows, out _);
+
+        // Assert
+        Assert.True(handled);
+        var version = rows[0]["version"]!.ToString()!;
+        Assert.Contains($"SharpCoreDB {productVersion}", version);
+        Assert.Contains($"on .NET {Environment.Version.Major}", version);
+        Assert.DoesNotContain(".NET 10", version);
+    }
+
+    [Fact]
     public void TryHandleCatalogQuery_CurrentUser_ReturnsUserName()
     {
         // Arrange

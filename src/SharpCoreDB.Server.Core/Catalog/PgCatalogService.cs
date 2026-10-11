@@ -15,12 +15,14 @@ namespace SharpCoreDB.Server.Core.Catalog;
 /// returns synthetic metadata rows derived from the live database schema.
 /// Enables GUI tools (DBeaver, DataGrip, pgAdmin, Beekeeper) to discover
 /// tables, columns, types, and constraints without requiring native catalog storage.
-/// C# 14: Primary constructor, collection expressions, switch expression.
+/// C# 15: Primary constructor, collection expressions, switch expression.
 /// </summary>
 public sealed class PgCatalogService(ILogger<PgCatalogService> logger)
 {
-    // Server version advertised to clients
-    private const string ServerVersion = "SharpCoreDB 1.7.0 on .NET 10 (PostgreSQL protocol compatible)";
+    // Server version advertised to clients (pg_catalog `version()`). Derived from the assembly and the
+    // running runtime so it cannot go stale — it previously hardcoded a "1.7.0 on .NET 10" literal.
+    private static readonly string ServerVersion =
+        $"SharpCoreDB {typeof(PgCatalogService).Assembly.GetName().Version?.ToString(3) ?? "2.x"} on .NET {Environment.Version.Major} (PostgreSQL protocol compatible)";
 
     // Catalog table/view names that this service handles
     private static readonly HashSet<string> KnownCatalogSources = new(StringComparer.OrdinalIgnoreCase)
