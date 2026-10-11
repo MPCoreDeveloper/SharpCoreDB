@@ -749,9 +749,26 @@ When SharpCoreDB scales to RDBMS mode:
 
 ### Integration Points
 
-- `Microsoft.Extensions.AI.IEmbeddingGenerator<string, Embedding<float>>` compatibility
-- `SharpCoreDB.EntityFrameworkCore` — `HasVectorProperty()` + `VectorDistance()` LINQ support
-- `SharpCoreDB.Data.Provider` — ADO.NET `DbType` mapping for vectors
+> **Corrected 2026-10-10 (verified against 2.1.0).** The three bullets that used to stand here were
+> aspirational, not shipped: `SharpCoreDB.EntityFrameworkCore` contains **no vector support at all** (a
+> search of that project for `vector`/`embedding` returns nothing — no `HasVectorProperty()`, no
+> `VectorDistance()`, no vector type mapping), and no project references `Microsoft.Extensions.AI`
+> (`Directory.Packages.props` has no `Extensions.AI` entry), so an `IEmbeddingGenerator` integration is
+> not part of the package.
+
+What ships today:
+
+- **`SharpCoreDB.VectorSearch`** (optional package) — HNSW / DiskANN / Flat indexes, quantization,
+  distance metrics and hybrid fusion; see [`README.md`](README.md) and
+  [`DISKANN_SQL_DDL.md`](DISKANN_SQL_DDL.md).
+- **SQL DDL for vector indexes** (`CREATE INDEX … USING HNSW|DISKANN …`), parsed in
+  `Services/SqlParser.DDL.cs`. Ranking and distance work happen through the package's C# search API —
+  there is no SQL `VECTOR_DISTANCE()` / `COSINE_DISTANCE()` function (none exists in the parser or the
+  expression evaluator).
+- **`SharpCoreDB.Data.Provider`** — ADO.NET access; vector values travel as their stored
+  representation.
+- **Embeddings** are produced by whatever generator the application chooses; SharpCoreDB consumes the
+  resulting float vectors and bundles no generator abstraction.
 
 ---
 

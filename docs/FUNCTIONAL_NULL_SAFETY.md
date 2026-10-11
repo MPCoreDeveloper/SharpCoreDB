@@ -1,4 +1,4 @@
-# Functional Null Safety in SharpCoreDB v1.7.0
+# Functional Null Safety in SharpCoreDB 2.1
 
 ## Why This Exists
 
@@ -104,13 +104,18 @@ if (rows != null && rows.Count > 0)
 // Compiler ensures you handle absence. Zero exceptions possible.
 var email = (await fdb.GetByIdAsync<UserDto>(Tables.Users, userId))
     .Map(u => u.Email)
-    .Bind(Option.FromNullOrEmpty)       // built-in helper, no ternary
-    .IfNone(Defaults.NoEmail);          // named constant, not a magic string
+    .Bind(Prelude.Optional)             // built-in helper: null → None
+    .IfNone(Defaults.NoEmail);          // caller-defined constant, not a magic string
 ```
 
 > **Best practice:** Always use strongly-typed table references (e.g., `Tables.Users`) and named
 > constants (e.g., `Defaults.NoEmail`) instead of raw strings. `Option<T>` composes cleanly with
 > either approach — but strong typing eliminates the "magic string" class of bugs entirely.
+>
+> **Which absences are covered where:** `Prelude.Optional` (and `Option<T>`) covers `null` only. The
+> functional read path additionally treats *semantic nulls* — empty string and the literal `"NULL"` —
+> as absent when materializing rows (`FunctionalDb.cs`), so an empty `Email` surfaces as `None`
+> without an extra check in caller code.
 
 #### Error Handling: `Fin<T>` vs Try/Catch
 
@@ -164,7 +169,7 @@ Database operations have inherently unpredictable data. Foreign keys reference d
 
 ---
 
-## Functional SQL Syntax (v1.7.0)
+## Functional SQL Syntax (SharpCoreDB 2.1)
 
 SharpCoreDB.Functional now supports a functional SQL layer that maps directly to `Option<T>` semantics.
 

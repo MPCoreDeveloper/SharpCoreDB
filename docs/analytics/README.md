@@ -354,7 +354,9 @@ var filtered = await database.QueryAsync(
 );
 ```
 
-Current support and known gaps are tracked in `docs/compatibility/SQLITE_POSTGRESQL_AGGREGATE_SYNTAX_v1.9.0.md`.
+Support for aggregate `FILTER` clauses and the known gaps against the SQLite/PostgreSQL aggregate
+syntax are covered in [`../manual/query.md`](../manual/query.md) (the SQL dialect and aggregates
+chapter). There is no separate compatibility-tracking page in this repository.
 
 ### HAVING
 Filters grouped results (WHERE applies before GROUP BY, HAVING after).

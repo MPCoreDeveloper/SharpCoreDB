@@ -5,6 +5,12 @@
 **Status:** Ready for Implementation (M1 Locked)  
 **Definition of Done:** All items below must be completed and verified
 
+> **Audit note (2026-10-10):** this is the original plan of record. The harness, runner scripts,
+> methodology and scenario documents were produced; the two report files, the committed raw data,
+> `REPRODUCING.md` and `INTERPRETING_RESULTS.md` named below were **not**. Every "✅" this file used to
+> carry is answered with its real artefact in [Evidence status](#evidence-status-audited-2026-10-10-against-the-210-tree)
+> at the end — the unchecked boxes above are therefore accurate as written.
+
 ---
 
 ## Phase 1: Benchmark v1 (Weeks 3-6, Milestone M2)
@@ -154,40 +160,37 @@
 
 ---
 
-## Evidence Submission (for Closure)
+## Evidence status (audited 2026-10-10 against the 2.1.0 tree)
 
-Issue #56 is **done** when:
+The ✅ markers this section used to carry asserted artefacts that were never produced. Here is what each
+line actually resolves to:
 
-1. ✅ Pull request merged with all benchmark code and results
-2. ✅ Raw data published:
-   - `tests/benchmarks/results/` directory with all runs
-   - `raw-data.json` for each run
-   - CSV exports available
-3. ✅ Reports published:
-   - Report v1 (`docs/benchmarks/REPORT_V1.md`)
-   - Report v2 (`docs/benchmarks/REPORT_V2.md`)
-4. ✅ Documentation published:
-   - Methodology (`BENCHMARK_METHOD.md`)
-   - Scenarios (`BENCHMARK_SCENARIOS_FINAL.md`)
-   - Reproducibility guide (`REPRODUCING.md`)
-   - Interpretation guide (`INTERPRETING_RESULTS.md`)
-5. ✅ Scripts available:
-   - Benchmark harness (`tests/benchmarks/SharpCoreDB.Benchmarks.csproj`)
-   - Runner scripts (`run-all.ps1`, `run-all.sh`)
-   - Report generator
-6. ✅ CI integration verified (results published automatically)
+| Evidence | Status | Where it really is |
+|----------|--------|--------------------|
+| Benchmark code in the repository | ✅ produced | `tests/SharpCoreDB.Benchmarks/` and `tests/SharpCoreDB.Benchmarks.Comparative/` |
+| Runner scripts | ✅ produced | `tests/benchmarks/run-all.ps1`, `run-all.sh`, `BenchmarkConfig.json` |
+| Raw data committed under `tests/benchmarks/results/` | ❌ not in the repository | that directory does not exist; run output is local and is not committed |
+| `raw-data.json` per run, CSV exports | ❌ not published | produced by a run, never checked in |
+| Report v1 — `docs/benchmarks/REPORT_V1.md` | ❌ never written | use `SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`, `ZVEC_BENCHMARKS_COMPLETE.md` |
+| Report v2 — `docs/benchmarks/REPORT_V2.md` | ❌ never written | later results live in `V198_V20_V21_PERFORMANCE_COMPARISON.md`, `SQLITE_LITEDB_COMPARISON_2026-09-16.md` |
+| Methodology — `BENCHMARK_METHOD.md` | ✅ produced | `docs/benchmarks/BENCHMARK_METHOD.md` |
+| Scenarios — `BENCHMARK_SCENARIOS_FINAL.md` | ✅ produced | `docs/benchmarks/BENCHMARK_SCENARIOS_FINAL.md` |
+| Reproducibility guide — `REPRODUCING.md` | ❌ never written | the run steps are in `tests/benchmarks/README.md` |
+| Interpretation guide — `INTERPRETING_RESULTS.md` | ❌ never written | interpretation notes live inside the report documents |
+| CI publishes results automatically | ❌ not implemented | `benchmarks.yml` runs the suite; it does not attach results to a release |
 
-**Closure Comment Template:**
+**Closure Comment Template** (keeping only claims that hold):
+
 ```markdown
-## Issue #56 Completed ✅
+## Issue #56 — benchmark suite published
 
 **Benchmark Suite: SharpCoreDB vs BLite vs Zvec**
 
-- Scenarios: 9 total (4 BLite, 5 Zvec)
-- Raw data: Available in `tests/benchmarks/`
-- Report v1: `REPORT_V1.md` (attach the published link when closing the issue)
-- Report v2: `REPORT_V2.md` (attach the published link when closing the issue)
-- Reproducibility: Scripts available, runnable
+- Scenarios: 9 total (4 BLite, 5 Zvec) — definitions in `BENCHMARK_SCENARIOS_FINAL.md`
+- Harness: `tests/SharpCoreDB.Benchmarks/`, runnable via `tests/benchmarks/run-all.ps1` / `run-all.sh`
+- Reports: `SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`, `ZVEC_BENCHMARKS_COMPLETE.md`
+- Methodology: `BENCHMARK_METHOD.md`
+- Raw per-run JSON: not committed — reproduce locally with the runner scripts
 
 **Key Findings:**
 - BLite: [summary]
@@ -197,9 +200,6 @@ Issue #56 is **done** when:
 **Links:**
 - PR: `#XXX` (fill in the pull-request number)
 - Documentation: [benchmarks README](../../tests/benchmarks/README.md)
-- Raw data: `tests/benchmarks/`
-
-Benchmark suite is now public and reproducible. Community can validate.
 ```
 
 ---

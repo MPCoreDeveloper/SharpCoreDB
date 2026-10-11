@@ -67,9 +67,12 @@ See [`src/SharpCoreDB.Functional.Linq2DB/README.md`](../../src/SharpCoreDB.Funct
 Bidirectional cloud/edge data sync provider built on Dotmim.Sync. Docs:
 [`docs/sync/README.md`](../sync/README.md) · [`docs/sync/CHANGELOG.md`](../sync/CHANGELOG.md)
 
-## 10.6 Migrations (`SharpCoreDB.FluentMigrator`)
+## 10.6 Migrations (FluentMigrator via `SharpCoreDB.Extensions`)
 
-FluentMigrator integration for embedded and server modes:
+FluentMigrator integration for embedded and server modes ships in the **`SharpCoreDB.Extensions`**
+package (`AddSharpCoreDBFluentMigrator()` / `AddSharpCoreDBFluentMigratorGrpc()`); there is no
+separate `SharpCoreDB.FluentMigrator` package. Scenarios, syntax modes and overrides are documented
+in [`docs/migration/README.md`](../migration/README.md):
 
 ```csharp
 [Maintenance(MigrationStage.BeforeAll)]

@@ -5,6 +5,12 @@ provider against **SharpCoreDB NuGet 1.9.3** (source checked out at
 `D:\repos\MPCoreDeveloper\SharpCoreDB`). The items are intended to be picked up in the
 SharpCoreDB repository: <https://github.com/MPCoreDeveloper/SharpCoreDB/issues>
 
+> **Audit status (2026-10-10):** every item below was re-checked against the shipped **2.1.0** tree.
+> Five of the six are fixed in the engine (2–5) or resolved by a flip/opt-in (1, 6); each item carries
+> a `RESOLVED` / `STILL TRUE` note naming the file that proves it. The report is kept as the historical
+> record of a 1.9.3-era integration — an un-annotated sentence inside an item is that item's original
+> observation, not a claim about 2.1.0.
+
 ---
 
 ## 1. 🔴 Table data is NOT encrypted even with `EnableBatchEncryption=true`
@@ -57,6 +63,14 @@ when `!noEncryption`, and `FlushBufferedAppends` should actually write the encry
 
 ## 2. 🟠 `Table.Insert` throws `ArgumentOutOfRangeException` after reopening a database
 
+> ✅ **RESOLVED (verified 2026-10-10, 2.1.0).** `Database.Core.Load()` now pads *all seven* per-column
+> lists to `Columns.Count`, including the two this report found short:
+> `DefaultExpressions` and `ColumnCheckExpressions` (the `while (… .Count < table.Columns.Count)`
+> block in `src/SharpCoreDB/Database/Core/Database.Core.cs`), alongside `IsAuto`, `IsNotNull`,
+> `DefaultValues`, `ColumnCollations` and `ColumnLocaleNames`. Reopening a database and then calling
+> `ITable.Insert` no longer indexes a short list, so the provider-side `RepairTableSchemaLists()`
+> workaround is no longer needed.
+
 **Location:** `src/SharpCoreDB/Database/Core/Database.Core.cs` → `Load()` (lines 184-428)
 
 - After deserialization, `IsAuto`, `IsNotNull`, `DefaultValues`, and `ColumnCollations` are
@@ -77,6 +91,13 @@ column count.
 
 ## 3. 🟠 Single-file (.scdb) mode has a no-op B-tree index
 
+> ✅ **RESOLVED (verified 2026-10-10, 2.1.0).** `SingleFileTable` now keeps a primary-key hash index
+> (`_pkIndex`, marked "Issue A1" in `src/SharpCoreDB/SingleFileTable.cs`) built from the PK column, so
+> `FindByPrimaryKey` / `UpdateByPrimaryKey` / `DeleteByPrimaryKey` are O(1) point operations in `.scdb`
+> mode — directory mode is no longer required for correct point lookups. The `NullIndex` this report
+> saw survives only as the interface's no-op default (`Interfaces/ITable.cs`) for implementations that
+> declare no index of their own.
+
 **Location:** `src/SharpCoreDB/Interfaces/ITable.cs` (lines 101-107) and
 `src/SharpCoreDB/SingleFileTable.cs`
 
@@ -96,6 +117,14 @@ mode.
 
 ## 4. 🟡 No read-after-write consistency without an explicit `Flush()`
 
+> ✅ **RESOLVED (verified 2026-10-10, 2.1.0).** `Database.ExecuteQuery` now flushes pending **batch**
+> writes before running the query (`src/SharpCoreDB/Database/Execution/Database.Execution.cs`,
+> "FIX (Known Issue 4)"), so rows written through `ITable.Insert` / `UpdateByPrimaryKey` are visible to
+> `FindByPrimaryKey` / `Select()` without an explicit `db.Flush()`. One asymmetry is deliberate and
+> documented in the code: a plain `_metadataDirty` flag is *not* flushed, because SQL `INSERT`s are
+> already visible in-memory on the default engine and a blanket metadata flush there costs more than it
+> buys. `IDatabase.Flush()` remains the explicit durability boundary.
+
 **Location:** `src/SharpCoreDB/Database/Execution/Database.Execution.cs`
 
 - `Database.ExecuteSQL(...)` only flushes before a SELECT when `_metadataDirty ||
@@ -104,8 +133,10 @@ mode.
 - After an `ITable.Insert` / `UpdateByPrimaryKey`, changes were invisible to
   `ITable.FindByPrimaryKey` / `ITable.Select()` until an explicit `database.Flush()` occurred.
 
-**Workaround in ServiceMq.SharpCoreDb:** flush before every `SelectArea` scan and on mutations
-with `DurabilityMode.FlushToDisk`.
+**Workaround in ServiceMq.SharpCoreDb:** flush before every `SelectArea` scan and on mutations via
+`db.Flush()`. (The historical write-up named `DurabilityMode.FlushToDisk`; that member does not exist —
+`DurabilityMode` is `FullSync` | `Async`, and forcing data to physical disk is what `FullSync` and an
+explicit `IDatabase.Flush()` perform.)
 
 **Recommendation:** `ExecuteQuery` should perform the same dirty-flush check as
 `ExecuteSQL(SELECT)`.
@@ -113,6 +144,11 @@ with `DurabilityMode.FlushToDisk`.
 ---
 
 ## 5. 🟡 SQL parameter validation does not match `@`-prefixed keys
+
+> ✅ **RESOLVED (verified 2026-10-10, 2.1.0).** `SqlQueryValidator` normalises keys before comparing:
+> `NormalizeKey` strips a leading `@` or `:` (its comment states "a @-prefixed key and an unprefixed key
+> with the same name are equivalent"), so `@name`, `:name` and `name` all satisfy a `@name` placeholder.
+> The false "Missing parameters for placeholders" / "Unused parameters provided" warnings are gone.
 
 **Location:** `src/SharpCoreDB/Services/SqlQueryValidator.cs` (lines 129-153)
 
@@ -131,6 +167,13 @@ its behavior is consistent with `SqlParser.ResolveParameter`.
 ---
 
 ## 6. 🟡 `INTEGER` columns map to Int32 instead of Int64
+
+> ⚠️ **STILL TRUE BY DEFAULT, with an opt-in (verified 2026-10-10, 2.1.0).** `INTEGER` →
+> `DataType.Integer` (Int32) remains the default, for backward compatibility with existing databases and
+> consumer code. The engine now offers the SQLite behaviour explicitly: set
+> `DatabaseConfig.UseSqliteIntegerAffinity = true` and `INTEGER` maps to `DataType.Long` (Int64) for
+> **newly created or added** columns — existing columns keep the type recorded in their table metadata.
+> The option is documented on `DatabaseConfig` in `src/SharpCoreDB/DatabaseConfig.cs`.
 
 **Location:** `src/SharpCoreDB/Services/SqlParser.ParseValue` and the DDL type mapping
 
@@ -151,11 +194,11 @@ error message.
 
 ## Priority summary
 
-| # | Issue | Severity | Status in ServiceMq.SharpCoreDb |
-|---|-------|----------|----------------------------------|
-| 1 | Table data not encrypted | 🔴 High | Provider-level AES-256-GCM |
-| 2 | `Table.Insert` AOORE after reopen | 🟠 Medium | `RepairTableSchemaLists()` |
-| 3 | Single-file no-op index | 🟠 Medium | Directory mode forced |
-| 4 | No read-after-write flush | 🟡 Low | Flush calls in provider |
-| 5 | SQL validator `@` prefix | 🟡 Low | Keys without `@` prefix |
-| 6 | INTEGER → Int32 | 🟡 Low | `BIGINT` columns |
+| # | Issue | Severity | Status in ServiceMq.SharpCoreDb | In SharpCoreDB 2.1.0 |
+|---|-------|----------|----------------------------------|----------------------|
+| 1 | Table data not encrypted | 🔴 High | Provider-level AES-256-GCM | **Fixed** — per-record AES-256-GCM on by default (`EnableAtRestRecordEncryption`), flippable since 2026-09-13 |
+| 2 | `Table.Insert` AOORE after reopen | 🟠 Medium | `RepairTableSchemaLists()` | **Fixed** — `Load()` pads every per-column list |
+| 3 | Single-file no-op index | 🟠 Medium | Directory mode forced | **Fixed** — `SingleFileTable` keeps a PK hash index |
+| 4 | No read-after-write flush | 🟡 Low | Flush calls in provider | **Fixed** — `ExecuteQuery` flushes pending batch writes |
+| 5 | SQL validator `@` prefix | 🟡 Low | Keys without `@` prefix | **Fixed** — `NormalizeKey` strips `@` / `:` |
+| 6 | INTEGER → Int32 | 🟡 Low | `BIGINT` columns | **Still the default** — opt in with `UseSqliteIntegerAffinity` |
