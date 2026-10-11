@@ -675,10 +675,14 @@ public partial class SqlParser
         // The four rules reproduced here are pinned by InsertValuesParsingTests:
         //   1. a quote toggles and is DROPPED, unless the previously *appended* character was a backslash — the
         //      check is against the accumulated content, not the source text, so a dropped quote does not update it;
-        //   2. a comma splits only outside quotes;
+        //   2. a comma splits only outside quotes and outside a bracketed literal;
         //   3. every literal is Trimmed;
         //   4. a literal whose content is empty is not emitted at all, so `(1,)` yields one value while `(1, )`
         //      yields an empty one.
+        //
+        // Rule 2's bracketed-literal clause is what makes a VECTOR value expressible in VALUES at all:
+        // `[0.5, 0.25, 0.125, 0.0625]` is one literal, not four (docs/Vectors/TECHNICAL_SPEC.md §7). Without
+        // it the first fragment reached ParseVectorValue as "[0.5" and the statement failed as invalid base64.
         //
         // A literal is slice-expressible exactly when at most one quote pair toggles inside it. An interior
         // toggling quote — `'it''s'` → `its` — is *dropped* by rule 1, which no contiguous slice can express, so
@@ -693,6 +697,7 @@ public partial class SqlParser
             int contentStart = index;
             int contentEnd = -1;
             int toggles = 0;
+            int bracketDepth = 0;
             bool inQuotes = false;
             char lastAppended = '\0';
             bool terminatedByComma = false;
@@ -711,7 +716,19 @@ public partial class SqlParser
                     continue;   // a dropped quote must not become the last appended character
                 }
 
-                if (c == ',' && !inQuotes)
+                if (!inQuotes)
+                {
+                    if (c == '[')
+                    {
+                        bracketDepth++;
+                    }
+                    else if (c == ']' && bracketDepth > 0)
+                    {
+                        bracketDepth--;
+                    }
+                }
+
+                if (c == ',' && !inQuotes && bracketDepth == 0)
                 {
                     terminatedByComma = true;
                     break;
@@ -763,11 +780,13 @@ public partial class SqlParser
 
         // The reference implementation, used only for literals a slice cannot express: one with an interior
         // toggling quote, or an unterminated one. It is byte-for-byte the behaviour this method had before the
-        // fast path existed, including emitting nothing when the accumulated content is empty.
+        // fast path existed, including emitting nothing when the accumulated content is empty — plus the
+        // bracketed-literal clause of rule 2, so it cannot disagree with the fast path about a vector literal.
         static string? BuildLiteralByAppending(ReadOnlySpan<char> text, bool terminatedByComma)
         {
             var currentValue = new StringBuilder();
             bool inQuotes = false;
+            int bracketDepth = 0;
 
             foreach (char c in text)
             {
@@ -777,7 +796,19 @@ public partial class SqlParser
                     continue;
                 }
 
-                if (c == ',' && !inQuotes)
+                if (!inQuotes)
+                {
+                    if (c == '[')
+                    {
+                        bracketDepth++;
+                    }
+                    else if (c == ']' && bracketDepth > 0)
+                    {
+                        bracketDepth--;
+                    }
+                }
+
+                if (c == ',' && !inQuotes && bracketDepth == 0)
                 {
                     break;
                 }
@@ -1846,7 +1877,9 @@ public partial class SqlParser
         if (!tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
-        var setClauses = updateMatch.Groups[2].Value.Trim().Split(',');
+        // Bracket-aware split: `SET embedding = [0.5, 0.25]` is one assignment, not two
+        // (SqlInPredicate.SplitTopLevelComma honours quotes, parentheses and bracketed literals).
+        var setClauses = SqlInPredicate.SplitTopLevelComma(updateMatch.Groups[2].Value.Trim());
         var whereClause = updateMatch.Groups[3].Value.Trim();
 
         var updates = new Dictionary<string, object?>();

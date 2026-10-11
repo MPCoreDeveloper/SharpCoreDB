@@ -353,6 +353,12 @@ public class CompiledQueryExecutor
             decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
             bool b => b ? "1" : "0",
             DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+
+            // Same vector-literal rendering as ParameterBinder.FormatParameter, so both binders agree.
+            float[] vector => VectorBinaryCodec.ToJson(vector),
+            ReadOnlyMemory<float> vectorMemory => VectorBinaryCodec.ToJson(vectorMemory.Span),
+            Memory<float> vectorBuffer => VectorBinaryCodec.ToJson(vectorBuffer.Span),
+            double[] vectorDoubles => VectorBinaryCodec.ToJson(Array.ConvertAll(vectorDoubles, static d => (float)d)),
             _ => $"'{value.ToString()?.Replace("'", "''") ?? string.Empty}'"
         };
     }

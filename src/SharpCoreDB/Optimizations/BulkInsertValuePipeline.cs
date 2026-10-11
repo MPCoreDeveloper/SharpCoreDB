@@ -215,6 +215,21 @@ public static class BulkInsertValuePipeline
                 }
                 break;
 
+            case DataType.Vector:
+                {
+                    // Same framing as Blob: [int32 length][VEC\0 blob], from the one vector codec.
+                    var vector = VectorBinaryCodec.ToVector(value);
+                    int vectorLength = VectorBinaryCodec.EncodedLength(vector);
+
+                    if (target.Length < 5 + vectorLength)
+                        throw new InvalidOperationException("Buffer too small");
+
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(target[1..], vectorLength);
+                    _ = VectorBinaryCodec.WriteTo(target[5..], vector);
+                    bytesWritten += 4 + vectorLength;
+                }
+                break;
+
             case DataType.Guid:
                 if (target.Length < 17) throw new InvalidOperationException("Buffer too small");
                 ((Guid)value).TryWriteBytes(target[1..]);
@@ -290,6 +305,11 @@ public static class BulkInsertValuePipeline
             DataType.Ulid => 35,  // 1 null + 4 len + 26 chars + 4 for safety
             DataType.String => 256,  // Average estimate
             DataType.Blob => 256,    // Average estimate
+
+            // Same per-row budget the parallel-scan cell uses — the documented 1536-dimension embedding
+            // (1 null + 4 length + 12 header + 1536 float32). A wider vector is refused by EncodeValue's
+            // bounds check rather than truncated.
+            DataType.Vector => 5 + VectorBinaryCodec.EncodedLength(1536),
             _ => 64
         };
 

@@ -49,7 +49,10 @@ public static class FixedWidthCodec
                 {
                     WriteNullVariableSlot(slot);
                 }
-                else if (value is string text && types[i] != DataType.Blob
+                // A string fast path is only valid where the slot is *read back as text*. Blob excluded it
+                // already; so must Vector — a JSON vector literal handed in as a string has to go through
+                // EncodeVariablePayload, which writes the VEC\0 blob the reader decodes, not raw UTF-8.
+                else if (value is string text && types[i] is not (DataType.Blob or DataType.Vector)
                          && TryWriteInlineStringSlot(slot, layout, text))
                 {
                     continue;   // encoded into the slot directly: no throw-away payload array
@@ -119,7 +122,7 @@ public static class FixedWidthCodec
                 {
                     WriteNullVariableSlot(slot);
                 }
-                else if (value is string text && types[i] != DataType.Blob
+                else if (value is string text && types[i] is not (DataType.Blob or DataType.Vector)
                          && TryWriteInlineStringSlot(slot, layout, text))
                 {
                     continue;   // encoded into the slot directly: no throw-away payload array

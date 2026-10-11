@@ -1039,6 +1039,7 @@ public partial class Table
             DataType.String => (-1, true),    // 1 null flag + 4 length + variable
             DataType.Blob => (-1, true),      // 1 null flag + 4 length + variable
             DataType.Ulid => (-1, true),      // 1 null flag + 4 length + variable (stored as string)
+            DataType.Vector => (-1, true),    // 1 null flag + 4 length + VEC\0 blob (variable)
             _ => (-1, true)                   // Unknown = variable
         };
     }

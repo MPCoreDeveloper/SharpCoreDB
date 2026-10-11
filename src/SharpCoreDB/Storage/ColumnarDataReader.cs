@@ -340,6 +340,17 @@ public class ColumnarDataReader : IDisposable
                 bytesRead = 4 + blobLength;
                 return span.Slice(4, blobLength).ToArray();
 
+            case DataType.Vector:
+                if (span.Length < 4)
+                    return Array.Empty<float>();
+
+                int vectorLength = BinaryPrimitives.ReadInt32LittleEndian(span);
+                if (vectorLength < VectorBinaryCodec.HeaderSize || vectorLength > span.Length - 4)
+                    return Array.Empty<float>();
+
+                bytesRead = 4 + vectorLength;
+                return VectorBinaryCodec.Deserialize(span.Slice(4, vectorLength));
+
             default:
                 return string.Empty;
         }

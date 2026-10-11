@@ -158,6 +158,9 @@ public sealed class BinaryRowDecoder
                     return data.Slice(4, length).ToArray();
                 }
 
+            case DataType.Vector:
+                return VectorBinaryCodec.ReadLengthPrefixed(data, out bytesRead);
+
             case DataType.Guid:
                 bytesRead = 16;
                 return new Guid(data[..16]);

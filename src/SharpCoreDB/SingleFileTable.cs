@@ -1963,7 +1963,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         return result;
     }
 
-    private static Dictionary<string, object> FromSerializableRow(Dictionary<string, object?> row)
+    private Dictionary<string, object> FromSerializableRow(Dictionary<string, object?> row)
     {
         var result = new Dictionary<string, object>(row.Count);
         foreach (var (key, value) in row)
@@ -1974,16 +1974,30 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             }
             else if (value is JsonElement element)
             {
-                // Convert JsonElement to the appropriate CLR type
-                result[key] = element.ValueKind switch
+                // Type-aware first: a VECTOR column is written as a JSON float array (see
+                // PolymorphicObjectConverter in SingleFileTableJsonContext), so it has to come back as the
+                // float[] every other storage path returns, never as the JsonElement — the row below used to
+                // hand the caller `[0.5,0.25]` as JSON for a VECTOR column. The raw text goes through the one
+                // vector parser (VectorBinaryCodec), so a base64-string legacy payload reads back the same way.
+                var vectorColumnIndex = Columns.IndexOf(key);
+                if (vectorColumnIndex >= 0 && ColumnTypes[vectorColumnIndex] == DataType.Vector
+                    && VectorBinaryCodec.TryParse(element.GetRawText(), out var vector))
                 {
-                    JsonValueKind.Number => ConvertJsonNumber(element),
-                    JsonValueKind.String => element.GetString() ?? string.Empty,
-                    JsonValueKind.True => true,
-                    JsonValueKind.False => false,
-                    JsonValueKind.Null => DBNull.Value,
-                    _ => value
-                };
+                    result[key] = vector;
+                }
+                else
+                {
+                    // Convert JsonElement to the appropriate CLR type
+                    result[key] = element.ValueKind switch
+                    {
+                        JsonValueKind.Number => ConvertJsonNumber(element),
+                        JsonValueKind.String => element.GetString() ?? string.Empty,
+                        JsonValueKind.True => true,
+                        JsonValueKind.False => false,
+                        JsonValueKind.Null => DBNull.Value,
+                        _ => value
+                    };
+                }
             }
             else
             {

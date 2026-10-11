@@ -264,23 +264,21 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Parses a vector value from a JSON float array string or Base64 bytes.
-    /// Supports: "[0.1, 0.2, 0.3]" JSON format and Base64-encoded binary.
+    /// Parses a vector value. Delegates to <see cref="DataStructures.VectorBinaryCodec.TryParse"/> — the single
+    /// definition of the accepted textual forms (JSON float array, base64 blob, 0x hex blob) — so the SQL path
+    /// and the parameter binder cannot disagree about what a vector literal is.
     /// </summary>
+    /// <param name="val">The literal text.</param>
+    /// <returns>The parsed float array.</returns>
     private static object ParseVectorValue(string val)
     {
-        val = val.Trim();
-
-        // JSON array format: [0.1, 0.2, 0.3, ...]
-        if (val.StartsWith('[') && val.EndsWith(']'))
+        if (DataStructures.VectorBinaryCodec.TryParse(val, out var vector))
         {
-            return AotJsonSerializer.Deserialize<float[]>(val)
-                ?? throw new InvalidOperationException("Failed to parse vector JSON array");
+            return vector;
         }
 
-        // Base64-encoded binary format
-        var bytes = Convert.FromBase64String(val);
-        return System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(bytes.AsSpan()).ToArray();
+        throw new InvalidOperationException(
+            $"Invalid VECTOR literal '{val}'. Expected a JSON float array like [0.5, 0.25], a base64 blob or a 0x hex blob.");
     }
 
     /// <summary>

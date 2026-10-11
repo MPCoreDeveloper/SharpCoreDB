@@ -144,8 +144,13 @@ public partial class Table
         return offsets;
     }
 
-    /// <summary>Fixed encoded size of a column (1 null flag + payload), or -1 for variable-length types.</summary>
-    private static int GetFixedEncodedSize(DataType type) => type switch
+    /// <summary>
+    /// Fixed encoded size of a column (1 null flag + payload), or -1 for variable-length types.
+    /// <see cref="VectorBinaryCodec"/> writes a vector as <c>[int32 length][blob]</c> — like Blob — so VECTOR
+    /// is variable-length and gets the same -1. Single definition: <see cref="FixedWidthRecordLayout"/> calls
+    /// this one instead of keeping its own copy of the map.
+    /// </summary>
+    internal static int GetFixedEncodedSize(DataType type) => type switch
     {
         DataType.Integer => 5,
         DataType.Long => 9,
@@ -156,7 +161,7 @@ public partial class Table
         DataType.Decimal => 17,
         DataType.Ulid => 31,
         DataType.Guid => 17,
-        _ => -1, // String, Blob, other: variable
+        _ => -1, // String, Blob, Vector, other: variable
     };
 
     /// <summary>Encoded size (in bytes) of a value for the given column type.</summary>
@@ -181,6 +186,9 @@ public partial class Table
                 return 5 + System.Text.Encoding.UTF8.GetByteCount((string)value);
             case DataType.Blob:
                 return 5 + ((byte[])value).Length;
+            case DataType.Vector:
+                // [null flag 1][int32 length 4][VEC\0 blob] — must match WriteTypedValueToSpan exactly.
+                return 5 + VectorBinaryCodec.EncodedLength(VectorBinaryCodec.ToVector(value));
             default:
                 return 5 + System.Text.Encoding.UTF8.GetByteCount(value.ToString() ?? string.Empty);
         }
@@ -497,6 +505,10 @@ public partial class Table
         return type switch
         {
             DataType.Blob => (byte[])value,
+
+            // The overflow-arena payload *is* the vector binary format, so the fixed-width path and the
+            // inline path store the same bytes the row codec writes (Table.Serialization).
+            DataType.Vector => VectorBinaryCodec.Serialize(VectorBinaryCodec.ToVector(value)),
             _ => System.Text.Encoding.UTF8.GetBytes(value?.ToString() ?? string.Empty),
         };
     }
@@ -506,6 +518,7 @@ public partial class Table
         return type switch
         {
             DataType.Blob => payload,
+            DataType.Vector => VectorBinaryCodec.Deserialize(payload),
             _ => System.Text.Encoding.UTF8.GetString(payload),
         };
     }
@@ -1369,6 +1382,12 @@ public partial class Table
                 bytesWritten += blobBytes.Length;
                 break;
                 
+            case DataType.Vector:
+                bytesWritten += VectorBinaryCodec.WriteLengthPrefixed(
+                    buffer.Slice(bytesWritten), VectorBinaryCodec.ToVector(value));
+                break;
+                
+
             case DataType.String:
                 // ✅ PHASE 1: Zero-allocation string encoding using GetBytes(chars, Span<byte>)
                 bytesWritten += WriteStringZeroAlloc(buffer.Slice(bytesWritten), (string)value);
@@ -1514,6 +1533,14 @@ public partial class Table
                 bytesRead += 4 + blobLen;
                 return buffer.Slice(5, blobLen).ToArray();
                 
+            case DataType.Vector:
+                // Same framing as Blob — [int32 length][payload] — where the payload is the VEC\0 blob, so
+                // the reader and the writer cannot disagree about the vector layout.
+                var vectorValue = VectorBinaryCodec.ReadLengthPrefixed(buffer.Slice(1), out int vectorBytes);
+                bytesRead += vectorBytes;
+                return vectorValue;
+                
+
             case DataType.String:
                 if (buffer.Length < 5) // 1 byte null flag + 4 bytes length
                     throw new InvalidOperationException(
@@ -1622,6 +1649,12 @@ public partial class Table
             DataType.Guid => 17, // 1 null flag + 16 bytes
             DataType.String => 4 + 256, // 1 null flag + 4 length + estimated 256 bytes
             DataType.Blob => 4 + 1024, // 1 null flag + 4 length + estimated 1024 bytes
+
+            // The fast-path StructRow buffer needs one fixed cell width per column, but vectors are
+            // variable-length: this is the width the documented 1536-dimension embedding needs
+            // (docs/Vectors/TECHNICAL_SPEC.md) — 1 null flag + 4 length + 12 header + 1536 float32.
+            // SelectStructParallel refuses a wider vector instead of truncating it (see Table.ParallelScan).
+            DataType.Vector => 5 + VectorBinaryCodec.EncodedLength(1536),
             _ => 4 + 256 // default estimate
         };
     }
@@ -1774,6 +1807,10 @@ public partial class Table
             DataType.Guid => value is Guid,
             DataType.RowRef => value is long,
             DataType.Blob => value is byte[],
+            // A vector accepts the representations VectorBinaryCodec coerces (float[], Memory<float>,
+            // IEnumerable<float>, double[], byte[], JSON-array or base64 text); anything else is a type
+            // mismatch instead of being stored as value.ToString().
+            DataType.Vector => VectorBinaryCodec.TryToVector(value, out _),
             _ => true,
         };
     }
@@ -1923,6 +1960,16 @@ public partial class Table
                     if (value is string strGuid && Guid.TryParse(strGuid, out var guidVal))
                     {
                         coercedValue = guidVal;
+                        return true;
+                    }
+                    break;
+
+                case DataType.Vector:
+                    // Accepts float[] and friends, a byte[] blob, and the JSON-array / base64 text forms, so a
+                    // client can bind a vector as float[], ReadOnlyMemory<float> or a string.
+                    if (VectorBinaryCodec.TryToVector(value, out var vectorValue))
+                    {
+                        coercedValue = vectorValue;
                         return true;
                     }
                     break;

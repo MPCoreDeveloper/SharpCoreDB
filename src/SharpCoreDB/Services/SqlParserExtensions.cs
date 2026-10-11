@@ -320,6 +320,7 @@ public static class SqlParserExtensions
 
         var valuesStr = remaining.Substring(startIdx + 1, endIdx - startIdx - 1);
 
-        return [.. valuesStr.Split(',').Select(v => v.Trim().Trim('\'') as object)];
+        // Top-level split: a bracketed VECTOR literal ([0.5, 0.25]) is one value, not two.
+        return [.. Services.SqlInPredicate.SplitTopLevelComma(valuesStr).Select(v => v.Trim().Trim('\'') as object)];
     }
 }

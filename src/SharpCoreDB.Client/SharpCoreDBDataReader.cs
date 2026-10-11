@@ -126,7 +126,11 @@ public sealed class SharpCoreDBDataReader : DbDataReader
             DataType.Guid => typeof(string),
             DataType.Ulid => typeof(string),
             DataType.Rowref => typeof(string),
-            DataType.Vector => typeof(double[]),
+
+            // float[], not double[]: a VECTOR column is a float32 array everywhere else in the engine
+            // (VectorBinaryCodec, VectorTypeProvider, the vector binary format), so the client must not
+            // advertise a CLR type the reader can never produce.
+            DataType.Vector => typeof(float[]),
             DataType.Decimal => typeof(decimal),
             _ => typeof(object)
         };

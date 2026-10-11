@@ -207,6 +207,16 @@ public readonly struct StructRow
                 bytes.CopyTo(buffer, 1);
                 return buffer;
             }
+            case DataType.Vector:
+            {
+                // [null flag][int32 length][VEC\0 blob] — the row codec's framing, from the one vector codec.
+                var payload = VectorBinaryCodec.Serialize(VectorBinaryCodec.ToVector(value));
+                var buffer = new byte[5 + payload.Length];
+                buffer[0] = 1;
+                BinaryPrimitives.WriteInt32LittleEndian(buffer.AsSpan(1, 4), payload.Length);
+                payload.CopyTo(buffer.AsSpan(5));
+                return buffer;
+            }
             default:
             {
                 byte[] payload = type == DataType.Blob && value is byte[] blob
@@ -505,6 +515,12 @@ public readonly struct StructRow
                 throw new InvalidCastException($"Cannot cast {type} to {typeof(T)}");
             return (T)(object)valueData.ToArray();
         }
+        else if (type == DataType.Vector)
+        {
+            if (typeof(T) != typeof(float[]))
+                throw new InvalidCastException($"Cannot cast {type} to {typeof(T)}");
+            return (T)(object)VectorBinaryCodec.ReadLengthPrefixed(valueData, out _);
+        }
         else
             throw new NotSupportedException($"Type {type} not supported for deserialization to {typeof(T)}");
     }
@@ -534,6 +550,7 @@ public readonly struct StructRow
             DataType.String => DeserializeString(valueData),
             DataType.Ulid => DeserializeUlid(valueData),
             DataType.Blob => valueData.ToArray(),
+            DataType.Vector => VectorBinaryCodec.ReadLengthPrefixed(valueData, out _),
             _ => DeserializeString(valueData) // Default to string
         };
     }

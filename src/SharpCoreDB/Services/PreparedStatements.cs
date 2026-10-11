@@ -492,6 +492,14 @@ internal static class ParameterBinder
             float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
             int i => i.ToString(),
             long l => l.ToString(),
+
+            // Vector parameters are rendered as the bracketed literal the parser reads back into a float[]
+            // (VectorBinaryCodec), and the VALUES/SET splitters keep that literal in one piece. Without this a
+            // float[] parameter was rendered as the literal text "System.Single[]" and stored as the string.
+            float[] vector => VectorBinaryCodec.ToJson(vector),
+            ReadOnlyMemory<float> vectorMemory => VectorBinaryCodec.ToJson(vectorMemory.Span),
+            Memory<float> vectorBuffer => VectorBinaryCodec.ToJson(vectorBuffer.Span),
+            double[] vectorDoubles => VectorBinaryCodec.ToJson(Array.ConvertAll(vectorDoubles, static d => (float)d)),
             byte[] bytes => $"0x{System.Convert.ToHexString(bytes)}",
             _ => $"'{EscapeSqlString(value.ToString())}'",
         };

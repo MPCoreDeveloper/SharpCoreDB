@@ -219,6 +219,22 @@ public sealed class StreamingRowEncoder : IDisposable
                 }
                 break;
 
+            case DataType.Vector:
+                {
+                    // Same framing as Blob: [int32 length][VEC\0 blob]. The blob comes from the one vector
+                    // codec, so this writer cannot drift from Table's row codec.
+                    var vector = VectorBinaryCodec.ToVector(value);
+                    int vectorLength = VectorBinaryCodec.EncodedLength(vector);
+
+                    if (target.Length < 5 + vectorLength)
+                        throw new InvalidOperationException("Buffer too small");
+
+                    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(target[1..], vectorLength);
+                    _ = VectorBinaryCodec.WriteTo(target[5..], vector);
+                    bytesWritten += 4 + vectorLength;
+                }
+                break;
+
             case DataType.Guid:
                 if (target.Length < 17) throw new InvalidOperationException("Buffer too small");
                 ((Guid)value).TryWriteBytes(target[1..]);
