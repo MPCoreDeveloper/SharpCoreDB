@@ -1386,7 +1386,8 @@ class Program
         SharpCoreDB.Interfaces.StorageEngineType engineType,
         bool fixedWidth = false,
         bool noEncrypt = true,
-        bool? atRestRecords = null)
+        bool? atRestRecords = null,
+        bool legacyVariableLength = false)
     {
         return new DatabaseConfig
         {
@@ -1398,10 +1399,15 @@ class Program
             // see docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md §3-1c/§3-1d.
             EnableAtRestRecordEncryption = atRestRecords ?? ProductAtRestDefault,
             StorageEngineType = engineType,
-            // The fair PK comparison intentionally isolates the record-layout variable: the legacy
-            // arm opts out of the AutoFixedWidthRecords default so it measures true variable-length
-            // records; the fixed-width arm forces FixedWidthRecordLayout.
-            AutoFixedWidthRecords = !fixedWidth,
+            // The fair PK comparison isolates the record-layout variable, and this is the only place it can
+            // be isolated: AutoFixedWidthRecords (product default TRUE since #359) turns every NEW table
+            // that declares a PRIMARY KEY into fixed-width records, so an arm that merely declines to force
+            // the layout still measures the fixed-width layout whatever its label says. `legacyVariableLength`
+            // is the opt-out the fair-PK legacy arm needs — without it the legacy arm read 223,728 INSERT /
+            // 562,562 UPDATE against the fixed-width arm's 230,591 / 582,384 (2026-10-11, ~3 % apart) while
+            // its label promises the layout the plan last measured 2,3x apart on UPDATE. `fixedWidth` forces
+            // the layout instead; every other caller keeps the product's auto resolver untouched.
+            AutoFixedWidthRecords = legacyVariableLength ? false : !fixedWidth,
             FixedWidthRecordLayout = fixedWidth,
             // §4b inline capacity — SHARPCOREDB_INLINE_BYTES. Unset keeps the PRODUCT default (24 since the
             // 2026-09-22 owner decision; it was 16 from §4b's landing on 2026-09-16), so the arms track it;
@@ -3589,6 +3595,7 @@ class Program
         string? defaultVariant = null,
         bool noEncrypt = true,
         bool? atRestRecords = null,
+        bool legacyVariableLength = false,
         bool profileUpdateArm = false,
         bool profileDeleteArm = false,
         bool profileInsertArm = false,
@@ -3619,7 +3626,7 @@ class Program
             }
             else
             {
-                config = BuildConfig(engineType, fixedWidth, noEncrypt, atRestRecords);
+                config = BuildConfig(engineType, fixedWidth, noEncrypt, atRestRecords, legacyVariableLength);
             }
 
             using var db = (SharpCoreDB.Database)factory.Create(
@@ -3717,7 +3724,12 @@ class Program
 
             var pkFiles = TableFileSizes(db);
             Console.WriteLine($"    [diag] pk INSERT shape: {(useArrayInsert ? "dictionary-free object[] columns=" + string.Join(",", PkColumns) : "List<Dictionary<string,object>>")}");
-            Console.WriteLine($"    [diag] pk INSERT fixedWidth={fixedWidth} noEncrypt={noEncrypt} "
+            // Resolved values, never the parameters: this line describes the arm the reader is looking at,
+            // and in the useDefaultConfig branch the parameters carry their defaults while the CONFIG is the
+            // product's default posture — the encrypted stock arm printed `noEncrypt=True` ("no encryption")
+            // until 2026-10-11, which is the opposite of what that arm measures.
+            Console.WriteLine($"    [diag] pk INSERT fixedWidth={config.FixedWidthRecordLayout} noEncrypt={config.NoEncryptMode} "
+                + $"autoFixedWidth={config.AutoFixedWidthRecords} "
                 + $"atRest={config.EnableAtRestRecordEncryption} IsFixedWidthRecords={pkFixedWidth} inline={pkInline}");
             Console.WriteLine($"    [diag] pk INSERT engine allocated {pkEngineAlloc:N0} B "
                 + $"({pkEngineAlloc / InsertCount:N0} B/row) · gen0 {pkEngineGen0} "
@@ -3970,6 +3982,16 @@ class Program
             ReadTime = MedianOf(runs, static r => r.ReadTime),
             UpdateTime = MedianOf(runs, static r => r.UpdateTime),
             DeleteTime = MedianOf(runs, static r => r.DeleteTime),
+            // Harness defect (found 2026-10-11 while publishing the current numbers; no plan section owns
+            // it — `--pk` is the measurement path): this helper builds its own median object instead of
+            // going through MedianArm/RunLadderMedianOf, and it did not stamp the rep count, so every
+            // pk_comparative_*.json — the archive the plan publishes BESIDE the fair-PK table (§2
+            // deliverable 1) so a reader can reproduce the protocol — claimed `"Reps": 1` while the run
+            // measured 3 reps after 8 discarded warm-ups. BenchmarkResult.Reps exists precisely to tell a
+            // median from a single-shot reading "without the console log", so the archive was telling the
+            // reader the opposite of what was measured. Fixed here and in the shared MedianOf overload;
+            // the guard is BenchmarkProtocolArchiveTests (Category=Manual), red on the pre-fix binary.
+            Reps = runs.Count,
             // S1: a median is a fresh object, so the comparator's regime has to be carried across
             // explicitly or the archived median loses the very thing S1 exists to record.
             SqlitePragmas = runs.Count > 0 ? runs[0].SqlitePragmas : null,
@@ -4062,7 +4084,9 @@ class Program
         Console.WriteLine($"(fair-PK arms: {ResolveWarmupReps()} discarded warm-up rep(s) each, then the measured reps — median time per phase is reported)");
 
         Console.WriteLine("━━━ SharpCoreDB (SQL, PK, legacy variable-length, plaintext) ━━━");
-        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType));
+        // The legacy arm opts out of the auto resolver so it measures what its banner promises
+        // (BuildConfig's `legacyVariableLength`); every other arm keeps the product default.
+        var scdb = RunPkMedian(() => RunSharpCoreDBPk(engineType, legacyVariableLength: true));
         Console.WriteLine();
 
         Console.WriteLine("━━━ SharpCoreDB (SQL, PK, fixed-width, plaintext) ━━━");
@@ -4085,15 +4109,22 @@ class Program
         Console.WriteLine($"║ SharpCoreDB FW      plaintext│ {scdbFw.InsertOpsPerSec,10:N0} │ {scdbFw.ReadOpsPerSec,8:N0} │ {scdbFw.UpdateOpsPerSec,8:N0} │ {scdbFw.DeleteOpsPerSec,8:N0} ║");
         Console.WriteLine($"║ SharpCoreDB FW      at-rest  │ {scdbFwAtRest.InsertOpsPerSec,10:N0} │ {scdbFwAtRest.ReadOpsPerSec,8:N0} │ {scdbFwAtRest.UpdateOpsPerSec,8:N0} │ {scdbFwAtRest.DeleteOpsPerSec,8:N0} ║");
         Console.WriteLine($"║ SQLite                       │ {sqlite.InsertOpsPerSec,10:N0} │ {sqlite.ReadOpsPerSec,8:N0} │ {sqlite.UpdateOpsPerSec,8:N0} │ {sqlite.DeleteOpsPerSec,8:N0} ║");
-        Console.WriteLine($"\n  UPDATE gap vs SQLite: legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   "
+        // State the direction: without it "gap 0,5x" reads as "we are ahead" to a reader who assumes the
+        // ratio is ours-over-theirs, and the fair-PK table is the one artifact readers copy numbers from.
+        Console.WriteLine("\n  Gap = SQLite's ops/s ÷ that arm's ops/s, so a value ABOVE 1,0x means SQLite is FASTER");
+        Console.WriteLine("  and a value below 1,0x means the SharpCoreDB arm is faster.");
+        Console.WriteLine($"  INSERT gap vs SQLite: legacy {sqlite.InsertOpsPerSec / (double)scdb.InsertOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.InsertOpsPerSec / (double)scdbFw.InsertOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F1}x");
+        Console.WriteLine($"  READ   gap vs SQLite: legacy {sqlite.ReadOpsPerSec / (double)scdb.ReadOpsPerSec:F1}x   "
+            + $"fixed-width {sqlite.ReadOpsPerSec / (double)scdbFw.ReadOpsPerSec:F1}x   "
+            + $"fixed-width at-rest {sqlite.ReadOpsPerSec / (double)scdbFwAtRest.ReadOpsPerSec:F1}x");
+        Console.WriteLine($"  UPDATE gap vs SQLite: legacy {sqlite.UpdateOpsPerSec / (double)scdb.UpdateOpsPerSec:F1}x   "
             + $"fixed-width {sqlite.UpdateOpsPerSec / (double)scdbFw.UpdateOpsPerSec:F1}x   "
             + $"fixed-width at-rest {sqlite.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F1}x");
         Console.WriteLine($"  DELETE gap vs SQLite: legacy {sqlite.DeleteOpsPerSec / (double)scdb.DeleteOpsPerSec:F1}x   "
             + $"fixed-width {sqlite.DeleteOpsPerSec / (double)scdbFw.DeleteOpsPerSec:F1}x   "
             + $"fixed-width at-rest {sqlite.DeleteOpsPerSec / (double)scdbFwAtRest.DeleteOpsPerSec:F1}x");
-        Console.WriteLine($"  INSERT gap vs SQLite: legacy {sqlite.InsertOpsPerSec / (double)scdb.InsertOpsPerSec:F1}x   "
-            + $"fixed-width {sqlite.InsertOpsPerSec / (double)scdbFw.InsertOpsPerSec:F1}x   "
-            + $"fixed-width at-rest {sqlite.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F1}x");
         Console.WriteLine($"  At-rest tax (same arm shape): INSERT {scdbFw.InsertOpsPerSec / (double)scdbFwAtRest.InsertOpsPerSec:F2}x   "
             + $"READ {scdbFw.ReadOpsPerSec / (double)scdbFwAtRest.ReadOpsPerSec:F2}x   "
             + $"UPDATE {scdbFw.UpdateOpsPerSec / (double)scdbFwAtRest.UpdateOpsPerSec:F2}x   "
@@ -5186,6 +5217,11 @@ class Program
 
         return new BenchmarkResult
         {
+            // Same stamp as MedianArm/RunLadderMedianOf, for the same reason as in RunPkMedian: a median
+            // must never describe itself as a single-shot reading (Reps defaults to 1). Nothing reads this
+            // field today — the gate and dual-mode payloads carry their own `reps` — but every median
+            // producer in this harness stamps it, so a future reader of this result cannot be misled.
+            Reps = runs.Count,
             InsertOpsPerSec = Median(runs, static r => r.InsertOpsPerSec),
             ReadOpsPerSec = Median(runs, static r => r.ReadOpsPerSec),
             UpdateOpsPerSec = Median(runs, static r => r.UpdateOpsPerSec),

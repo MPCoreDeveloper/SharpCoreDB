@@ -1,12 +1,55 @@
 # SharpCoreDB — Comparative Benchmark Report
 
-**Date:** 2026-03-06 (original) · **Updated:** 2026-08-28 (v2.0.0 final)
-**SharpCoreDB Version:** 1.7.0 (original) → **2.0.0** (current)
+**Date:** 2026-03-06 (original) · **Updated:** 2026-10-11 (v2.1.0, .NET 11)
+**SharpCoreDB Version:** 1.7.0 (original) → **2.1.0** (current)
 **Test Machine:** Intel i7-10850H (6C/12T), 32 GB RAM, Windows 10, NVMe SSD
 
 ---
 
-## ⚡ v2.0.0 Update (final, 2026-08-28)
+## ⚡ v2.1.0 Update (2026-10-11, .NET 11 / C# 15)
+
+Re-measured with the same harness, same schema and same machine as the v2.0.0 run below, on the
+promoted tree `92794084` (v2.1.0). Ladder: `comparative_20261011_125436.json` (median of 3 runs);
+fair-PK: `pk_default_20261011_125413.json`. **Every ratio is same-run**, against that run's own SQLite
+and LiteDB arms.
+
+**Document CRUD shape (no PK — the workload of this report), ops/sec, median of 3:**
+
+| Database | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| **SharpCoreDB v2.1.0 (Direct)** | 186.718 | **191.474** 🥇 | 221.092 | 326.445 |
+| **SharpCoreDB v2.1.0 (StructRow)** | **187.838** 🥇 | 169.684 | — | — |
+| **SharpCoreDB v2.1.0 (SQL)** | 144.706 | 105.250 | 176.570 | 134.022 |
+| **SQLite** | 175.138 | 109.429 | **717.926** 🥇 | **975.609** 🥇 |
+| **LiteDB** | 70.410 | 15.774 | 11.038 | 14.880 |
+
+`—` = that phase is deliberately not run on the StructRow arm (plan §5.5); the Direct row carries
+those cells through the same batch call path, table and indexes. **BLite 4.0.1 is still skipped**, for
+the same reason as in 2026-03-06: its `BsonDocumentBuilder` has no public setter API
+(`Set`/`Add`/`Write` all missing), so `DynamicCollection.CreateDocument()` compiles but cannot be
+populated — the harness prints that reason rather than a zero.
+
+**Headline takeaways:**
+
+- ✅ **READ beats SQLite on the Direct and StructRow APIs** — 191.474 / 169.684 vs 109.429 ops/sec
+  (**1,75x / 1,55x**), and INSERT is ahead on both (186.718 / 187.838 vs 175.138, **1,07x**).
+- ✅ **Every CRUD operation beats LiteDB** on the best API — INSERT 2,7x, READ 12,1x, UPDATE 20,0x,
+  DELETE 21,9x.
+- ⚠️ **The generic document shape still trails SQLite on UPDATE/DELETE** (Direct 221.092/326.445 =
+  **0,31x / 0,33x**; SQL path 0,25x / 0,14x) — improved over the v2.0 reading of ~0,1–0,2x by the
+  in-place UPDATE/DELETE work, but not closed. On the **fair-PK shape**, where that work is the design
+  target, the default posture reads UPDATE 398.709 (0,53x) and DELETE 509.941 (0,47x) with INSERT
+  1,17x and READ 1,13x ahead — the fair-PK table and the encryption posture are in
+  [`docs/manual/performance.md`](../manual/performance.md) §7.1 and
+  [`docs/benchmarks/default-config-pk.md`](default-config-pk.md).
+- ⚠️ **The SQL path pays for the generic planner** — same engine, same table: Direct is 1,29x faster
+  on INSERT, 1,82x on READ, 1,25x on UPDATE and 2,44x on DELETE. If a hot path is SQL, that is the
+  cost of the parse/resolve layer, measured rather than inferred.
+
+---
+
+
+## ⚡ v2.0.0 Update (historical, 2026-08-28)
 
 The v2.0 performance-first release **closed the benchmark gap**. Same harness, same schema,
 same machine, same protocol — two-run range (`comparative_20260828_*.json`):
@@ -26,8 +69,9 @@ same machine, same protocol — two-run range (`comparative_20260828_*.json`):
 - ✅ **Every CRUD operation beats LiteDB** — reads ~5–8x, updates ~5x, deletes ~2–10x.
 - ✅ **INSERT remains SQLite-competitive** (0.6–0.9x, within 15–20%).
 - ⚠️ **Single-row UPDATE/DELETE still behind SQLite** (~0.1–0.2x) — SQLite's fixed-length C
-  record format writes in place; SharpCoreDB row stores still append-on-update. This is the
-  top v2.1 priority.
+  record format writes in place; SharpCoreDB row stores still append-on-update. This was the top v2.1
+  priority, and the v2.1.0 section at the top of this file records what shipped and where the ratio
+  stands today (fair-PK default posture UPDATE 0,53x / DELETE 0,47x).
 - ✅ **Columnar SIMD analytics remain in a class of their own** — `GROUP BY` SUM over 10M rows
   in ~2 ms vs ~1,300 ms for SQLite (**~682x**).
 

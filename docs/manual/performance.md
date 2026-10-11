@@ -1,40 +1,64 @@
 # 7. Performance Guide
 
-> **The headline:** SharpCoreDB v2.0.0.3 is the current *performance-first* release on the v2.x
-> engine line. The v1.x benchmark gap (point reads/updates/deletes ~16–52x behind SQLite) is
-> closed: on the fair-PK harness (median-of-3, tuned config) **UPDATE is ~0.8–1.7x of SQLite,
-> INSERT is competitive, and DELETE ~2.1–3.5x** — see §7.1 for the current table.
+> **The headline:** SharpCoreDB v2.1.0 is the current *performance-first* release, on the .NET 11 /
+> C# 15 line. The v1.x gap (point reads/updates/deletes ~16–52x behind SQLite, because every update
+> appended a new row) is closed as an engine behaviour, and re-measured on 2026-10-11 (`92794084`)
+> the **default posture is INSERT 1,17x (1,03–1,27) and READ 1,13x (1,12–1,15) ahead of SQLite** while
+> **UPDATE 0,53x (0,42–0,53) and DELETE 0,47x (0,46–0,62)** stay behind — see §7.1.
 >
 > This chapter explains **when SharpCoreDB is fastest**, how to write code that gets there, and —
-> honestly — where SQLite is still ahead (and why). Run the current fair-PK numbers yourself with
-> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release, `--pk`), or use the published
-> `docs/2.0.0.3_WHAT_CHANGED.md` / `docs/benchmarks/default-config-pk.md` results.
+> honestly — where SQLite is still ahead (and why). Run the current numbers yourself with
+> `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (Release; `--pk-default` for the product
+> posture, `--pk` for the record-layout A/B), or read `docs/BENCHMARK_RESULTS.md`.
 
 ---
 
-## 7.1 The current v2.0.0.3 numbers (fair-PK harness)
+## 7.1 The current v2.1.0 numbers
 
-Harness: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` fair-PK mode (`--pk`, median of 3
-runs), fixed-width Columnar fast path, ascending-PK batches. Methodology and SQLite reference:
-`docs/2.0.0.3_WHAT_CHANGED.md` and `docs/benchmarks/default-config-pk.md`.
+Harness: `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` — `--pk-default` (the product posture:
+pure `DatabaseConfig` with the engine pinned to `AppendOnly`, encryption on, no harness flags) and
+`--pk` (the tuned record-layout A/B), median of 3 runs, fixed-width Columnar fast path, ascending-PK
+batches, measured 2026-10-11 on `92794084`. Every ratio is **same-run** against that run's own SQLite
+arm, because SQLite's own reference drifts between sessions — ratios are the comparable part, never
+lone absolutes.
 
-| Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
+**Default posture (`--pk-default`, encryption on) — ratio is SharpCoreDB ÷ SQLite, so > 1,00x means
+SharpCoreDB is ahead; the parenthesised range is the paired per-rep range, and one that straddles
+1,00x means the cell sits inside this box's noise and must be re-run, not rounded:**
+
+| Operation (ops/s) | **SharpCoreDB v2.1.0 (default, encrypted)** | SQLite (same run) | ratio |
 |---|---:|---:|---:|
-| **UPDATE** | **~163–245K** | ~270–315K | ~0.8–1.7x of SQLite |
-| **DELETE** | **~106–172K** | ~353–420K | ~2.1–3.5x |
-| **INSERT** | **~125–152K** | ~186–190K | competitive |
-| **READ** | **~72–110K** | ~95–107K | competitive |
+| **INSERT** | **204.263** | 174.469 | **1,17x** (1,03–1,27) |
+| **READ** | **134.634** | 116.916 | **1,13x** (1,12–1,15) |
+| **UPDATE** | **398.709** | 773.323 | 0,53x (0,42–0,53) |
+| **DELETE** | **509.941** | 1.085.140 | 0,47x (0,46–0,62) |
+
+**Record-layout A/B (`--pk`, tuned config, plaintext, two runs) — the ratio column here is SQLite ÷
+arm, exactly as the harness prints it, so > 1,00x means SQLite is faster:**
+
+| Arm (ops/s, range of two runs) | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| fixed-width, plaintext | 227–237K | 138–142K | **534–629K** | **687–716K** |
+| fixed-width, at-rest | 191–192K | 107–113K | 292–329K | 455–488K |
+| legacy variable-length, plaintext | 218–233K | 134–175K | 360–372K | 425–466K |
+| SQLite (same runs) | 177–183K | 112–113K | 796–811K | 999K–1,04M |
+| gap vs SQLite (fixed-width, plaintext) | 0,8x | 0,6–0,8x | 1,3–1,5x | 1,4–1,5x |
 
 **Read the table honestly:**
 
-- ✅ **UPDATE is now competitive with SQLite on the keyed fast path** (~0.8–1.7x) — fixed-width
-  record layout (default for new PK tables) makes UPDATE an in-place overwrite, and strictly
-  ascending `pk = literal` batches run as one contiguous range (B8/B9).
-- ⚠️ **DELETE still trails SQLite ~2.1–3.5x** — SQLite’s row store is extremely fast at pure
-  deletes; closing the rest of that gap is the tracked v2.1 target.
-- ⚠️ The **pure default config** runs ~1.3–1.6x slower than the tuned harness because the
-  file-level wrapper still pays AES work while per-record at-rest encryption is off (documented
-  `NoEncryptMode` root cause, see `docs/benchmarks/default-config-pk.md`).
+- ✅ **INSERT and READ are ahead of SQLite in the default posture** (1,17x and 1,13x, neither range
+  straddling 1,00x), and the fixed-width layout is **1,2–1,5x ahead of the legacy variable-length
+  layout** on UPDATE/DELETE — the layout change paying off, measured with the layout as the only
+  variable.
+- ⚠️ **SQLite is still faster on point UPDATE and DELETE** — 1,3–1,5x / 1,4–1,5x on the tuned
+  fixed-width arm and ~1,9x / ~2,1x in the default posture. Earlier published claims that the
+  fair-PK layout was *ahead* on UPDATE/DELETE were measured while the harness left the SQLite arm
+  allocating a command and two parameters per row; SQLite's own PK references jumped **3,05x** once
+  the comparator held one prepared command (288.108 → 878.557 UPDATE, 385.116 → 1.172.704 DELETE),
+  so those readings are superseded, not "better".
+- ⚠️ **Per-record encryption costs 1,2–1,9x** on the otherwise-identical fixed-width arm (INSERT
+  1,18–1,25x, READ 1,22–1,32x, UPDATE 1,83–1,91x, DELETE 1,41–1,57x) — a real, measured at-rest tax
+  rather than a hidden one.
 - ✅ **Analytics remain the crown jewel** — SIMD columnar aggregates run far faster than SQLite
   on `GROUP BY` SUM workloads (see §7.5).
 

@@ -29,14 +29,19 @@ Use it when you need:
 
 > **Current release: v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
 > NuGet.org** (all 27 packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
-> ships at 16 by default on both storage paths (+12–19 % on the batched multi-row INSERT shape, per
-> the tracked measurement), the overflow arena appends a row's payloads in one call instead of one
-> file open per value, and in-place UPDATE/DELETE with deferred index maintenance put the
-> fixed-width fair-PK layout **ahead of SQLite on UPDATE (0.8×) and DELETE (0.5×)**.
+> ships at 24 bytes by default on both storage paths (worth **+34 %** on the batched multi-row INSERT
+> shape and **0,63× → 0,87×** on the tracked fair-PK INSERT ratio), the overflow arena appends a row's payloads in one call instead of one
+> file open per value, and in-place UPDATE/DELETE with deferred index maintenance now run the
+> fixed-width fair-PK layout **1,2–1,5× ahead of the legacy variable-length layout** on UPDATE and DELETE.
 > Validated by **2,897 tests across 16 suites (0 failed, 16 skipped)** and the write-path regression
-> gate (PASSED). Honest caveats: INSERT is still ~1.4× behind SQLite on the fair-PK shape, the
-> PageBased engine's UPDATE is 4.9× behind, and the pure default (encrypted) config is 1.3–1.6×
-> behind the `NoEncryptMode` raw-speed posture. Full notes:
+> gate (PASSED). Benchmarks re-measured and republished on 2026-10-11 (`92794084`), every ratio
+> same-run: on the default-posture fair-PK shape SharpCoreDB is **INSERT 1,17× (1,03–1,27) and READ
+> 1,13× (1,12–1,15) ahead** of SQLite and **UPDATE 0,53× (0,42–0,53) and DELETE 0,47× (0,46–0,62)**
+> of it, and per-record encryption costs the otherwise-identical fixed-width arm **1,2–1,9×**. This
+> corrects the earlier "ahead on UPDATE/DELETE" reading, which was taken while the benchmark left the
+> *SQLite* arm allocating a command and two parameters per row — SQLite's own PK UPDATE/DELETE
+> references rose **3,05×** (288.108 → 878.557 / 385.116 → 1.172.704) once the comparator held one
+> prepared command, so that band is superseded, not better. Full notes:
 > [`docs/2.1.0-RC.3_WHAT_CHANGED.md`](docs/2.1.0-RC.3_WHAT_CHANGED.md) — the RC.3 validation record;
 > the promotion itself re-verified the core suite at **1995 / 0 failed** and is documented in
 > [`docs/net11/PROMOTION_TO_MAIN.md`](docs/net11/PROMOTION_TO_MAIN.md).
@@ -51,7 +56,9 @@ Use it when you need:
 > UPDATE ~270–315K, DELETE ~353–420K, INSERT ~186–190K, READ ~95–107K). Honest default-config
 > caveat: the pure default config runs ~1.3–1.6x slower because the file-level wrapper still pays
 > AES work while per-record at-rest encryption is off (`NoEncryptMode` root cause, P3d). Full
-> report: [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
+> note: the SQLite references in this block are the pre-comparator-correction ones described above,
+> so read them as that line's history rather than as today's reference. Full report:
+> [`docs/2.0.0.2_WHAT_CHANGED.md`](docs/2.0.0.2_WHAT_CHANGED.md) and
 > [`docs/benchmarks/default-config-pk.md`](docs/benchmarks/default-config-pk.md).
 
 > Full documentation: **`docs/INDEX.md`** · Manual: **`docs/manual/README.md`** · Performance: **`docs/manual/performance.md`**
@@ -84,22 +91,35 @@ Use it when you need:
 
 ## What's new in v2.x (current engine line)
 
-The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite**) is closed. The
-numbers below are the **fair-PK harness (median-of-3, tuned config, ascending-PK batches)** from
-`docs/2.0.0.2_WHAT_CHANGED.md`:
+The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite** because every update
+appended a new row) is closed as an engine behaviour. The numbers below are re-measured on
+**2026-10-11** (`92794084`, v2.1.0 / .NET 11) on the **fair-PK harness (median of 3 runs, `id INTEGER
+PRIMARY KEY`, ascending-PK batches)**, and every ratio is taken against **that run's own SQLite arm** —
+this project reports ratios, never lone absolutes, because SQLite's own reference drifts between runs.
 
-| Operation (ops/s) | **SharpCoreDB v2.x (Columnar fixed-width)** | SQLite | gap |
+**Default posture, `--pk-default` (pure `DatabaseConfig`: encryption on, no harness flags).** Ratio is
+SharpCoreDB ÷ SQLite, so **> 1,00x means SharpCoreDB is ahead**; the range is the paired per-rep range,
+and one that straddles 1,00x means the cell is inside this box's noise:
+
+| Operation (ops/s) | **SharpCoreDB v2.1.0 (default, encrypted)** | SQLite (same run) | ratio |
 |---|---:|---:|---:|
-| **UPDATE** | **~163–245K** | ~270–315K | ~0.8–1.7x of SQLite |
-| **DELETE** | **~106–172K** | ~353–420K | ~2.1–3.5x |
-| **INSERT** | **~125–152K** | ~186–190K | competitive |
-| **READ** | **~72–110K** | ~95–107K | competitive |
+| **INSERT** | **204.263** | 174.469 | **1,17x** (1,03–1,27) ✅ |
+| **READ** | **134.634** | 116.916 | **1,13x** (1,12–1,15) ✅ |
+| **UPDATE** | **398.709** | 773.323 | **0,53x** (0,42–0,53) |
+| **DELETE** | **509.941** | 1.085.140 | **0,47x** (0,46–0,62) |
+
+**Record-layout A/B on the tuned `--pk` harness** — same workload, three interchangeable layouts,
+plaintext so the layout is the only variable: the **fixed-width** layout is **1,2–1,5× ahead of the
+legacy variable-length layout** on UPDATE (534–629K vs 360–372K) and DELETE (687–716K vs 425–466K)
+while level on INSERT/READ. Per-record encryption costs the same fixed-width arm **1,2–1,9×**
+(INSERT 1,18–1,25× · READ 1,22–1,32× · UPDATE 1,83–1,91× · DELETE 1,41–1,57×).
 
 Honest notes: these are ascending-PK batches on the fixed-width Columnar fast path — other query
-shapes fall back to correct-but-slower generic paths. The **pure default config** runs ~1.3–1.6x
-slower than `NoEncryptMode=true` (documented `NoEncryptMode` root cause, see
-`docs/benchmarks/default-config-pk.md`). SQLite comparison, honest guidance and the API ladder:
-**[Performance Guide](docs/manual/performance.md)**. Roadmap:
+shapes fall back to correct-but-slower generic paths. SQLite's PK UPDATE/DELETE references are really
+~0,80M / ~1,00M ops/s on this box; the ~270–315K / ~353–420K references published earlier were
+measured while the harness left the SQLite arm allocating a command and two parameters per row, so
+they understate SQLite and are superseded. Full tables and the API ladder:
+**[Performance Guide](docs/manual/performance.md)** · **[`docs/BENCHMARK_RESULTS.md`](docs/BENCHMARK_RESULTS.md)**. Roadmap:
 **[`docs/performance/V2_PERFORMANCE_PLAN.md`](docs/performance/V2_PERFORMANCE_PLAN.md)**.
 
 Headline changes:

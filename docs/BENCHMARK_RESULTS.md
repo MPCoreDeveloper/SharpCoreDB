@@ -4,13 +4,59 @@
 - OS: Windows 11
 - CPU: Intel i7-10850H @ 2.70GHz (6 cores/12 threads)
 - RAM: 16GB
-- Runtime: .NET 10.0.4, RyuJIT x86-64-v3
-- Benchmark Tool: BenchmarkDotNet v0.15.8
-- **Last Updated: March 14, 2026** · **v2.0.0 update: August 28, 2026**
+- Runtime: .NET 10.0.4 (the v1.x BenchmarkDotNet suite further down) · **.NET 11 (C# 15 preview), RyuJIT x86-64-v3** for the v2.1.0 comparative numbers
+- Benchmark Tool: BenchmarkDotNet v0.15.8 (v1.x suite) · `tests/benchmarks/SharpCoreDB.Benchmarks.Comparative` (v2.1.0)
+- **Last Updated: March 14, 2026** · **v2.0.0 update: August 28, 2026** · **v2.1.0 update: October 11, 2026**
 
 ---
 
-## ⚡ v2.0.0 Update (August 28, 2026)
+## ⚡ v2.1.0 Update (October 11, 2026, .NET 11)
+
+Re-measured on the promoted tree `92794084` (v2.1.0) with the same harness. **Every ratio below is
+same-run** — SQLite is measured in the same process run, because its own reference drifts between
+sessions and ratios, not lone absolutes, are the comparable part. Results:
+`pk_default_20261011_125413.json` (fair-PK), `comparative_20261011_125436.json` (ladder).
+
+**Fair-PK shape, default posture (`--pk-default`: pure `DatabaseConfig`, encryption on, no harness
+flags, `id INTEGER PRIMARY KEY`) — ratio is SharpCoreDB ÷ SQLite, so > 1,00x means SharpCoreDB is
+ahead, and the range is the paired per-rep range:**
+
+| Operation | SharpCoreDB v2.1.0 (default, encrypted) | SQLite (same run) | ratio |
+|---|---:|---:|---:|
+| INSERT | **204.263** | 174.469 | **1,17x** (1,03–1,27) |
+| READ | **134.634** | 116.916 | **1,13x** (1,12–1,15) |
+| UPDATE | **398.709** | 773.323 | 0,53x (0,42–0,53) |
+| DELETE | **509.941** | 1.085.140 | 0,47x (0,46–0,62) |
+
+**Document CRUD shape (no PK, the v1.x-era workload of this file), median of 3:**
+
+| Database | INSERT | READ | UPDATE | DELETE |
+|---|---:|---:|---:|---:|
+| SharpCoreDB (Direct) | 186.718 | **191.474** 🥇 | 221.092 | 326.445 |
+| SharpCoreDB (StructRow) | **187.838** | 169.684 | — | — |
+| SharpCoreDB (SQL) | 144.706 | 105.250 | 176.570 | 134.022 |
+| SQLite | 175.138 | 109.429 | **717.926** 🥇 | **975.609** 🥇 |
+| LiteDB | 70.410 | 15.774 | 11.038 | 14.880 |
+
+**What closed and what is left.** The v2.0-era warning in this file — "single-row UPDATE/DELETE vs
+SQLite (append-on-update vs in-place C records) — top v2.1 priority" — is **closed as an engine
+behaviour and honestly restated as a remaining ratio**. UPDATE/DELETE now run in place with deferred
+index maintenance (fixed-width layout is the default for new PK tables), which makes the fixed-width
+fair-PK arm **1,2–1,5× faster than the legacy variable-length arm** on UPDATE/DELETE and puts the
+default posture at 0,53× / 0,47× of SQLite — but it did **not** close the ratio, because SQLite's own
+PK references on this box are ~796–811K UPDATE and ~1,00–1,04M DELETE. Earlier publications quoted
+SQLite at ~270–315K UPDATE / ~353–420K DELETE and therefore claimed the layout was *ahead*; those
+references were measured while the harness left the SQLite arm allocating a command and two
+parameters per row, and they are superseded (SQLite's PK references rose 3,05× once the comparator
+held one prepared command — 288.108 → 878.557 UPDATE, 385.116 → 1.172.704 DELETE).
+
+> Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
+> comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
+
+---
+
+
+## ⚡ v2.0.0 Update (historical, August 28, 2026)
 
 This report covers the v1.x-era BenchmarkDotNet micro-benchmark suite. The **v2.0 performance-first
 release** additionally closed the comparative CRUD gap against SQLite/LiteDB — measured on the
@@ -21,8 +67,9 @@ release** additionally closed the comparative CRUD gap against SQLite/LiteDB —
 - **Batch INSERT is SQLite-competitive** — 91–133K vs 145–150K ops/s
 - **SIMD columnar analytics remain dominant** — `GROUP BY` SUM over 10M rows in ~2 ms
 
-Remaining known gap: single-row UPDATE/DELETE vs SQLite (append-on-update vs in-place C records) —
-top v2.1 priority.
+Remaining known gap at that time: single-row UPDATE/DELETE vs SQLite (append-on-update vs in-place C
+records) — **closed as an engine behaviour in v2.1.0** (UPDATE/DELETE now run in place with deferred
+index maintenance); see the v2.1.0 section above for where the ratio stands today.
 
 > Full analysis + API ladder: [`docs/manual/performance.md`](manual/performance.md) ·
 > comparative report: [`docs/benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md`](benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md)
