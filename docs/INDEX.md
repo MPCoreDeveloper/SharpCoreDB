@@ -14,7 +14,7 @@ guide explaining when SharpCoreDB is fastest.
 - `manual/data-modeling.md` — types, ULID/rowid keys, constraints, collation
 - `manual/indexing.md` — hash, B-tree, expression, partial indexes
 - `manual/query.md` — SQL dialect, aggregates, window functions, joins, subqueries
-- `manual/performance.md` — ⭐ **Performance Guide** (measured v2.0 numbers, API ladder, examples)
+- `manual/performance.md` — ⭐ **Performance Guide** (measured v2.1 numbers, API ladder, examples)
 - `manual/simd-vector.md` — SIMD analytics, vector search, GraphRAG, time-series
 - `manual/server.md` — gRPC/REST server, security, multitenancy, observability
 - `manual/providers.md` — ADO.NET, EF Core, Dapper, linq2db, YesSql, Sync
@@ -42,7 +42,7 @@ guide explaining when SharpCoreDB is fastest.
 - `CHANGELOG.md`
 - `CONTRIBUTING.md`
 - `UseCases.md`
-- `manual/README.md` — the v2.0 manual (see Section 0)
+- `manual/README.md` — the v2.1 manual (see Section 0)
 
 
 ## 2. Package Documentation (src)
@@ -177,10 +177,10 @@ guide explaining when SharpCoreDB is fastest.
   2026-09-17, and the remaining gaps
 - `2.0.0.2_WHAT_CHANGED.md` — ⭐ **release notes (2.0.0.2)**: the 2.x-vs-1.9.x major steps + the
   2.0.0.2 hardening/perf batch
-- `CHANGELOG.md` — full per-version change log (`[2.0.0.2]`, new `[Unreleased]` on top)
+- `CHANGELOG.md` — full per-version change log (`[2.1.0]`, new `[Unreleased]` on top)
 - `manual/upgrade-and-downgrade.md` — compatibility matrix & downgrade policy
 - `benchmarks/default-config-pk.md` — default-config fair-PK benchmark + NoEncryptMode root cause
-- `manual/performance.md` — ⭐ **Performance Guide**: when SharpCoreDB is fastest + v2.0 results
+- `manual/performance.md` — ⭐ **Performance Guide**: when SharpCoreDB is fastest + v2.1 results
 - `performance/V2_PERFORMANCE_PLAN.md` — v2.x performance roadmap, root-cause analysis, .NET 11 plan
 - `benchmarks/SHARPCOREDB_COMPARATIVE_BENCHMARKS.md` — comparative report vs SQLite/LiteDB/BLite
 - `BENCHMARK_RESULTS.md` — micro-benchmark suite report (v1.x-era, with v2.0 update)

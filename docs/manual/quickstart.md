@@ -1,14 +1,14 @@
 # 1. Quick Start
 
 > ⚡ For maximum throughput, jump straight to the [Performance Guide](performance.md) after this
-> page. The quick start covers the idiomatic v2.0 API surface.
+> page. The quick start covers the idiomatic v2.1 API surface.
 
 ---
 
 ## 1.1 Install
 
 ```bash
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.1.0
 ```
 
 The engine targets **.NET 11** and **C# 15**. No native dependencies, no external processes —

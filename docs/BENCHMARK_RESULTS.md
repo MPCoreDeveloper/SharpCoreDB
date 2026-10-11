@@ -78,7 +78,7 @@ index maintenance); see the v2.1.0 section above for where the ratio stands toda
 
 ## Executive Summary
 
-SharpCoreDB is a high-performance embedded database for .NET 10. This document presents comprehensive benchmark results comparing SharpCoreDB against **SQLite** and **LiteDB**.
+SharpCoreDB is a high-performance embedded database for .NET 11. This document presents comprehensive benchmark results comparing SharpCoreDB against **SQLite** and **LiteDB**.
 
 ### Key Findings
 

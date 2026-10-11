@@ -1,9 +1,9 @@
-# SharpCoreDB v2.0 Manual
+# SharpCoreDB v2.1 Manual
 
-> **SharpCoreDB v2.0 — performance-first.** An embedded, encrypted, SIMD-accelerated database
+> **SharpCoreDB v2.1 — performance-first.** An embedded, encrypted, SIMD-accelerated database
 > engine and production gRPC server for .NET 11 / C# 15.
 >
-> Version 2.0.0.0 · MIT License · [GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
+> Version 2.1.0 · MIT License · [GitHub](https://github.com/MPCoreDeveloper/SharpCoreDB)
 
 ---
 

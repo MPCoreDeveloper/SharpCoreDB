@@ -36,10 +36,10 @@ This guide covers deploying SharpCoreDB with the **SCDB (SharpCore DataBase)** s
 
 ```bash
 # .NET 11 Runtime (required)
-dotnet --version  # Should show 10.0 or higher
+dotnet --version  # Should show 11.0 or higher
 
 # NuGet Package
-dotnet add package SharpCoreDB --version 2.0.0
+dotnet add package SharpCoreDB --version 2.1.0
 ```
 
 ---
