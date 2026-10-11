@@ -138,7 +138,6 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "scripts", "scripts", "{D8F9
 		scripts\commit-grpc.bat = scripts\commit-grpc.bat
 		scripts\commit-server-phase1.bat = scripts\commit-server-phase1.bat
 		scripts\create-collate-issue.ps1 = scripts\create-collate-issue.ps1
-		scripts\docs-commit.bat = scripts\docs-commit.bat
 	EndProjectSection
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "docs", "docs", "{E9A0B1C2-FD3E-4456-A78B-9C0D1E2F3A4B}"
