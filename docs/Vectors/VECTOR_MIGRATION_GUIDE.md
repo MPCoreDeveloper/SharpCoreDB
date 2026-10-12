@@ -790,8 +790,8 @@ File.Delete("old.db");
 
 ## Support & Resources
 
-- **Documentation:** [Vector Search Guide](../vectors/README.md)
-- **API Reference:** [Vector API Docs](../vectors/README.md#api-reference)
+- **Documentation:** [Vector Search Guide](../Vectors/README.md)
+- **API Reference:** [Vector API Docs](../Vectors/README.md#api-reference)
 - **Performance:** [Performance Benchmarks](../BENCHMARK_RESULTS.md)
 - **Issues:** [GitHub Issues](https://github.com/MPCoreDeveloper/SharpCoreDB/issues)
 

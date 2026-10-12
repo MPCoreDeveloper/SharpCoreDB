@@ -396,14 +396,20 @@ internal static class SqlInPredicate
     }
 
     /// <summary>
-    /// Splits a string on commas that are not inside parentheses or string literals. This is what
-    /// lets <c>IN (VALUES ('a', 'x'), ('b', 'y'))</c> be split into two tuple rows instead of four
-    /// scalar values.
+    /// Splits <paramref name="text"/> on commas that are at the top level: a comma inside a string literal,
+    /// inside parentheses, or inside a bracketed literal does not split. The bracketed-literal rule is what
+    /// keeps a <c>VECTOR</c> value (<c>[0.5, 0.25, 0.125]</c>, see <c>docs/Vectors/TECHNICAL_SPEC.md</c>) in
+    /// one piece, so the INSERT and UPDATE value splitters of every statement path agree about where a vector
+    /// literal ends. This is the single definition — the private <see cref="SplitTopLevel(string)"/> the
+    /// IN-list parser uses delegates here.
     /// </summary>
-    private static List<string> SplitTopLevel(string text)
+    /// <param name="text">The text to split.</param>
+    /// <returns>The top-level comma-separated parts, untrimmed and in order.</returns>
+    public static List<string> SplitTopLevelComma(string text)
     {
         var parts = new List<string>();
         int depth = 0;
+        int bracketDepth = 0;
         bool inString = false;
         char quote = '\0';
         int start = 0;
@@ -430,7 +436,15 @@ internal static class SqlInPredicate
             {
                 depth = Math.Max(0, depth - 1);
             }
-            else if (c == ',' && depth == 0)
+            else if (c == '[')
+            {
+                bracketDepth++;
+            }
+            else if (c == ']')
+            {
+                bracketDepth = Math.Max(0, bracketDepth - 1);
+            }
+            else if (c == ',' && depth == 0 && bracketDepth == 0)
             {
                 parts.Add(text[start..i]);
                 start = i + 1;
@@ -440,6 +454,13 @@ internal static class SqlInPredicate
         parts.Add(text[start..]);
         return parts;
     }
+
+    /// <summary>
+    /// Splits a string on commas that are not inside parentheses or string literals. This is what
+    /// lets <c>IN (VALUES ('a', 'x'), ('b', 'y'))</c> be split into two tuple rows instead of four
+    /// scalar values.
+    /// </summary>
+    private static List<string> SplitTopLevel(string text) => SplitTopLevelComma(text);
 
     /// <summary>
     /// Normalizes a column reference to the bare row-key form: strips alias qualifiers

@@ -113,6 +113,7 @@ public partial class Database
             int valueIndex = 0;
             bool inQuotes = false;
             int parenDepth = 0;
+            int bracketDepth = 0;   // bracketed literals ([0.5, 0.25] — a VECTOR value) never split
             
             for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
             {
@@ -126,7 +127,9 @@ public partial class Database
                 {
                     if (c == '(') parenDepth++;
                     else if (c == ')') parenDepth--;
-            else if (c == ',' && parenDepth == 0)
+                    else if (c == '[') bracketDepth++;
+                    else if (c == ']' && bracketDepth > 0) bracketDepth--;
+            else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
             {
                 // ✅ FIX: Strict bounds check before Slice to prevent ArgumentOutOfRangeException
                 if (valueStart < i && valueIndex < ColumnTypes.Count)
@@ -1122,9 +1125,10 @@ public partial class Database
         if (!tables.TryGetValue(tableName, out var table))
             return false;
 
-        // Parse SET clause: "col1 = val1, col2 = val2"
+        // Parse SET clause: "col1 = val1, col2 = val2". Split top-level so a vector literal
+        // (`SET embedding = [0.5, 0.25]`) stays one assignment.
         var fallbackUpdates = new Dictionary<string, object>();
-        var setParts = setClause.Split(',');
+        var setParts = SqlInPredicate.SplitTopLevelComma(setClause);
         foreach (var setPart in setParts)
         {
             var eqIdx = setPart.IndexOf('=');
@@ -1872,13 +1876,13 @@ public partial class Database
                 var colStart = rest.IndexOf('(') + 1;
                 var colEnd = rest.IndexOf(')', colStart);
                 var colStr = rest[colStart..colEnd];
-                insertColumns = [.. colStr.Split(',').Select(c => c.Trim())];
+                insertColumns = [.. SqlInPredicate.SplitTopLevelComma(colStr).Select(c => c.Trim())];
                 rest = rest[(colEnd + 1)..];
             }
 
             var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
             var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
-            var values = valuesStr.Split(',').Select(v => v.Trim().Trim('\'')).ToList();
+            var values = SqlInPredicate.SplitTopLevelComma(valuesStr).Select(v => v.Trim().Trim('\'')).ToList();
             
             Dictionary<string, object> row = [];
             var table = tables[tableName];

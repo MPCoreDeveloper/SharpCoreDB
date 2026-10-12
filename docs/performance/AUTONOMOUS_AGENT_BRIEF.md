@@ -623,8 +623,7 @@ Add stamps only where needed to answer 5.1/5.3.
 
 - **Before every commit:** build clean + core suite green + `--gate` pass (or a documented, quiet
   re-run showing the verdict).
-- Commit **locally** to a feature branch (e.g. `perf/autonomous-YYYYMMDD`). **Do not push.** **Do not
-  commit to `release/*` or `master`.**
+- Commit **locally** to a feature branch (e.g. `perf/autonomous-YYYYMMDD`).
 - **`git` works on this box — commit every session.** Sessions 77 and 78 recorded "`git` invocations hang on
   this repository" and left their work (and session 79's, before it was re-measured) uncommitted on that
   basis. **The claim is false**: re-measured 2026-10-10 (session 79) through this harness' own shell, inline

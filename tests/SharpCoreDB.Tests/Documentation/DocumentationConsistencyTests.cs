@@ -97,7 +97,9 @@ public sealed class DocumentationConsistencyTests
 
                     var resolved = Path.GetFullPath(Path.Combine(Path.GetDirectoryName(file)!, path.Replace('/', Path.DirectorySeparatorChar)));
 
-                    if (!File.Exists(resolved) && !Directory.Exists(resolved))
+                    // Case-exact, like the ubuntu runner: File.Exists/Directory.Exists are case-insensitive on
+                    // Windows and macOS, so a wrong-case link used to pass here and fail only in CI (session 85).
+                    if (!PathExistsWithExactCase(resolved))
                     {
                         failures.Add($"{Path.GetRelativePath(docsRoot, file)}:{lineNumber} -> {target}");
                     }
@@ -124,7 +126,8 @@ public sealed class DocumentationConsistencyTests
             var relative = match.Groups[1].Value;
             var resolved = Path.GetFullPath(Path.Combine(docsRoot, relative.Replace('/', Path.DirectorySeparatorChar)));
 
-            if (!File.Exists(resolved))
+            // Case-exact, so a wrong-case path fails here and not only on the case-sensitive CI runner.
+            if (!PathExistsWithExactCase(resolved))
             {
                 failures.Add(relative);
             }
@@ -223,6 +226,62 @@ public sealed class DocumentationConsistencyTests
 
         // Assert
         Assert.Empty(failures);
+    }
+
+    /// <summary>
+    /// Reports whether <paramref name="path"/> exists when every segment is matched case-sensitively, which is
+    /// how Linux — and therefore the CI runner — resolves it. <see cref="File.Exists(string)"/> and
+    /// <see cref="Directory.Exists(string)"/> are case-insensitive on Windows and macOS, so using them made a
+    /// wrong-case link pass locally and fail only on the ubuntu runner.
+    /// </summary>
+    /// <param name="path">An absolute path, expected to live inside this repository.</param>
+    /// <returns><c>true</c> if the path resolves with exactly the casing on disk.</returns>
+    private static bool PathExistsWithExactCase(string path)
+    {
+        var repositoryRoot = GetRepositoryFilePath();
+        var current = repositoryRoot;
+        var relative = Path
+            .GetRelativePath(repositoryRoot, path)
+            .Replace(Path.AltDirectorySeparatorChar, Path.DirectorySeparatorChar);
+
+        foreach (var segment in relative.Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries))
+        {
+            if (segment == ".")
+            {
+                continue;
+            }
+
+            if (segment == "..")
+            {
+                var parent = Directory.GetParent(current);
+
+                if (parent is null)
+                {
+                    return false;
+                }
+
+                current = parent.FullName;
+                continue;
+            }
+
+            if (!Directory.Exists(current))
+            {
+                return false;
+            }
+
+            var match = Directory
+                .EnumerateFileSystemEntries(current)
+                .FirstOrDefault(entry => string.Equals(Path.GetFileName(entry), segment, StringComparison.Ordinal));
+
+            if (match is null)
+            {
+                return false;
+            }
+
+            current = match;
+        }
+
+        return true;
     }
 
     private static string GetRepositoryFilePath(params string[] segments)

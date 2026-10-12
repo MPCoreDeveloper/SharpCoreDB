@@ -5,6 +5,7 @@
 
 namespace SharpCoreDB.Optimizations;
 
+using SharpCoreDB.DataStructures;
 using SharpCoreDB.Services;
 using System;
 using System.Buffers;
@@ -184,6 +185,7 @@ public static class InsertBatchOptimized
                 DataType.Ulid => 4 + 26, // length prefix + ULID string
                 DataType.String => 4 + System.Text.Encoding.UTF8.GetByteCount((string)value),
                 DataType.Blob => 4 + ((byte[])value).Length,
+                DataType.Vector => 4 + VectorBinaryCodec.EncodedLength(VectorBinaryCodec.ToVector(value)),
                 _ => 4 + 100 // default fallback
             };
         }
@@ -303,6 +305,13 @@ public static class InsertBatchOptimized
                         break;
                     case DataType.Blob:
                         bytesWritten += SerializeBlob(buffer.Slice(bytesWritten), (byte[])value);
+                        break;
+                    case DataType.Vector:
+                        // Same framing as Blob, payload from the one vector codec (EstimateRowSize budgets the
+                        // same 4 + EncodedLength bytes, so the rented buffer always fits).
+                        bytesWritten += SerializeBlob(
+                            buffer.Slice(bytesWritten),
+                            VectorBinaryCodec.Serialize(VectorBinaryCodec.ToVector(value)));
                         break;
                     default:
                         bytesWritten += SerializeString(buffer.Slice(bytesWritten), value.ToString() ?? string.Empty);

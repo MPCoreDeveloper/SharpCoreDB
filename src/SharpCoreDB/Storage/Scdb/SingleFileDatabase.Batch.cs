@@ -305,7 +305,7 @@ internal static class SingleFileDatabaseBatchExtension
                 if (colEnd > colStart)
                 {
                     var colStr = afterInto[(colStart + 1)..colEnd];
-                    insertColumns = [.. colStr.Split(',').Select(c => c.Trim())];
+                    insertColumns = [.. Services.SqlInPredicate.SplitTopLevelComma(colStr).Select(c => c.Trim())];
                     rest = afterInto[(colEnd + 1)..];
                 }
             }
@@ -374,6 +374,7 @@ internal static class SingleFileDatabaseBatchExtension
         int start = 0;
         bool inQuotes = false;
         int inParens = 0;  // ✅ FIX: Use int for parenthesis depth
+        int inBrackets = 0; // bracketed literals ([0.5, 0.25] — a VECTOR value) never split
         
         // ✅ OPTIMIZATION: Use span-based iteration to avoid repeated string allocations
         for (int i = 0; i < span.Length; i++)
@@ -396,8 +397,16 @@ internal static class SingleFileDatabaseBatchExtension
                 {
                     inParens--;
                 }
+                else if (c == '[')
+                {
+                    inBrackets++;
+                }
+                else if (c == ']' && inBrackets > 0)
+                {
+                    inBrackets--;
+                }
                 // Check for value delimiter
-                else if (c == ',' && inParens == 0)
+                else if (c == ',' && inParens == 0 && inBrackets == 0)
                 {
                     // Extract value using span (zero-copy until ToString)
                     var valueSpan = span[start..i].Trim();
@@ -514,7 +523,7 @@ internal static class SingleFileDatabaseBatchExtension
             
             // Parse SET assignments
             var updates = new Dictionary<string, object>();
-            foreach (var assignment in setClause.Split(','))
+            foreach (var assignment in Services.SqlInPredicate.SplitTopLevelComma(setClause))
             {
                 var parts = assignment.Split('=');
                 if (parts.Length != 2) continue;

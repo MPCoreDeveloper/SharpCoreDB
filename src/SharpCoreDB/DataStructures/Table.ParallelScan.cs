@@ -444,6 +444,26 @@ public partial class Table
                         var guid = value is Guid g ? g : Guid.Parse(value.ToString() ?? string.Empty);
                         guid.TryWriteBytes(cellSpan.Slice(1, 16));
                         break;
+                    case DataType.Vector:
+                        {
+                            // [null flag][int32 length][VEC\0 blob], the same framing the row codec uses. The
+                            // cell was sized by GetColumnSize(DataType.Vector); a vector wider than that cell is
+                            // refused loudly — silently truncating it (what the shared default branch below does
+                            // with an over-long payload) would leave an unreadable blob in the buffer.
+                            var vector = VectorBinaryCodec.ToVector(value);
+                            int vectorLength = VectorBinaryCodec.EncodedLength(vector);
+                            if (cellSpan.Length < 5 + vectorLength)
+                            {
+                                throw new InvalidOperationException(
+                                    $"VECTOR value of {vectorLength} bytes does not fit the parallel-scan cell " +
+                                    $"({cellSpan.Length} bytes); read the column with the dictionary path " +
+                                    "(ExecuteQuery) instead of SelectStructParallel.");
+                            }
+
+                            BinaryPrimitives.WriteInt32LittleEndian(cellSpan.Slice(1, 4), vectorLength);
+                            _ = VectorBinaryCodec.WriteTo(cellSpan.Slice(5), vector);
+                            break;
+                        }
                     default:
                         var payload = dataType == DataType.Blob && value is byte[] blob
                             ? blob

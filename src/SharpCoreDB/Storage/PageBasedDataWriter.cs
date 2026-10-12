@@ -294,6 +294,14 @@ public class PageBasedDataWriter : IDisposable
                 writer.Write(blob);
                 break;
 
+            case DataType.Vector:
+                // Same framing as Blob ([int32 length][payload]); the payload is the VEC\0 blob written by
+                // the one vector codec, and ColumnarDataReader reads it back as float[].
+                var vectorBytes = VectorBinaryCodec.Serialize(VectorBinaryCodec.ToVector(value));
+                writer.Write(vectorBytes.Length);
+                writer.Write(vectorBytes);
+                break;
+
             default:
                 throw new NotSupportedException($"Data type {dataType} not supported for serialization");
         }

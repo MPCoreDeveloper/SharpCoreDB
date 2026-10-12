@@ -469,6 +469,12 @@ Header flags (future-proof):
 4. **Magic bytes** prevent accidental interpretation of regular BLOBs as vectors
 5. **Overhead:** 12 bytes per vector (< 0.2% for 1536-dim) — negligible
 
+### Where the format is implemented
+
+One type owns it: `SharpCoreDB.DataStructures.VectorBinaryCodec` (`src/SharpCoreDB/DataStructures/VectorBinaryCodec.cs`) — `Serialize` / `WriteTo` / `Deserialize`, the `[int32 length][VEC\0 blob]` framing every row codec stores in a variable-length column, and the coercion rules (`float[]`, `Memory<float>` / `ReadOnlyMemory<float>`, `IEnumerable<float>`, `double[]`, `byte[]` blob or raw float32, JSON array text, base64, `0x` hex). `SharpCoreDB.VectorSearch.VectorSerializer` delegates to it, so the engine, the similarity index and the parameter binder cannot disagree about the layout.
+
+A vector value reaches a column as a bracketed SQL literal (`INSERT INTO docs (id, embedding) VALUES (1, [0.5, 0.25])` — the VALUES tokenizer treats the commas inside the bracket as part of one literal), as a bound parameter (`float[]`, `ReadOnlyMemory<float>`, a JSON array string, …), or through the object API. A value that is not one of the accepted representations is rejected with a type error naming them, rather than being stored as its `ToString()` text.
+
 ### HNSW Index Persistence
 
 ```

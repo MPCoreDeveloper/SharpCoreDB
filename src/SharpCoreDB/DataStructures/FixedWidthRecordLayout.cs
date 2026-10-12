@@ -61,7 +61,7 @@ public sealed class FixedWidthRecordLayout
         int offset = 0;
         for (int i = 0; i < count; i++)
         {
-            int fixedSize = GetFixedEncodedSize(columnTypes[i]);
+            int fixedSize = Table.GetFixedEncodedSize(columnTypes[i]);
             if (fixedSize < 0)
             {
                 // Variable-length column: [null-flag(1)][overflow offset(4)] plus, when enabled, the inline
@@ -90,19 +90,4 @@ public sealed class FixedWidthRecordLayout
             InlineValueBytes = inline
         };
     }
-
-    // Slot size including the 1-byte null flag — must match Table.Serialization.GetFixedEncodedSize.
-    private static int GetFixedEncodedSize(DataType type) => type switch
-    {
-        DataType.Integer => 5,
-        DataType.Long => 9,
-        DataType.RowRef => 9,
-        DataType.Real => 9,
-        DataType.Boolean => 2,
-        DataType.DateTime => 9,
-        DataType.Decimal => 17,
-        DataType.Ulid => 31,
-        DataType.Guid => 17,
-        _ => -1 // String / Blob are variable-length
-    };
 }
