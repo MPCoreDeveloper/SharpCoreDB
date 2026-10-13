@@ -74,6 +74,18 @@ ignore:
 # `"flags": []`) and no status reads -- where a flag the suites did fill would answer with their coverage.
 # One report per commit needs no flag to tell the suites apart.
 #
+# Measured *after* this file landed on `master` (merge `b4b9a70d`, 2026-10-13), so that an earlier, inferred
+# reading is corrected here instead of repeated: the registry entry outlives the declaration. The commit's own
+# upload was processed against this tree -- `/commits/b4b9a70dfd6bb453ff7bcd03a00294be38c0d362/uploads/`
+# answers `count: 1`, `"flags": []`, 537 files / 58 907 lines at 04:04:43Z -- and nine minutes later `/flags/`
+# still answers `{"count": 1, "results": [{"flag_name": "unittests", "coverage": 0.0}]}`, with
+# `/flags/unittests/` live (HTTP 200, carrying a `coverage` link). So that list is driven neither by the
+# current contents of this file nor by the head upload's flags: it is a repository-level registry Codecov
+# keeps, and no directive in this file deletes an entry from it (deleting a flag is a dashboard action).
+# BLOCKED (2026-10-13, outside this repository): the lingering `unittests` registry entry itself -- the same
+# class of item as `codecov/project` below, and equally free to leave alone, because no upload carries that
+# flag and no status reads it.
+#
 # Known and deliberately not "fixed" here: `codecov/project` has never been posted in this repository.
 # Checked through the GitHub API for the promotion commit `58f297e` (when the current CI first ran, where
 # `codecov/patch` still arrived as a legacy commit status), for `204d9f8`, `4283626` and `b6bcf34`, and for
