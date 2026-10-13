@@ -1,7 +1,16 @@
+# Codecov configuration for SharpCoreDB.
+#
+# Everything here is fed by the `coverage` job in .github/workflows/ci.yml: it runs the three suites
+# tools/measure-coverage.ps1 names (SharpCoreDB.Tests, SharpCoreDB.VectorSearch.Tests,
+# SharpCoreDB.EntityFrameworkCore.Tests), writes one Cobertura report per suite and hands all three to
+# `codecov/codecov-action` in a single call. Codecov records that multi-file upload as *one* upload for the
+# commit: `/commits/<full-sha>/uploads/` answers `count: 1` with `"flags": []` for the head commit
+# 4283626d8235b4e2175097a929a9b0e1613a17b2 (the endpoint wants all 40 characters -- the abbreviated form
+# answers 404), so there is exactly one upload to wait for and no `after_n_builds` is set here (waiting for
+# three would leave every commit without a comment or a status). The 18% floor is enforced in-job by the
+# script before it uploads: these statuses report the trend, they are not the gate.
 codecov:
-  # Notify Codecov of the expected number of uploads per commit.
-  # 3 test projects run in CI (SharpCoreDB.Tests, VectorSearch.Tests, EntityFrameworkCore.Tests),
-  # all on ubuntu-latest only for coverage, so we expect exactly 3 uploads.
+  # A commit carries the report of its own push and nothing else, so do not discard it twelve hours later.
   max_report_age: off
 
 coverage:
@@ -31,7 +40,10 @@ coverage:
         if_ci_failed: error
 
 comment:
-  layout: "header, diff, flags, components, tree"
+  # `flags` and `components` are deliberately absent from the layout: the uploads carry no flag (see the
+  # comment on the upload step in ci.yml) and this file defines no `component_management`, so both sections
+  # could only ever render empty.
+  layout: "header, diff, tree"
   behavior: default
   require_changes: true
   require_base: false
@@ -55,8 +67,20 @@ ignore:
   - "**/*.g.i.cs"
   - "**/GlobalUsings.cs"
 
-flags:
-  unittests:
-    paths:
-      - src/
-    carryforward: true
+# No `flags:` section on purpose. The upload is unflagged, because a status that names no flag would
+# otherwise have no data to read, and a flag that is declared but never uploaded is exactly what the section
+# that used to live here was: `/flags/` answers `{"count": 1, "results": [{"flag_name": "unittests",
+# "coverage": 0.0}]}` -- one declared flag no upload ever carries (the commit's own upload record reads
+# `"flags": []`) and no status reads -- where a flag the suites did fill would answer with their coverage.
+# One report per commit needs no flag to tell the suites apart.
+#
+# Known and deliberately not "fixed" here: `codecov/project` has never been posted in this repository.
+# Checked through the GitHub API for the promotion commit `58f297e` (when the current CI first ran, where
+# `codecov/patch` still arrived as a legacy commit status), for `204d9f8`, `4283626` and `b6bcf34`, and for
+# the three PR heads #446/#447/#448 -- every one of them carries `codecov/patch` and none carries
+# `codecov/project`, including the commits whose base *does* have an uploaded report. The declaration above
+# is the documented structure, this file validates, and the 18% floor is enforced in-job either way, so the
+# missing status is a Codecov-side evaluation, not something this file can turn on (or off).
+# BLOCKED (2026-10-12, outside this repository): nothing here can post it; it needs a Codecov
+# dashboard/app check, and it costs this project nothing while it is absent (the patch status, the PR
+# comment and the in-job 18% floor all still report).
