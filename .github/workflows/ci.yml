@@ -224,7 +224,7 @@ jobs:
       if: ${{ !cancelled() }}
       # Pinned to a commit SHA rather than the moving `v5` tag (Sonar S7637): a tag can be repointed at a
       # different commit, a SHA cannot. Bump deliberately, with the release notes of the new version.
-      uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5
+      uses: codecov/codecov-action@303a32d7a59b442fa8d48b6a1cc6825c09c847a5 # v7.1.1
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: artifacts/coverage/*.cobertura.xml
