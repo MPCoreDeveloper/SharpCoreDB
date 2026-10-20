@@ -3,7 +3,7 @@
 **Status:** draft for owner review · **Date:** 2026-09-24 · **Branch:** `perf/autonomous-20260921`
 **Mission it extends:** `INSERT_UPDATE_PERFORMANCE_PLAN.md` (single source of truth for the INSERT/UPDATE
 campaign, now largely closed) and `AUTONOMOUS_AGENT_BRIEF.md` (session protocol).
-**Evidence base:** `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/research.md`
+**Evidence base:** `docs/performance/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/research.md`
 — a bmad-deep-recon *technical* run, 23 external sources, 26 claims in the ledger (21 verified), 3 rounds
 and 11 digests. Cited as `[n]` against that report's source appendix. **External sources support the *mechanisms* only; every
 SharpCoreDB number in this plan comes from this repository's own harness and is cited to the file it
@@ -1089,7 +1089,7 @@ moves to a §9 owner decision rather than a build, and S2 becomes the plan's mai
 
 ## 10. Provenance
 
-- **Research artifact:** `_bmad-output/planning-artifacts/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/`
+- **Research artifact:** `docs/performance/research/technical-beating-sqlite-on-every-crud-axis-2026-09-24/`
   — `research.md` (report, citation-checked clean: 23 sources, all referenced, none dangling), `digests/`
   (11 digests), `.memlog.md` (54 entries:
   23 sources, 26 claims — 21 verified, 5 unverified), `imports/` (empty: a native run, nothing imported).
