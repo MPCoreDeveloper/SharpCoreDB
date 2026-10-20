@@ -1,6 +1,3 @@
-<!-- bmad:context -->
-<!-- Verified 2026-09-24 against a1cf15de. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
-
 ## SharpCoreDB
 
 Embedded + networked database engine for .NET with AES-256-GCM encryption, a gRPC server, and a
@@ -38,6 +35,10 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
   `NEXT:` line, never from memory.
 - Status, history and feature matrix: `docs/PROJECT_STATUS.md`, `docs/CHANGELOG.md`,
   `docs/FEATURE_MATRIX.md`, `docs/INDEX.md`
+- Spec-Driven Development: Cline slash commands in `.clinerules/workflows/speckit-*.md`, backed by
+  `.specify/` (templates, PowerShell scripts, `memory/constitution.md`). Run `/speckit-constitution`
+  before the first `/speckit-specify`.
+- Research artefacts behind the performance plans: `docs/performance/research/`.
 - SIMD code must satisfy `.github/SIMD_STANDARDS.md` — `System.Runtime.Intrinsics` only, never
   `System.Numerics.Vector<T>`.
 - Regression canaries that must stay green: `ReopenRoundTripMatrixTests`, `FormatCompatPolicyTests`,
@@ -98,19 +99,17 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 - Check roadmap status against open issues before calling anything done, and mark the matching issue
   draft document resolved when roadmap work completes.
 
-<!-- /bmad:context -->
-
-## Push and landing — amended by the owner, 2026-10-11 (deliberately outside the managed block)
+## Push and landing — amended by the owner, 2026-10-11
 
 - The agent may **push feature branches** (`perf/autonomous-*`), open and update pull requests, and keep a
   feature branch current with `master`. The blanket "Never push / never commit to `master`" line was
-  removed from the managed block above (which a `bmad-project-context` refresh replaces) and from Brief
-  §9; this section is where that decision persists.
+  removed from this file's policy section and from Brief §9; this section is where that decision
+  persists.
 - **Merging into `master` or `release/*` stays an owner action.** That push runs `pack` and "Push to
   NuGet.org" (`.github/workflows/ci.yml`), and `pack/publish` is still a standing rail — so the agent
   prepares the branch and the pull request and stops there.
 
-## Working rules that outrank convenience (owner directive, 2026-09-26 — deliberately outside the managed block)
+## Working rules that outrank convenience (owner directive, 2026-09-26)
 
 - **A bug you find is yours to fix, in the same session.** A finding never leaves a session as a bare
   note, a `TODO`, a worklog bullet or a hand-off. The bar is: a test that fails before and passes

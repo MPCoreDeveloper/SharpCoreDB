@@ -1,0 +1,15 @@
+{
+  "version": "1.2.1",
+  "integration_state_schema": 1,
+  "installed_integrations": [
+    "cline"
+  ],
+  "integration_settings": {
+    "cline": {
+      "script": "ps",
+      "invoke_separator": "-"
+    }
+  },
+  "integration": "cline",
+  "default_integration": "cline"
+}
