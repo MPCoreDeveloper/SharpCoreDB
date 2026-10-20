@@ -42,6 +42,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <PackageReference Include="MessagePack" VersionOverride="2.5.303" />
     <PackageReference Include="Microsoft.SourceLink.GitHub" Version="10.0.401">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
