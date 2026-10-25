@@ -15,7 +15,7 @@
 
     <!-- NuGet Package Properties -->
     <PackageId>SharpCoreDB.VectorSearch</PackageId>
-    <Version>2.1.0</Version>
+    <Version>2.1.1</Version>
     <Authors>MPCoreDeveloper</Authors>
     <Company>SharpCoreDB</Company>
     <Product>SharpCoreDB.VectorSearch</Product>
@@ -28,7 +28,7 @@
     <RepositoryType>git</RepositoryType>
     <PackageIcon>SharpCoreDB.jpg</PackageIcon>
     <PackageReadmeFile>NuGet.README.md</PackageReadmeFile>
-    <PackageReleaseNotes>v2.1.0 (2026-10-10): Munarium-inspired native C# features - DiskAnn index type, content-verified artifacts (canonical manifest + SHA256 artifact_id + verification), hybrid fusion weights, C# 15 record-based BuildResult for strict error handling. All changes are pure managed .NET 11 / C# 15 on the release/v2.1.0.0 branch. See docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md.</PackageReleaseNotes>
+    <PackageReleaseNotes>v2.1.1 (2026-10-25): patch release with no API changes. A float[] parameter now reaches a VECTOR(n) column as a vector instead of the literal text "System.Single[]", and ORDER BY vec_distance_*() LIMIT k now reaches the vector index instead of a full scan. Previous: v2.1.0 (2026-10-10): Munarium-inspired native C# features - DiskAnn index type, content-verified artifacts (canonical manifest + SHA256 artifact_id + verification), hybrid fusion weights, C# 15 record-based BuildResult for strict error handling. All changes are pure managed .NET 11 / C# 15 on the release/v2.1.0.0 branch. See docs/Vectors/MUNARIUM_INSPIRATION_PLAN.md.</PackageReleaseNotes>
   </PropertyGroup>
 
   <ItemGroup>

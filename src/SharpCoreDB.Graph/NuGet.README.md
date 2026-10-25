@@ -53,7 +53,7 @@ A* pathfinding and graph algorithms **30-50% faster than alternatives** with pur
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph --version 2.1.0
+dotnet add package SharpCoreDB.Graph --version 2.1.1
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

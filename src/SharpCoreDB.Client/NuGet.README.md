@@ -27,7 +27,7 @@
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Client --version 2.1.0
+dotnet add package SharpCoreDB.Client --version 2.1.1
 ```
 
 ## Documentation

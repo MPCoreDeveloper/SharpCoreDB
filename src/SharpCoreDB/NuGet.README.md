@@ -1,8 +1,8 @@
-# SharpCoreDB 2.1.0 — Performance-First Database Engine
+# SharpCoreDB 2.1.1 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
 
-> **This is the 2.1.0 release line** — it targets **net11.0 only** with
+> **This is the 2.1.x release line (current: 2.1.1)** — it targets **net11.0 only** with
 > **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages are the v2.0 stable
 > line, parked on `release/v2.0`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
@@ -13,6 +13,26 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![.NET 11](https://img.shields.io/badge/.NET-11-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.1.1
+
+**A patch release with no API changes**, cut from the commits since the `v2.1.0` tag:
+
+- **A `float[]` parameter bound to a `VECTOR(n)` column now arrives as a vector.** It used to be
+  formatted as the literal text `"System.Single[]"`, and a `VECTOR(N)` column stored nothing that
+  could be read back (the vector case was missing from eight row codecs, five tokenizers, the
+  single-file JSON reader and both parameter binders).
+- **`ORDER BY vec_distance_*() LIMIT k` now reaches the vector index**, and `CREATE VECTOR INDEX`
+  builds one. The planner branch had been stubbed out and was never wired to `SqlParser`, so both
+  paths silently declined and every query scanned. What an ascending top-k cannot answer — a `DESC`
+  order, a non-empty `WHERE` — still falls back to a full scan instead of returning a wrong shape.
+- **`information_schema` is answered by the engine itself**, so the embedded API and the REST
+  endpoint see the same catalog the PostgreSQL handshake does.
+- **The 18 % coverage floor is measured and enforced in CI** (`.github/workflows/ci.yml` +
+  `tools/measure-coverage.ps1`), instead of being carried unmeasured.
+- **Re-verified on the 2.1.1 tree:** build 0 errors, `pack` produces 27 packages, and **2,532 tests
+  / 0 failed** across the four CI suites (core 2,137 · VectorSearch 255 · EF Core 116 · linq2db 24).
+- Full list: `docs/CHANGELOG.md` › `[2.1.1]`.
 
 ## What's New in 2.1.0
 
@@ -230,16 +250,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.0
+dotnet add package SharpCoreDB --version 2.1.1
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.1.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0
+dotnet add package SharpCoreDB.Functional --version 2.1.1
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.1
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.1
 ```
 
 ## 🔄 Upgrading from v1.9
