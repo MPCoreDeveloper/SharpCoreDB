@@ -158,7 +158,7 @@ jobs:
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: test-results-${{ matrix.os }}
         path: '**/TestResults/**/*.trx'
@@ -232,7 +232,7 @@ jobs:
         done <<< "${{ steps.discover-packable.outputs.packable_projects }}"
 
     - name: Upload artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: nuget-packages
         path: ./artifacts/*.nupkg
@@ -261,7 +261,7 @@ jobs:
         dotnet-version: '10.0.x'
 
     - name: Download NuGet packages
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         name: nuget-packages
         path: ./artifacts
