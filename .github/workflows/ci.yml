@@ -344,26 +344,76 @@ jobs:
       run: |
         set -euo pipefail
 
+        # NuGet.org rate-limits pushes and answers 403 "Quota Exceeded" once the budget is gone, which
+        # turns a master push red after the release itself has already shipped. `--skip-duplicate` does
+        # not help: a duplicate is still a PUT, and it still counts against the quota. So ask the feed
+        # first and only push what is actually missing. Everything already on NuGet.org is skipped
+        # without a request to the push endpoint.
+        PUSHED_FILE=/tmp/pushed.txt
+        SKIPPED_FILE=/tmp/skipped.txt
+        SEEN_FILE=/tmp/seen.txt
+        : > "$PUSHED_FILE"
+        : > "$SKIPPED_FILE"
+        : > "$SEEN_FILE"
+
+        nuspec_field() {
+          # $1 = nupkg, $2 = nuspec element name (id, version). `|| true` keeps `pipefail` from
+          # aborting the step when head closes the pipe early; an empty result fails the caller's guard.
+          unzip -p "$1" '*.nuspec' 2>/dev/null | grep -oP "(?<=<$2>)[^<]+" | head -n1 || true
+        }
+
+        already_on_feed() {
+          # $1 = package id, $2 = version. 0 = present, 1 = absent.
+          local id_lower code
+          id_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+          code="$(curl -s -o /tmp/nuget-versions.json -w '%{http_code}' \
+            "https://api.nuget.org/v3-flatcontainer/${id_lower}/index.json")"
+          [ "$code" = "200" ] || return 1
+          # Case-insensitive: the feed lowercases pre-release labels ("2.1.0-rc.3"), the nuspec
+          # declares them as authored ("2.1.0-RC.3").
+          grep -qi "\"$2\"" /tmp/nuget-versions.json
+        }
+
         push_layer() {
           local layer_name="$1"
           shift
-          local found_any=false
+          local pushed_any=false
 
           echo "::group::Publishing $layer_name"
           for pattern in "$@"; do
             for pkg in ./artifacts/${pattern}; do
               [ -f "$pkg" ] || continue
-              found_any=true
-              echo "  Publishing $(basename "$pkg")"
+              # The catch-all layer re-visits packages the layers above already handled. Visit each
+              # artifact once: a no-op run then costs one GET per package, not two.
+              local base="$(basename "$pkg")"
+              if grep -qxF "$base" "$SEEN_FILE"; then
+                continue
+              fi
+              echo "$base" >> "$SEEN_FILE"
+              local id version
+              id="$(nuspec_field "$pkg" id)"
+              version="$(nuspec_field "$pkg" version)"
+              if [ -z "$id" ] || [ -z "$version" ]; then
+                echo "  Cannot read id/version from $(basename "$pkg")" >&2
+                exit 1
+              fi
+              if already_on_feed "$id" "$version"; then
+                echo "  Skip $id $version (already on NuGet.org)"
+                echo "$id $version" >> "$SKIPPED_FILE"
+                continue
+              fi
+              echo "  Publishing $id $version"
               dotnet nuget push "$pkg" \
                 --api-key "$NUGET_API_KEY" \
                 --source "$NUGET_SOURCE" \
                 --skip-duplicate
+              echo "$id $version" >> "$PUSHED_FILE"
+              pushed_any=true
             done
           done
           echo "::endgroup::"
 
-          if [ "$found_any" = true ]; then
+          if [ "$pushed_any" = true ]; then
             echo "Waiting 30s for NuGet.org to index $layer_name..."
             sleep 30
           fi
@@ -403,19 +453,33 @@ jobs:
           "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
           "SharpCoreDB.Functional.Linq2DB.*.nupkg"
 
+        # Catch-all for anything the layers above do not name. It no longer re-PUTs the packages it
+        # shares with them: the feed check in push_layer skips what is already published.
         push_layer "Remaining packages" \
           "*.nupkg"
 
-        echo "All packages published in dependency order."
+        echo "Push complete: $(wc -l < "$PUSHED_FILE") published, $(wc -l < "$SKIPPED_FILE") already on NuGet.org."
 
     - name: Create release summary
       run: |
+        pushed=$(wc -l < /tmp/pushed.txt 2>/dev/null || echo 0)
+        skipped=$(wc -l < /tmp/skipped.txt 2>/dev/null || echo 0)
         echo "## NuGet Packages Published (Dependency-Ordered)" >> $GITHUB_STEP_SUMMARY
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "Published $(ls -1 ./artifacts/*.nupkg | wc -l) package(s) to NuGet.org" >> $GITHUB_STEP_SUMMARY
+        echo "$pushed package(s) pushed, $skipped already on NuGet.org" >> $GITHUB_STEP_SUMMARY
+        if [ "$pushed" = "0" ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Nothing was pushed: every package in this run is already published at the version this" >> $GITHUB_STEP_SUMMARY
+          echo "tree declares. Bump the version (or dispatch publish-manual.yml) to actually release." >> $GITHUB_STEP_SUMMARY
+        fi
         echo "" >> $GITHUB_STEP_SUMMARY
-        echo "### Packages" >> $GITHUB_STEP_SUMMARY
-        ls -1 ./artifacts/*.nupkg | xargs -I {} basename {} >> $GITHUB_STEP_SUMMARY
+        if [ "$pushed" -gt 0 ]; then
+          echo "### Pushed" >> $GITHUB_STEP_SUMMARY
+          sed 's/^/- /' /tmp/pushed.txt >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "### Skipped (already on NuGet.org)" >> $GITHUB_STEP_SUMMARY
+        sed 's/^/- /' /tmp/skipped.txt >> $GITHUB_STEP_SUMMARY
 
   # Core-package-only publish (workflow_dispatch). Carried over from ci-net11.yml so the RC workflow's
   # ability to push just SharpCoreDB to NuGet.org survives the promotion; the full package set goes
