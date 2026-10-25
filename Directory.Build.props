@@ -6,7 +6,7 @@
   <ItemGroup>
     <!-- Force our version of Microsoft.Data.Sqlite to prevent NU1506 duplicate PackageVersion warnings
          from transitive dependencies (Microsoft.EntityFrameworkCore.Sqlite, linq2db.Provider.SQLite, YesSql.Provider.Sqlite, etc.) -->
-    <PackageVersion Update="Microsoft.Data.Sqlite" Version="10.0.10" />
+    <PackageVersion Update="Microsoft.Data.Sqlite" Version="10.0.13" />
   </ItemGroup>
 
   <!-- Suppress noisy warnings for a cleaner build output -->
