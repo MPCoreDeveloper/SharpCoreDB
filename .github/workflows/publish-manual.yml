@@ -82,26 +82,66 @@ jobs:
       run: |
         set -euo pipefail
 
+        # NuGet.org rate-limits pushes (403 "Quota Exceeded") and `--skip-duplicate` does not avoid the
+        # PUT — a duplicate still counts. Ask the feed first and push only what is missing, so a
+        # re-dispatch after a partial run costs one request per package instead of a full re-push.
+        SEEN_FILE=/tmp/seen.txt
+        : > "$SEEN_FILE"
+
+        nuspec_field() {
+          # $1 = nupkg, $2 = nuspec element name (id, version). `|| true` keeps `pipefail` from
+          # aborting the step when head closes the pipe early; an empty result fails the caller's guard.
+          unzip -p "$1" '*.nuspec' 2>/dev/null | grep -oP "(?<=<$2>)[^<]+" | head -n1 || true
+        }
+
+        already_on_feed() {
+          # $1 = package id, $2 = version. 0 = present, 1 = absent.
+          local id_lower code
+          id_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+          code="$(curl -s -o /tmp/nuget-versions.json -w '%{http_code}' \
+            "https://api.nuget.org/v3-flatcontainer/${id_lower}/index.json")"
+          [ "$code" = "200" ] || return 1
+          grep -qi "\"$2\"" /tmp/nuget-versions.json
+        }
+
         push_layer() {
           local layer_name="$1"
           shift
-          local found_any=false
+          local pushed_any=false
 
           echo "::group::Publishing $layer_name"
           for pattern in "$@"; do
             for pkg in ./artifacts/${pattern}; do
               [ -f "$pkg" ] || continue
-              found_any=true
-              echo "  ↗ Pushing $(basename "$pkg")"
+              # The catch-all layer re-visits packages the layers above already handled. Visit each
+              # artifact once: a no-op run then costs one GET per package, not two.
+              local base="$(basename "$pkg")"
+              if grep -qxF "$base" "$SEEN_FILE"; then
+                continue
+              fi
+              echo "$base" >> "$SEEN_FILE"
+              local id version
+              id="$(nuspec_field "$pkg" id)"
+              version="$(nuspec_field "$pkg" version)"
+              if [ -z "$id" ] || [ -z "$version" ]; then
+                echo "  Cannot read id/version from $(basename "$pkg")" >&2
+                exit 1
+              fi
+              if already_on_feed "$id" "$version"; then
+                echo "  ⏭ Skipping $id $version (already on NuGet.org)"
+                continue
+              fi
+              echo "  ↗ Pushing $id $version"
               dotnet nuget push "$pkg" \
                 --api-key "$NUGET_API_KEY" \
                 --source "$NUGET_SOURCE" \
                 --skip-duplicate
+              pushed_any=true
             done
           done
           echo "::endgroup::"
 
-          if [ "$found_any" = true ]; then
+          if [ "$pushed_any" = true ]; then
             echo "⏳ Waiting 30s for NuGet.org to index $layer_name..."
             sleep 30
           fi
