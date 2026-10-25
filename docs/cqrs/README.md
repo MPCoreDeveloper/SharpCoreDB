@@ -54,7 +54,7 @@ Non-goals:
 ## 2. Installation
 
 ```bash
-dotnet add package SharpCoreDB.CQRS --version 2.1.0
+dotnet add package SharpCoreDB.CQRS --version 2.1.1
 ```
 
 ---
