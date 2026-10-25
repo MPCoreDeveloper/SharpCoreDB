@@ -31,21 +31,47 @@ public partial class Database
         {
             _sharedSqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
             _sharedSqlParser.Database = this;
-
-            // v2: resolve the optional GRAPH_RAG provider once and cache it for the parser
-            // lifetime. Previously this DI lookup ran on every ExecuteSQL/ExecuteQuery call.
-            if (_cachedGraphRagProvider is null)
-            {
-                _cachedGraphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
-            }
-
-            if (_cachedGraphRagProvider is not null)
-            {
-                _sharedSqlParser.SetGraphRagProvider(_cachedGraphRagProvider);
-            }
+            AttachOptionalProviders(_sharedSqlParser);
         }
 
         return _sharedSqlParser;
+    }
+
+    /// <summary>
+    /// Attaches the optional SQL extensions that live in separate assemblies and are therefore
+    /// resolved from the service provider instead of being referenced directly: the GRAPH_RAG
+    /// provider and the vector query optimizer.
+    /// <para>
+    /// The vector optimizer used to be attached nowhere at all. <c>SqlParser.VectorQueryOptimizer</c>
+    /// was an <c>internal static</c> property that no code inside this assembly ever set and no other
+    /// assembly could set (the type is internal), so both of its consumers were permanent no-ops:
+    /// <c>CREATE VECTOR INDEX</c> built no index, and the <c>ORDER BY vec_distance_*(...) LIMIT k</c>
+    /// planner branch was never entered. Resolving <see cref="IVectorQueryOptimizer"/> here — the same
+    /// way the GRAPH_RAG provider is resolved — is what makes <c>AddVectorSupport()</c> reach the
+    /// planner. Both lookups are cached on the database, so a parser rebuild costs nothing when the
+    /// extension is registered and resolves to null only once when it is not.
+    /// </para>
+    /// </summary>
+    /// <param name="parser">The parser instance to configure.</param>
+    private void AttachOptionalProviders(SqlParser parser)
+    {
+        if (_cachedGraphRagProvider is null)
+        {
+            _cachedGraphRagProvider = _serviceProvider.GetService(typeof(IGraphRagProvider)) as IGraphRagProvider;
+        }
+
+        if (_cachedGraphRagProvider is not null)
+        {
+            parser.SetGraphRagProvider(_cachedGraphRagProvider);
+        }
+
+        _cachedVectorQueryOptimizer ??=
+            _serviceProvider.GetService(typeof(IVectorQueryOptimizer)) as IVectorQueryOptimizer;
+
+        if (_cachedVectorQueryOptimizer is not null)
+        {
+            parser.SetVectorQueryOptimizer(_cachedVectorQueryOptimizer);
+        }
     }
 
 
@@ -469,14 +495,11 @@ public partial class Database
             return executor.Execute(stmt.CompiledPlan, parameters);
         }
         
-        // ✅ Fallback: Lazy-initialize shared SqlParser (thread-safe via Interlocked)
-        if (_sharedSqlParser is null)
-        {
-            _sharedSqlParser = new SqlParser(tables, _dbPath, storage, isReadOnly, queryCache, config);
-            _sharedSqlParser.Database = this;
-        }
-
-        return _sharedSqlParser.ExecuteQuery(stmt.Plan, parameters);
+        // ✅ Fallback: the shared parser created by GetSharedSqlParser() (which also attaches the
+        // optional GRAPH_RAG provider and vector optimizer). This block used to build its own
+        // SqlParser, so a compiled query falling back here got a parser without either extension —
+        // the second of the two creation sites is exactly how an extension point loses its wiring.
+        return GetSharedSqlParser().ExecuteQuery(stmt.Plan, parameters);
     }
 
     /// <inheritdoc />

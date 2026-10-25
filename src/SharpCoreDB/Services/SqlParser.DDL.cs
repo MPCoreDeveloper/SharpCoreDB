@@ -1157,7 +1157,7 @@ public partial class SqlParser
 
         // Phase 5.4: Build live in-memory index if optimizer is registered
         // Supports DISKANN via VectorIndexManager / DiskAnnIndex
-        SqlParser.VectorQueryOptimizer?.BuildIndex(table, tableName, columnName, indexType);
+        this.VectorQueryOptimizer?.BuildIndex(table, tableName, columnName, indexType);
 
         wal?.Log(sql);
     }
@@ -1191,7 +1191,7 @@ public partial class SqlParser
                     table.RemoveMetadata($"vector_index:{colName}:sql");
 
                     // Phase 5.4: Drop live in-memory index if optimizer is registered
-                    SqlParser.VectorQueryOptimizer?.DropIndex(tableName, colName);
+                    this.VectorQueryOptimizer?.DropIndex(tableName, colName);
 
                     found = true;
                     break;
