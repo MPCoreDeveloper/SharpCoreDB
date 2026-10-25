@@ -118,12 +118,33 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     private List<Dictionary<string, object>> _pendingQueryResults = [];
 
     /// <summary>
-    /// Optional vector query optimizer registered by the VectorSearch module.
-    /// When set, the query planner detects ORDER BY vec_distance_*() + LIMIT patterns
-    /// and routes them to a vector index instead of a full table scan.
-    /// Thread-safe: set once during Database initialization, read from any thread.
+    /// Optional vector query optimizer supplied by the VectorSearch module.
+    /// <para>
+    /// When set, the planner detects <c>ORDER BY vec_distance_*(col, vector) LIMIT k</c> and
+    /// <c>CREATE VECTOR INDEX</c> routes them to a vector index instead of a full table scan.
+    /// </para>
+    /// <para>
+    /// This is a per-parser instance member, not a static one. It used to be
+    /// <c>internal static</c>, which made the extension point unreachable in practice: an
+    /// <c>internal</c> static on an <c>internal</c> class cannot be assigned by another assembly
+    /// (SharpCoreDB.VectorSearch registers <see cref="IVectorQueryOptimizer"/> with the DI
+    /// container, it cannot see this type), and no code inside this assembly ever assigned it
+    /// either. Every call site was therefore a null-conditional no-op, in both directions:
+    /// <c>CREATE VECTOR INDEX</c> built nothing and <c>ORDER BY vec_distance_*</c> never reached
+    /// the optimizer. <see cref="Database"/> resolves the registered optimizer from its service
+    /// provider and attaches it here (see <c>Database.GetSharedSqlParser</c>).
+    /// </para>
     /// </summary>
-    internal static IVectorQueryOptimizer? VectorQueryOptimizer { get; set; }
+    internal IVectorQueryOptimizer? VectorQueryOptimizer { get; private set; }
+
+    /// <summary>
+    /// Attaches the optional vector query optimizer for this parser instance.
+    /// Called by <see cref="Database"/> once, when the shared parser is created, with the
+    /// <see cref="IVectorQueryOptimizer"/> registered by <c>AddVectorSupport()</c> (if any).
+    /// </summary>
+    /// <param name="optimizer">The optimizer to use, or <see langword="null"/> for none.</param>
+    internal void SetVectorQueryOptimizer(IVectorQueryOptimizer? optimizer)
+        => this.VectorQueryOptimizer = optimizer;
 
     /// <inheritdoc />
     public void Execute(string sql, IWAL? wal = null)

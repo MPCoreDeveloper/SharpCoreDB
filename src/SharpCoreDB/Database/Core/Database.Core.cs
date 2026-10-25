@@ -57,6 +57,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     private QueryPlanCache? planCache;  // ✅ Lazy-initialized query plan cache
     private SqlParser? _sharedSqlParser;  // ✅ Reusable SqlParser for compiled queries
     private IGraphRagProvider? _cachedGraphRagProvider;  // v2: cached DI resolution (avoids per-call GetService)
+    private IVectorQueryOptimizer? _cachedVectorQueryOptimizer;  // resolved once, same reason
 
     /// <summary>
     /// v2 (Native AOT readiness): metadata JSON options. <see cref="AotJsonSerializer.Options"/> resolves the

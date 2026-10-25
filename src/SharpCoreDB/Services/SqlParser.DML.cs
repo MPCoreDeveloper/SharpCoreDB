@@ -1074,10 +1074,14 @@ public partial class SqlParser
 
         TrackColumnUsage(tableName, whereStr);
 
-        // Phase 5.4: Detect ORDER BY vec_distance_*(col, query) LIMIT k → route to vector index
+        // Phase 5.4: Detect ORDER BY vec_distance_*(col, query) LIMIT k → route to vector index.
+        // The scan below stays the answer whenever the index cannot reproduce it exactly; see
+        // TryExecuteVectorOptimized for the two cases it refuses.
         if (limit.HasValue && limit.Value > 0 && VectorQueryOptimizer is not null)
         {
-            var vectorResult = TryExecuteVectorOptimized(sql, selectClause, tableName, orderBy, limit.Value, noEncrypt);
+            var vectorResult = TryExecuteVectorOptimized(
+                sql, selectClause, tableName, whereStr, orderBy, asc, limit.Value, noEncrypt);
+
             if (vectorResult is not null)
                 return vectorResult;
         }
@@ -1107,6 +1111,395 @@ public partial class SqlParser
         return results;
     }
 
+
+    /// <summary>
+    /// The distance functions a vector index can answer. Kept in sync with
+    /// <c>SharpCoreDB.VectorSearch.VectorQueryOptimizer</c>; a name the optimizer does not know is
+    /// rejected by <see cref="IVectorQueryOptimizer.CanOptimize"/> anyway.
+    /// </summary>
+    private static readonly string[] VectorDistanceFunctions =
+    [
+        "VEC_DISTANCE_COSINE",
+        "VEC_DISTANCE_L2",
+        "VEC_DISTANCE_DOT",
+    ];
+
+    /// <summary>
+    /// Answers <c>SELECT ... ORDER BY vec_distance_*(col, vector) LIMIT k</c> from the vector index
+    /// instead of scanning and sorting the table.
+    /// <para>
+    /// Returns <see langword="null"/> — meaning "take the scan path" — unless the index can produce
+    /// exactly the rows, in exactly the shape, the query asks for. The implementation this replaces
+    /// returned every column plus a <c>distance</c> key no matter what the SELECT list said, and did
+    /// so for <c>DESC</c> and <c>WHERE</c> queries too, so an optimized query and an unoptimized one
+    /// returned different results for the same SQL. The rows are now projected like any other SELECT,
+    /// and the two shapes an ascending top-k index cannot answer fall through to the scan.
+    /// </para>
+    /// </summary>
+    /// <param name="sql">The full statement (the ORDER BY region is parsed from here).</param>
+    /// <param name="selectClause">The SELECT list, used for the distance alias and the projection.</param>
+    /// <param name="tableName">The table being selected from.</param>
+    /// <param name="whereStr">The WHERE clause, if any, so a filtered query can be refused.</param>
+    /// <param name="orderBy">The single token the legacy parser read after ORDER BY.</param>
+    /// <param name="ascending">False when ORDER BY ... DESC was requested.</param>
+    /// <param name="limit">The LIMIT value (k).</param>
+    /// <param name="noEncrypt">Whether to read ciphertext.</param>
+    /// <returns>Projected rows, or null when the query must be answered by a scan.</returns>
+    private List<Dictionary<string, object>>? TryExecuteVectorOptimized(
+        string sql,
+        string selectClause,
+        string tableName,
+        string? whereStr,
+        string? orderBy,
+        bool ascending,
+        int limit,
+        bool noEncrypt)
+    {
+        if (VectorQueryOptimizer is null || string.IsNullOrEmpty(orderBy) || limit <= 0)
+        {
+            return null;
+        }
+
+        // An index scan returns the k nearest rows. That is not the answer to the other two shapes
+        // SQL allows here, and returning it anyway is how an "optimization" becomes a wrong result:
+        //   * ORDER BY ... DESC asks for the k farthest, which reversing the nearest k does not give;
+        //   * a WHERE clause would have to be applied after the index already chose its k, and
+        //     post-filtering a limited set drops matching rows instead of fetching more of them.
+        if (!ascending || !string.IsNullOrWhiteSpace(whereStr))
+        {
+            return null;
+        }
+
+        var orderStart = sql.IndexOf(SqlConstants.ORDER, StringComparison.OrdinalIgnoreCase);
+        var orderCall = orderStart >= 0 ? FindVectorDistanceCall(sql, orderStart) : null;
+        var selectCall = FindVectorDistanceCall(selectClause, 0);
+
+        // ORDER BY either re-states the distance function or names the alias the SELECT gave it.
+        var distanceAlias = selectCall is { } projection ? ReadAliasAfter(selectClause, projection.End) : null;
+        var orderByNamesAlias = distanceAlias is not null
+            && orderBy.Trim().Equals(distanceAlias, StringComparison.OrdinalIgnoreCase);
+
+        // When the ORDER BY re-states the call, that call is the one being ordered on; the SELECT
+        // need not mention the function at all (SELECT id ... ORDER BY vec_distance_*(...)).
+        (string Function, string Column, string Argument, int End) call;
+        if (orderCall is { } orderedCall)
+        {
+            call = orderedCall;
+        }
+        else if (orderByNamesAlias && selectCall is { } projectedCall)
+        {
+            call = projectedCall;
+        }
+        else
+        {
+            return null;
+        }
+
+        if (!IsSimpleIdentifier(call.Column)
+            || !VectorQueryOptimizer.CanOptimize(tableName, call.Column, call.Function, limit))
+        {
+            return null;
+        }
+
+        var queryVector = Unquote(call.Argument);
+        if (queryVector.Length == 0)
+        {
+            return null;
+        }
+
+        var rows = VectorQueryOptimizer.ExecuteOptimized(
+            this.tables[tableName],
+            tableName,
+            call.Column,
+            call.Function,
+            queryVector,
+            limit,
+            noEncrypt);
+
+        return ProjectVectorRows(rows, selectClause, distanceAlias, call.Function);
+    }
+
+    /// <summary>
+    /// Finds the first <c>vec_distance_*(column, vector)</c> call at or after <paramref name="start"/>
+    /// and returns its function name, its column (bare name), its second argument as written, and the
+    /// index of its closing parenthesis.
+    /// </summary>
+    /// <param name="text">The text to search.</param>
+    /// <param name="start">The index to start searching from.</param>
+    /// <returns>The parsed call, or null when there is none.</returns>
+    private static (string Function, string Column, string Argument, int End)? FindVectorDistanceCall(string text, int start)
+    {
+        var searchFrom = Math.Min(start, text.Length);
+        var bestIndex = -1;
+        string? function = null;
+
+        foreach (var candidate in VectorDistanceFunctions)
+        {
+            var index = text.IndexOf(candidate, searchFrom, StringComparison.OrdinalIgnoreCase);
+            if (index >= 0 && (bestIndex < 0 || index < bestIndex))
+            {
+                bestIndex = index;
+                function = candidate;
+            }
+        }
+
+        if (function is null)
+        {
+            return null;
+        }
+
+        var open = text.IndexOf('(', bestIndex);
+        if (open < 0)
+        {
+            return null;
+        }
+
+        var close = FindClosingParenthesis(text, open);
+        if (close < 0)
+        {
+            return null;
+        }
+
+        var arguments = SplitVectorArguments(text[(open + 1)..close]);
+        if (arguments.Count < 2)
+        {
+            return null;
+        }
+
+        return (function, ExtractBareColumn(arguments[0]), arguments[1], close);
+    }
+
+    /// <summary>
+    /// Returns the index of the parenthesis matching the one at <paramref name="open"/>, tracking
+    /// nesting and skipping quoted text.
+    /// </summary>
+    /// <param name="text">The text holding the parentheses.</param>
+    /// <param name="open">The index of the opening parenthesis.</param>
+    /// <returns>The index of the closing parenthesis, or -1 when unbalanced.</returns>
+    private static int FindClosingParenthesis(string text, int open)
+    {
+        var depth = 0;
+        var inQuote = false;
+
+        for (var i = open; i < text.Length; i++)
+        {
+            var c = text[i];
+
+            if (c == '\'')
+            {
+                inQuote = !inQuote;
+                continue;
+            }
+
+            if (inQuote)
+            {
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')' && --depth == 0)
+            {
+                return i;
+            }
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Splits the argument list of a function call on its top-level commas, so a vector literal or a
+    /// nested call inside one argument stays in one piece. Brackets and braces count as nesting too:
+    /// a bound <c>float[]</c> parameter arrives as an unquoted <c>[1,0,0,0]</c>, whose commas are
+    /// part of the value, and splitting there would leave <c>[1</c> as the query vector.
+    /// </summary>
+    /// <param name="arguments">The text between the parentheses.</param>
+    /// <returns>The trimmed arguments.</returns>
+    private static List<string> SplitVectorArguments(string arguments)
+    {
+        var items = new List<string>();
+        var current = new System.Text.StringBuilder();
+        var nesting = 0;
+        var inQuote = false;
+
+        foreach (var c in arguments)
+        {
+            if (c == '\'')
+            {
+                inQuote = !inQuote;
+            }
+
+            if (!inQuote)
+            {
+                if (c is '(' or '[' or '{')
+                {
+                    nesting++;
+                }
+                else if (c is ')' or ']' or '}')
+                {
+                    if (nesting > 0)
+                    {
+                        nesting--;
+                    }
+                }
+                else if (c == ',' && nesting == 0)
+                {
+                    items.Add(current.ToString().Trim());
+                    current.Clear();
+                    continue;
+                }
+            }
+
+            current.Append(c);
+        }
+
+        if (current.Length > 0)
+        {
+            items.Add(current.ToString().Trim());
+        }
+
+        return items;
+    }
+
+    /// <summary>
+    /// Reads an alias that follows a parsed call: <c>... ) AS distance</c> or the bare form
+    /// <c>... ) distance</c>. Returns null when the next token is punctuation, an operator, or the
+    /// end of the clause.
+    /// </summary>
+    /// <param name="text">The clause the call was parsed from.</param>
+    /// <param name="callEnd">The index of the call's closing parenthesis.</param>
+    /// <returns>The alias, or null.</returns>
+    private static string? ReadAliasAfter(string text, int callEnd)
+    {
+        if (callEnd + 1 >= text.Length)
+        {
+            return null;
+        }
+
+        var rest = text[(callEnd + 1)..].TrimStart();
+
+        if (rest.StartsWith("AS", StringComparison.OrdinalIgnoreCase)
+            && rest.Length > 2
+            && char.IsWhiteSpace(rest[2]))
+        {
+            rest = rest[2..].TrimStart();
+        }
+
+        var end = 0;
+        while (end < rest.Length && (char.IsLetterOrDigit(rest[end]) || rest[end] == '_'))
+        {
+            end++;
+        }
+
+        return end == 0 ? null : rest[..end];
+    }
+
+    /// <summary>
+    /// Projects rows returned by the vector index onto the SELECT list, substituting the
+    /// <c>distance</c> the optimizer injected for the distance expression itself. The scan path
+    /// around it does not project, so this is what keeps an optimized query's column set identical
+    /// to the same query without an index.
+    /// </summary>
+    /// <param name="rows">Rows from <see cref="IVectorQueryOptimizer.ExecuteOptimized"/>.</param>
+    /// <param name="selectClause">The SELECT list.</param>
+    /// <param name="distanceAlias">The alias given to the distance expression, if any.</param>
+    /// <param name="distanceFunction">The distance function name used by the query.</param>
+    /// <returns>The projected rows.</returns>
+    private static List<Dictionary<string, object>> ProjectVectorRows(
+        List<Dictionary<string, object>> rows,
+        string selectClause,
+        string? distanceAlias,
+        string distanceFunction)
+    {
+        var items = SplitVectorArguments(selectClause);
+        var distanceKey = string.IsNullOrEmpty(distanceAlias) ? "distance" : distanceAlias;
+        var selectAll = items.Count == 1 && items[0].Trim() == "*";
+
+        var result = new List<Dictionary<string, object>>(rows.Count);
+        foreach (var row in rows)
+        {
+            if (selectAll)
+            {
+                // `SELECT *` asked for the row, not for the ordering expression.
+                result.Add(new Dictionary<string, object>(row, StringComparer.OrdinalIgnoreCase));
+                continue;
+            }
+
+            var projected = new Dictionary<string, object>(items.Count, StringComparer.OrdinalIgnoreCase);
+            foreach (var item in items)
+            {
+                var (expression, alias) = SplitSelectItem(item);
+
+                if (expression.Contains(distanceFunction, StringComparison.OrdinalIgnoreCase))
+                {
+                    projected[alias ?? distanceKey] = row.TryGetValue("distance", out var distance)
+                        ? distance
+                        : DBNull.Value;
+                    continue;
+                }
+
+                projected[alias ?? ExtractBareColumn(expression)] = FindValue(row, expression) ?? DBNull.Value;
+            }
+
+            result.Add(projected);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Splits one SELECT item into its expression and its alias, using the same rule the join
+    /// projection uses (<c>expr AS alias</c> or <c>expr alias</c>).
+    /// </summary>
+    /// <param name="item">One comma-separated SELECT item.</param>
+    /// <returns>The expression and the alias, if any.</returns>
+    private static (string Expression, string? Alias) SplitSelectItem(string item)
+    {
+        var trimmed = item.Trim();
+        var match = System.Text.RegularExpressions.Regex.Match(
+            trimmed,
+            @"^(.+?)\s+(?:AS\s+)?(\w+)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+            TimeSpan.FromSeconds(1));
+
+        return match.Success
+            ? (match.Groups[1].Value.Trim(), match.Groups[2].Value.Trim())
+            : (trimmed, null);
+    }
+
+    /// <summary>
+    /// Returns true when the value is a plain column reference (letters, digits, underscore), so a
+    /// numeric literal or an expression can never be handed to the index registry as a column name.
+    /// </summary>
+    /// <param name="value">The candidate column name.</param>
+    /// <returns>True when the value is a simple identifier.</returns>
+    private static bool IsSimpleIdentifier(string value)
+    {
+        if (value.Length == 0 || !(char.IsLetter(value[0]) || value[0] == '_'))
+        {
+            return false;
+        }
+
+        foreach (var c in value)
+        {
+            if (!(char.IsLetterOrDigit(c) || c == '_'))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Strips the surrounding quotes from a SQL string literal, leaving a vector literal such as
+    /// <c>[0.25,0.5,0.75,1]</c> as the text the optimizer's vector reader expects.
+    /// </summary>
+    /// <param name="value">The literal as written in the statement.</param>
+    /// <returns>The unquoted value.</returns>
+    private static string Unquote(string value) => value.Trim().Trim('\'', '"');
 
     /// <summary>
     /// Executes COUNT(*) aggregate query with modern patterns.
