@@ -62,8 +62,9 @@ internal sealed class PreparedStatement : IPreparedStatement
     {
         _plan = plan ?? throw new ArgumentNullException(nameof(plan));
         
-        // Pre-compute parameter positions for fast binding
-        _parameterPositions = ExtractParameterPositions(_plan.Sql);
+        // Pre-compute parameter positions for fast binding. The one ?-scanner lives on ParameterBinder; this class
+        // used to carry a byte-for-byte copy of it, which is how the two could disagree about quotes.
+        _parameterPositions = ParameterBinder.ExtractPositionalParameterPositions(_plan.Sql);
         
         // Extract named parameters if present
         _namedParameters = ExtractNamedParameters(_plan.Sql);
@@ -97,43 +98,6 @@ internal sealed class PreparedStatement : IPreparedStatement
         return ParameterBinder.BindNamedParameters(_plan.Sql, _namedParameters, parameters);
     }
 
-    /// <summary>Extracts positions of ? placeholders in SQL.</summary>
-    /// <remarks>
-    /// Quoted literals are skipped as a whole through <see cref="SqlLiteralScanner"/>, the single quote
-    /// definition: a doubled quote is one quote and does not close the literal, and a backslash is data. The
-    /// previous form toggled on every quote whose predecessor was not a backslash, so <c>'it''s ?'</c> was read
-    /// as "outside the literal" after the doubled quote and its <c>?</c> counted as a placeholder.
-    /// </remarks>
-    private static int[] ExtractParameterPositions(string sql)
-    {
-        var positions = new List<int>();
-
-        for (int i = 0; i < sql.Length; i++)
-        {
-            char c = sql[i];
-
-            if (c is '\'' or '"')
-            {
-                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
-                if (closing < 0)
-                {
-                    break;  // unterminated literal: nothing after it is a placeholder
-                }
-
-                i = closing;
-                continue;
-            }
-
-            // Count ? outside strings
-            if (c == '?')
-            {
-                positions.Add(i);
-            }
-        }
-
-        return positions.ToArray();
-    }
-
     /// <summary>Extracts named parameters (@paramName) from SQL.</summary>
     private static Dictionary<string, int>? ExtractNamedParameters(string sql)
     {
@@ -143,7 +107,7 @@ internal sealed class PreparedStatement : IPreparedStatement
         {
             char c = sql[i];
 
-            // Skip a whole literal (see ExtractParameterPositions for the rule).
+            // Skip a whole literal (see ParameterBinder.ExtractPositionalParameterPositions for the rule).
             if (c is '\'' or '"')
             {
                 int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
@@ -430,6 +394,14 @@ internal static class ParameterBinder
     }
 
     /// <summary>Extracts positions of '?' placeholders from SQL, outside string literals.</summary>
+    /// <remarks>
+    /// The single <c>?</c>-scanner: <see cref="PreparedStatement"/> and the binder both call this one — they used
+    /// to carry identical copies, which is how the two could drift apart. Quoted literals are skipped as a whole
+    /// through <see cref="SqlLiteralScanner"/>, the single quote definition: a doubled quote is one quote and does
+    /// not close the literal, and a backslash is data. The previous form toggled on every quote whose predecessor
+    /// was not a backslash, so <c>'it''s ?'</c> was read as "outside the literal" after the doubled quote and its
+    /// <c>?</c> counted as a placeholder.
+    /// </remarks>
     internal static int[] ExtractPositionalParameterPositions(string sql)
     {
         var positions = new List<int>();

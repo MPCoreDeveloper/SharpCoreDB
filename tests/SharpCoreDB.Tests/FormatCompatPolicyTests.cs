@@ -42,7 +42,10 @@ public sealed class FormatCompatPolicyTests : IDisposable
         var stmts = new List<string>(to - from + 1);
         for (int i = from; i <= to; i++)
         {
-            stmts.Add($"INSERT INTO docs VALUES ({i}, 'user{i}', {i * 0.5})");
+            // Invariant culture: {i * 0.5} renders as "0,5" on a Dutch machine, which is two SQL values, not one —
+            // and a four-value tuple for a three-column table is rejected, not silently truncated.
+            var score = (i * 0.5).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            stmts.Add($"INSERT INTO docs VALUES ({i}, 'user{i}', {score})");
         }
 
         db.ExecuteBatchSQL(stmts);

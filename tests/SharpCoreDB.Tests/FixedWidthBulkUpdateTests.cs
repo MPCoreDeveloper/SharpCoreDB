@@ -123,7 +123,7 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
         var db = CreateDb();
         try
         {
-            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL, age INTEGER)");
             InsertDocs(db, 1, 1000);
             db.Flush();
 
@@ -158,7 +158,7 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
         var db = CreateDb();
         try
         {
-            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL, age INTEGER)");
             InsertDocs(db, 1, 500);
             db.Flush();
 
@@ -185,7 +185,7 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
         var db = CreateDb();
         try
         {
-            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL, age INTEGER)");
             db.ExecuteSQL("CREATE INDEX idx_docs_name ON docs(name)");
             InsertDocs(db, 1, 800);
             db.Flush();
@@ -220,7 +220,7 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
         var db = CreateDb(noEncrypt: false);
         try
         {
-            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL, age INTEGER)");
             InsertDocs(db, 1, 300);
             db.Flush();
 
@@ -247,7 +247,7 @@ public sealed class FixedWidthBulkUpdateTests : IDisposable
         IDatabase? db = CreateEncryptedDb();
         try
         {
-            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
+            db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL, age INTEGER)");
             InsertDocs(db, 1, 400);
             db.Flush();
 

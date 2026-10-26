@@ -11,6 +11,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > bucket had collected since the `v2.1.1` tag — the statement-path literal scanner below — **shipped in
 > `[2.1.2]`**. New entries start here.
 
+### Fixed
+
+- **A surplus value in a batched `INSERT … VALUES` is rejected instead of silently dropped — the last copy of the known-issue-7 truncation.** The prepared-insert fast path, the one `ExecuteBatchSQL` uses for bulk inserts, stopped counting a tuple at the table's column count: `INSERT INTO docs VALUES (1, 'a', 0,5, 21)` against a three-column table bound the first three values, discarded the rest and **succeeded**, where the statement path has rejected that shape since `[2.1.2]`. Both paths now throw, and the message names the table, the tuple and both counts; a *short* tuple keeps its documented meaning (the missing columns fall to `NULL`). Found by `tests/SharpCoreDB.Tests/PreparedInsertValuesParsingTests.cs`, which parses every case through **both** prepared parsers and asserts they agree — nothing covered either one before, which is how the two could drift. Verified on this tree: core **2118 / 0 failed**, and the §7 reproduction published in `docs/sharpcoredb-known-issues.md` still prints the fixed output for all five bound-value shapes.
+
+### Changed
+
+- **Internal: one VALUES splitter and one literal skipper instead of five copies.** `PreparedInsertStatement.ParseValues` and `ParseValuesToArray` carried identical splitting loops; they now share a `ValueRangeEnumerator` `ref struct` (allocation-free, one branch per character, identical behaviour). The two canonical-shape scanners in `Database.Batch.cs` re-implemented the quote machine a third and fourth time and now call `SqlLiteralScanner` through a `TrySkipLiteral` helper, and `PreparedStatement`'s `?`-position extractor — a byte-for-byte copy of `ParameterBinder.ExtractPositionalParameterPositions` — is gone. This is what the CI Sonar gate flagged (duplication above the 3 % ceiling on new lines).
+
 ## [2.1.2] - 2026-10-26
 
 > **What this release is.** A patch release with no API changes, cut from `v2.1.1..HEAD`, and a data-correctness
