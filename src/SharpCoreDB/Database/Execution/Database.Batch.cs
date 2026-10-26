@@ -108,58 +108,26 @@ public partial class Database
         public Dictionary<string, object> ParseValues(ReadOnlySpan<char> valuesClause)
         {
             var row = new Dictionary<string, object>(Columns.Count);
-            
-            int valueStart = 0;
+
+            // One splitter for both parsers (ValueRangeEnumerator): this method and ParseValuesToArray used to
+            // carry identical copies of it, so a fix in one could silently miss the other.
+            var ranges = new ValueRangeEnumerator(valuesClause);
             int valueIndex = 0;
-            int parenDepth = 0;
-            int bracketDepth = 0;   // bracketed literals ([0.5, 0.25] — a VECTOR value) never split
 
-            for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
+            while (ranges.MoveNext(out int start, out int end))
             {
-                char c = valuesClause[i];
-
-                // Skip a whole literal through SqlLiteralScanner (a doubled quote is one quote and does not close
-                // the literal; a backslash is data), so a comma inside a value cannot split the row.
-                if (c == '\'')
+                // ✅ FIX: Strict bounds check before slicing to prevent ArgumentOutOfRangeException
+                if (valueIndex < Columns.Count && valueIndex < ColumnTypes.Count && start < end)
                 {
-                    int closing = SqlLiteralScanner.FindClosingQuote(valuesClause, i, out _);
-                    if (closing < 0)
-                    {
-                        break;
-                    }
-
-                    i = closing;
-                    continue;
+                    var valueSpan = valuesClause.Slice(start, end - start).Trim();
+                    var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
+                    row[Columns[valueIndex]] = value ?? DBNull.Value;
                 }
 
-                if (c == '(') parenDepth++;
-                else if (c == ')') parenDepth--;
-                else if (c == '[') bracketDepth++;
-                else if (c == ']' && bracketDepth > 0) bracketDepth--;
-                else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
-                {
-                    // ✅ FIX: Strict bounds check before Slice to prevent ArgumentOutOfRangeException
-                    if (valueStart < i && valueIndex < ColumnTypes.Count)
-                    {
-                        var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
-                        var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
-                        row[Columns[valueIndex]] = value ?? DBNull.Value;
-                    }
-
-                    valueStart = i + 1;
-                    valueIndex++;
-                }
+                // Counted even when it is not stored: a surplus value has to be reported, not dropped.
+                valueIndex++;
             }
-            
-        // Parse last value - ✅ FIX: Strict bounds check (< instead of <=) to prevent ArgumentOutOfRangeException
-        if (valueIndex < Columns.Count && valueStart < valuesClause.Length)
-        {
-            var valueSpan = valuesClause.Slice(valueStart).Trim();
-            var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
-            row[Columns[valueIndex]] = value ?? DBNull.Value;
-            valueIndex++;
-        }
-            
+
             // ✅ FIX: Verify we parsed all expected columns to catch malformed SQL early
             if (valueIndex != Columns.Count)
             {
@@ -167,7 +135,7 @@ public partial class Database
                     $"Column count mismatch in INSERT VALUES: expected {Columns.Count} values, but parsed {valueIndex}. " +
                     $"Table '{TableName}' requires columns: {string.Join(", ", Columns)}");
             }
-            
+
             return row;
         }
 
@@ -182,45 +150,19 @@ public partial class Database
         {
             var values = new object[Columns.Count];
 
-            int valueStart = 0;
+            // Same splitter as ParseValues (ValueRangeEnumerator) — the two bodies used to be copies of each other.
+            var ranges = new ValueRangeEnumerator(valuesClause);
             int valueIndex = 0;
-            int parenDepth = 0;
-            int bracketDepth = 0;
 
-            for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
+            while (ranges.MoveNext(out int start, out int end))
             {
-                char c = valuesClause[i];
-
-                // Whole literals are skipped (SqlLiteralScanner is the single quote definition), so a comma or a
-                // parenthesis inside a value cannot end it — and a bracketed VECTOR literal stays together.
-                if (c == '\'')
+                if (valueIndex < Columns.Count && valueIndex < ColumnTypes.Count && start < end)
                 {
-                    int closing = SqlLiteralScanner.FindClosingQuote(valuesClause, i, out _);
-                    if (closing < 0)
-                    {
-                        break;
-                    }
-
-                    i = closing;
-                    continue;
+                    var valueSpan = valuesClause.Slice(start, end - start).Trim();
+                    values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
                 }
 
-                if (c == '(') parenDepth++;
-                else if (c == ')') parenDepth--;
-                else if (c == '[') bracketDepth++;
-                else if (c == ']' && bracketDepth > 0) bracketDepth--;
-                else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
-                {
-                    CommitParsedValue(valuesClause, i, ref valueStart, valueIndex, values);
-                    valueIndex++;
-                }
-            }
-
-            // Parse last value
-            if (valueIndex < Columns.Count && valueStart < valuesClause.Length)
-            {
-                var valueSpan = valuesClause.Slice(valueStart).Trim();
-                values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+                // Counted even when it is not stored: a surplus value has to be reported, not dropped.
                 valueIndex++;
             }
 
@@ -235,15 +177,104 @@ public partial class Database
             return values;
         }
 
-        private void CommitParsedValue(ReadOnlySpan<char> valuesClause, int commaIndex, ref int valueStart, int valueIndex, object[] values)
+        /// <summary>
+        /// Splits a VALUES clause into raw (untrimmed) value ranges at top-level commas, so
+        /// <see cref="ParseValues"/> and <see cref="ParseValuesToArray"/> share one splitter instead of each carrying
+        /// a copy of the loop (they had drifted into two identical bodies).
+        /// <para>
+        /// A quoted literal is skipped as a whole through <see cref="SqlLiteralScanner"/>, the single quote
+        /// definition — a doubled quote is one quote and does not close the literal, a backslash is data — so a comma
+        /// inside a value cannot split the row. A parenthesised list and a bracketed VECTOR literal
+        /// (<c>[0.5, 0.25]</c>) stay together as well.
+        /// </para>
+        /// <para>
+        /// A <c>ref struct</c> on purpose: the prepared-insert path must not allocate per row.
+        /// </para>
+        /// </summary>
+        private ref struct ValueRangeEnumerator
         {
-            if (valueStart < commaIndex && valueIndex < ColumnTypes.Count)
+            private readonly ReadOnlySpan<char> _clause;
+            private int _scan;
+            private int _valueStart;
+            private int _parenDepth;
+            private int _bracketDepth;
+
+            internal ValueRangeEnumerator(ReadOnlySpan<char> clause)
             {
-                var valueSpan = valuesClause.Slice(valueStart, commaIndex - valueStart).Trim();
-                values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+                _clause = clause;
+                _scan = 0;
+                _valueStart = 0;
+                _parenDepth = 0;
+                _bracketDepth = 0;
             }
 
-            valueStart = commaIndex + 1;
+            /// <summary>
+            /// Yields the next value as a <c>[start, end)</c> slice of the clause, or <c>false</c> once the clause is
+            /// consumed. The text after the last top-level comma is yielded as the final value; an empty clause
+            /// yields nothing.
+            /// </summary>
+            /// <param name="start">Start index of the value in the clause.</param>
+            /// <param name="end">Index just past the value.</param>
+            /// <returns><c>true</c> when a value was yielded.</returns>
+            internal bool MoveNext(out int start, out int end)
+            {
+                for (int i = _scan; i < _clause.Length; i++)
+                {
+                    char c = _clause[i];
+
+                    if (c == '\'')
+                    {
+                        int closing = SqlLiteralScanner.FindClosingQuote(_clause, i, out _);
+                        if (closing < 0)
+                        {
+                            _scan = _clause.Length;
+                            break;   // unterminated literal: the rest of the clause cannot be split
+                        }
+
+                        i = closing;
+                        continue;
+                    }
+
+                    if (c == '(')
+                    {
+                        _parenDepth++;
+                    }
+                    else if (c == ')')
+                    {
+                        _parenDepth--;
+                    }
+                    else if (c == '[')
+                    {
+                        _bracketDepth++;
+                    }
+                    else if (c == ']' && _bracketDepth > 0)
+                    {
+                        _bracketDepth--;
+                    }
+                    else if (c == ',' && _parenDepth == 0 && _bracketDepth == 0)
+                    {
+                        start = _valueStart;
+                        end = i;
+                        _valueStart = i + 1;
+                        _scan = i + 1;
+                        return true;
+                    }
+                }
+
+                _scan = _clause.Length;
+
+                if (_valueStart < _clause.Length)
+                {
+                    start = _valueStart;
+                    end = _clause.Length;
+                    _valueStart = _clause.Length;
+                    return true;
+                }
+
+                start = 0;
+                end = 0;
+                return false;
+            }
         }
 
         /// <summary>
@@ -849,33 +880,19 @@ public partial class Database
         }
 
         int v0 = i;
-        bool inString = false;
-        char quote = '\0';
         while (i < s.Length)
         {
             char ch = s[i];
-            if (inString)
-            {
-                if (ch == quote)
-                {
-                    if (i + 1 < s.Length && s[i + 1] == quote)
-                    {
-                        i += 2; // escaped '' inside a string literal
-                        continue;
-                    }
-
-                    inString = false;
-                }
-
-                i++;
-                continue;
-            }
 
             if (ch is '\'' or '"')
             {
-                inString = true;
-                quote = ch;
-                i++;
+                // SqlLiteralScanner is the one quote definition (doubling honoured, a backslash is data), so these
+                // canonical-shape scanners do not carry a second copy of the rules.
+                if (!TrySkipLiteral(s, ref i))
+                {
+                    return false; // unterminated string literal
+                }
+
                 continue;
             }
 
@@ -885,11 +902,6 @@ public partial class Database
             }
 
             i++;
-        }
-
-        if (inString)
-        {
-            return false; // unterminated string literal
         }
 
         var whereVal = s[v0..].Trim();
@@ -911,6 +923,26 @@ public partial class Database
         }
 
         return i > start;
+    }
+
+    /// <summary>
+    /// Skips the quoted literal that starts at <paramref name="i"/>, leaving <paramref name="i"/> just past its
+    /// closing quote. Returns <c>false</c> when the literal is unterminated. The quote rules themselves live in
+    /// <see cref="SqlLiteralScanner"/>, so the canonical-shape scanners call this instead of re-implementing them.
+    /// </summary>
+    /// <param name="s">The statement text.</param>
+    /// <param name="i">Index of the opening quote; advanced past the closing quote on success.</param>
+    /// <returns><c>true</c> when a complete literal was skipped.</returns>
+    private static bool TrySkipLiteral(ReadOnlySpan<char> s, ref int i)
+    {
+        int closing = SqlLiteralScanner.FindClosingQuote(s, i, out _);
+        if (closing < 0)
+        {
+            return false;
+        }
+
+        i = closing + 1;
+        return true;
     }
 
     private static bool TryConsumeKeyword(ReadOnlySpan<char> s, ref int i, string keyword)
@@ -985,34 +1017,18 @@ public partial class Database
     {
         value = default;
         int v0 = i;
-        bool inString = false;
-        char quote = '\0';
 
         while (i < s.Length)
         {
             char ch = s[i];
-            if (inString)
-            {
-                if (ch == quote)
-                {
-                    if (i + 1 < s.Length && s[i + 1] == quote)
-                    {
-                        i += 2;
-                        continue;
-                    }
-
-                    inString = false;
-                }
-
-                i++;
-                continue;
-            }
 
             if (ch is '\'' or '"')
             {
-                inString = true;
-                quote = ch;
-                i++;
+                if (!TrySkipLiteral(s, ref i))
+                {
+                    return false; // unterminated string literal -> not canonical
+                }
+
                 continue;
             }
 
