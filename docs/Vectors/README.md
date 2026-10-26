@@ -76,10 +76,10 @@ This is the foundation for:
 
 ```bash
 # Core database
-dotnet add package SharpCoreDB --version 2.1.0
+dotnet add package SharpCoreDB --version 2.1.2
 
 # Vector search extension
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.2
 ```
 
 ### 2. Register Vector Search

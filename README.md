@@ -28,7 +28,16 @@ Use it when you need:
   measured 2026-10-11)**, the **RC.3 sweep of 2,897 tests across 16 suites**, and **backward
   compatibility**
 
-> **Current release: v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
+> **Current release: v2.1.2 (2026-10-26) — the .NET 11 / C# 15 line, on `master`.** A data-correctness
+> patch with no API changes: a **bound string parameter holding an apostrophe, a doubled quote or a
+> backslash was re-scanned as SQL**, so the value could land in the neighbouring column, and a value
+> ending in a backslash could not be written at all. One scanner now owns SQL's and SQLite's escaping
+> rules for every literal reader on the statement path. Validated by **core 2,107 tests / 0 failed,
+> VectorSearch 255 / 0, EF Core 116 / 0, linq2DB 24 / 0**, and a two-file runnable reproduction ships in
+> [`docs/sharpcoredb-known-issues.md`](docs/sharpcoredb-known-issues.md) §7. Full notes:
+> [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.2]`.
+
+> **Previous release — v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
 > NuGet.org** (all 27 packable packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
 > ships at 24 bytes by default on both storage paths (worth **+34 %** on the batched multi-row INSERT
 > shape and **0,63× → 0,87×** on the tracked fair-PK INSERT ratio), the overflow arena appends a row's payloads in one call instead of one
@@ -73,17 +82,17 @@ Use it when you need:
 
 ## Requirements and the two release lines
 
-| | **v2.1.0 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
+| | **v2.1.2 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
 |---|---|---|
 | Target framework | `net11.0` only (every project under `src`) | `net10.0` |
 | Language | C# 15 (`LangVersion=preview`, always on) | C# 14 |
 | SDK | .NET 11 RC, pinned in `global.json` (`11.0.100-rc.1.26425.128`, `allowPrerelease`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
 | Pipeline | `.github/workflows/ci.yml` | `.github/workflows/ci-net10.yml` |
-| Packages | `2.1.0` — the 27 packable projects under `src` | `2.0.0.3` |
+| Packages | `2.1.2` — the 27 packable projects under `src` | `2.0.0.3` |
 | Status | current release, receives new work | servicing only |
 
 - **Pick one line per solution.** The package references are line-specific: a `net10.0` project uses the
-  `2.0.0.x` packages, a `net11.0` project the `2.1.0` ones. Do not mix them in one solution.
+  `2.0.0.x` packages, a `net11.0` project the `2.1.2` ones. Do not mix them in one solution.
 - **The .NET 11 SDK is required to build** — the `global.json` pin is deliberate and `dotnet test` is not
   this repository's runner (Microsoft.Testing.Platform is; run the built test executable, or see
   [`docs/INDEX.md`](docs/INDEX.md)).
@@ -115,7 +124,47 @@ Use it when you need:
 
 ---
 
-## What's new in v2.1.0 (current release)
+## What's new in v2.1.2 (current release)
+
+**A data-correctness patch with no API changes.** `ExecuteSQL(sql, parameters)` does not bind values at the
+engine level: it renders each one back **into the statement text** and hands that text to the ordinary
+parser, so the formatter and the statement scanners have to agree about escaping — and they did not. A
+bound `TEXT` value holding an apostrophe, a doubled quote or a backslash was re-scanned as SQL: the value
+could land in the **neighbouring column**, and a value ending in a backslash could not be written at all
+(`Mismatched parentheses in VALUES clause`). Any consumer storing prose, source code or Windows paths
+through a parameter was exposed, and both faces of the failure were silent.
+
+The rules now live once, in [`SqlLiteralScanner`](src/SharpCoreDB/Services/SqlLiteralScanner.cs), and every
+literal reader on the statement path uses it: the `VALUES` and `SET` splitters, the matching-parenthesis
+scan, all four parameter extractors, the batch `INSERT` parsers, `FastSqlLexer.ReadString`, the expression
+tokenizer, the `WHERE` tokenizer (`EvaluateWhere` split on spaces and truncated *any* quoted value at its
+first space) and the server's `$n` → `?` translation. A doubled quote is one quote and does not close the
+literal; a backslash is data. `ParseValue` removes exactly one quote pair and collapses the doubling (a
+parameter holding `'` used to store an empty string), a quoted `''` stores an empty string as SQLite does
+instead of `NULL`, `UPDATE … SET col = @v` splits at the first `=` instead of every `=`, and a tuple that
+cannot fit its statement throws before any row is written — naming the table, the tuple index, both counts
+and the column list — instead of shifting values right.
+
+```csharp
+// Before 2.1.2 the body landed in `Source` (or the INSERT threw "Mismatched parentheses").
+// After: both round-trip byte-for-byte, Windows paths and prose included.
+db.ExecuteSQL("INSERT INTO Passages (Id, Source, Body) VALUES (@id, @src, @body)",
+    new Dictionary<string, object?>
+    {
+        ["@id"] = 7,
+        ["@src"] = @"C:\src\app\",
+        ["@body"] = @"It's O(n log n) — see docs\draft.pdf, 'quoted' too"
+    });
+```
+
+Validated on this tree: **core 2,107 tests / 0 failed**, VectorSearch **255 / 0**, EF Core **116 / 0**,
+linq2DB **24 / 0**, and `SharpCoreDB.CI.slnf` builds clean. A two-file runnable reproduction with the
+before/after console output ships in [`docs/sharpcoredb-known-issues.md`](docs/sharpcoredb-known-issues.md)
+§7, and the consumer that reported it — SharpAgent's code-evidence index, which writes source text and
+Windows paths as `TEXT` — runs its **144 indexing tests green** against this build with **no code change**.
+Full list: [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.2]`.
+
+## What's new in v2.1.0 (previous release)
 
 The v1.x benchmark gap (point reads/updates/deletes **16–52x behind SQLite** because every update
 appended a new row) is closed as an engine behaviour. The numbers below are re-measured on
@@ -235,7 +284,7 @@ Headline changes, grouped by area. Everything below is in the shipped `2.1.0` pa
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.0
+dotnet add package SharpCoreDB --version 2.1.2
 ```
 
 ```csharp
@@ -272,8 +321,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.1.0
-dotnet add package SharpCoreDB.Client --version 2.1.0
+dotnet add package SharpCoreDB.Server.Core --version 2.1.2
+dotnet add package SharpCoreDB.Client --version 2.1.2
 ```
 
 > The server host is a standalone executable (`src/SharpCoreDB.Server`), distributed as the
@@ -286,6 +335,10 @@ dotnet add package SharpCoreDB.Client --version 2.1.0
 
 ## Previous releases
 
+- **v2.1.1** — patch, no API changes: a bound `float[]` reaches a `VECTOR(n)` column as a vector,
+  `ORDER BY vec_distance_*() LIMIT k` reaches the vector index instead of scanning, `information_schema`
+  is answered by the engine itself (so REST and the embedded API see the catalog the PG handshake does),
+  and the 18 % coverage floor is measured and enforced in CI.
 - **v2.0.0.3** — the net10.0 / C# 14 stable line, parked on `release/v2.0` and built by `ci-net10.yml`
   (the complete package list is above). Engine foundation it carries: fixed-width record layout by default
   for new PK tables, in-place UPDATE/DELETE with commit-time tombstones, and the reopen data-integrity
@@ -300,50 +353,50 @@ dotnet add package SharpCoreDB.Client --version 2.1.0
 
 ## Available NuGet packages
 
-### v2.1.0 — current release (`master`, net11.0 / C# 15 preview)
+### v2.1.2 — current release (`master`, net11.0 / C# 15 preview)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.1.0
+dotnet add package SharpCoreDB --version 2.1.2
 
 # Server/client
-dotnet add package SharpCoreDB.Server.Core --version 2.1.0
-dotnet add package SharpCoreDB.Server.Protocol --version 2.1.0
-dotnet add package SharpCoreDB.Client --version 2.1.0
-dotnet add package SharpCoreDB.Client.Protocol --version 2.1.0
-dotnet add package SharpCoreDB.Data.Provider --version 2.1.0
+dotnet add package SharpCoreDB.Server.Core --version 2.1.2
+dotnet add package SharpCoreDB.Server.Protocol --version 2.1.2
+dotnet add package SharpCoreDB.Client --version 2.1.2
+dotnet add package SharpCoreDB.Client.Protocol --version 2.1.2
+dotnet add package SharpCoreDB.Data.Provider --version 2.1.2
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.1.0
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.0
-dotnet add package SharpCoreDB.Search --version 2.1.0
-dotnet add package SharpCoreDB.HybridSearch --version 2.1.0
-dotnet add package SharpCoreDB.Graph --version 2.1.0
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.0
-dotnet add package SharpCoreDB.Distributed --version 2.1.0
-dotnet add package SharpCoreDB.Provider.Sync --version 2.1.0
-dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.0
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.0
-dotnet add package SharpCoreDB.Extensions --version 2.1.0
-dotnet add package SharpCoreDB.Identity --version 2.1.0
-dotnet add package SharpCoreDB.Serilog.Sinks --version 2.1.0
+dotnet add package SharpCoreDB.Analytics --version 2.1.2
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.2
+dotnet add package SharpCoreDB.Search --version 2.1.2
+dotnet add package SharpCoreDB.HybridSearch --version 2.1.2
+dotnet add package SharpCoreDB.Graph --version 2.1.2
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
+dotnet add package SharpCoreDB.Distributed --version 2.1.2
+dotnet add package SharpCoreDB.Provider.Sync --version 2.1.2
+dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.2
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.2
+dotnet add package SharpCoreDB.Extensions --version 2.1.2
+dotnet add package SharpCoreDB.Identity --version 2.1.2
+dotnet add package SharpCoreDB.Serilog.Sinks --version 2.1.2
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.0
-dotnet add package SharpCoreDB.Projections --version 2.1.0
-dotnet add package SharpCoreDB.CQRS --version 2.1.0
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.2
+dotnet add package SharpCoreDB.Projections --version 2.1.2
+dotnet add package SharpCoreDB.CQRS --version 2.1.2
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.1.0
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.0
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.0
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.0
+dotnet add package SharpCoreDB.Functional --version 2.1.2
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.2
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.2
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.2
 
 # Hosting and tooling
-dotnet add package SharpCoreDB.Aspire.Hosting --version 2.1.0
+dotnet add package SharpCoreDB.Aspire.Hosting --version 2.1.2
 ```
 
-> The 27 commands above are the complete packable set of this line. **`2.1.0` is a stable release**, so
+> The 27 commands above are the complete packable set of this line. **`2.1.2` is a stable release**, so
 > NuGet selects it by default for a `net11.0` project; a `net10.0` project resolves to the `2.0.0.3` line
 > instead. Pin the version explicitly (as above) when you want to be certain, and tick *Include
 > prerelease* only if you are deliberately testing an RC build.

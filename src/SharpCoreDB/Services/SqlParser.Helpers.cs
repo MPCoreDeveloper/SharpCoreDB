@@ -162,17 +162,18 @@ public partial class SqlParser
     /// </summary>
     public static object? ParseValue(string val, DataType type)
     {
-        if (val == "NULL")
+        // A bare NULL keyword is the null value; a quoted 'NULL' is the four-character string. The order matters,
+        // so the literal is unquoted only after this check.
+        if (val.Equals("NULL", StringComparison.OrdinalIgnoreCase))
         {
             return null;
         }
 
-        while (val.Length >= 2 &&
-               ((val.StartsWith('\'') && val.EndsWith('\'')) ||
-                (val.StartsWith('"') && val.EndsWith('"'))))
-        {
-            val = val[1..^1];
-        }
+        // Exactly one pair of quotes is removed and SQL quote doubling is collapsed ('it''s' → it's), through
+        // SqlLiteralScanner — the same definition every statement scanner uses. The previous form stripped
+        // repeatedly, so a value that ended in a quote lost it (a parameter holding `'` stored an empty string),
+        // and it never collapsed doubling, so 'it''s' reached storage as it''s. Both are known issue 7.
+        val = SqlLiteralScanner.Unquote(val);
 
         try
         {

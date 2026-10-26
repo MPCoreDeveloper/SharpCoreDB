@@ -80,7 +80,11 @@ public sealed class EncryptionCoverageTests : IDisposable
         db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
         for (int i = 1; i <= 5; i++)
         {
-            db.ExecuteSQL($"INSERT INTO docs VALUES ({i}, '{Marker}_{i}', {i * 0.5})");
+            // Invariant culture: {i * 0.5} formats as "0,5" on a Dutch machine, which is a four-value tuple because
+            // SQL's decimal literal separator is '.', as SQLite requires. The engine now rejects such a tuple
+            // (correctly) instead of silently dropping the overflow value.
+            var score = (i * 0.5).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+            db.ExecuteSQL($"INSERT INTO docs VALUES ({i}, '{Marker}_{i}', {score})");
         }
 
         db.Flush();

@@ -8,6 +8,7 @@ namespace SharpCoreDB.DataStructures;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// Query helper methods for Table - WHERE clause parsing, row deserialization, result ordering.
@@ -53,7 +54,11 @@ public partial class Table
         }
 
         ReadOnlySpan<char> colSpan = span[..eq].Trim().Trim("\"[]`".AsSpan());
-        ReadOnlySpan<char> valSpan = span[(eq + 1)..].Trim().Trim("'\"".AsSpan());
+
+        // The value stays as written: Unquote below removes exactly one pair of quotes and collapses SQL doubling
+        // (''), so a value holding an apostrophe resolves to the same key it was stored under. Trimming the quote
+        // characters here left the doubling in place and stripped every edge quote (known issue 7).
+        ReadOnlySpan<char> valSpan = span[(eq + 1)..].Trim();
 
         if (colSpan.IsEmpty || valSpan.IsEmpty)
         {
@@ -70,7 +75,7 @@ public partial class Table
         }
 
         column = colSpan.ToString();
-        value = valSpan.ToString();
+        value = SqlLiteralScanner.Unquote(valSpan.ToString());
         return true;
     }
 
@@ -132,8 +137,8 @@ public partial class Table
             if (parts.Length == 3)
             {
                 column = parts[0];
-                rangeStart = parts[1].Trim('\'', '"');
-                rangeEnd = parts[2].Trim('\'', '"');
+                rangeStart = SqlLiteralScanner.Unquote(parts[1].Trim());
+                rangeEnd = SqlLiteralScanner.Unquote(parts[2].Trim());
                 return true;
             }
         }
@@ -145,7 +150,7 @@ public partial class Table
             if (parts.Length == 2)
             {
                 column = parts[0].Trim();
-                rangeStart = parts[1].Trim().Trim('\'', '"');
+                rangeStart = SqlLiteralScanner.Unquote(parts[1].Trim());
                 rangeEnd = "9999999999"; // Large number for upper bound
                 return true;
             }
@@ -159,7 +164,7 @@ public partial class Table
             if (parts.Length == 2)
             {
                 column = parts[0].Trim();
-                rangeStart = parts[1].Trim().Trim('\'', '"');
+                rangeStart = SqlLiteralScanner.Unquote(parts[1].Trim());
                 rangeEnd = "9999999999";
                 return true;
             }
@@ -173,7 +178,7 @@ public partial class Table
             {
                 column = parts[0].Trim();
                 rangeStart = "0"; // Minimum value
-                rangeEnd = parts[1].Trim().Trim('\'', '"');
+                rangeEnd = SqlLiteralScanner.Unquote(parts[1].Trim());
                 return true;
             }
         }
@@ -186,7 +191,7 @@ public partial class Table
             {
                 column = parts[0].Trim();
                 rangeStart = "0";
-                rangeEnd = parts[1].Trim().Trim('\'', '"');
+                rangeEnd = SqlLiteralScanner.Unquote(parts[1].Trim());
                 return true;
             }
         }

@@ -73,11 +73,13 @@ public sealed class WritePathProfilerTests : IDisposable
             db.ExecuteSQL("CREATE TABLE docs (id INTEGER PRIMARY KEY, name TEXT, score REAL)");
             for (int i = 0; i < 50; i++)
             {
-                db.ExecuteSQL($"INSERT INTO docs VALUES ({i}, 'user{i}', {i * 0.5})");
+                // Invariant culture: a Dutch machine renders {i * 0.5} as "0,5", which is two SQL values, not one.
+                var score = (i * 0.5).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture);
+                db.ExecuteSQL($"INSERT INTO docs VALUES ({i}, 'user{i}', {score})");
             }
 
             db.ExecuteBatchSQL([.. Enumerable.Range(0, 50).Select(i =>
-                $"UPDATE docs SET score = {i * 1.5} WHERE id = {i}")]);
+                $"UPDATE docs SET score = {(i * 1.5).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)} WHERE id = {i}")]);
 
             db.Flush();
         }

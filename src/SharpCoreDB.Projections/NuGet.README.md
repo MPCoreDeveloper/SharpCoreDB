@@ -28,7 +28,7 @@ Projection primitives for `SharpCoreDB.EventSourcing`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Projections --version 2.1.1
+dotnet add package SharpCoreDB.Projections --version 2.1.2
 ```
 
 ## Documentation

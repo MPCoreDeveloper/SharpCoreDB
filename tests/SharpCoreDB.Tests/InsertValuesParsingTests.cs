@@ -15,25 +15,24 @@ using Xunit;
 
 /// <summary>
 /// Pins the observable behaviour of the multi-row <c>INSERT … VALUES</c> literal scanner
-/// (<c>SqlParser.ParseInsertValues</c>, <c>SqlParser.DML.cs:654</c>) <b>before</b> it is rewritten to slice
-/// literals out of the statement text instead of appending them to a <c>StringBuilder</c> one character at a
-/// time (plan §9 priority 2, lever 1 — the measured 25 % of a multi-row pass).
+/// (<c>SqlParser.ParseInsertValues</c>).
 /// <para>
-/// The rewrite is only safe if these four rules are reproduced exactly, and three of them are surprising enough
-/// to be documented here rather than in prose:
-/// <list type="number">
-/// <item>a single quote toggles quote state and is <b>dropped</b> — unless the previously <i>appended</i>
-/// character was a backslash, a check against the scanner's accumulated content rather than the source text.
-/// So <c>'it''s'</c> becomes <c>its</c> (standard SQL quote-doubling is <b>not</b> an escape here) while
-/// <c>'a\'b'</c> keeps its backslash and its content.</item>
-/// <item>a comma splits literals only <b>outside</b> quotes.</item>
-/// <item>every literal is <c>Trim()</c>ed.</item>
-/// <item>a literal with <b>no text at all is not emitted</b>, so <c>(1,)</c> yields a single value — leaving the
-/// second column to the missing-value path and therefore <c>NULL</c> — while <c>(1, )</c> yields an empty
-/// literal, which for a TEXT column stores an empty string. A missing literal and an empty-string literal are
-/// different values.</item>
-/// </list>
+/// The scanner is structural: it splits a tuple into element texts and hands each one, quotes and all, to
+/// <c>SqlParser.ParseValue</c>. The rules below are what the suites pin:
 /// </para>
+/// <list type="number">
+/// <item>a single quote opens and closes a literal, and <c>''</c> inside one is <b>one quote of data</b> that does
+/// not close it — SQL and SQLite (<c>'it''s'</c> → <c>it's</c>). A backslash is data too: it is a legal last
+/// character of a value, so it can never escape the closing quote. (Before known issue 7 was fixed the scanner
+/// dropped the quote of a doubled pair and let a backslash suppress a toggle, which is why a bound value
+/// containing either could not round-trip.)</item>
+/// <item>a comma splits literals only <b>outside</b> quotes and outside a bracketed literal.</item>
+/// <item>every literal is <c>Trim()</c>ed.</item>
+/// <item>a literal that is present is a value even when it is empty, so <c>(1, '')</c> stores an empty string, as
+/// SQLite does; only a literally absent element is dropped, so <c>(1,)</c> leaves the column to the
+/// missing-value path and therefore <c>NULL</c>, while <c>(1, )</c> stores an empty string. A missing literal and
+/// an empty-string literal are different values.</item>
+/// </list>
 /// </summary>
 public sealed class InsertValuesParsingTests : IDisposable
 {
@@ -87,30 +86,30 @@ public sealed class InsertValuesParsingTests : IDisposable
         Assert.Equal("c", NameOf(db, 2));
     }
 
-    // ── Rule 1: quote toggling, and the escape check against accumulated content ────────────────
+    // ── Rule 1: a doubled quote is one quote; a backslash is data ───────────────────────────────
 
     [Fact]
-    public async Task DoubledQuote_IsDroppedAndContentConcatenated_NotEscaped()
+    public async Task DoubledQuote_IsOneQuote_NotAnEscape()
     {
         await using var db = Open("doubled_quote");
 
-        // 'it''s' → quote(dropped) i t quote(dropped) quote(dropped) s quote(dropped) → "its"
+        // 'it''s' → the doubled quote is data, so the literal is it's (SQL and SQLite behaviour).
         db.ExecuteSQL("INSERT INTO t VALUES (1, 'it''s'), (2, 'ok')");
 
-        Assert.Equal("its", NameOf(db, 1));
+        Assert.Equal("it's", NameOf(db, 1));
     }
 
     [Fact]
-    public async Task BackslashEscapedQuote_IsKeptVerbatim_AndDoesNotToggle()
+    public async Task TrailingBackslash_DoesNotSwallowTheClosingQuote()
     {
         await using var db = Open("escaped_quote");
 
-        // 'a\'b' → quote(dropped) a \ ' (the accumulated content ends in '\', so this is NOT a toggle — the
-        // quote is appended and stays) b quote(dropped) → "a\'b". The backslash is data, not an escape: it is
-        // stored verbatim, and so is the quote it "escaped".
-        db.ExecuteSQL("INSERT INTO t VALUES (1, 'a\\'b'), (2, 'ok')");
+        // 'C:\temp\' → the backslash is data, so the final quote still closes the literal. A scanner that treats
+        // a backslash as an escape cannot represent this value at all — it read the closing quote as escaped and
+        // reported "Mismatched parentheses in VALUES clause".
+        db.ExecuteSQL("INSERT INTO t VALUES (1, 'C:\\temp\\'), (2, 'ok')");
 
-        Assert.Equal("a\\'b", NameOf(db, 1));
+        Assert.Equal("C:\\temp\\", NameOf(db, 1));
     }
 
     // ── Rule 3: literals are trimmed ────────────────────────────────────────────────────────────
@@ -155,15 +154,24 @@ public sealed class InsertValuesParsingTests : IDisposable
         await using var db = Open("interior_empty");
         db.ExecuteSQL("CREATE TABLE t3 (id INTEGER PRIMARY KEY, name TEXT, note INTEGER)");
 
-        // Found by the suites when the scanner was rewritten (2026-09-16): a literal that is followed by a comma
-        // is emitted unconditionally, so '' stores an empty string — only a *trailing* literal is suppressed when
-        // it has no text. Inside `(1, '')` the empty literal IS the trailing one, so it is not emitted at all and
-        // the column falls to NULL; expressing the interior case needs a value after it.
         db.ExecuteSQL("INSERT INTO t3 VALUES (1, '', 42), (2, 'x', 43)");
 
         var rows = db.ExecuteQuery("SELECT * FROM t3 WHERE id = 1");
         Assert.Equal(string.Empty, rows[0]["name"]);
         Assert.Equal(42, Convert.ToInt32(rows[0]["note"]));
+    }
+
+    [Fact]
+    public async Task EmptyStringLiteral_InTheTrailingPosition_IsStoredAsAnEmptyString()
+    {
+        await using var db = Open("trailing_empty");
+
+        // SQLite stores '' here, so SharpCoreDB must too. The old rule suppressed a trailing empty literal, which
+        // meant a *present* empty value became NULL — and, through a bound parameter, an empty string was not
+        // round-trippable at all (known issue 7).
+        db.ExecuteSQL("INSERT INTO t VALUES (1, ''), (2, 'ok')");
+
+        Assert.Equal(string.Empty, NameOf(db, 1));
     }
 
     // ── Control: the single-tuple shape still parses ────────────────────────────────────────────

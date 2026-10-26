@@ -57,7 +57,7 @@ while (reader.Read())
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Data.Provider --version 2.1.1
+dotnet add package SharpCoreDB.Data.Provider --version 2.1.2
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

@@ -232,7 +232,9 @@ public partial class SqlParser
         {
             var leftCol  = literalOpMatch.Groups[1].Value;
             var op       = literalOpMatch.Groups[2].Value;
-            var rightRaw = literalOpMatch.Groups[3].Value.Trim().Trim('\'');
+            // Keep the raw literal: ParseValue removes one pair of quotes and collapses doubling. Trimming quotes
+            // here as well stripped a value that legitimately ends in a quote (known issue 7's shape).
+            var rightRaw = literalOpMatch.Groups[3].Value.Trim();
             existingRow.TryGetValue(leftCol, out var leftVal);
             var colIdx   = table.Columns.IndexOf(leftCol);
             var colType  = colIdx >= 0 ? table.ColumnTypes[colIdx] : DataType.String;

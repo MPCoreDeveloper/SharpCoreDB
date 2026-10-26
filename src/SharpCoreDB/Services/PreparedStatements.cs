@@ -98,32 +98,34 @@ internal sealed class PreparedStatement : IPreparedStatement
     }
 
     /// <summary>Extracts positions of ? placeholders in SQL.</summary>
+    /// <remarks>
+    /// Quoted literals are skipped as a whole through <see cref="SqlLiteralScanner"/>, the single quote
+    /// definition: a doubled quote is one quote and does not close the literal, and a backslash is data. The
+    /// previous form toggled on every quote whose predecessor was not a backslash, so <c>'it''s ?'</c> was read
+    /// as "outside the literal" after the doubled quote and its <c>?</c> counted as a placeholder.
+    /// </remarks>
     private static int[] ExtractParameterPositions(string sql)
     {
         var positions = new List<int>();
-        bool inString = false;
-        char stringChar = '\0';
 
         for (int i = 0; i < sql.Length; i++)
         {
             char c = sql[i];
 
-            // Handle string literals
-            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            if (c is '\'' or '"')
             {
-                if (!inString)
+                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
+                if (closing < 0)
                 {
-                    inString = true;
-                    stringChar = c;
+                    break;  // unterminated literal: nothing after it is a placeholder
                 }
-                else if (c == stringChar)
-                {
-                    inString = false;
-                }
+
+                i = closing;
+                continue;
             }
 
             // Count ? outside strings
-            if (!inString && c == '?')
+            if (c == '?')
             {
                 positions.Add(i);
             }
@@ -136,30 +138,26 @@ internal sealed class PreparedStatement : IPreparedStatement
     private static Dictionary<string, int>? ExtractNamedParameters(string sql)
     {
         var parameters = new Dictionary<string, int>();
-        bool inString = false;
-        char stringChar = '\0';
 
         for (int i = 0; i < sql.Length; i++)
         {
             char c = sql[i];
 
-            // Handle string literals
-            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            // Skip a whole literal (see ExtractParameterPositions for the rule).
+            if (c is '\'' or '"')
             {
-                if (!inString)
+                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
+                if (closing < 0)
                 {
-                    inString = true;
-                    stringChar = c;
+                    break;
                 }
-                else if (c == stringChar)
-                {
-                    inString = false;
-                }
+
+                i = closing;
                 continue;
             }
 
             // Extract @paramName outside strings
-            if (!inString && c == '@' && i + 1 < sql.Length && char.IsLetter(sql[i + 1]))
+            if (c == '@' && i + 1 < sql.Length && char.IsLetter(sql[i + 1]))
             {
                 int nameStart = i + 1;
                 int nameEnd = nameStart;
@@ -176,7 +174,6 @@ internal sealed class PreparedStatement : IPreparedStatement
                 }
 
                 // Skip past the parameter name (nameEnd is already one past the last character)
-                // Note: loop increment will still happen, so we need to account for that
                 i = nameEnd - 1;
             }
         }
@@ -394,30 +391,26 @@ internal static class ParameterBinder
     internal static List<(string name, int pos)> ExtractNamedParameterOccurrences(string sql)
     {
         var occurrences = new List<(string name, int pos)>();
-        bool inString = false;
-        char stringChar = '\0';
 
         for (int i = 0; i < sql.Length; i++)
         {
             char c = sql[i];
 
-            // Skip string literals ('...' or "...").
-            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            // Skip the whole literal (SqlLiteralScanner is the single quote definition — see
+            // ExtractParameterPositions).
+            if (c is '\'' or '"')
             {
-                if (!inString)
+                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
+                if (closing < 0)
                 {
-                    inString = true;
-                    stringChar = c;
-                }
-                else if (c == stringChar)
-                {
-                    inString = false;
+                    break;
                 }
 
+                i = closing;
                 continue;
             }
 
-            if (inString || c != '@' || i + 1 >= sql.Length || !char.IsLetterOrDigit(sql[i + 1]))
+            if (c != '@' || i + 1 >= sql.Length || !char.IsLetterOrDigit(sql[i + 1]))
             {
                 continue;
             }
@@ -440,29 +433,24 @@ internal static class ParameterBinder
     internal static int[] ExtractPositionalParameterPositions(string sql)
     {
         var positions = new List<int>();
-        bool inString = false;
-        char stringChar = '\0';
 
         for (int i = 0; i < sql.Length; i++)
         {
             char c = sql[i];
 
-            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            if (c is '\'' or '"')
             {
-                if (!inString)
+                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
+                if (closing < 0)
                 {
-                    inString = true;
-                    stringChar = c;
-                }
-                else if (c == stringChar)
-                {
-                    inString = false;
+                    break;
                 }
 
+                i = closing;
                 continue;
             }
 
-            if (!inString && c == '?')
+            if (c == '?')
             {
                 positions.Add(i);
             }

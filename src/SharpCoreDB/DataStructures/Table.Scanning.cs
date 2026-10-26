@@ -225,8 +225,11 @@ public partial class Table
         // split-based evaluator treats a leading "(" as part of the column name).
         where = SqlInPredicate.StripOuterParentheses(where);
 
-        var parts = where.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        if (parts.Length < 3) return true;
+        // Tokenised on top-level whitespace (SqlLiteralScanner): a quoted value keeps its spaces and its doubled
+        // quotes, so 'it''s fine, really' is one token and compares as it''s→it's after Unquote. Splitting on ' '
+        // truncated such a value at its first space and the row could never match (known issue 7's shape).
+        var parts = SqlLiteralScanner.SplitTopLevelWhitespace(where);
+        if (parts.Count < 3) return true;
 
         // ✅ Issue #348: split compound conditions on top-level AND/OR and evaluate each
         // operand recursively (via the full single-condition evaluator below). The previous
@@ -266,7 +269,7 @@ public partial class Table
         // SqlParser evaluator, which now implements SQL-correct semantics (NULL never matches
         // LIKE, %/_ patterns, BETWEEN as inclusive range). Previously these fell through the
         // switch's default → return true (no filtering) in this directory-mode scan path.
-        if (parts.Length >= 2 &&
+        if (parts.Count >= 2 &&
             (parts[1].Equals("LIKE", StringComparison.OrdinalIgnoreCase) ||
              parts[1].Equals("NOT LIKE", StringComparison.OrdinalIgnoreCase) ||
              parts[1].Equals("BETWEEN", StringComparison.OrdinalIgnoreCase)))
@@ -287,7 +290,7 @@ public partial class Table
         }
 
         // Handle IS NOT NULL (4 tokens: column IS NOT NULL)
-        if (parts.Length >= 4
+        if (parts.Count >= 4
             && parts[1].Equals("IS", StringComparison.OrdinalIgnoreCase)
             && parts[2].Equals("NOT", StringComparison.OrdinalIgnoreCase)
             && parts[3].Equals("NULL", StringComparison.OrdinalIgnoreCase))
@@ -303,17 +306,17 @@ public partial class Table
         }
 
         var op = parts[1];
-        var value = parts[2].Trim('"').Trim((char)39);
+        var value = SqlLiteralScanner.Unquote(parts[2]);
 
         // Handle multi-word operators: NOT REGEXP, NOT LIKE, NOT IN (4 tokens: col NOT OP val)
-        if (parts.Length >= 4
+        if (parts.Count >= 4
             && parts[1].Equals("NOT", StringComparison.OrdinalIgnoreCase)
             && (parts[2].Equals("REGEXP", StringComparison.OrdinalIgnoreCase)
                 || parts[2].Equals("LIKE", StringComparison.OrdinalIgnoreCase)
                 || parts[2].Equals("IN", StringComparison.OrdinalIgnoreCase)))
         {
             op = $"NOT {parts[2].ToUpperInvariant()}";
-            value = parts[3].Trim('"').Trim((char)39);
+            value = SqlLiteralScanner.Unquote(parts[3]);
         }
 
         if (!row.TryGetValue(columnName, out var rowValue) || rowValue == null)

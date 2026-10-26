@@ -1533,7 +1533,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
 
         if (valueStr.StartsWith('\'') && valueStr.EndsWith('\''))
         {
-            valueStr = valueStr[1..^1];
+            valueStr = SqlLiteralScanner.Unquote(valueStr);
         }
 
         if (rowValue is int intVal && int.TryParse(valueStr, out var intCompare))
@@ -1584,7 +1584,7 @@ internal sealed class SingleFileDatabase : IDatabase, IDisposable, IAsyncDisposa
         if ((valueStr.StartsWith('\'') && valueStr.EndsWith('\'')) ||
             (valueStr.StartsWith('"') && valueStr.EndsWith('"')))
         {
-            return valueStr[1..^1];
+            return SqlLiteralScanner.Unquote(valueStr);
         }
         
         if (int.TryParse(valueStr, out var intVal))

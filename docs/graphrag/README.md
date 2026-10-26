@@ -49,9 +49,9 @@ For package-level mapping, see `../FEATURE_MATRIX.md`.
 ## Quick start
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.1
-dotnet add package SharpCoreDB.Graph --version 2.1.1
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
+dotnet add package SharpCoreDB.Graph --version 2.1.2
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.2
 ```
 
 ```csharp

@@ -5,6 +5,7 @@
 
 using Microsoft.Extensions.Logging;
 using SharpCoreDB.Server.Core;
+using SharpCoreDB.Services;
 using SharpCoreDB.Server.Core.Catalog;
 using SharpCoreDB.Server.Core.Observability;
 using SharpCoreDB.Server.Core.Security;
@@ -1118,27 +1119,30 @@ public sealed class BinaryProtocolHandler(
         }
 
         var sb = new StringBuilder(sql.Length);
-        bool inString = false;
-        char stringChar = '\0';
 
         for (int i = 0; i < sql.Length; i++)
         {
             char c = sql[i];
 
-            if ((c == '\'' || c == '"') && (i == 0 || sql[i - 1] != '\\'))
+            // A quoted literal is copied verbatim and never translated. SqlLiteralScanner is the single quote
+            // definition (a doubled quote is one quote and does not close the literal; a backslash is data), so a
+            // '$1' inside a value stays text here — the previous form exited the literal at the first quote it saw
+            // after a doubled one and rewrote it.
+            if (c is '\'' or '"')
             {
-                if (!inString)
+                int closing = SqlLiteralScanner.FindClosingQuote(sql, i, out _);
+                if (closing < 0)
                 {
-                    inString = true;
-                    stringChar = c;
+                    sb.Append(sql, i, sql.Length - i);  // unterminated literal: take the rest as written
+                    break;
                 }
-                else if (c == stringChar)
-                {
-                    inString = false;
-                }
+
+                sb.Append(sql, i, closing - i + 1);
+                i = closing;
+                continue;
             }
 
-            if (!inString && c == '$' && i + 1 < sql.Length && char.IsDigit(sql[i + 1]))
+            if (c == '$' && i + 1 < sql.Length && char.IsDigit(sql[i + 1]))
             {
                 // Skip '$' and all following digits; emit a single '?'.
                 i++;

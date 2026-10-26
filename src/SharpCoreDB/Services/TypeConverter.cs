@@ -186,6 +186,15 @@ public static class TypeConverter
                 currentToken.Append(c);
                 if (c == stringChar)
                 {
+                    // A doubled quote is one quote of data and does not close the literal (SQL/SQLite), so
+                    // 'it''s' is one token rather than two. A backslash is data too — never an escape.
+                    if (i + 1 < expression.Length && expression[i + 1] == stringChar)
+                    {
+                        currentToken.Append(expression[i + 1]);
+                        i++;
+                        continue;
+                    }
+
                     inString = false;
                     tokens.Add(currentToken.ToString());
                     currentToken.Clear();
@@ -395,13 +404,13 @@ public static class TypeConverter
         }
         else if (token.StartsWith('\'') && token.EndsWith('\''))
         {
-            // String literal
-            return token.Trim('\'', '"');
+            // String literal: one pair of quotes off, and SQL doubling collapsed ('it''s' → it's).
+            return SqlLiteralScanner.Unquote(token);
         }
         else if (token.StartsWith('"') && token.EndsWith('"'))
         {
-            // String literal
-            return token.Trim('\'', '"');
+            // Quoted identifier or string literal — same rule.
+            return SqlLiteralScanner.Unquote(token);
         }
         else if (int.TryParse(token, out var intValue))
         {

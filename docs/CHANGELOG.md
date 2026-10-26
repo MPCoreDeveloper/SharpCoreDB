@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Where this bucket ends.** `2.1.1` was cut from this line's `HEAD` on 2026-10-25, so every entry this
-> bucket had collected since the `v2.1.0` tag — the list below — **shipped in `[2.1.1]`**. New entries
-> start here.
+> **Where this bucket ends.** `2.1.2` was cut from this line's `HEAD` on 2026-10-26, so the entry this
+> bucket had collected since the `v2.1.1` tag — the statement-path literal scanner below — **shipped in
+> `[2.1.2]`**. New entries start here.
+
+## [2.1.2] - 2026-10-26
+
+> **What this release is.** A patch release with no API changes, cut from `v2.1.1..HEAD`, and a data-correctness
+> one rather than a performance one. `ExecuteSQL(sql, parameters)` never binds: it renders every value back
+> into the statement text and hands that text to the ordinary parser, so the formatter and the scanners have
+> to agree about escaping — and they did not. A bound `TEXT` value holding an apostrophe, a doubled quote or a
+> backslash was re-scanned as SQL, and the damage was silent: the value landed in the neighbouring column, or
+> the statement was rejected with "Mismatched parentheses in VALUES clause". Any consumer that stores prose,
+> source code or Windows paths through a parameter was exposed; SharpAgent's code-evidence index hit both
+> faces of it. One scanner now owns the rules (`Services/SqlLiteralScanner.cs`), every literal reader on the
+> statement path uses it, and a tuple that still cannot fit its statement fails loudly instead of shifting
+> values. Verified on this tree: core **2107 / 0 failed**, VectorSearch **255 / 0**, EF Core **116 / 0**,
+> linq2DB **24 / 0**, `SharpCoreDB.CI.slnf` builds clean, and the reproduction published in
+> `docs/sharpcoredb-known-issues.md` §7 prints the fixed output when extracted from the document.
+
+### Fixed
+
+- **A bound string parameter was re-parsed as SQL text, so an apostrophe or a backslash in the value corrupted the row — it could land in the next column, or the statement failed with "Mismatched parentheses in VALUES clause".** `ExecuteSQL(sql, parameters)` renders every value back into the statement text (`ParameterBinder.FormatParameter` emits `'it''s'` for `it's`, SQL's doubled-quote convention) and hands the *rendered* statement to the ordinary parser, so the formatter and the scanner have to agree about escaping — and they did not: the VALUES scanner dropped the quote of a doubled pair (standard SQL doubling was not an escape) and let a backslash suppress a quote toggle, which also meant a value ending in a backslash could not be written at all. SharpAgent's code-evidence index hit it as rows rejected with "Mismatched parentheses in VALUES clause" and, worse, as a value silently landing in the neighbouring column (`Invalid VECTOR literal '… iterations)'` on `embedding`). The rules are now SQL's and SQLite's, defined once in `Services/SqlLiteralScanner.cs` and used by every literal reader on the statement path — the VALUES and `SET` splitters, the matching-parenthesis scan, all four parameter extractors, the batch INSERT parsers, `FastSqlLexer.ReadString`, the expression tokenizer, the `WHERE` tokenizer (`Table.Scanning.EvaluateWhere`, which split on spaces and therefore truncated *any* quoted value at its first space) and the wire protocol's `$n` → `?` translation (which needed `InternalsVisibleTo("SharpCoreDB.Server.Core")`): a doubled quote is one quote and does not close the literal, and a backslash is data. `ParseValue` now removes exactly **one** pair of quotes and collapses the doubling — the old `while`-strip removed every edge quote, so a parameter holding `'` stored an empty string, and `'it''s'` reached storage as `it''s`. `UPDATE … SET col = @v` splits at the first `=` instead of every `=` (a value containing `=` silently dropped that assignment), a quoted empty literal stores an empty string as SQLite does (a trailing `''` used to become `NULL`), and a tuple that still produces more values than the statement can consume throws **before any row is written**, naming the table, the tuple index, both counts and the column list, instead of shifting values into the next column. Verified red→green: `ParameterLiteralRoundTripTests` (74 cases — apostrophes, doubled quotes, backslash before a quote, trailing backslash, commas, brackets, braces, newlines, non-ASCII, `NULL`, the empty string, `'`, `''`, `\`, each through an interior and a trailing INSERT value, multi-row INSERT, positional `?`, `UPDATE … SET`, and a `WHERE val = @val` lookup) failed 32 of 57 assertions before the fix and passes 74/74 after; `InsertValuesParsingTests` was corrected to SQL semantics (`'it''s'` → `it's`, a trailing backslash is data, a trailing `''` is an empty string) and the suites are **core 2107 / 0 failed**, VectorSearch 255 / 0, EF Core 116 / 0, linq2DB 24 / 0 (`SharpCoreDB.CI.slnf` builds clean). Two latent test bugs surfaced on the way: `EncryptionCoverageTests` and `WritePathProfilerTests` interpolated `{i * 0.5}` straight into SQL, which renders `0,5` on a comma-decimal machine and is a four-value tuple — the old parser silently dropped the overflow value, the new arity check rejects it, so both now format invariantly. `docs/sharpcoredb-known-issues.md` §7 now carries a self-contained, runnable reproduction (two files, `dotnet run`) with the before/after console output, and the same cases are pinned by `ParameterLiteralRoundTripTests`.
 
 ## [2.1.1] - 2026-10-25
 

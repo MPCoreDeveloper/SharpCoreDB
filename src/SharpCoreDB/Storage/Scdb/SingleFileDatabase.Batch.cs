@@ -372,7 +372,6 @@ internal static class SingleFileDatabaseBatchExtension
         var span = valuesStr.AsSpan();
         
         int start = 0;
-        bool inQuotes = false;
         int inParens = 0;  // ✅ FIX: Use int for parenthesis depth
         int inBrackets = 0; // bracketed literals ([0.5, 0.25] — a VECTOR value) never split
         
@@ -381,41 +380,47 @@ internal static class SingleFileDatabaseBatchExtension
         {
             char c = span[i];
             
-            // Check for quote (with escape handling)
-            if (c == '\'' && (i == 0 || span[i - 1] != '\\'))
+            // A quoted literal is skipped as a whole: SqlLiteralScanner is the single quote definition ('' is one
+            // quote and does not close the literal; a backslash is data), so a comma inside a value cannot split it.
+            if (c == '\'')
             {
-                inQuotes = !inQuotes;
+                int closing = SqlLiteralScanner.FindClosingQuote(span, i, out _);
+                if (closing < 0)
+                {
+                    break;
+                }
+
+                i = closing;
+                continue;
             }
-            else if (!inQuotes)
+
+            // Handle parenthesis depth
+            if (c == '(')
             {
-                // Handle parenthesis depth
-                if (c == '(')
+                inParens++;
+            }
+            else if (c == ')')
+            {
+                inParens--;
+            }
+            else if (c == '[')
+            {
+                inBrackets++;
+            }
+            else if (c == ']' && inBrackets > 0)
+            {
+                inBrackets--;
+            }
+            // Check for value delimiter
+            else if (c == ',' && inParens == 0 && inBrackets == 0)
+            {
+                // Extract value using span (zero-copy until ToString)
+                var valueSpan = span[start..i].Trim();
+                if (valueSpan.Length > 0)
                 {
-                    inParens++;
+                    values.Add(TrimQuotes(valueSpan));
                 }
-                else if (c == ')')
-                {
-                    inParens--;
-                }
-                else if (c == '[')
-                {
-                    inBrackets++;
-                }
-                else if (c == ']' && inBrackets > 0)
-                {
-                    inBrackets--;
-                }
-                // Check for value delimiter
-                else if (c == ',' && inParens == 0 && inBrackets == 0)
-                {
-                    // Extract value using span (zero-copy until ToString)
-                    var valueSpan = span[start..i].Trim();
-                    if (valueSpan.Length > 0)
-                    {
-                        values.Add(TrimQuotes(valueSpan));
-                    }
-                    start = i + 1;
-                }
+                start = i + 1;
             }
         }
         
@@ -441,7 +446,12 @@ internal static class SingleFileDatabaseBatchExtension
         // Check if both ends have quotes
         if (value.Length >= 2 && value[0] == '\'' && value[value.Length - 1] == '\'')
         {
-            return value[1..^1].ToString();
+            var inner = value[1..^1];
+
+            // SQL quote doubling is one quote of data: 'it''s' → it's.
+            return inner.IndexOf("''") >= 0
+                ? inner.ToString().Replace("''", "'", StringComparison.Ordinal)
+                : inner.ToString();
         }
         
         // Check if only start has quote

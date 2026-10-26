@@ -160,16 +160,24 @@ public sealed class FastSqlLexer
         var start = position;
         position++; // Skip opening quote
 
-        while (!IsAtEnd() && Current() != quote)
+        while (!IsAtEnd())
         {
-            if (Current() == '\\' && Peek(1) == quote)
-            {
-                position += 2; // Skip escaped quote
-            }
-            else
+            if (Current() != quote)
             {
                 position++;
+                continue;
             }
+
+            // A doubled quote is one quote of data and does not close the literal (SQL/SQLite). A backslash is
+            // data as well: it is a legal last character of a value (a Windows path), so it can never escape the
+            // closing quote — the old escape rule consumed past the literal's end for such a value.
+            if (Peek(1) == quote)
+            {
+                position += 2;
+                continue;
+            }
+
+            break;
         }
 
         if (!IsAtEnd()) position++; // Skip closing quote

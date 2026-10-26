@@ -28,7 +28,7 @@ Advanced graph analytics and GraphRAG package for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.1
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
 ```
 
 ## Documentation

@@ -335,7 +335,7 @@ internal static class SqlInPredicate
             item = item[1..^1];
         }
 
-        return item.Trim().Trim('\'', '"');
+        return SqlLiteralScanner.Unquote(item.Trim());
     }
 
     /// <summary>
@@ -382,13 +382,13 @@ internal static class SqlInPredicate
             {
                 // Tuple row: (v1, v2) — split the inner list on top-level commas.
                 rows.Add(SplitTopLevel(t[1..^1])
-                    .Select(v => v.Trim().Trim('\'', '"'))
+                    .Select(v => SqlLiteralScanner.Unquote(v.Trim()))
                     .Where(v => v.Length > 0)
                     .ToArray());
             }
             else
             {
-                rows.Add([t.Trim('\'', '"')]);
+                rows.Add([SqlLiteralScanner.Unquote(t)]);
             }
         }
 
@@ -410,25 +410,29 @@ internal static class SqlInPredicate
         var parts = new List<string>();
         int depth = 0;
         int bracketDepth = 0;
-        bool inString = false;
-        char quote = '\0';
         int start = 0;
 
         for (int i = 0; i < text.Length; i++)
         {
             char c = text[i];
-            if (inString)
+
+            // A quoted literal is skipped as a whole. SqlLiteralScanner is the single quote definition: a
+            // doubled quote is one quote and does not end the literal, and a backslash is data. The previous
+            // form exited at the first quote it met (`inString = c != quote`), so 'it''s, ok' split mid-value
+            // — the SET-list half of known issue 7.
+            if (c is '\'' or '"')
             {
-                inString = c != quote; // closing quote exits the string literal
+                int closing = SqlLiteralScanner.FindClosingQuote(text, i, out _);
+                if (closing < 0)
+                {
+                    break;  // unterminated literal: the rest is one part, exactly as before
+                }
+
+                i = closing;
                 continue;
             }
 
-            if (c is '\'' or '"')
-            {
-                inString = true;
-                quote = c;
-            }
-            else if (c == '(')
+            if (c == '(')
             {
                 depth++;
             }
