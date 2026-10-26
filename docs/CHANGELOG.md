@@ -7,9 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Where this bucket ends.** `2.1.1` was cut from this line's `HEAD` on 2026-10-25, so every entry this
-> bucket had collected since the `v2.1.0` tag — the list below — **shipped in `[2.1.1]`**. New entries
-> start here.
+> **Where this bucket ends.** `2.1.2` was cut from this line's `HEAD` on 2026-10-26, so the entry this
+> bucket had collected since the `v2.1.1` tag — the statement-path literal scanner below — **shipped in
+> `[2.1.2]`**. New entries start here.
+
+## [2.1.2] - 2026-10-26
+
+> **What this release is.** A patch release with no API changes, cut from `v2.1.1..HEAD`, and a data-correctness
+> one rather than a performance one. `ExecuteSQL(sql, parameters)` never binds: it renders every value back
+> into the statement text and hands that text to the ordinary parser, so the formatter and the scanners have
+> to agree about escaping — and they did not. A bound `TEXT` value holding an apostrophe, a doubled quote or a
+> backslash was re-scanned as SQL, and the damage was silent: the value landed in the neighbouring column, or
+> the statement was rejected with "Mismatched parentheses in VALUES clause". Any consumer that stores prose,
+> source code or Windows paths through a parameter was exposed; SharpAgent's code-evidence index hit both
+> faces of it. One scanner now owns the rules (`Services/SqlLiteralScanner.cs`), every literal reader on the
+> statement path uses it, and a tuple that still cannot fit its statement fails loudly instead of shifting
+> values. Verified on this tree: core **2107 / 0 failed**, VectorSearch **255 / 0**, EF Core **116 / 0**,
+> linq2DB **24 / 0**, `SharpCoreDB.CI.slnf` builds clean, and the reproduction published in
+> `docs/sharpcoredb-known-issues.md` §7 prints the fixed output when extracted from the document.
 
 ### Fixed
 

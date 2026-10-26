@@ -35,7 +35,7 @@ Network database server package for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.1.1
+dotnet add package SharpCoreDB.Server.Core --version 2.1.2
 ```
 
 ## Documentation

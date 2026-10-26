@@ -1,16 +1,26 @@
 # SharpCoreDB Project Status
 
-**Version:** 2.1.0 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
-**Status:** ✅ v2.1.0 promoted to the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
-**Last Updated:** October 10, 2026
+**Version:** 2.1.2 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
+**Status:** ✅ v2.1.2 released on the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
+**Last Updated:** October 26, 2026
 
 ## Current Status
+
+The **current release is `2.1.2` (2026-10-26)** — a data-correctness patch with no API changes: a bound
+`TEXT` parameter holding an apostrophe, a doubled quote or a backslash was re-scanned as SQL by the
+statement path, so the value could land in the neighbouring column, or the statement was rejected with
+"Mismatched parentheses in VALUES clause". One scanner (`Services/SqlLiteralScanner.cs`) now owns SQL's
+and SQLite's escaping rules for every literal reader on the statement path. Validated on the `2.1.2` tree:
+core **2,107 tests / 0 failed**, VectorSearch **255 / 0**, EF Core **116 / 0**, linq2DB **24 / 0**. Notes:
+[`CHANGELOG.md`](CHANGELOG.md) › `[2.1.2]`; the runnable reproduction is in
+[`sharpcoredb-known-issues.md`](sharpcoredb-known-issues.md) §7.
 
 The **v2.1 line (`2.1.0`)** is validated and packaged, and was promoted to `master` on **2026-10-10**
 (see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md)): **2,897 tests across 16
 suites — 0 failed, 0 errors, 16 skipped** (core 1,916), the write-path regression gate **passed**, and
 the full benchmark arm set (comparative, fair-PK, pure-default, PageBased, multi-row INSERT) measured
 in the product-default regime. Release notes: [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
+`2.1.1` followed on **2026-10-25** with the SQL vector fixes; `2.1.2` is the current patch.
 
 The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on `release/v2.0`, including:
 
@@ -34,9 +44,9 @@ The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on
 - ✅ **The RC.3 line was published to NuGet.org (2026-09-17)** — all 27 packages at `2.1.0-RC.3` from
   `release/v2.1.0.0-RC.3` (`Manual NuGet Publish` run 35244818191); `SharpCoreDB.Search`,
   `SharpCoreDB.HybridSearch` and `SharpCoreDB.Aspire.Hosting` ship on this line for the first time
-- ⏳ **2.1.0 is prepared on `master` and not yet tagged or pushed** — the owner's flip (`git tag -a v2.1.0`
-  + `git push`) is what publishes the 27 packages at `2.1.0`; version metadata, CI and the shipped
-  package documentation are already aligned for it (see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md))
+- ✅ **2.1.0 was published from `master`, and `2.1.1` followed as a patch (2026-10-25)** — the publish
+  trigger is the `push: branches: [master]` job in `.github/workflows/ci.yml`, which packs and pushes the
+  27 packages; `2.1.2` is the current release. History: [`CHANGELOG.md`](CHANGELOG.md).
 - ✅ **Linux/macOS data-integrity defect fixed** — the AES-GCM cipher caches were shared across threads,
   which is only safe on Windows (dotnet/runtime#53320); they are thread-affine now, so concurrent
   encryption cannot corrupt a cipher's native state or repeat a nonce off Windows

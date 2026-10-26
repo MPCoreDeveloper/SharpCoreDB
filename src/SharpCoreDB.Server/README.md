@@ -38,8 +38,8 @@ docker run -p 5001:5001 -p 8443:8443 ghcr.io/mpcoredeveloper/sharpcoredb-server:
 The packable server-side libraries are:
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.1.0-RC.3
-dotnet add package SharpCoreDB.Server.Protocol --version 2.1.0-RC.3
+dotnet add package SharpCoreDB.Server.Core --version 2.1.2
+dotnet add package SharpCoreDB.Server.Protocol --version 2.1.2
 ```
 
 ## Documentation

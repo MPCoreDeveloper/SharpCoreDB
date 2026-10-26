@@ -1,8 +1,8 @@
-# SharpCoreDB 2.1.1 — Performance-First Database Engine
+# SharpCoreDB 2.1.2 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
 
-> **This is the 2.1.x release line (current: 2.1.1)** — it targets **net11.0 only** with
+> **This is the 2.1.x release line (current: 2.1.2)** — it targets **net11.0 only** with
 > **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages are the v2.0 stable
 > line, parked on `release/v2.0`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
@@ -13,6 +13,49 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![.NET 11](https://img.shields.io/badge/.NET-11-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.1.2
+
+**A data-correctness patch with no API changes** — a bound text parameter now reaches storage exactly as
+you passed it:
+
+- **A bound string holding an apostrophe, a doubled quote or a backslash is no longer re-scanned as SQL.**
+  `ExecuteSQL(sql, parameters)` does not bind at the engine level: it renders each value into the
+  statement text and hands that text to the ordinary parser, so the formatter and the statement scanners
+  have to agree about escaping. They disagreed — the `VALUES` scanner dropped the quote of a doubled pair
+  and let a backslash suppress a quote toggle — and the damage was silent rather than an error: a passage
+  written through a parameter could land in the **neighbouring column**, and a value ending in a backslash
+  could not be written at all. One scanner (`Services/SqlLiteralScanner.cs`) now owns SQL's and SQLite's
+  rules and every literal reader on the statement path uses it: the `VALUES` / `SET` splitters, the
+  matching-parenthesis scan, all four parameter extractors, the batch `INSERT` parsers,
+  `FastSqlLexer.ReadString`, the expression tokenizer, the `WHERE` tokenizer — which used to split on
+  spaces and truncate *any* quoted value at its first space — and the server's `$n` → `?` translation.
+
+  ```csharp
+  // 2.1.1: the value landed in the next column, or the statement threw
+  //        "Mismatched parentheses in VALUES clause".
+  // 2.1.2: it round-trips byte-for-byte, and so does every Windows path.
+  db.ExecuteSQL("INSERT INTO Docs (Id, Body) VALUES (@id, @body)", new Dictionary<string, object?>
+  {
+      ["@id"] = 1,
+      ["@body"] = @"It's C:\src\app\, see docs\draft.pdf"
+  });
+  ```
+
+- **A parameter holding a single quote no longer stores an empty string.** `ParseValue` removes exactly
+  one quote pair and collapses the doubling; the old strip loop removed every edge quote, so a value of
+  `'` stored `""` and `'it''s'` reached storage as `it''s`. A quoted empty literal (`''`) now stores an
+  empty string, as SQLite does, where a trailing `''` used to become `NULL`.
+- **`UPDATE … SET col = @v` splits at the first `=`**, not at every `=` — a value containing `=` used to
+  drop that assignment silently. A tuple that cannot fit its statement now throws before any row is
+  written, naming the table, the tuple index, both counts and the column list, instead of shifting
+  values right.
+- **Verified on this tree:** core **2,107** tests / 0 failed, VectorSearch **255** / 0, EF Core **116** /
+  0, linq2db **24** / 0; `SharpCoreDB.CI.slnf` builds clean. A two-file runnable reproduction with the
+  before/after console output ships in `docs/sharpcoredb-known-issues.md` §7, and the consumer that
+  reported it — SharpAgent's code-evidence index, which writes source text and Windows paths as `TEXT` —
+  runs its 144 indexing tests green against this build with no code change.
+- Full list: `docs/CHANGELOG.md` › `[2.1.2]`.
 
 ## What's New in 2.1.1
 
@@ -250,16 +293,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.1
+dotnet add package SharpCoreDB --version 2.1.2
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.1.1
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.1
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.1
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.1
+dotnet add package SharpCoreDB.Functional --version 2.1.2
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.2
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.2
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -287,10 +330,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.1.0 (October 2026)  
+**Latest Version:** 2.1.2 (October 2026)  
 **Target:** .NET 11 / C# 15 (preview)  
-**Tests:** 2,897 across 16 suites (0 failed, 16 skipped)  
-**Status:** ✅ Released — 2.1.0 (net11.0-only performance line)  
+**Tests:** core suite 2,107 (0 failed) · VectorSearch 255 · EF Core 116 · linq2db 24  
+**Status:** ✅ Released — 2.1.2 (net11.0-only performance line)  
 **Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 

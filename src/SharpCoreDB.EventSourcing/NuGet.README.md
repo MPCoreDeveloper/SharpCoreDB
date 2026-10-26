@@ -28,7 +28,7 @@ Event store primitives for `SharpCoreDB`.
 ## Installation
 
 ```bash
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.1
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.2
 ```
 
 ## Documentation
