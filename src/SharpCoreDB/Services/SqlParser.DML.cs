@@ -383,6 +383,26 @@ public partial class SqlParser
             }
         }
 
+        // Known issue 7, safety net: a value that splits its literal at a comma used to land in the NEXT column
+        // (SharpAgent saw an embedding column receive "… iterations)") or fail later as an unrelated parse error.
+        // A tuple that produces more values than the statement can consume is malformed, so it is rejected here —
+        // before any row is written — naming the table, the tuple and both counts. Fewer values stays legal:
+        // that is the documented missing-value path, and the column falls to NULL.
+        int expectedValueCount = insertColumns?.Count ?? table.Columns.Count - (skipInternalRowId ? 1 : 0);
+        for (int rowIndex = 0; rowIndex < allRowValues.Count; rowIndex++)
+        {
+            var rowValues = allRowValues[rowIndex];
+            if (rowValues.Count > expectedValueCount)
+            {
+                throw new InvalidOperationException(
+                    $"Column count mismatch in INSERT INTO '{tableName}': VALUES tuple {rowIndex} produced " +
+                    $"{rowValues.Count} values but {expectedValueCount} can be consumed " +
+                    $"({string.Join(", ", insertColumns ?? table.Columns)}). A string literal that ends early " +
+                    $"splits the tuple at its own comma; write an embedded quote as a doubled quote ('') " +
+                    $"instead of escaping it with a backslash.");
+            }
+        }
+
         // Build one row from one VALUES tuple. Shared by the per-row loop and the batched fast path below so
         // the two cannot drift apart on value parsing, column mapping or internal-_rowid skipping.
         Dictionary<string, object> BuildRowFromValues(List<string> rowValues)
@@ -629,30 +649,43 @@ public partial class SqlParser
 
     /// <summary>
     /// Helper: Find matching closing parenthesis, respecting quoted strings.
+    /// <para>
+    /// The quote rule is <see cref="SqlLiteralScanner"/>'s: a doubled quote is one quote and does not close the
+    /// literal, so a value such as <c>'it''s)'</c> cannot end the tuple early.
+    /// </para>
     /// </summary>
     private static int FindMatchingCloseParen(string str, int openParenIdx)
     {
         int depth = 0;
-        bool inQuotes = false;
 
         for (int i = openParenIdx; i < str.Length; i++)
         {
             char c = str[i];
 
-            // Toggle quote state, respecting escape
-            if (c == '\'' && (i == 0 || str[i - 1] != '\\'))
+            // Skip a whole literal, quotes included.
+            if (c == '\'')
             {
-                inQuotes = !inQuotes;
+                int closing = SqlLiteralScanner.FindClosingQuote(str, i, out _);
+                if (closing < 0)
+                {
+                    return -1; // unterminated literal — the tuple cannot be closed
+                }
+
+                i = closing;
+                continue;
             }
 
             // Track parenthesis depth only outside quotes
-            if (!inQuotes)
+            if (c == '(')
             {
-                if (c == '(') depth++;
-                else if (c == ')')
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+                if (depth == 0)
                 {
-                    depth--;
-                    if (depth == 0) return i;
+                    return i;
                 }
             }
         }
@@ -661,165 +694,103 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// ✅ UPDATED: Parses single row INSERT VALUES using modern Span-based approach.
-    /// Respects quoted strings and handles escaping correctly.
+    /// Splits one <c>INSERT … VALUES</c> tuple into its element texts.
+    /// <para>
+    /// Structural only: each element is returned <b>as written</b>, quotes and all, and
+    /// <see cref="SqlParser.ParseValue"/> is the single reader of literal syntax. The two therefore cannot
+    /// disagree about escaping, which is what known issue 7 was: the formatter doubled quotes while this
+    /// scanner had its own backslash-escape rule, so a bound text value was split at its own comma and shifted
+    /// into the neighbouring column.
+    /// </para>
+    /// <para>
+    /// The rules, pinned by <c>InsertValuesParsingTests</c>:
+    /// <list type="number">
+    /// <item>a comma splits only outside a quoted literal and outside a bracketed literal
+    /// (<c>[0.5, 0.25, 0.125]</c> is one <c>VECTOR</c> value — <c>docs/Vectors/TECHNICAL_SPEC.md</c> §7). Quote
+    /// scanning is <see cref="SqlLiteralScanner"/>'s single definition: a doubled quote is one quote and does not
+    /// close the literal, and a backslash is data;</item>
+    /// <item>every element is <c>Trim()</c>ed;</item>
+    /// <item>an element is a value when it has any text, and a quoted element is a value even when its content is
+    /// empty — <c>(1, '')</c> stores an empty string, as SQLite does. Only a literally absent element is dropped,
+    /// so <c>(1,)</c> yields one value while <c>(1, )</c> yields an empty one: a missing literal and an
+    /// empty-string literal are different values.</item>
+    /// </list>
+    /// </para>
     /// </summary>
     private static List<string> ParseInsertValues(ReadOnlySpan<char> valuesStr)
     {
         List<string> values = [];
 
-        // (2026-09-16, plan §9 priority 2 lever 1) Literals are sliced out of the statement instead of being
-        // appended to a StringBuilder one character at a time. Measured, that per-character build is the parse
-        // stage's dominant cost on the 1,000-row-statement shape (3.33 µs/row, ~1 KB/row allocated).
-        //
-        // The four rules reproduced here are pinned by InsertValuesParsingTests:
-        //   1. a quote toggles and is DROPPED, unless the previously *appended* character was a backslash — the
-        //      check is against the accumulated content, not the source text, so a dropped quote does not update it;
-        //   2. a comma splits only outside quotes and outside a bracketed literal;
-        //   3. every literal is Trimmed;
-        //   4. a literal whose content is empty is not emitted at all, so `(1,)` yields one value while `(1, )`
-        //      yields an empty one.
-        //
-        // Rule 2's bracketed-literal clause is what makes a VECTOR value expressible in VALUES at all:
-        // `[0.5, 0.25, 0.125, 0.0625]` is one literal, not four (docs/Vectors/TECHNICAL_SPEC.md §7). Without
-        // it the first fragment reached ParseVectorValue as "[0.5" and the statement failed as invalid base64.
-        //
-        // A literal is slice-expressible exactly when at most one quote pair toggles inside it. An interior
-        // toggling quote — `'it''s'` → `its` — is *dropped* by rule 1, which no contiguous slice can express, so
-        // such a literal falls back to the character loop this method used to run for everything. That loop is
-        // kept below as the reference; it is the slow path, not a second interpretation of the rules.
         int index = 0;
         int length = valuesStr.Length;
 
         while (index < length)
         {
-            int literalStart = index;
-            int contentStart = index;
-            int contentEnd = -1;
-            int toggles = 0;
+            int elementStart = index;
             int bracketDepth = 0;
-            bool inQuotes = false;
-            char lastAppended = '\0';
-            bool terminatedByComma = false;
+            int literalCount = 0;
 
+            // One pass over the element: whole literals are skipped (a comma inside one is text), a bracketed
+            // literal stays in one piece, and the first top-level comma ends the element.
             while (index < length)
             {
                 char c = valuesStr[index];
 
-                if (c == '\'' && lastAppended != '\\')
+                if (c == '\'')
                 {
-                    toggles++;
-                    if (toggles == 1) { contentStart = index + 1; inQuotes = true; }
-                    else if (toggles == 2) { contentEnd = index; inQuotes = false; }
+                    int closing = SqlLiteralScanner.FindClosingQuote(valuesStr, index, out _);
+                    if (closing < 0)
+                    {
+                        // Unterminated literal: the rest of the tuple belongs to this element. The text is still
+                        // passed on as written, so nothing is silently truncated here.
+                        literalCount++;
+                        index = length;
+                        break;
+                    }
 
-                    index++;
-                    continue;   // a dropped quote must not become the last appended character
+                    literalCount++;
+                    index = closing + 1;
+                    continue;
                 }
 
-                if (!inQuotes)
+                if (c == '[')
                 {
-                    if (c == '[')
-                    {
-                        bracketDepth++;
-                    }
-                    else if (c == ']' && bracketDepth > 0)
-                    {
-                        bracketDepth--;
-                    }
+                    bracketDepth++;
                 }
-
-                if (c == ',' && !inQuotes && bracketDepth == 0)
+                else if (c == ']' && bracketDepth > 0)
                 {
-                    terminatedByComma = true;
+                    bracketDepth--;
+                }
+                else if (c == ',' && bracketDepth == 0)
+                {
                     break;
                 }
 
-                lastAppended = c;
                 index++;
             }
 
-            // Rule 4, corrected by the suites: an interior literal is emitted **unconditionally** at its comma —
-            // `('', 2)` stores an empty string — and only the *trailing* literal is suppressed when it has no text
-            // at all. So `(1,)` yields one value, `(1, )` yields an empty one, and `('')` as the last literal
-            // yields none while `('', 2)` yields an empty string.
-            // The flag is set where the comma is *seen*; deriving it afterwards from `index < length` was wrong,
-            // because a literal whose closing quote is the tuple's last character also ends with index == length.
+            bool terminatedByComma = index < length;
+            var element = valuesStr[elementStart..index];
 
-            if (toggles == 0)
+            // A quoted element IS a value even when its content is empty: `(1, '')` stores an empty string in
+            // SQLite and must here too. Only a literally absent element is dropped, so `(1,)` yields one value
+            // while `(1, )` still yields an empty one — a missing literal and an empty-string literal are
+            // different values. (The previous rule suppressed a *trailing* `''` as well, which made a bound
+            // empty string silently NULL — known issue 7's second half; InsertValuesParsingTests pinned it.)
+            bool hasValue = literalCount > 0 || element.Length > 0;
+
+            if (hasValue || terminatedByComma)
             {
-                var literal = valuesStr[literalStart..index];
-                if (literal.Length > 0 || terminatedByComma)
-                {
-                    values.Add(literal.Trim().ToString());
-                }
-            }
-            else if (toggles == 2 && contentEnd >= contentStart)
-            {
-                var literal = valuesStr[contentStart..contentEnd];
-                if (literal.Length > 0 || terminatedByComma)
-                {
-                    values.Add(literal.Trim().ToString());
-                }
-            }
-            else
-            {
-                var fallback = BuildLiteralByAppending(valuesStr[literalStart..index], terminatedByComma);
-                if (fallback is not null)
-                {
-                    values.Add(fallback);
-                }
+                values.Add(element.Trim().ToString());
             }
 
-            if (index < length)
+            if (terminatedByComma)
             {
                 index++;    // step over the separating comma
             }
         }
 
         return values;
-
-        // The reference implementation, used only for literals a slice cannot express: one with an interior
-        // toggling quote, or an unterminated one. It is byte-for-byte the behaviour this method had before the
-        // fast path existed, including emitting nothing when the accumulated content is empty — plus the
-        // bracketed-literal clause of rule 2, so it cannot disagree with the fast path about a vector literal.
-        static string? BuildLiteralByAppending(ReadOnlySpan<char> text, bool terminatedByComma)
-        {
-            var currentValue = new StringBuilder();
-            bool inQuotes = false;
-            int bracketDepth = 0;
-
-            foreach (char c in text)
-            {
-                if (c == '\'' && (currentValue.Length == 0 || currentValue[^1] != '\\'))
-                {
-                    inQuotes = !inQuotes;
-                    continue;
-                }
-
-                if (!inQuotes)
-                {
-                    if (c == '[')
-                    {
-                        bracketDepth++;
-                    }
-                    else if (c == ']' && bracketDepth > 0)
-                    {
-                        bracketDepth--;
-                    }
-                }
-
-                if (c == ',' && !inQuotes && bracketDepth == 0)
-                {
-                    break;
-                }
-
-                currentValue.Append(c);
-            }
-
-            // Emitted whenever the literal ended at a comma, even with nothing accumulated (an empty string);
-            // suppressed only for an empty trailing literal.
-            return currentValue.Length == 0 && !terminatedByComma ? null : currentValue.ToString().Trim();
-        }
     }
 
     /// <summary>
@@ -2278,11 +2249,14 @@ public partial class SqlParser
         var updates = new Dictionary<string, object?>();
         foreach (var setClause in setClauses)
         {
-            var parts = setClause.Split('=');
-            if (parts.Length == 2)
+            // Split at the FIRST '=' only. A bound text value may contain '=' itself (a URL query string, a
+            // source line), and Split('=') produced three parts for those and silently dropped the assignment —
+            // the same class as known issue 7: the value was not the value.
+            int assign = setClause.IndexOf('=');
+            if (assign > 0)
             {
-                var colName = parts[0].Trim();
-                var valueStr = parts[1].Trim();
+                var colName = setClause[..assign].Trim();
+                var valueStr = setClause[(assign + 1)..].Trim();
 
                 // Find column type
                 var colIndex = table.Columns.IndexOf(colName);

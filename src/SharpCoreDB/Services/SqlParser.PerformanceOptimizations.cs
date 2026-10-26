@@ -395,9 +395,8 @@ public static partial class SqlParserPerformanceOptimizations
         if (!valueStr.StartsWith("(") || !valueStr.EndsWith(")"))
             return false;
         
-        var items = valueStr[1..^1]  // Remove parentheses
-            .Split(',')
-            .Select(s => s.Trim().Trim('\'', '"'))
+        var items = SqlInPredicate.SplitTopLevelComma(valueStr[1..^1])  // Remove parentheses
+            .Select(s => SqlLiteralScanner.Unquote(s.Trim()))
             .ToList();
         
         return items.Contains(value.ToString() ?? string.Empty);
@@ -411,8 +410,8 @@ public static partial class SqlParserPerformanceOptimizations
         if (value == null)
             return false;
         
-        // Remove quotes
-        valueStr = valueStr.Trim('\'', '"');
+        // Remove quotes (and collapse SQL doubling)
+        valueStr = SqlLiteralScanner.Unquote(valueStr);
         
         // Simple LIKE: convert SQL wildcards to regex
         var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(valueStr)

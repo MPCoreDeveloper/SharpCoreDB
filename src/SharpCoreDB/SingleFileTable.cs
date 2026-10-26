@@ -1316,7 +1316,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if ((val.StartsWith('\'') && val.EndsWith('\'')) ||
             (val.StartsWith('"') && val.EndsWith('"')))
         {
-            val = val[1..^1];
+            val = SqlLiteralScanner.Unquote(val);
         }
 
         // Normalize numeric literals to the row's canonical ToString() form so `pk = 05`
@@ -1693,7 +1693,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if ((valueStr.StartsWith('\'') && valueStr.EndsWith('\'')) ||
             (valueStr.StartsWith('"') && valueStr.EndsWith('"')))
         {
-            valueStr = valueStr[1..^1];
+            valueStr = SqlLiteralScanner.Unquote(valueStr);
         }
 
         if (valueStr.Length == 0)
@@ -1825,8 +1825,8 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if (betweenMatch.Success)
         {
             var col = NormalizeColumnName(betweenMatch.Groups[1].Value);
-            var lowStr = betweenMatch.Groups[2].Value.Trim('\'', '"');
-            var highStr = betweenMatch.Groups[3].Value.Trim('\'', '"');
+            var lowStr = SqlLiteralScanner.Unquote(betweenMatch.Groups[2].Value.Trim());
+            var highStr = SqlLiteralScanner.Unquote(betweenMatch.Groups[3].Value.Trim());
             if (!row.TryGetValue(col, out var rowVal) || rowVal is null or DBNull)
             {
                 return false;
@@ -1894,7 +1894,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         if ((valueStr.StartsWith('\'') && valueStr.EndsWith('\'')) ||
             (valueStr.StartsWith('"') && valueStr.EndsWith('"')))
         {
-            valueStr = valueStr[1..^1];
+            valueStr = SqlLiteralScanner.Unquote(valueStr);
         }
 
         if (rowValue is int intVal && int.TryParse(valueStr, out var intCompare))

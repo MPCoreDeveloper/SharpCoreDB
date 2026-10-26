@@ -111,37 +111,43 @@ public partial class Database
             
             int valueStart = 0;
             int valueIndex = 0;
-            bool inQuotes = false;
             int parenDepth = 0;
             int bracketDepth = 0;   // bracketed literals ([0.5, 0.25] — a VECTOR value) never split
-            
+
             for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
             {
                 char c = valuesClause[i];
-                
-                if (c == '\'' && (i == 0 || valuesClause[i - 1] != '\\'))
+
+                // Skip a whole literal through SqlLiteralScanner (a doubled quote is one quote and does not close
+                // the literal; a backslash is data), so a comma inside a value cannot split the row.
+                if (c == '\'')
                 {
-                    inQuotes = !inQuotes;
+                    int closing = SqlLiteralScanner.FindClosingQuote(valuesClause, i, out _);
+                    if (closing < 0)
+                    {
+                        break;
+                    }
+
+                    i = closing;
+                    continue;
                 }
-                else if (!inQuotes)
+
+                if (c == '(') parenDepth++;
+                else if (c == ')') parenDepth--;
+                else if (c == '[') bracketDepth++;
+                else if (c == ']' && bracketDepth > 0) bracketDepth--;
+                else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
                 {
-                    if (c == '(') parenDepth++;
-                    else if (c == ')') parenDepth--;
-                    else if (c == '[') bracketDepth++;
-                    else if (c == ']' && bracketDepth > 0) bracketDepth--;
-            else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
-            {
-                // ✅ FIX: Strict bounds check before Slice to prevent ArgumentOutOfRangeException
-                if (valueStart < i && valueIndex < ColumnTypes.Count)
-                {
-                    var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
-                    var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
-                    row[Columns[valueIndex]] = value ?? DBNull.Value;
-                }
-                
-                valueStart = i + 1;
-                valueIndex++;
-            }
+                    // ✅ FIX: Strict bounds check before Slice to prevent ArgumentOutOfRangeException
+                    if (valueStart < i && valueIndex < ColumnTypes.Count)
+                    {
+                        var valueSpan = valuesClause.Slice(valueStart, i - valueStart).Trim();
+                        var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
+                        row[Columns[valueIndex]] = value ?? DBNull.Value;
+                    }
+
+                    valueStart = i + 1;
+                    valueIndex++;
                 }
             }
             
@@ -178,26 +184,35 @@ public partial class Database
 
             int valueStart = 0;
             int valueIndex = 0;
-            bool inQuotes = false;
             int parenDepth = 0;
+            int bracketDepth = 0;
 
             for (int i = 0; i < valuesClause.Length && valueIndex < Columns.Count; i++)
             {
                 char c = valuesClause[i];
 
-                if (IsQuoteChar(c, i, valuesClause))
+                // Whole literals are skipped (SqlLiteralScanner is the single quote definition), so a comma or a
+                // parenthesis inside a value cannot end it — and a bracketed VECTOR literal stays together.
+                if (c == '\'')
                 {
-                    inQuotes = !inQuotes;
-                }
-                else if (!inQuotes)
-                {
-                    if (c == '(') parenDepth++;
-                    else if (c == ')') parenDepth--;
-                    else if (c == ',' && parenDepth == 0)
+                    int closing = SqlLiteralScanner.FindClosingQuote(valuesClause, i, out _);
+                    if (closing < 0)
                     {
-                        CommitParsedValue(valuesClause, i, ref valueStart, valueIndex, values);
-                        valueIndex++;
+                        break;
                     }
+
+                    i = closing;
+                    continue;
+                }
+
+                if (c == '(') parenDepth++;
+                else if (c == ')') parenDepth--;
+                else if (c == '[') bracketDepth++;
+                else if (c == ']' && bracketDepth > 0) bracketDepth--;
+                else if (c == ',' && parenDepth == 0 && bracketDepth == 0)
+                {
+                    CommitParsedValue(valuesClause, i, ref valueStart, valueIndex, values);
+                    valueIndex++;
                 }
             }
 
@@ -220,9 +235,6 @@ public partial class Database
             return values;
         }
 
-        private static bool IsQuoteChar(char c, int i, ReadOnlySpan<char> clause)
-            => c == '\'' && (i == 0 || clause[i - 1] != '\\');
-
         private void CommitParsedValue(ReadOnlySpan<char> valuesClause, int commaIndex, ref int valueStart, int valueIndex, object[] values)
         {
             if (valueStart < commaIndex && valueIndex < ColumnTypes.Count)
@@ -242,11 +254,18 @@ public partial class Database
         {
             if (value.IsEmpty || value.Equals("NULL", StringComparison.OrdinalIgnoreCase))
                 return null;
-            
-            // Remove quotes if present
+
+            // Remove one pair of quotes if present, and collapse SQL quote doubling ('it''s' → it's) — the same
+            // literal syntax SqlLiteralScanner and SqlParser.ParseValue read.
+            string? unescaped = null;
             if (value.Length >= 2 && value[0] == '\'' && value[^1] == '\'')
             {
                 value = value[1..^1];
+                if (value.IndexOf("''") >= 0)
+                {
+                    unescaped = value.ToString().Replace("''", "'", StringComparison.Ordinal);
+                    value = unescaped.AsSpan();
+                }
             }
             
             return type switch
@@ -1882,7 +1901,11 @@ public partial class Database
 
             var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
             var valuesStr = rest[valuesStart..].Trim().TrimStart('(').TrimEnd(')');
-            var values = SqlInPredicate.SplitTopLevelComma(valuesStr).Select(v => v.Trim().Trim('\'')).ToList();
+
+            // Keep the quotes: SqlParser.ParseValue reads literal syntax (one pair off, '' collapsed). Trimming
+            // them here stripped every edge quote and left the doubling in place, so a value ending in a quote
+            // lost it — known issue 7's shape.
+            var values = SqlInPredicate.SplitTopLevelComma(valuesStr).Select(v => v.Trim()).ToList();
             
             Dictionary<string, object> row = [];
             var table = tables[tableName];

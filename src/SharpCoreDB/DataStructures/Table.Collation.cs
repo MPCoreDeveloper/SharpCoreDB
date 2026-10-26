@@ -3,6 +3,7 @@ namespace SharpCoreDB.DataStructures;
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using SharpCoreDB.Services;
 
 /// <summary>
 /// ✅ Phase 5: Collation-aware query execution support for WHERE, ORDER BY, DISTINCT, and GROUP BY.
@@ -91,11 +92,10 @@ public partial class Table
         if (string.IsNullOrEmpty(listStr))
             return false;
 
-        // Parse comma-separated list (remove parentheses, spaces)
-        var list = listStr
-            .Trim('(', ')')
-            .Split(',')
-            .Select(s => s.Trim().Trim('\'', '"'))
+        // Parse comma-separated list (remove parentheses, spaces). SplitTopLevelComma keeps a comma inside a
+        // quoted item together, and Unquote reads the item with SQL's rules ('' is one quote).
+        var list = SqlInPredicate.SplitTopLevelComma(listStr.Trim('(', ')'))
+            .Select(s => SqlLiteralScanner.Unquote(s.Trim()))
             .ToList();
 
         // Check if rowValue equals any item in the list
@@ -375,10 +375,8 @@ public partial class Table
         if (string.IsNullOrEmpty(listStr))
             return false;
 
-        var list = listStr
-            .Trim('(', ')')
-            .Split(',')
-            .Select(s => s.Trim().Trim('\'', '"'))
+        var list = SqlInPredicate.SplitTopLevelComma(listStr.Trim('(', ')'))
+            .Select(s => SqlLiteralScanner.Unquote(s.Trim()))
             .ToList();
 
         foreach (var item in list)

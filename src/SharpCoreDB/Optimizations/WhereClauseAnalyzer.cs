@@ -111,8 +111,8 @@ public static class WhereClauseAnalyzer
                     return false; // Not a numeric column
                 }
 
-                // Remove quotes if present
-                valuePart = valuePart.Trim('\'', '"');
+                // Remove quotes if present (and collapse SQL doubling: '' is one quote)
+                valuePart = SqlLiteralScanner.Unquote(valuePart.Trim());
 
                 // Parse operator
                 SimdWhereFilter.ComparisonOp compOp;

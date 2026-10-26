@@ -161,6 +161,9 @@
   <!-- Allow unit test project to access internal members -->
   <ItemGroup>
     <InternalsVisibleTo Include="SharpCoreDB.Tests" />
+    <!-- The wire protocol uses SqlLiteralScanner (internal) so its '$1' marker translation reads literals with the
+         same rules as the parser instead of keeping a second copy. -->
+    <InternalsVisibleTo Include="SharpCoreDB.Server.Core" />
   </ItemGroup>
   <ItemGroup>
     <Folder Include="Database\Caching\" />
