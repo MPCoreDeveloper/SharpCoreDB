@@ -4,9 +4,10 @@
     It has higher precedence than Directory.Packages.props for resolving conflicts.
   -->
   <ItemGroup>
-    <!-- Force our version of Microsoft.Data.Sqlite to prevent NU1506 duplicate PackageVersion warnings
-         from transitive dependencies (Microsoft.EntityFrameworkCore.Sqlite, linq2db.Provider.SQLite, YesSql.Provider.Sqlite, etc.) -->
-    <PackageVersion Update="Microsoft.Data.Sqlite" Version="10.0.13" />
+    <!-- Keep Microsoft.Data.Sqlite aligned with Directory.Packages.props to prevent NU1506 duplicate
+         PackageVersion warnings from transitive dependencies (Microsoft.EntityFrameworkCore.Sqlite,
+         linq2db, YesSql.Provider.Sqlite, etc.). -->
+    <PackageVersion Update="Microsoft.Data.Sqlite" Version="10.0.14" />
   </ItemGroup>
 
   <!-- Suppress noisy warnings for a cleaner build output -->
