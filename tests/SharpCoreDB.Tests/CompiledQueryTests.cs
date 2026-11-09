@@ -7,6 +7,7 @@ using Microsoft.Extensions.DependencyInjection;
 using SharpCoreDB;
 using SharpCoreDB.DataStructures;
 using System.Diagnostics;
+using System.Globalization;
 using System.Threading.Tasks;
 
 namespace SharpCoreDB.Tests;
@@ -276,7 +277,12 @@ public class CompiledQueryTests
             var insertStatements = new List<string>();
             for (int i = 1; i <= 200; i++)
             {
-                insertStatements.Add($"INSERT INTO benchdata VALUES ({i}, 'Entry{i}', {i * 1.5})");
+                // Invariant, not the current culture: on a comma-decimal machine this used to render "4,5" inside
+                // the VALUES list, which the splitter then read as four values for three columns. The arity guard
+                // made that visible; formatting the literal is the actual fix, and it keeps the SQL identical
+                // wherever the test runs.
+                insertStatements.Add(
+                    $"INSERT INTO benchdata VALUES ({i}, 'Entry{i}', {(i * 1.5).ToString(CultureInfo.InvariantCulture)})");
             }
 
             db.ExecuteBatchSQL(insertStatements);
