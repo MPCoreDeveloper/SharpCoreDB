@@ -70,8 +70,8 @@ export class GrpcClient {
   private _tls: boolean;
   private _timeout: number;
 
-  private _client?: DatabaseServiceClient;
-  private _sessionId?: string;
+  private _client: DatabaseServiceClient | undefined;
+  private _sessionId: string | undefined;
 
   constructor(host: string, port: number, options: { tls?: boolean; timeout?: number } = {}) {
     this._host = host;
@@ -141,7 +141,7 @@ export class GrpcClient {
     const request: QueryRequest = {
       sessionId: this._sessionId,
       sql,
-      parameters
+      ...(parameters && { parameters })
     };
 
     try {
@@ -194,7 +194,10 @@ export class GrpcClient {
     const request: NonQueryRequest = {
       sessionId: this._sessionId,
       sql,
-      parameters
+      // Conditional spread rather than `parameters`: exactOptionalPropertyTypes forbids
+      // assigning an explicit `undefined` to the optional property (same form as
+      // ws-client's message payloads).
+      ...(parameters && { parameters })
     };
 
     try {

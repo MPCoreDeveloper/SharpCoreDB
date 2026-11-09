@@ -16,8 +16,11 @@ export class HttpClient {
   private _timeout: number;
 
   private _httpClient: AxiosInstance;
-  private _authToken?: string;
-  private _database?: string;
+  // `| undefined` rather than optional (`?`) for the same reason as ws-client: with
+  // exactOptionalPropertyTypes the optional form forbids an explicit `undefined`
+  // assignment, and disconnect() clears both fields that way.
+  private _authToken: string | undefined;
+  private _database: string | undefined;
 
   constructor(host: string, port: number, options: { tls?: boolean; timeout?: number } = {}) {
     this._host = host;
