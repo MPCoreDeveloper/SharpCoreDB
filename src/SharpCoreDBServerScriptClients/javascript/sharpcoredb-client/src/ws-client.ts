@@ -15,9 +15,12 @@ export class WebSocketClient {
   private _tls: boolean;
   private _timeout: number;
 
-  private _ws?: WebSocket;
-  private _sessionId?: string;
-  private _database?: string;
+  // Declared `| undefined` rather than optional (`?`): with exactOptionalPropertyTypes
+  // the optional form forbids an explicit `undefined` assignment, and disconnect()
+  // releases the socket and session by assigning `undefined`.
+  private _ws: WebSocket | undefined;
+  private _sessionId: string | undefined;
+  private _database: string | undefined;
   private _messageId = 0;
 
   private _responsePromises = new Map<number, {
