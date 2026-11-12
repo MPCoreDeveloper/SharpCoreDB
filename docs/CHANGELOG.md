@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Where this bucket ends.** `2.1.2` was cut from this line's `HEAD` on 2026-10-26, so the entry this
-> bucket had collected since the `v2.1.1` tag — the statement-path literal scanner below — **shipped in
-> `[2.1.2]`**. New entries start here.
+> **Where this bucket ends.** `2.1.3` was cut from this line's `HEAD` on 2026-11-12, so everything below the
+> `[2.1.3]` heading shipped in that patch. New entries start here, above `[2.1.3]`.
+
+## [2.1.3] - 2026-11-12
+
+> The issue #497 patch: the linq2db adapter executes on SharpCoreDB instead of SQLite — a password is honoured
+> and rows land in an encrypted SharpCoreDB file — and the SQL shapes that blocked it (and any other SQL
+> generator) are fixed in the engine: pretty-printed statements, SELECT-list projection, boolean truth tests,
+> `LIKE … ESCAPE`, scalar `EXISTS`, and hex `byte[]`/`Guid` literals. No API breaks.
 
 ### Added
 

@@ -1,28 +1,30 @@
 # SharpCoreDB Project Status
 
-**Version:** 2.1.2 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
-**Status:** ✅ v2.1.2 released on the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
-**Last Updated:** October 26, 2026
+**Version:** 2.1.3 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
+**Status:** ✅ v2.1.3 released on the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
+**Last Updated:** November 12, 2026
 
 ## Current Status
 
-The **current release is `2.1.2` (2026-10-26)** — a data-correctness patch with no API changes: a bound
-`TEXT` parameter holding an apostrophe, a doubled quote or a backslash was re-scanned as SQL by the
-statement path, so the value could land in the neighbouring column, or the statement was rejected with
-"Mismatched parentheses in VALUES clause". One scanner (`Services/SqlLiteralScanner.cs`) now owns SQL's
-and SQLite's escaping rules for every literal reader on the statement path. Validated on the `2.1.2` tree:
-core **2,107 tests / 0 failed**, VectorSearch **255 / 0**, EF Core **116 / 0**, linq2DB **24 / 0**. Notes:
-[`CHANGELOG.md`](CHANGELOG.md) › `[2.1.2]`; the runnable reproduction is in
-[`sharpcoredb-known-issues.md`](sharpcoredb-known-issues.md) §7.
+The **current release is `2.1.3` (2026-11-12)** — the LINQ to DB patch: `SharpCoreDBDataConnection` used to
+hand its connection string to `ProviderName.SQLite`, so a password was refused and the rows went into an
+unencrypted `SQLite format 3` file; it now executes on SharpCoreDB's own connection, with SQLite kept as the
+SQL **dialect** only. Seven engine defects that blocked generated SQL were fixed with it: pretty-printed
+`INSERT`s, SELECT-list projection (order and aliases), bare and negated boolean `WHERE`, `LIKE … ESCAPE`,
+scalar `EXISTS`, hex `byte[]`/`Guid` literals, and the reader's type-before-`Read()` throw. Validated on the
+`2.1.3` tree: core **2,149 tests / 0 failed**, linq2DB **25 / 0**, EF Core **116 / 0**, Functional **38 / 0**,
+Dapper **3 / 0**. Notes: [`CHANGELOG.md`](CHANGELOG.md) › `[2.1.3]`; the report is issue
+[#497](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/497).
 
 The **v2.1 line (`2.1.0`)** is validated and packaged, and was promoted to `master` on **2026-10-10**
 (see [`net11/PROMOTION_TO_MAIN.md`](net11/PROMOTION_TO_MAIN.md)): **2,897 tests across 16
 suites — 0 failed, 0 errors, 16 skipped** (core 1,916), the write-path regression gate **passed**, and
 the full benchmark arm set (comparative, fair-PK, pure-default, PageBased, multi-row INSERT) measured
 in the product-default regime. Release notes: [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
-`2.1.1` followed on **2026-10-25** with the SQL vector fixes; `2.1.2` is the current patch.
+`2.1.1` followed on **2026-10-25** with the SQL vector fixes; `2.1.2` (2026-10-26) with the statement-path
+literal scanner; `2.1.3` is the current patch.
 
-### .NET 11 GA upgrade (prepared 2026-11-12, awaiting the owner's release)
+### .NET 11 GA upgrade (released as 2.1.3 on 2026-11-12)
 
 `master` now builds on the **.NET 11 GA SDK** (`11.0.100`; `global.json` no longer allows prerelease) and
 Runtime Async is defined once for every net11.0 project instead of three hand-copied ones — an awaited,
@@ -31,13 +33,14 @@ synchronously-completing `async Task<T>` allocates **0 B/call** (was 71,4 B) and
 surface ships with it, and the write-path gate now compares the **best-of-reps capability** when a baseline
 carries it, because the UPDATE cell's median is disturbance-dominated on this box.
 
-Validated on the branch: `SharpCoreDB.CI.slnf` **0 errors**, core suite **2,124 / 0 failed / 0 errors**,
+Validated on the branch: `SharpCoreDB.CI.slnf` **0 errors**, core suite **2,149 / 0 failed / 0 errors**,
 the eight standing canaries **57 / 0**, gate **PASSED** (worst cell **1,08×** against the previous release's
 baseline, UPDATE **faster** on both arms), docs consistency **9/9**, and the server image rebuilt on the GA
-base images reporting runtime `11.0.0`. The release checklist — and the one open blocker
-(`Aspire.Hosting` 13.6.4 / GHSA-f7vh-h5g3-7jrh, patched in 13.6.5, an owner package bump) — is in
-[`net11/GA_RELEASE_NOTES.md`](net11/GA_RELEASE_NOTES.md). Version metadata is deliberately untouched: the
-bump, the tag and the merge that publishes remain owner actions.
+base images reporting runtime `11.0.0`. The release checklist is in
+[`net11/GA_RELEASE_NOTES.md`](net11/GA_RELEASE_NOTES.md). The one blocker it recorded —
+`Aspire.Hosting` 13.6.4 / GHSA-f7vh-h5g3-7jrh — is closed by the 13.6.5 bump ([PR #501](https://github.com/MPCoreDeveloper/SharpCoreDB/pull/501)),
+and the version metadata now reads `2.1.3` in `Directory.Packages.props` and the 28 packable projects. The
+tag and the publish remain owner actions.
 
 The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on `release/v2.0`, including:
 
@@ -63,7 +66,7 @@ The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on
   `SharpCoreDB.HybridSearch` and `SharpCoreDB.Aspire.Hosting` ship on this line for the first time
 - ✅ **2.1.0 was published from `master`, and `2.1.1` followed as a patch (2026-10-25)** — the publish
   trigger is the `push: branches: [master]` job in `.github/workflows/ci.yml`, which packs and pushes the
-  27 packages; `2.1.2` is the current release. History: [`CHANGELOG.md`](CHANGELOG.md).
+  28 packages; `2.1.3` is the current release. History: [`CHANGELOG.md`](CHANGELOG.md).
 - ✅ **Linux/macOS data-integrity defect fixed** — the AES-GCM cipher caches were shared across threads,
   which is only safe on Windows (dotnet/runtime#53320); they are thread-affine now, so concurrent
   encryption cannot corrupt a cipher's native state or repeat a nonce off Windows
