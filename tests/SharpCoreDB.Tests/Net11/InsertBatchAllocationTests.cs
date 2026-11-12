@@ -65,17 +65,20 @@ public sealed class InsertBatchAllocationTests : IDisposable
     public void InsertBatch_ArrayRows_AllocatesAtMostPerRow()
     {
         const int Rows = 2_000;
-        // Measured 2026-11-12 on the GA runtime (11.0.100) with this exact overload, same commit:
-        //   win-x64   894 B/row  (1.787.608 bytes / 2.000 rows) — after the presence-mask hoist
-        //   linux-x64 903 B/row  (1.806.872 bytes)
-        //   osx-arm64 903 B/row  (1.806.856 bytes)
-        // The 9 B/row delta between Windows and the Unix runners is the runtime's own accounting for the same
-        // code — the canary first ran on Windows only, so a single 900 ceiling failed both Unix jobs. An
-        // absolute-bytes canary has to carry the platform's own figure, or it reports a platform difference as
-        // a regression. The Unix ceiling stays ~1 % above its measured value and *below* the pre-hoist 919
-        // B/row (+9 on Unix), so reintroducing the allocation this test was written to catch still turns it red.
-        // Before the hoist the figure was 919 B/row on Windows (1.838.776 bytes), a measured -25 B/row.
-        int ceilingBytesPerRow = OperatingSystem.IsWindows() ? 900 : 915;
+        // Measured with this exact overload on the GA runtime (11.0.100), same commit, dictionary-free
+        // object[] + column-order path:
+        //   developer box, win-x64          894 B/row  (1.787.608 bytes / 2.000 rows)
+        //   GitHub windows-latest           902 B/row  (1.803.560 bytes)
+        //   GitHub ubuntu-latest            903 B/row  (1.806.872 bytes)
+        //   GitHub macos-latest (arm64)     903 B/row  (1.806.856 bytes)
+        // The 894-903 spread is the environment's own accounting for identical code (GC and JIT-tiering
+        // behaviour, not a code path): the first single-environment ceiling of 900 was recorded on the
+        // developer box and failed *every* runner. The ceiling therefore sits above the highest runner
+        // figure and still below the pre-hoist 919 B/row (1.838.776 bytes, ~927 on a runner), so
+        // reintroducing the allocation this canary was written to catch still turns it red everywhere.
+        // Guardrail: absolute-bytes canaries must be set from the runner measurement, never from a
+        // developer machine — the same reason AGENTS.md says to quote ratios, not absolutes.
+        const int CeilingBytesPerRow = 915;
 
         // Warm the call shape first: a tiered-JIT promotion inside the measured call would be charged to it.
         db.InsertBatch("docs", BuildRows(0, 500), Columns);
@@ -87,8 +90,8 @@ public sealed class InsertBatchAllocationTests : IDisposable
 
         double perRow = allocated / (double)Rows;
         Assert.True(
-            allocated <= Rows * (long)ceilingBytesPerRow,
-            $"InsertBatch allocated {allocated:N0} bytes for {Rows:N0} rows ({perRow:F0} B/row); at most {ceilingBytesPerRow} B/row was expected.");
+            allocated <= Rows * (long)CeilingBytesPerRow,
+            $"InsertBatch allocated {allocated:N0} bytes for {Rows:N0} rows ({perRow:F0} B/row); at most {CeilingBytesPerRow} B/row was expected.");
     }
 
     private static List<object[]> BuildRows(int start, int count)
