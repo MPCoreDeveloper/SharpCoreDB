@@ -82,6 +82,7 @@
   },
   "overrides": {
     "protobufjs": "^7.6.5",
+    "minimatch": "^11.0.1",
     "esbuild": "^0.28.2"
   }
 }
