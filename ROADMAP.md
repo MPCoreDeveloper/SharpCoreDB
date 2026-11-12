@@ -151,14 +151,18 @@
 - ✅ **Content-verified immutable artifacts** (`ArtifactManifest`, canonical SHA-256 `artifact_id`, `IVerifiableIndex`, content-addressed `Verify()` with `BuildResult`).
 - ⚠️ **Hybrid fusion scoring — partial** (`HybridFusionAlpha` in `VectorSearchOptions`, recorded in the manifest; the weighted scorer is not yet wired into GraphRAG ranking).
 - ✅ **DiskANN-style index** (`DiskAnnIndex`, `DiskAnnConfig`, recall-focused graph, crossover testing helper — inspired by munarium-datastore `vector_diskann.rs`) + `CREATE VECTOR INDEX … USING DISKANN` DDL.
-- ⬜ **True C# 15 union types** for `BuildResult` — deferred to .NET 11 GA (currently a `record` hierarchy).
+- ⬜ **True C# 15 union types** — **shipped at GA as the opt-in `SharpCoreDB.Unions` namespace**
+  (`QueryOutcome`, `ExecuteOutcome`, `TableLookup`; `src/SharpCoreDB/Net11/Unions/UnionOutcomes.cs`).
+  `BuildResult` is deliberately **not** retrofitted onto a union — that would be a breaking change to a
+  shipped type, so it stays a `record` hierarchy. See `docs/net11/UNION_TYPES_DESIGN.md`.
 
 ### .NET 11 / C# 15 line (v2.1)
 >> **Branch model:** **`master` is the net11.0 / C# 15 line** (the 2.1 line, promoted 2026-10-10 —
 >> see `docs/net11/PROMOTION_TO_MAIN.md`). The v2.0 stable packages stay on **net10.0 / C# 14**, parked
 >> on `release/v2.0`.
 
-- Runtime Async enabled on the core project (`Features=runtime-async=on`)
+- Runtime Async enabled on **every** net11.0 project (one definition in `Directory.Build.targets`; the core
+  project previously carried the only hand-copied switch alongside two EventSourcing projects)
 - Native Zstandard compression (`ZstandardStream`) with quality presets + frame checksum
 - AVX-VNNI-512 / SVE2 intrinsics and the SIMD lane APIs remain open for a later pass
 
