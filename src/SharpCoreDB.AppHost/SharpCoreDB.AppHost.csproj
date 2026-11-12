@@ -5,7 +5,9 @@
     <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
   </PropertyGroup>
 
-  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.4" />
+  <!-- Aspire SDK and the hosting package move together: the SDK supplies the orchestration/dashboard targets that
+       Aspire.Hosting.AppHost compiles against, so a mismatched patch pair is a supported-version mismatch. -->
+  <Sdk Name="Aspire.AppHost.Sdk" Version="13.6.5" />
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -22,7 +24,7 @@
 
   <ItemGroup>
     <!-- Aspire implicit packages must have inline versions when CPM is repo-wide -->
-    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.6.4" />
+    <PackageReference Include="Aspire.Hosting.AppHost" Version="13.6.5" />
     <!-- Orchestration and Dashboard SDK are automatically provided by Aspire SDK, removed explicit references to fix NU1504 -->
     <PackageReference Include="KubernetesClient" Version="21.0.8" />
     <!-- Explicit override for vulnerable transitive MessagePack brought by KubernetesClient + Aspire/StreamJsonRpc (>=2.5.302 required) -->
