@@ -22,6 +22,23 @@ the full benchmark arm set (comparative, fair-PK, pure-default, PageBased, multi
 in the product-default regime. Release notes: [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
 `2.1.1` followed on **2026-10-25** with the SQL vector fixes; `2.1.2` is the current patch.
 
+### .NET 11 GA upgrade (prepared 2026-11-12, awaiting the owner's release)
+
+`master` now builds on the **.NET 11 GA SDK** (`11.0.100`; `global.json` no longer allows prerelease) and
+Runtime Async is defined once for every net11.0 project instead of three hand-copied ones — an awaited,
+synchronously-completing `async Task<T>` allocates **0 B/call** (was 71,4 B) and `SharpCoreDB.dll` carries
+**2** compiler async state machines instead of 163 (the async iterators). The opt-in `SharpCoreDB.Unions`
+surface ships with it, and the write-path gate now compares the **best-of-reps capability** when a baseline
+carries it, because the UPDATE cell's median is disturbance-dominated on this box.
+
+Validated on the branch: `SharpCoreDB.CI.slnf` **0 errors**, core suite **2,124 / 0 failed / 0 errors**,
+the eight standing canaries **57 / 0**, gate **PASSED** (worst cell **1,08×** against the previous release's
+baseline, UPDATE **faster** on both arms), docs consistency **9/9**, and the server image rebuilt on the GA
+base images reporting runtime `11.0.0`. The release checklist — and the one open blocker
+(`Aspire.Hosting` 13.6.4 / GHSA-f7vh-h5g3-7jrh, patched in 13.6.5, an owner package bump) — is in
+[`net11/GA_RELEASE_NOTES.md`](net11/GA_RELEASE_NOTES.md). Version metadata is deliberately untouched: the
+bump, the tag and the merge that publishes remain owner actions.
+
 The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on `release/v2.0`, including:
 
 - `SharpCoreDB` (embedded engine — v2.0 performance release)
