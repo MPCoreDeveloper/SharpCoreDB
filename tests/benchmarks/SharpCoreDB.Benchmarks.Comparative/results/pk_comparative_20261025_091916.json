@@ -1,0 +1,58 @@
+{
+  "SharpCoreDB (SQL, PK, legacy, plaintext)": {
+    "Reps": 2,
+    "SqlitePragmas": null,
+    "InsertTime": 2.1073857,
+    "InsertOpsPerSec": 47452,
+    "ReadTime": 0.3919355,
+    "ReadOpsPerSec": 25514,
+    "UpdateTime": 0.2321813,
+    "UpdateOpsPerSec": 43069,
+    "DeleteTime": 0.3623017,
+    "DeleteOpsPerSec": 27601,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  },
+  "SharpCoreDB (SQL, PK, fixed-width, plaintext)": {
+    "Reps": 2,
+    "SqlitePragmas": null,
+    "InsertTime": 1.1424636,
+    "InsertOpsPerSec": 87530,
+    "ReadTime": 0.2376711,
+    "ReadOpsPerSec": 42074,
+    "UpdateTime": 0.1107278,
+    "UpdateOpsPerSec": 90311,
+    "DeleteTime": 0.0729911,
+    "DeleteOpsPerSec": 137003,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  },
+  "SharpCoreDB (SQL, PK, fixed-width, at-rest default)": {
+    "Reps": 2,
+    "SqlitePragmas": null,
+    "InsertTime": 1.3015632,
+    "InsertOpsPerSec": 76830,
+    "ReadTime": 0.2559389,
+    "ReadOpsPerSec": 39071,
+    "UpdateTime": 0.0610472,
+    "UpdateOpsPerSec": 163807,
+    "DeleteTime": 0.0609196,
+    "DeleteOpsPerSec": 164150,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  },
+  "SQLite": {
+    "Reps": 2,
+    "SqlitePragmas": "journal_mode=wal, synchronous=1",
+    "InsertTime": 2.1418093,
+    "InsertOpsPerSec": 46689,
+    "ReadTime": 0.2951072,
+    "ReadOpsPerSec": 33885,
+    "UpdateTime": 0.0322501,
+    "UpdateOpsPerSec": 310076,
+    "DeleteTime": 0.0221051,
+    "DeleteOpsPerSec": 452384,
+    "UpdateMeasured": true,
+    "DeleteMeasured": true
+  }
+}
