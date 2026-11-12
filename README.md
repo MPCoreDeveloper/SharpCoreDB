@@ -86,7 +86,7 @@ Use it when you need:
 |---|---|---|
 | Target framework | `net11.0` only (every project under `src`) | `net10.0` |
 | Language | C# 15 (`LangVersion=preview`, always on) | C# 14 |
-| SDK | .NET 11 RC, pinned in `global.json` (`11.0.100-rc.1.26425.128`, `allowPrerelease`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
+| SDK | .NET 11 GA, pinned in `global.json` (`11.0.100`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
 | Pipeline | `.github/workflows/ci.yml` | `.github/workflows/ci-net10.yml` |
 | Packages | `2.1.2` — the 27 packable projects under `src` | `2.0.0.3` |
 | Status | current release, receives new work | servicing only |

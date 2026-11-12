@@ -5,7 +5,8 @@
          appends (TryAppendEventsAsync / TryAppendEventAsync with expectedVersion). -->
     <TargetFramework>net11.0</TargetFramework>
     <LangVersion>preview</LangVersion>
-    <Features>$(Features);runtime-async=on</Features>
+    <!-- .NET 11 Runtime Async is set once for every net11.0 project in the repository root
+         Directory.Build.targets (Features=runtime-async=on); this project inherits it from there. -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <GenerateAssemblyInfo>false</GenerateAssemblyInfo>

@@ -6,9 +6,8 @@
          extension indexers, collection expression arguments) are always enabled. The net10.0 / C# 14
          line is the v2.0 stable packages, now parked on release/v2.0. -->
     <LangVersion>preview</LangVersion>
-    <!-- .NET 11 Runtime Async: the compiler emits runtime-native async state machines instead of
-         per-method generated ones (fewer heap allocations, cleaner stack traces). -->
-    <Features>$(Features);runtime-async=on</Features>
+    <!-- .NET 11 Runtime Async is set once for every net11.0 project in the repository root
+         Directory.Build.targets (Features=runtime-async=on); this project inherits it from there. -->
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>

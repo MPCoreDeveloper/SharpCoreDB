@@ -53,12 +53,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    # The branch's global.json pins the .NET 11 RC SDK (net11.0 + C# 15 preview only).
-    - name: Setup .NET 11 (RC)
+    # The branch's global.json pins the .NET 11 GA SDK (net11.0 + C# 15 preview only).
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.100-rc.1.26425.128'
-        include-prerelease: true
+        dotnet-version: '11.0.x'
 
     - name: Build the comparative benchmark (Release)
       run: dotnet build "$BENCH_PROJECT" --configuration Release --framework net11.0

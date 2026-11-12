@@ -72,8 +72,8 @@ Linq2DB, YesSql, Sync). Encrypted and plaintext are reported **separately**, nev
 ## 2. Repository map and commands
 
 - Root: `d:\repos\MPCoreDeveloper\SharpCoreDB`
-- SDK (pinned in `global.json`): .NET 11 RC `11.0.100-rc.1.26425.128`; targets `net11.0` /
-  C# 15 preview **only**. Do not change this.
+- SDK (pinned in `global.json`): .NET 11 GA `11.0.100` (`rollForward: latestPatch`, GA since 2026-11-10);
+  targets `net11.0` / C# 15 preview **only**. Do not change this.
 - **Read these before acting:** `docs/performance/INSERT_UPDATE_PERFORMANCE_PLAN.md`
   (2710 lines — the single source of truth; §8 targets, §9 priorities, §11 instrumentation),
   `docs/performance/V2_PERFORMANCE_PLAN.md`, `docs/manual/performance.md`,

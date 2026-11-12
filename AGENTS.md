@@ -48,8 +48,9 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 
 ## Running and verifying
 
-- The .NET 11 RC SDK is pinned in `global.json` (`11.0.100-rc.1.26425.128`, `allowPrerelease`).
-  Target `net11.0` / C# 15 preview here; do not change the pin and do not assume a pre-.NET 11 context.
+- The .NET 11 GA SDK is pinned in `global.json` (`11.0.100`, `rollForward: latestPatch`; GA since
+  2026-11-10 — an RC SDK no longer satisfies the pin). Target `net11.0` / C# 15 preview here; do not
+  change the pin and do not assume a pre-.NET 11 context.
 - **`dotnet test` does not work in this repository** — Microsoft.Testing.Platform rejects the VSTest
   target on .NET 10 SDK+. Run the MTP executable directly instead:
   `tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest 'FullyQualifiedName~MyTestClass'`
@@ -89,7 +90,9 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
   four times for acting on an inferred reading.
 - **"We need a quiet machine" is not a blocker on this box — it is a script.** Check it with
   `pwsh scripts/quiet-machine.ps1` (exit 0 = `QUIET`, 1 = `NOISY`) and clear what it names with
-  `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp`. Only *recording a baseline* needs the `QUIET`
+  `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp`. Run it from the repository root or pass the
+  absolute path to `scripts/quiet-machine.ps1`: typed from any other directory the *path* fails to resolve
+  before the script starts, so nothing runs and it looks like "it does nothing". Only *recording a baseline* needs the `QUIET`
   verdict (`--write-baseline`, reason in the commit message); gate *verdicts* are not blocked by the one
   standing finding (`WSearch` — the gate has passed on this box with it running: attempts 9/10 and
   sessions 64, 65, 66-rerun, 67). Stopping `WSearch` needs an elevated shell, so an unfixable finding is a

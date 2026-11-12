@@ -4,7 +4,8 @@
 
 # ── Stage 1: Build ──
 # The image's own .NET 11 SDK is used on purpose: global.json is deliberately NOT copied in, so the
-# repo's SDK pin (an RC until 2026-11-10) can never fail the container build on a missing SDK.
+# repo's SDK pin can never fail the container build on a missing SDK. `sdk:11.0` / `aspnet:11.0` resolve
+# to the GA images since 2026-11-10 and carry the runtime that .NET 11 Runtime Async compiles against.
 FROM mcr.microsoft.com/dotnet/sdk:11.0 AS build
 WORKDIR /src
 
