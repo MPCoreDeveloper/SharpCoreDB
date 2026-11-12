@@ -42,7 +42,12 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
                 : new DataParameter(null, DBNull.Value, DataType.NVarChar));
         SetConverter<string?, Ulid?>(str => string.IsNullOrWhiteSpace(str) ? null : Ulid.Parse(str));
 
-        // GUIDs as compact string
+        // GUIDs as compact string. A DataParameter (like the ULID one below) is what makes the SQLite provider
+        // render the value as text: with only the CLR converter registered the parameter kept DataType.Guid and
+        // the provider rendered it as a 16-byte blob literal (X'…'), which a TEXT column then stored as the
+        // literal text and could not read back into a Guid.
+        SetConverter<Guid, DataParameter>(guid =>
+            new DataParameter(null, guid.ToString("D"), DataType.NVarChar));
         SetConverter<Guid, string>(guid => guid.ToString("N"));
         SetConverter<string, Guid>(str => Guid.Parse(str));
 

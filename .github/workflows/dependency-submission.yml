@@ -28,12 +28,11 @@ jobs:
     - name: Checkout
       uses: actions/checkout@v7
 
-    # The solution it submits is net11.0; this pin matches global.json until the GA SDK ships (2026-11-10).
-    - name: Setup .NET 11 (RC)
+    # The solution it submits is net11.0; this pin matches global.json (11.0.100, GA since 2026-11-10).
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
-        dotnet-version: '11.0.100-rc.1.26425.128'
-        include-prerelease: true
+        dotnet-version: '11.0.x'
 
     - name: Submit dependencies
       uses: advanced-security/component-detection-dependency-submission-action@v0.2.0

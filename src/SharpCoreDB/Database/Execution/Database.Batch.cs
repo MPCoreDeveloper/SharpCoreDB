@@ -29,9 +29,6 @@ using SharpCoreDB.Services;
 /// </summary>
 public partial class Database
 {
-    /// <summary>SQL prefix that marks an INSERT statement (also its length for prefix slicing).</summary>
-    private const string SqlInsertPrefix = "INSERT INTO";
-
     /// <summary>
     /// v2: Pre-compiled regex for batch UPDATE statement parsing.
     /// Previously a per-statement Regex cache lookup/creation was incurred for every statement.
@@ -747,8 +744,16 @@ public partial class Database
     /// </summary>
     private static bool IsInsertStatement(string sql)
     {
-        var trimmed = sql.AsSpan().Trim();
-        return trimmed.Length >= 11 && trimmed[..11].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
+        // Any SQL whitespace may separate the keywords — a line break or a tab after INSERT must not change the
+        // classification, and SQLite also accepts INSERT OR REPLACE|IGNORE|… INTO.
+        var statement = sql.AsSpan();
+        if (!SqlIdentifierScanner.TrySkipKeyword(statement, 0, "INSERT", out int afterInsert))
+        {
+            return false;
+        }
+
+        return SqlIdentifierScanner.TrySkipKeyword(statement, afterInsert, "INTO", out _)
+            || SqlIdentifierScanner.TrySkipKeyword(statement, afterInsert, "OR", out _);
     }
 
     /// <summary>
@@ -1684,35 +1689,17 @@ public partial class Database
     {
         try
         {
-            // B9: the only caller already ran IsInsertStatement, so the statement starts with
-            // "INSERT INTO" (after optional leading whitespace) — skip the redundant full-span
-            // IndexOf scan.
+            // The target is read through the shared identifier scanner: any whitespace between the keywords,
+            // and a newline/tab between the name and the column list, are legal SQL — the previous "up to the
+            // next space" scan read the table name into the string literal's first space.
             var insertSql = sql.AsSpan();
-            int idx = 0;
-            while (idx < insertSql.Length && char.IsWhiteSpace(insertSql[idx]))
-            {
-                idx++;
-            }
-
-            insertSql = insertSql.Slice(idx);
-            const int KeywordLen = 11; // "INSERT INTO".Length
-            const int PrefixLen = 12;  // "INSERT INTO ".Length
-            if (insertSql.Length < PrefixLen ||
-                !insertSql[..KeywordLen].Equals(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase))
+            if (!SqlIdentifierScanner.TryFindInsertTarget(insertSql, out int tableStart, out int tableEnd))
             {
                 return null;
             }
 
-            // Find table name end (whitespace or opening parenthesis).
-            var nameSpan = insertSql.Slice(KeywordLen).TrimStart();
-            int tableEnd = nameSpan.IndexOfAny(' ', '(');
-            if (tableEnd < 0)
-            {
-                return null;
-            }
+            var tableName = SqlIdentifierScanner.IdentifierText(insertSql[tableStart..tableEnd]);
 
-            var tableName = nameSpan[..tableEnd].ToString();
-            
             if (!tables.ContainsKey(tableName))
                 return null;
 
@@ -1731,7 +1718,7 @@ public partial class Database
             }
 
             // Find VALUES clause
-            var rest = insertSql.Slice(tableEnd);
+            var rest = insertSql[tableEnd..];
             var valuesIdx = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase);
             if (valuesIdx < 0) return null;
 
@@ -1792,25 +1779,12 @@ public partial class Database
         try
         {
             var insertSql = sql.AsSpan();
-            var insertIdx = insertSql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase);
-            if (insertIdx < 0) return null;
-
-            insertSql = insertSql.Slice(insertIdx);
-            var tableStart = (SqlInsertPrefix.Length + 1);
-
-            // Find table name end
-            int tableEnd = -1;
-            for (int i = tableStart; i < insertSql.Length; i++)
+            if (!SqlIdentifierScanner.TryFindInsertTarget(insertSql, out int tableStart, out int tableEnd))
             {
-                if (insertSql[i] == ' ' || insertSql[i] == '(')
-                {
-                    tableEnd = i;
-                    break;
-                }
+                return null;
             }
-            if (tableEnd == -1) return null;
 
-            var tableName = insertSql.Slice(tableStart, tableEnd - tableStart).Trim().ToString();
+            var tableName = SqlIdentifierScanner.IdentifierText(insertSql[tableStart..tableEnd]);
             if (!tables.ContainsKey(tableName))
                 return null;
 
@@ -1890,20 +1864,17 @@ public partial class Database
     {
         try
         {
-            var insertSql = sql[sql.IndexOf(SqlInsertPrefix, StringComparison.OrdinalIgnoreCase)..];
-            var tableStart = (SqlInsertPrefix.Length + 1);
-            var tableEnd = insertSql.IndexOf(' ', tableStart);
-            if (tableEnd == -1)
+            if (!SqlIdentifierScanner.TryFindInsertTarget(sql, out int tableStart, out int tableEnd))
             {
-                tableEnd = insertSql.IndexOf('(', tableStart);
+                return null;
             }
 
-            var tableName = insertSql[tableStart..tableEnd].Trim();
-            
+            var tableName = SqlIdentifierScanner.IdentifierText(sql.AsSpan(tableStart, tableEnd - tableStart));
+
             if (!tables.ContainsKey(tableName))
                 return null;
             
-            var rest = insertSql[tableEnd..];
+            var rest = sql[tableEnd..];
             List<string>? insertColumns = null;
             
             if (rest.TrimStart().StartsWith('('))
@@ -1911,7 +1882,7 @@ public partial class Database
                 var colStart = rest.IndexOf('(') + 1;
                 var colEnd = rest.IndexOf(')', colStart);
                 var colStr = rest[colStart..colEnd];
-                insertColumns = [.. SqlInPredicate.SplitTopLevelComma(colStr).Select(c => c.Trim())];
+                insertColumns = [.. SqlInPredicate.SplitTopLevelComma(colStr).Select(c => SqlIdentifierScanner.IdentifierText(c.Trim()))];
                 rest = rest[(colEnd + 1)..];
             }
 

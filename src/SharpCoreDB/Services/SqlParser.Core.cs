@@ -312,6 +312,25 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
     }
 
     /// <summary>
+    /// Returns the text between <c>SELECT</c> and <c>FROM</c> from already-tokenized statement parts, or
+    /// <see langword="null"/> when the statement has no <c>FROM</c> (a literal SELECT).
+    /// </summary>
+    /// <param name="parts">The tokenized statement.</param>
+    /// <returns>The SELECT list, or <see langword="null"/>.</returns>
+    private static string? ExtractSelectClause(string[] parts)
+    {
+        for (int i = 1; i < parts.Length; i++)
+        {
+            if (parts[i].Equals(SqlConstants.FROM, StringComparison.OrdinalIgnoreCase))
+            {
+                return i == 1 ? null : string.Join(' ', parts[1..i]);
+            }
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Executes a query using a cached plan and returns the results.
     /// Skips tokenization/parsing on hot path.
     /// </summary>
@@ -332,7 +351,10 @@ public partial class SqlParser(Dictionary<string, ITable> tables, string dbPath,
         if (plan.SimpleSelect is not null &&
             TryExecuteSimpleSelect(plan.SimpleSelect, parameters, out var fastResults))
         {
-            return fastResults;
+            // The point-lookup fast path scans the whole row; the SELECT list still has to be applied, or a
+            // consumer that maps by ordinal reads the wrong column (parity with the general path below).
+            var fastSelectClause = ExtractSelectClause(plan.Parts);
+            return fastSelectClause is null ? fastResults : ApplySelectListToRows(fastResults, fastSelectClause);
         }
 
         string sql;

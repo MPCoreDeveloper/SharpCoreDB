@@ -282,14 +282,21 @@ public partial class SqlParser
         if (this.isReadOnly) throw new InvalidOperationException("Cannot insert in readonly mode");
         _lastChanges = 0;
         var returningColumns = TryExtractReturningColumns(sql, out var sqlWithoutReturning);
-        var insertSql = sqlWithoutReturning[sqlWithoutReturning.IndexOf("INSERT INTO", StringComparison.OrdinalIgnoreCase)..];
-        var tableStart = "INSERT INTO ".Length;
-        var tableEnd = insertSql.IndexOf(' ', tableStart);
-        if (tableEnd == -1) tableEnd = insertSql.IndexOf('(', tableStart);
-        var tableName = insertSql[tableStart..tableEnd].Trim().Trim('"', '[', ']', '`');
+
+        // The object name is read as an identifier token, not as "everything up to the next space": a statement
+        // may be laid out with newlines or tabs (linq2db's SQLite dialect, DbUp and most pretty-printers emit
+        // INSERT INTO\n\t[table]\n(\n\t…\n)), and a bare space scan then takes the first space *inside a string
+        // literal* as the end of the table name.
+        var insertSql = sqlWithoutReturning.AsSpan();
+        if (!SqlIdentifierScanner.TryFindInsertTarget(insertSql, out var tableStart, out var tableEnd))
+        {
+            throw new InvalidOperationException($"Unrecognised INSERT statement: {sql}");
+        }
+
+        var tableName = SqlIdentifierScanner.IdentifierText(insertSql[tableStart..tableEnd]);
         if (!this.tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
-        var rest = insertSql[tableEnd..];
+        var rest = insertSql[tableEnd..].ToString();
         List<string>? insertColumns = null;
         if (rest.TrimStart().StartsWith('('))
         {
@@ -922,6 +929,14 @@ public partial class SqlParser
             return ExecuteInformationSchemaQuery(sql, informationSchemaMatch.Groups["view"].Value);
         }
 
+        // SELECT [NOT] EXISTS (SELECT …) — SQLite's scalar form, and the shape linq2db emits for Any()/Exists().
+        // The subquery detector below routes this statement to the AST parser, which reads EXISTS( as a function
+        // call and then rejects the * inside it, so it is answered here.
+        if (TryExecuteExistsProjection(sql, noEncrypt, out var existsRows))
+        {
+            return existsRows;
+        }
+
         // ✅ Route GRAPH_RAG queries through EnhancedSqlParser before regex-based parsing
         if (sql.Contains("GRAPH_RAG", StringComparison.OrdinalIgnoreCase))
         {
@@ -1079,7 +1094,157 @@ public partial class SqlParser
         // Deduplicate by primary key
         results = ((this.tables[tableName] as Table)?.DeduplicateByPrimaryKey(results)) ?? results;
 
+        // The SELECT list is a projection, not a hint: SQLite returns exactly the listed columns, in the listed
+        // order, under the listed names. Returning the whole row instead (table order, aliases ignored) made every
+        // ordinal-based consumer read the wrong values — linq2db mapped a TEXT column as an INT and failed with
+        // "The input string 'Test User' was not in a correct format", and `SELECT body` returned `id` as well.
+        results = ApplySelectListToRows(results, selectClause);
+
         return results;
+    }
+
+    /// <summary>
+    /// Answers <c>SELECT [NOT] EXISTS (SELECT …)</c>, SQLite's scalar form — <b>1</b> when the inner query returns
+    /// any row, <b>0</b> otherwise. It is what linq2db's SQLite dialect emits for <c>Any()</c> and
+    /// <c>Exists()</c>.
+    /// <para>
+    /// The legacy path never reached an executor for this shape: the statement's <c>SELECT</c>-inside-parentheses
+    /// routed it to the AST parser, which parsed <c>EXISTS(</c> as a function call and failed on the <c>*</c>
+    /// ("Unexpected trailing content: *"). A trailing <c>FROM</c> is refused here so the projected per-row form
+    /// still takes its own path rather than being answered as a constant.
+    /// </para>
+    /// </summary>
+    /// <param name="sql">The statement.</param>
+    /// <param name="noEncrypt">Whether to bypass encryption for this query.</param>
+    /// <param name="rows">The single-row result, when the statement is of this form.</param>
+    /// <returns><c>true</c> when the statement was answered here.</returns>
+    private bool TryExecuteExistsProjection(string sql, bool noEncrypt, out List<Dictionary<string, object>> rows)
+    {
+        rows = [];
+
+        var text = sql.AsSpan().TrimStart();
+        if (!text.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var rest = text["SELECT".Length..].TrimStart();
+
+        bool negated = false;
+        if (rest.StartsWith("NOT", StringComparison.OrdinalIgnoreCase) &&
+            rest.Length > "NOT".Length && char.IsWhiteSpace(rest["NOT".Length]))
+        {
+            negated = true;
+            rest = rest["NOT".Length..].TrimStart();
+        }
+
+        if (!rest.StartsWith("EXISTS", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var afterExists = rest["EXISTS".Length..].TrimStart();
+        if (afterExists.Length == 0 || afterExists[0] != '(')
+        {
+            return false;
+        }
+
+        int depth = 0;
+        int close = -1;
+        for (int i = 0; i < afterExists.Length; i++)
+        {
+            if (afterExists[i] == '(')
+            {
+                depth++;
+            }
+            else if (afterExists[i] == ')' && --depth == 0)
+            {
+                close = i;
+                break;
+            }
+        }
+
+        if (close < 0)
+        {
+            return false;
+        }
+
+        var remainder = afterExists[(close + 1)..].Trim();
+        if (!remainder.IsEmpty && remainder.Contains("FROM", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;   // projected over a table — not the scalar form this path answers
+        }
+
+        var innerSql = afterExists[1..close].Trim().ToString();
+        if (innerSql.Length == 0)
+        {
+            return false;
+        }
+
+        var innerParts = innerSql.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+        var innerRows = ExecuteSelectQuery(innerSql, innerParts, noEncrypt);
+
+        bool exists = innerRows.Count > 0;
+        if (negated)
+        {
+            exists = !exists;
+        }
+
+        var columnName = remainder.IsEmpty
+            ? "exists"
+            : SqlIdentifierScanner.IdentifierText(
+                remainder.StartsWith("AS", StringComparison.OrdinalIgnoreCase) ? remainder["AS".Length..].Trim() : remainder);
+
+        rows = [new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase) { [columnName] = exists ? 1L : 0L }];
+        return true;
+    }
+
+    /// <summary>
+    /// Projects a row set onto the statement's SELECT list — the SQL semantics an ADO.NET consumer relies on,
+    /// because it maps columns by ordinal.
+    /// <para>
+    /// Only plain column references (optionally qualified and/or aliased) are projected here. A wildcard
+    /// (<c>*</c>, <c>t.*</c>) already asks for the whole row, and an expression needs the evaluator the JOIN path
+    /// uses, so those rows are returned untouched rather than with a column of NULLs.
+    /// </para>
+    /// </summary>
+    /// <param name="rows">The scanned rows, keyed by table column name.</param>
+    /// <param name="selectClause">The text between SELECT and FROM.</param>
+    /// <returns>The projected rows.</returns>
+    private static List<Dictionary<string, object>> ApplySelectListToRows(
+        List<Dictionary<string, object>> rows,
+        string selectClause)
+    {
+        if (rows.Count == 0 || string.IsNullOrWhiteSpace(selectClause))
+        {
+            return rows;
+        }
+
+        var clause = selectClause.Trim();
+        if (clause.StartsWith("DISTINCT", StringComparison.OrdinalIgnoreCase))
+        {
+            clause = clause["DISTINCT".Length..].Trim();
+        }
+
+        foreach (var item in SqlInPredicate.SplitTopLevelComma(clause))
+        {
+            var text = item.Trim();
+            if (text.Length == 0 || text == "*" || text.EndsWith(".*", StringComparison.Ordinal))
+            {
+                return rows;    // whole-row form — nothing to project
+            }
+
+            foreach (var c in text)
+            {
+                if (c is '(' or ')' or '\'' or '+' or '-' or '/' or '%' or '|' or '=' or '<' or '>' or '~' or '*')
+                {
+                    // An expression, not a column reference: leave the row as the scan produced it.
+                    return rows;
+                }
+            }
+        }
+
+        return ProjectColumns(rows, clause);
     }
 
 
@@ -1972,9 +2137,15 @@ public partial class SqlParser
         var dotIndex = key.LastIndexOf('.');
         var isQualifiedKey = dotIndex > 0;
 
-        // Try bare column name only for unqualified lookups.
+        // Try bare column name for unqualified lookups.
         var bare = ExtractBareColumn(key);
         if (!isQualifiedKey && row.TryGetValue(bare, out v))
+            return v;
+
+        // A single-table scan keys its rows by bare column name, so `SELECT t.name FROM t` must resolve
+        // `t.name` to `name`. (The suffix search below exists for joins, whose rows are keyed `alias.column`;
+        // a plain `name` key is this table's own column and cannot be another table's phantom.)
+        if (isQualifiedKey && row.TryGetValue(bare, out v))
             return v;
 
         // Try all keys ending with .col and pick best candidate.
@@ -2255,7 +2426,11 @@ public partial class SqlParser
             int assign = setClause.IndexOf('=');
             if (assign > 0)
             {
-                var colName = setClause[..assign].Trim();
+                // The column may be quoted ([body], "body", `body`): SQLite accepts all three, and a client that
+                // quotes identifiers (linq2db's SQLite dialect, EF Core) would otherwise have every assignment
+                // dropped — `table.Columns.IndexOf("[body]")` is -1, the SET list became empty and the UPDATE
+                // matched nothing while reporting success.
+                var colName = SqlIdentifierScanner.IdentifierText(setClause[..assign].Trim());
                 var valueStr = setClause[(assign + 1)..].Trim();
 
                 // Find column type
@@ -2265,6 +2440,13 @@ public partial class SqlParser
                     var colType = table.ColumnTypes[colIndex];
                     var value = SqlParser.ParseValue(valueStr, colType);
                     updates[colName] = value;
+                }
+                else
+                {
+                    // SQLite reports "no such column" here; dropping the assignment silently changed nothing and
+                    // said nothing, which is the same failure mode as the literal-escaping defect (known issue 7).
+                    throw new InvalidOperationException(
+                        $"Column '{colName}' does not exist in table '{tableName}' (UPDATE SET list).");
                 }
             }
         }
@@ -3339,10 +3521,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
 
     private static bool SqlLike(string value, string pattern)
     {
-        // SQLite LIKE is case-insensitive and uses % and _ wildcards
-        var regexPattern = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
-            .Replace("%", ".*")
-            .Replace("_", ".") + "$";
-        return System.Text.RegularExpressions.Regex.IsMatch(value, regexPattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        // One definition of LIKE, shared with the WHERE evaluators and the collation comparator.
+        return SqlLikePattern.IsMatch(value, pattern);
     }
 }

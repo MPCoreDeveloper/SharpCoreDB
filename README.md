@@ -28,7 +28,17 @@ Use it when you need:
   measured 2026-10-11)**, the **RC.3 sweep of 2,897 tests across 16 suites**, and **backward
   compatibility**
 
-> **Current release: v2.1.2 (2026-10-26) — the .NET 11 / C# 15 line, on `master`.** A data-correctness
+> **Current release: v2.1.3 (2026-11-12) — the .NET 11 / C# 15 line, on `master`.** The LINQ to DB patch:
+> `SharpCoreDBDataConnection` used to hand its connection string to `ProviderName.SQLite`, so a password was
+> refused and the rows landed in an unencrypted `SQLite format 3` file. It now executes on SharpCoreDB's own
+> connection — SQLite stays the SQL **dialect**, SharpCoreDB owns the file and the AES-256-GCM encryption —
+> and the SQL shapes that blocked it are fixed in the engine: **pretty-printed `INSERT`s, SELECT-list
+> projection (order and aliases included), bare and negated boolean `WHERE`, `LIKE … ESCAPE`, scalar
+> `EXISTS`, and hex `byte[]`/`Guid` literals**. Validated by **core 2,149 tests / 0 failed, linq2DB 25 / 0,
+> EF Core 116 / 0, Functional 38 / 0, Dapper 3 / 0**. Full notes:
+> [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.3]`.
+
+> **Previous release — v2.1.2 (2026-10-26) — the .NET 11 / C# 15 line, on `master`.** A data-correctness
 > patch with no API changes: a **bound string parameter holding an apostrophe, a doubled quote or a
 > backslash was re-scanned as SQL**, so the value could land in the neighbouring column, and a value
 > ending in a backslash could not be written at all. One scanner now owns SQL's and SQLite's escaping
@@ -37,7 +47,7 @@ Use it when you need:
 > [`docs/sharpcoredb-known-issues.md`](docs/sharpcoredb-known-issues.md) §7. Full notes:
 > [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.2]`.
 
-> **Previous release — v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
+> **Earlier release — v2.1.0 (2026-10-10) — the .NET 11 / C# 15 line, on `master`.** **Published on
 > NuGet.org** (all 27 packable packages) from `master`, `net11.0` only. Highlights: the fixed-width inline capacity
 > ships at 24 bytes by default on both storage paths (worth **+34 %** on the batched multi-row INSERT
 > shape and **0,63× → 0,87×** on the tracked fair-PK INSERT ratio), the overflow arena appends a row's payloads in one call instead of one
@@ -82,17 +92,17 @@ Use it when you need:
 
 ## Requirements and the two release lines
 
-| | **v2.1.2 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
+| | **v2.1.3 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
 |---|---|---|
 | Target framework | `net11.0` only (every project under `src`) | `net10.0` |
 | Language | C# 15 (`LangVersion=preview`, always on) | C# 14 |
-| SDK | .NET 11 RC, pinned in `global.json` (`11.0.100-rc.1.26425.128`, `allowPrerelease`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
+| SDK | .NET 11 GA, pinned in `global.json` (`11.0.100`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
 | Pipeline | `.github/workflows/ci.yml` | `.github/workflows/ci-net10.yml` |
-| Packages | `2.1.2` — the 27 packable projects under `src` | `2.0.0.3` |
+| Packages | `2.1.3` — the 28 packable projects under `src` | `2.0.0.3` |
 | Status | current release, receives new work | servicing only |
 
 - **Pick one line per solution.** The package references are line-specific: a `net10.0` project uses the
-  `2.0.0.x` packages, a `net11.0` project the `2.1.2` ones. Do not mix them in one solution.
+  `2.0.0.x` packages, a `net11.0` project the `2.1.3` ones. Do not mix them in one solution.
 - **The .NET 11 SDK is required to build** — the `global.json` pin is deliberate and `dotnet test` is not
   this repository's runner (Microsoft.Testing.Platform is; run the built test executable, or see
   [`docs/INDEX.md`](docs/INDEX.md)).
@@ -124,7 +134,37 @@ Use it when you need:
 
 ---
 
-## What's new in v2.1.2 (current release)
+## What's new in v2.1.3 (current release)
+
+**The LINQ to DB adapter now executes on SharpCoreDB.** `SharpCoreDBDataConnection` passed its connection
+string to `ProviderName.SQLite`, which resolves to Microsoft.Data.Sqlite and the native `e_sqlite3` library:
+a password was refused (*"the native SQLite library doesn't support encryption"*) and, without one, the rows
+landed in an unencrypted `SQLite format 3` file that SharpCoreDB cannot read. The adapter is the SQLite
+**dialect**, not the SQLite **engine** — linq2db still generates the SQL, and SharpCoreDB owns the
+connection, the file and the encryption.
+
+Running real statements through it exposed seven engine defects, each fixed with a test that failed first:
+a pretty-printed `INSERT` was rejected; a SELECT list was not a projection (aliases dropped, columns
+returned in table order, cached point lookups skipped it); `WHERE col` and `WHERE NOT col` were not boolean
+truth tests; `LIKE … ESCAPE` matched nothing; `SELECT EXISTS (…)` never reached an executor; `byte[]`/`Guid`
+written as `0x…`/`X'…'` failed as base64; and the reader threw `Invalid read position` when a type was asked
+for before the first `Read()`. The functional SQL translator also selects the columns its `IS SOME`/`IS NONE`
+post-filter reads.
+
+```csharp
+// A password is honoured, and the rows live in a SharpCoreDB file.
+await using var db = new SharpCoreDBDataConnection("Data Source=app.scdb;Password=…");
+await db.CreateTableAsync<Note>();
+await db.InsertAsync(new Note { Id = 1, Body = "it's a probe" });
+
+var notes = await db.GetTable<Note>().Where(n => n.Body.StartsWith("it's")).ToListAsync();
+```
+
+Validated: **core 2,149 / 0 failed**, linq2DB **25 / 0**, EF Core **116 / 0**, Functional **38 / 0**, Dapper
+**3 / 0**, `SharpCoreDB.CI.slnf` clean. Full list:
+[`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.3]`.
+
+## What's new in v2.1.2 (previous release)
 
 **A data-correctness patch with no API changes.** `ExecuteSQL(sql, parameters)` does not bind values at the
 engine level: it renders each one back **into the statement text** and hands that text to the ordinary
@@ -284,7 +324,7 @@ Headline changes, grouped by area. Everything below is in the shipped `2.1.0` pa
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.2
+dotnet add package SharpCoreDB --version 2.1.3
 ```
 
 ```csharp
@@ -321,8 +361,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.1.2
-dotnet add package SharpCoreDB.Client --version 2.1.2
+dotnet add package SharpCoreDB.Server.Core --version 2.1.3
+dotnet add package SharpCoreDB.Client --version 2.1.3
 ```
 
 > The server host is a standalone executable (`src/SharpCoreDB.Server`), distributed as the
@@ -353,50 +393,50 @@ dotnet add package SharpCoreDB.Client --version 2.1.2
 
 ## Available NuGet packages
 
-### v2.1.2 — current release (`master`, net11.0 / C# 15 preview)
+### v2.1.3 — current release (`master`, net11.0 / C# 15 preview)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.1.2
+dotnet add package SharpCoreDB --version 2.1.3
 
 # Server/client
-dotnet add package SharpCoreDB.Server.Core --version 2.1.2
-dotnet add package SharpCoreDB.Server.Protocol --version 2.1.2
-dotnet add package SharpCoreDB.Client --version 2.1.2
-dotnet add package SharpCoreDB.Client.Protocol --version 2.1.2
-dotnet add package SharpCoreDB.Data.Provider --version 2.1.2
+dotnet add package SharpCoreDB.Server.Core --version 2.1.3
+dotnet add package SharpCoreDB.Server.Protocol --version 2.1.3
+dotnet add package SharpCoreDB.Client --version 2.1.3
+dotnet add package SharpCoreDB.Client.Protocol --version 2.1.3
+dotnet add package SharpCoreDB.Data.Provider --version 2.1.3
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.1.2
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.2
-dotnet add package SharpCoreDB.Search --version 2.1.2
-dotnet add package SharpCoreDB.HybridSearch --version 2.1.2
-dotnet add package SharpCoreDB.Graph --version 2.1.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
-dotnet add package SharpCoreDB.Distributed --version 2.1.2
-dotnet add package SharpCoreDB.Provider.Sync --version 2.1.2
-dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.2
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.2
-dotnet add package SharpCoreDB.Extensions --version 2.1.2
-dotnet add package SharpCoreDB.Identity --version 2.1.2
-dotnet add package SharpCoreDB.Serilog.Sinks --version 2.1.2
+dotnet add package SharpCoreDB.Analytics --version 2.1.3
+dotnet add package SharpCoreDB.VectorSearch --version 2.1.3
+dotnet add package SharpCoreDB.Search --version 2.1.3
+dotnet add package SharpCoreDB.HybridSearch --version 2.1.3
+dotnet add package SharpCoreDB.Graph --version 2.1.3
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.3
+dotnet add package SharpCoreDB.Distributed --version 2.1.3
+dotnet add package SharpCoreDB.Provider.Sync --version 2.1.3
+dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.3
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.3
+dotnet add package SharpCoreDB.Extensions --version 2.1.3
+dotnet add package SharpCoreDB.Identity --version 2.1.3
+dotnet add package SharpCoreDB.Serilog.Sinks --version 2.1.3
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.2
-dotnet add package SharpCoreDB.Projections --version 2.1.2
-dotnet add package SharpCoreDB.CQRS --version 2.1.2
+dotnet add package SharpCoreDB.EventSourcing --version 2.1.3
+dotnet add package SharpCoreDB.Projections --version 2.1.3
+dotnet add package SharpCoreDB.CQRS --version 2.1.3
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.1.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.2
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.2
+dotnet add package SharpCoreDB.Functional --version 2.1.3
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.3
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.3
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.3
 
 # Hosting and tooling
-dotnet add package SharpCoreDB.Aspire.Hosting --version 2.1.2
+dotnet add package SharpCoreDB.Aspire.Hosting --version 2.1.3
 ```
 
-> The 27 commands above are the complete packable set of this line. **`2.1.2` is a stable release**, so
+> The 28 commands above are the complete packable set of this line. **`2.1.3` is a stable release**, so
 > NuGet selects it by default for a `net11.0` project; a `net10.0` project resolves to the `2.0.0.3` line
 > instead. Pin the version explicitly (as above) when you want to be certain, and tick *Include
 > prerelease* only if you are deliberately testing an RC build.

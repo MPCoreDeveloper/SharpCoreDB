@@ -357,7 +357,11 @@ public sealed class NullSafetyComparisonTests : IDisposable
                 2 => 2,  // Bob — exists
                 _ => 99  // doesn't exist
             };
-            inserts.Add($"INSERT INTO Orders VALUES ({i}, {userId}, {i * 10.5})");
+            // Invariant formatting: on a comma-decimal culture `10.5` renders as "10,5", the statement's value
+            // tuple splits at that comma, and the arity check rejects the INSERT — the test would then fail on a
+            // machine culture rather than on the behaviour it pins.
+            inserts.Add(string.Create(System.Globalization.CultureInfo.InvariantCulture,
+                $"INSERT INTO Orders VALUES ({i}, {userId}, {i * 10.5})"));
         }
 
         _db.ExecuteBatchSQL(inserts);

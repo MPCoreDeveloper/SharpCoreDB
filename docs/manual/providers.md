@@ -47,7 +47,7 @@ Guide: [`docs/graphrag/EF_CORE_COMPLETE_GUIDE.md`](../graphrag/EF_CORE_COMPLETE_
 |---------|---------|-----------|
 | `SharpCoreDB.Functional.Dapper` | Dapper | `Option<T>`, `Fin<T>`, `Seq<T>` results |
 | `SharpCoreDB.Functional.EntityFrameworkCore` | EF Core | functional composition over `IQueryable` |
-| `SharpCoreDB.Functional.Linq2DB` | linq2db | `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), compile-safe LINQ — ideal for high-throughput AI/agentic workloads |
+| `SharpCoreDB.Functional.Linq2DB` | linq2db | `BulkCopyAsync` batching, full type mapping (ULID/GUID/DateTime), compile-safe LINQ — ideal for high-throughput AI/agentic workloads. linq2db's SQLite dialect generates the SQL; the connection, the storage and the encryption are SharpCoreDB's |
 
 ```csharp
 // linq2db functional example

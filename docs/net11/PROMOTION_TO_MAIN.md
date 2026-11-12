@@ -270,6 +270,70 @@ API (`qualitygates/project_status`, `project_analyses/search`, `issues/search`),
    only changes with the next version published. What remains is the release *narrative*: the announcement
    text and the `README.md` / `PROJECT_STATUS.md` release text for the tag.
 
+## GA upgrade (2026-11-12) — items 1 and 2 of the checklist above are closed
+
+Both were done on the GA SDK `11.0.100` (released 2026-11-10) and verified on this tree.
+
+1. **SDK pin.** `global.json` → `"version": "11.0.100"`, `"rollForward": "latestPatch"`,
+   `allowPrerelease` dropped — in both copies (`global.json` and `src/SharpCoreDB/global.json`). An RC SDK
+   no longer satisfies the pin, so every build of this branch now needs a GA SDK.
+2. **CI pins.** `DOTNET_VERSION` → `11.0.x` in `ci.yml`, `compatibility-smoke.yml`, `publish-manual.yml`;
+   the literal pin → `11.0.x` in `dependency-submission.yml` and `benchmarks.yml`; `include-prerelease`
+   removed from all five; the now-false "until the GA SDK ships (2026-11-10)" comments corrected.
+   `ci-net10.yml` is untouched, as planned. The Dockerfile's `sdk:11.0` / `aspnet:11.0` resolve to the GA
+   images without a change; only its comment needed correcting.
+
+**Runtime Async was found half-wired and is now defined once.** `Features=runtime-async=on` existed as
+three hand-copied lines — the core engine, `SharpCoreDB.EventSourcing` and its test project — while the
+other 72 projects compiled classic, and `docs/net11/UPGRADE.md` already described it as a property of the
+whole line. The switch now lives in a new repository-root `Directory.Build.targets`, conditioned on
+`net11.0` with `<UseRuntimeAsync>false</UseRuntimeAsync>` as the per-project opt-out. Targets rather than
+props on purpose: props are evaluated before the project body, where `$(TargetFramework)` is still empty,
+and a TFM-conditioned switch there silently never applies (observed: 163 state machines and 71,4 B/call
+with the switch in props, before the move). Per-project copies removed.
+
+Measured on the GA runtime (1.000-call loop): an awaited, synchronously-completing `async Task<int>`
+allocated **71.424 bytes (71,4 B/call) before and 0 bytes after**; `SharpCoreDB.dll` went from **163
+compiler-generated `IAsyncStateMachine` types to 2** — the two async iterators (`ColumnarDataReader.
+ReadBatchesAsync`, `PageBasedDataWriter`), which runtime async does not cover at GA. A non-awaited call
+(`.GetAwaiter().GetResult()`) still materialises the task at 72,0 B/call — recorded rather than hidden.
+
+Evidence: `tests/SharpCoreDB.Tests/Net11/RuntimeAsyncCodegenTests.cs` fails on both facts with
+`-p:UseRuntimeAsync=false` (163 state machines; 71,4 B/call) and passes on the GA build. Verification on
+this tree: `SharpCoreDB.Tests` **2120 / 0 failed / 0 errors / 0 skipped in 90,0 s**, `SharpCoreDB.CI.slnf`
+builds with the GA SDK, and the two canaries are 2/2.
+
+**Item 3 — union types: IMPLEMENTED.** `src/SharpCoreDB/Net11/Unions/UnionOutcomes.cs` (namespace
+`SharpCoreDB.Unions`, source-gated `#if NET11_0_OR_GREATER`) exposes `QueryOutcome` (rows / not found /
+failure), `ExecuteOutcome` (rows affected / failure) and `TableLookup` (found / missing) as C# 15 `union`
+declarations, with seven `record class` case types. The `union` keyword form was chosen over the
+hand-written `[Union]` class in the design doc because the GA compiler generates that shape itself.
+Nothing is retrofitted: `QueryResult`, `ExecuteResult` and every `ExecuteSQL` signature are unchanged, and
+`BuildResult` deliberately stays a `record` hierarchy (see `ROADMAP.md`). Tests:
+`tests/SharpCoreDB.Tests/Net11/UnionOutcomeTests.cs`, **3/3**, whose switches carry no discard arm so
+exhaustiveness is a compile-time guarantee rather than a runtime assertion.
+
+**Item 4 — the gate ran on the GA runtime; the Docker image is rebuilt.** The gate's first run came out
+`INCONCLUSIVE` (exit 2) with a worst rep spread of **3,20×** on `default UPDATE` (98.561 / 315.843 /
+196.317 ops/sec — rep 1 coldest, i.e. a cold process rather than load). Per the standing protocol that is
+a statement about that run, so: one `scripts/quiet-machine.ps1` check, then **one documented re-run →
+`GATE PASSED` (exit 0), 8/8 metrics `ok`, worst rep spread 2,39×**, with `raw UPDATE 0,61×`,
+`default UPDATE 0,75×`, `raw READ 0,91×` — faster than the recorded baseline — and nothing above 1,08×
+against a 1,50× tolerance. Both runs are archived (`artifacts/ga-gate.txt`,
+`artifacts/ga-gate-rerun.txt`).
+
+**The baseline was recorded — by the owner, from an elevated shell, and it exposed a defect.** `quiet-machine.ps1 -Apply -StopServices` stopped `WSearch` and made the Defender probe effective, and the baseline was recorded at **`2026-11-12T09:23:01Z`** (3 reps): raw `I 217.844 / R 139.008 / U 410.145 / D 452.095`, default `I 199.184 / R 150.719 / U 247.619 / D 181.701`. The gate then **failed against it minutes later on the very same binary** — `raw UPDATE 2,05×` (410.145 → 199.953) — and the documented re-run came out `INCONCLUSIVE` (exit 2, worst spread 2,55× on `raw UPDATE`: 462.444 / 484.116 / 189.843). The finding is that the `raw UPDATE` cell **picks a mode of ~215.000 or ~420.000 ops/sec (1,86–1,95×) and holds it**; `raw READ` has a milder version (139.000 vs ~200.000). Ruled out with measurements, not reasoning: machine load (`INSERT`/`READ` in those same reps stayed within 1,07×/1,08×), warm-up depth (8 passes: spreads 2,39/2,55/3,20×; 16 passes: one fast run at 1,08× *and* one slow run at 1,22× — so the deeper warm-up makes the reps agree with each other and still lets the process disagree with the baseline), and the workload data (fixed, prebuilt statement lists). The profiler signature is recorded: the whole batch path scales together (parse 3,9 → 25,9 ms, engine-write 2,0 → 37,8 ms, commit-overwrites 2,2 → 20,5 ms per 10.000 updates) while the one-off `row-snapshot` stage stays flat. **The owner decided to keep the new baseline**; `baselines/README.md` carries the defect for whoever reads the guard, and finding the switch is the first item in the worklog's `NEXT:` line.
+
+Docker: the daemon was not running at the start of the session; it was started and the image rebuilt on
+the GA base images — **`sharpcoredb-server:net11-ga`, 604 MB, id `4fb97e58b276`**, with
+`docker run --rm --entrypoint dotnet sharpcoredb-server:net11-ga --list-runtimes` answering `11.0.0`
+(runtime present and functional).
+
+**Item 5 — release metadata: NOT done here, deliberately.** Version fields, `<PackageReleaseNotes>`,
+package metadata, packing and publishing are an owner action under the standing rail, so only the
+narrative/docs were updated in this session (`docs/CHANGELOG.md`, `docs/net11/UPGRADE.md`, `ROADMAP.md`,
+this document). The `2.1.x` version bump and the tag remain with the owner.
+
 ## What must not be done
 
 - No **branch rename** and no default-branch pointer change: a rename stops the CI workflows matching their

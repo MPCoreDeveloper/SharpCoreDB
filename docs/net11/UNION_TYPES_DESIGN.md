@@ -1,16 +1,22 @@
 # Union Types in SharpCoreDB — Design Pass (v2.1 Preview)
 
-> Branch: `release/v2.1.0.0-RC.3` · Status: deferred to .NET 11 GA (see `MUNARIUM_INSPIRATION_PLAN.md`, Phase 6) · Reference: [Union types — C# reference](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/union)
+> Status: **IMPLEMENTED at .NET 11 GA** (2026-11-12) — the opt-in `SharpCoreDB.Unions` namespace ships in
+> `src/SharpCoreDB/Net11/Unions/UnionOutcomes.cs` with tests in
+> `tests/SharpCoreDB.Tests/Net11/UnionOutcomeTests.cs`. This document stays as the design record; the
+> shipped code uses the `union` keyword form (`public union QueryOutcome(QuerySuccess, QueryNotFound,
+> QueryFailure);`) rather than the hand-written `[Union]` class shape proposed below, because the GA
+> compiler generates that shape itself. Reference: [Union types — C# reference](https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/builtin-types/union)
 
 ## Status
 
-**Verified available** on .NET 11 RC1 (C# 15 preview): union types work via the `union` keyword and the
-`[System.Runtime.CompilerServices.Union]` attribute with `IUnion`. The runtime ships
-`UnionAttribute`/`IUnion` since .NET 11 Preview 5.
+**Implemented and shipped** in this line (2026-11-12) as `SharpCoreDB.Unions`; the syntax was verified on
+RC1 and the GA compiler (`11.0.100`) accepts the `union` keyword form unchanged. The runtime ships
+`UnionAttribute`/`IUnion` since .NET 11 Preview 5 and they are GA in .NET 11.
 
-**Recommendation:** expose unions as a **new opt-in namespace** `SharpCoreDB.Unions` (net11.0-only),
-**never retrofit** existing result types (that would be breaking), and **hold off shipping** until the
-preview syntax stabilizes at GA. This document is the ready-to-implement blueprint.
+**Decision as taken:** a **new opt-in namespace** `SharpCoreDB.Unions` (net11.0-only), existing result
+types **never retrofitted** (`QueryResult` / `ExecuteResult` / `ExecuteSQL` signatures stay byte-identical),
+and the `union` keyword rather than the hand-written `[Union]` class below — the compiler generates that
+shape, so there is nothing to hand-maintain.
 
 ## Verified syntax (compiles + runs on RC1)
 

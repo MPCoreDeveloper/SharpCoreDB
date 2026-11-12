@@ -4,8 +4,8 @@ Embedded + networked database engine for .NET with AES-256-GCM encryption, a gRP
 package family spanning ADO.NET, EF Core, Dapper, linq2DB, YesSql, Sync, Analytics, VectorSearch,
 Graph, EventSourcing, CQRS and Projections. C#/.NET, `LangVersion=preview`. Deep documentation lives
 in `docs/` (start at `docs/INDEX.md`); the live performance mission is
-`docs/performance/AUTONOMOUS_AGENT_BRIEF.md`. `master` is the `net11.0` / C# 15 preview line (2.1.0 — the
-former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14 stable line is parked on
+`docs/performance/AUTONOMOUS_AGENT_BRIEF.md`. `master` is the `net11.0` / C# 15 preview line (2.1.3 — the
+.NET 11 GA line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14 stable line is parked on
 `release/v2.0` for 2.0.x servicing and is built by `ci-net10.yml`.
 
 ## Policy
@@ -48,8 +48,9 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 
 ## Running and verifying
 
-- The .NET 11 RC SDK is pinned in `global.json` (`11.0.100-rc.1.26425.128`, `allowPrerelease`).
-  Target `net11.0` / C# 15 preview here; do not change the pin and do not assume a pre-.NET 11 context.
+- The .NET 11 GA SDK is pinned in `global.json` (`11.0.100`, `rollForward: latestPatch`; GA since
+  2026-11-10 — an RC SDK no longer satisfies the pin). Target `net11.0` / C# 15 preview here; do not
+  change the pin and do not assume a pre-.NET 11 context.
 - **`dotnet test` does not work in this repository** — Microsoft.Testing.Platform rejects the VSTest
   target on .NET 10 SDK+. Run the MTP executable directly instead:
   `tests/SharpCoreDB.Tests/bin/Release/net11.0/SharpCoreDB.Tests.exe -filterVSTest 'FullyQualifiedName~MyTestClass'`
@@ -59,6 +60,10 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 - CI runs the core suite with `Category!=Debug&Category!=Manual&Category!=Performance`; 30
   `Performance` and 3 `Debug` tests exist and are excluded by default. Tag new slow or benchmark
   tests `[Trait("Category","Performance")]` so they stay out of the default run.
+- Tag allocation-ceiling canaries `[Trait("Category","Allocation")]`. They stay in `Build and Test`, but the
+  **coverage** job adds `&Category!=Allocation`, because instrumentation changes what the JIT may do: measured
+  2026-11-12, code coverage made the Runtime Async elision disappear (0 → 71.424 bytes per 1.000 awaited calls,
+  exactly the classic figure) and pushed a batch-INSERT canary from 894 to 902 B/row.
 - A clean build still emits ~299 warnings. Do not chase them as part of unrelated work.
 - CI restores and builds `SharpCoreDB.CI.slnf` — not the `.sln` — with
   `--configfile NuGet.Config /p:UseLocalProjectReferences=true`.
@@ -89,7 +94,9 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
   four times for acting on an inferred reading.
 - **"We need a quiet machine" is not a blocker on this box — it is a script.** Check it with
   `pwsh scripts/quiet-machine.ps1` (exit 0 = `QUIET`, 1 = `NOISY`) and clear what it names with
-  `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp`. Only *recording a baseline* needs the `QUIET`
+  `-Apply [-StopServices] -BenchTempDir D:\scdb-bench-tmp`. Run it from the repository root or pass the
+  absolute path to `scripts/quiet-machine.ps1`: typed from any other directory the *path* fails to resolve
+  before the script starts, so nothing runs and it looks like "it does nothing". Only *recording a baseline* needs the `QUIET`
   verdict (`--write-baseline`, reason in the commit message); gate *verdicts* are not blocked by the one
   standing finding (`WSearch` — the gate has passed on this box with it running: attempts 9/10 and
   sessions 64, 65, 66-rerun, 67). Stopping `WSearch` needs an elevated shell, so an unfixable finding is a

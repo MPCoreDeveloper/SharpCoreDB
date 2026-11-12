@@ -153,12 +153,82 @@ public sealed partial class FunctionalSqlTranslator
         // Remove functional predicates from SQL WHERE; they are enforced in FunctionalDb post-filtering.
         sql = RemoveFunctionalWherePredicates(sql);
 
+        // The post-filter reads the SOME/NONE columns from the returned row, so those columns must be part of the
+        // projection. They used to arrive by accident — the engine ignored a SELECT list and returned every
+        // column — and with a real projection a filter on a column that is not selected would silently pass.
+        sql = EnsureFilterColumnsAreSelected(sql, [.. someColumns, .. noneColumns]);
+
         return new TranslationResult(
             sql.Trim(),
             isOptional,
             someColumns,
             noneColumns,
             unwrapMappings);
+    }
+
+    /// <summary>
+    /// Appends the columns the functional post-filter reads to the SELECT list when they are not selected yet.
+    /// A wildcard projection needs nothing, and a <c>DISTINCT</c> projection is left alone because adding a
+    /// column would change what <c>DISTINCT</c> means.
+    /// </summary>
+    /// <param name="sql">The statement, with the functional predicates already removed.</param>
+    /// <param name="filterColumns">The columns named by <c>IS SOME</c> / <c>IS NONE</c> / <c>MATCH</c>.</param>
+    /// <returns>The statement with the filter columns selected.</returns>
+    private static string EnsureFilterColumnsAreSelected(string sql, IReadOnlyList<string> filterColumns)
+    {
+        if (filterColumns.Count == 0)
+        {
+            return sql;
+        }
+
+        int selectIdx = sql.IndexOf("SELECT", StringComparison.OrdinalIgnoreCase);
+        if (selectIdx < 0)
+        {
+            return sql;
+        }
+
+        int fromIdx = sql.IndexOf(" FROM ", selectIdx, StringComparison.OrdinalIgnoreCase);
+        if (fromIdx < 0)
+        {
+            return sql;
+        }
+
+        var selectList = sql[(selectIdx + "SELECT".Length)..fromIdx].Trim();
+        if (selectList.Length == 0 ||
+            selectList.StartsWith("DISTINCT", StringComparison.OrdinalIgnoreCase) ||
+            selectList == "*" ||
+            selectList.EndsWith(".*", StringComparison.Ordinal))
+        {
+            return sql;
+        }
+
+        var selected = selectList.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        var missing = new List<string>();
+
+        foreach (var column in filterColumns.Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            bool present = selected.Any(item =>
+                item.Equals(column, StringComparison.OrdinalIgnoreCase) ||
+                item.EndsWith("." + column, StringComparison.OrdinalIgnoreCase) ||
+                item.EndsWith(" AS " + column, StringComparison.OrdinalIgnoreCase));
+
+            if (!present)
+            {
+                missing.Add(column);
+            }
+        }
+
+        if (missing.Count == 0)
+        {
+            return sql;
+        }
+
+        var rewrittenList = selectList + ", " + string.Join(", ", missing);
+        return string.Concat(
+            sql.AsSpan(0, selectIdx + "SELECT".Length),
+            " ",
+            rewrittenList,
+            sql.AsSpan(fromIdx));
     }
 
     private static string RemoveFunctionalWherePredicates(string sql)

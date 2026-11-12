@@ -63,7 +63,29 @@ insertResult.IfSucc(count => Console.WriteLine($"Inserted {count} rows"))
             .IfFail(err => Console.WriteLine($"Error: {err.Message}"));
 ```
 
-**Connection note**: Use `"Data Source=..."` for full linq2db/SQLite compatibility. SharpCoreDB `"Path=..."` works via the core provider but may require the underlying ADO.NET path for DDL.
+**Connection note**: `Data Source=…` and `Path=…` are both SharpCoreDB connection strings
+(`Data Source=./app.scdb;Password=…`). See *Storage and encryption* below for what the adapter does with them.
+
+---
+
+## Storage and encryption
+
+The adapter is the SQLite **dialect**, not the SQLite **engine**:
+
+- linq2db generates the SQL with its SQLite dialect — SharpCoreDB is SQLite-compatible at the SQL level.
+- The SQL is executed on a `SharpCoreDBConnection` (from `SharpCoreDB.Data.Provider`), so the rows are stored
+  by SharpCoreDB in its own file format and encrypted with AES-256-GCM when the connection string carries a
+  `Password`.
+- No SQLite file is created and the native `e_sqlite3` library is never opened. Microsoft.Data.Sqlite remains a
+  package dependency because linq2db's SQLite dialect resolves it for its provider plumbing; `BulkCopy` is set to
+  `MultipleRows` so the provider-specific native bulk-copy path is never taken.
+
+This changed in 2.1.3: before that, `SharpCoreDBDataConnection` passed the connection string straight to
+`ProviderName.SQLite`, so a password was refused (*"the native SQLite library 'e_sqlite3' doesn't support
+encryption"*) and the data landed in an unencrypted `SQLite format 3` file that SharpCoreDB cannot read.
+
+`GetUnderlyingConnection()` returns the SharpCoreDB ADO.NET connection, which is the way to run DDL or
+SharpCoreDB-specific SQL that linq2db does not model.
 
 ---
 

@@ -16,8 +16,8 @@ permissions:
   contents: read
 
 env:
-  # The server it builds is net11.0; this pin matches global.json until the GA SDK ships (2026-11-10).
-  DOTNET_VERSION: '11.0.100-rc.1.26425.128'
+  # The server it builds is net11.0; this pin matches global.json (11.0.100, GA since 2026-11-10).
+  DOTNET_VERSION: '11.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -43,7 +43,6 @@ jobs:
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Setup Python
       uses: actions/setup-python@v7
