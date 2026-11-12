@@ -198,12 +198,12 @@ public partial class SqlParser
                 DataType.Integer => ParseInt32Checked(val),
                 DataType.String => val,
                 DataType.Real => double.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
-                DataType.Blob => Convert.FromBase64String(val),
+                DataType.Blob => ParseBlobValue(val),
                 DataType.DateTime => ParseDateTime(val),
                 DataType.Long => long.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Decimal => decimal.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Ulid => Ulid.Parse(val),
-                DataType.Guid => Guid.Parse(val),
+                DataType.Guid => ParseGuidValue(val),
                 DataType.RowRef => long.Parse(val, System.Globalization.CultureInfo.InvariantCulture),
                 DataType.Vector => ParseVectorValue(val),
                 _ => val,
@@ -213,6 +213,51 @@ public partial class SqlParser
         {
             throw new InvalidOperationException($"Invalid value '{val}' for data type {type}: {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// Parses a blob literal. Three forms reach this method and all three are accepted: SharpCoreDB's own
+    /// parameter renderer writes base64, SQLite's hex blob literal is <c>X'0102'</c>, and SQL generators that
+    /// render binary as SQL — linq2db's SQLite dialect among them — write <c>0x0102</c>. Accepting only base64
+    /// made a bound <c>byte[]</c> impossible to express through generated SQL.
+    /// </summary>
+    /// <param name="val">The literal text (one pair of surrounding quotes already removed).</param>
+    /// <returns>The bytes.</returns>
+    private static byte[] ParseBlobValue(string val)
+    {
+        if (val.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return Convert.FromHexString(val[2..]);
+        }
+
+        if (val.Length >= 3 && (val[0] == 'X' || val[0] == 'x') && val[1] == '\'')
+        {
+            return Convert.FromHexString(val[2..].TrimEnd('\''));
+        }
+
+        return Convert.FromBase64String(val);
+    }
+
+    /// <summary>
+    /// Parses a Guid literal. SQLite has no Guid type: providers store it as text or as a 16-byte blob, and
+    /// linq2db's SQLite dialect renders it as a hex blob literal (<c>0x…</c>), exactly like <c>byte[]</c>. The
+    /// blob form is read back with .NET's byte order, which is the order the provider wrote it in.
+    /// </summary>
+    /// <param name="val">The literal text.</param>
+    /// <returns>The Guid.</returns>
+    private static Guid ParseGuidValue(string val)
+    {
+        if (val.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+        {
+            return new Guid(Convert.FromHexString(val[2..]));
+        }
+
+        if (val.Length >= 3 && (val[0] == 'X' || val[0] == 'x') && val[1] == '\'')
+        {
+            return new Guid(Convert.FromHexString(val[2..].TrimEnd('\'')));
+        }
+
+        return Guid.Parse(val);
     }
 
     /// <summary>
@@ -296,7 +341,9 @@ public partial class SqlParser
         // like "a = 1 OR b = 2" (a leading "(" would otherwise stick to the column name).
         where = SqlInPredicate.StripOuterParentheses(where);
 
-        var parts = where.Split(' ');
+        // SQL whitespace may be any kind: splitting on the space character alone left a tab- or
+        // newline-separated condition as a single unusable token.
+        var parts = where.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length <= 3)
         {
             return EvaluateSimpleCondition(row, parts);
@@ -438,13 +485,32 @@ public partial class SqlParser
                         value = null;
                     }
 
+                    // SQLite's ESCAPE clause — `col LIKE 'p~_%' ESCAPE '~'`, which is what linq2db's SQLite
+                    // dialect emits for string.StartsWith — makes the next character literal.
+                    char? likeEscape = null;
+                    if ((op.Equals("LIKE", StringComparison.OrdinalIgnoreCase) || op.Equals("NOT LIKE", StringComparison.OrdinalIgnoreCase))
+                        && i + 4 < parts.Length
+                        && parts[i + 3].Trim().Equals("ESCAPE", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var escapeToken = parts[i + 4].Trim().Trim('\'');
+                        if (escapeToken.Length > 0)
+                        {
+                            likeEscape = escapeToken[0];
+                        }
+
+                        consumed = 5;
+                    }
+                    else
+                    {
+                        consumed = 3;
+                    }
+
                     expr = false;
                     if (row.ContainsKey(key))
                     {
                         var rowValue = row[key];
-                        expr = EvaluateOperator(rowValue, op, value);
+                        expr = EvaluateOperator(rowValue, op, value, likeEscape: likeEscape);
                     }
-                    consumed = 3;
                 }
             }
 
@@ -541,7 +607,7 @@ public partial class SqlParser
     /// <param name="value">The value to compare against.</param>
     /// <param name="collation">Optional collation type for string comparisons. Defaults to Binary (case-sensitive).</param>
     /// <returns>True if the comparison evaluates to true, false otherwise.</returns>
-    private static bool EvaluateOperator(object? rowValue, string op, string? value, CollationType collation = CollationType.Binary)
+    private static bool EvaluateOperator(object? rowValue, string op, string? value, CollationType collation = CollationType.Binary, char? likeEscape = null)
     {
         // Convert types for accurate numeric/date comparisons
         object? rhs = value;
@@ -591,9 +657,9 @@ public partial class SqlParser
             "<=" => Compare(rowValue, rhs) <= 0,
             ">" => Compare(rowValue, rhs) > 0,
             ">=" => Compare(rowValue, rhs) >= 0,
-            // ✅ Parity: NULL matches nothing (SQL) and %/_ patterns are honored
-            "LIKE" => rowValueStr is not null && value is not null && LikeMatch(rowValueStr, value),
-            "NOT LIKE" => rowValueStr is not null && value is not null && !LikeMatch(rowValueStr, value),
+            // ✅ Parity: NULL matches nothing (SQL) and %/_ patterns are honored, with an optional ESCAPE char
+            "LIKE" => rowValueStr is not null && value is not null && LikeMatch(rowValueStr, value, likeEscape),
+            "NOT LIKE" => rowValueStr is not null && value is not null && !LikeMatch(rowValueStr, value, likeEscape),
             "REGEXP" => rowValueStr is not null && value is not null && Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
             "NOT REGEXP" => rowValueStr is null || value is null || !Regex.IsMatch(rowValueStr, value, RegexOptions.None, TimeSpan.FromSeconds(1)),
             "IN" => SqlInPredicate.ValueInList(rowValueStr, value),
@@ -647,14 +713,11 @@ public partial class SqlParser
     }
 
     /// <summary>
-    /// Matches a SQL LIKE pattern (% = any sequence, _ = single char), case-insensitive.
+    /// Matches a SQL LIKE pattern (% = any sequence, _ = single char), case-insensitive, with SQLite's optional
+    /// <c>ESCAPE</c> character.
     /// </summary>
-    private static bool LikeMatch(string input, string pattern)
-    {
-        var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
-            .Replace("%", ".*").Replace("_", ".") + "$";
-        return Regex.IsMatch(input, regex, RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
-    }
+    private static bool LikeMatch(string input, string pattern, char? escape = null)
+        => SqlLikePattern.IsMatch(input, pattern, escape);
 
     /// <summary>
     /// Binds parameters to a SQL query string, replacing placeholders with actual values.

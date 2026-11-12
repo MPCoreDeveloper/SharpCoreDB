@@ -20,9 +20,10 @@ permissions:
   contents: read
 
 env:
-  # .NET 11 SDK pin. `include-prerelease` stays until the GA SDK ships (2026-11-10); after that the value
-  # becomes '11.0.x' and the flag can be dropped. One place to change, three setup steps consume it.
-  DOTNET_VERSION: '11.0.100-rc.1.26425.128'
+  # .NET 11 SDK, GA since 2026-11-10. `11.0.x` follows the servicing patches; `global.json` still pins the
+  # exact baseline (11.0.100, rollForward latestPatch) for local builds and for the runtime-async codegen.
+  # One place to change, five setup steps consume it.
+  DOTNET_VERSION: '11.0.x'
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
   DOTNET_CLI_TELEMETRY_OPTOUT: true
   DOTNET_NOLOGO: true
@@ -44,11 +45,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11 (RC)
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Display .NET info
       run: dotnet --info
@@ -190,12 +190,11 @@ jobs:
       with:
         fetch-depth: 0
 
-    # The global.json pin already selects the SDK; include-prerelease keeps setup-dotnet from rejecting it.
-    - name: Setup .NET 11 (RC)
+    # The global.json pin already selects the SDK; setup-dotnet only has to make a GA 11.0 SDK available.
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Restore tools
       run: dotnet tool restore --configfile NuGet.Config
@@ -208,7 +207,12 @@ jobs:
 
     - name: Measure coverage and enforce the floor
       shell: pwsh
-      run: ./tools/measure-coverage.ps1 -Floor 0.18
+      # `Category!=Allocation` keeps the allocation-ceiling canaries out of an *instrumented* run. Code coverage
+      # changes what the JIT is allowed to do, so those assertions stop measuring the engine and start measuring
+      # dotnet-coverage: measured 2026-11-12 on this job, the Runtime Async elision disappeared (0 → 71.424 bytes
+      # over 1.000 awaited calls, i.e. exactly the classic figure) and the batch-INSERT canary read 902 instead of
+      # 894 B/row. They still run — and gate — in the uninstrumented `Build and Test` jobs above.
+      run: ./tools/measure-coverage.ps1 -Floor 0.18 -Filter "Category!=Debug&Category!=Manual&Category!=Performance&Category!=Allocation"
 
     - name: Upload coverage reports
       if: ${{ !cancelled() }}
@@ -244,11 +248,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11 (RC)
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Discover packable projects
       id: discover-packable
@@ -324,11 +327,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11 (RC)
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Download NuGet packages
       uses: actions/download-artifact@v8
@@ -495,11 +497,10 @@ jobs:
       with:
         fetch-depth: 0
 
-    - name: Setup .NET 11 (RC)
+    - name: Setup .NET 11 (GA)
       uses: actions/setup-dotnet@v6
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
-        include-prerelease: true
 
     - name: Pack SharpCoreDB core
       run: dotnet pack src/SharpCoreDB/SharpCoreDB.csproj --configuration Release --output ./artifacts --configfile NuGet.Config

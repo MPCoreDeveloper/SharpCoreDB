@@ -362,6 +362,13 @@ parameter tuning (`M`, `efConstruction`, `efSearch`).
 | `PreparedStatements` (`db.Prepare(sql)` → `ExecutePrepared`/`ExecuteCompiledQuery`) | Compile once, execute many — removes parse + plan costs from the loop |
 | Collation `BINARY` | The only collation eligible for SIMD byte-compare paths |
 | Hash index on the lookup key | O(1) point access; enables the Direct/StructRow fast path |
+| **.NET GC mode: `DOTNET_gcServer=1`** | On a many-core host the workstation GC leaves most of the write path's allocation on one collector thread. Measured on an 8-core box, .NET 11 GA, same binary: INSERT **359.637 / 347.407 / 343.264** ops/sec against **~200.000** with the default workstation GC (**~1,75×**), READ **+20%**, and the write-path gate's INSERT cell read **0,65×** against its baseline (`= 1,54× faster`). Costs memory — server GC keeps a heap per core — so it is a server/benchmark setting, not an embedded default. `SharpCoreDB.Server` already sets it in its Dockerfile (`ENV DOTNET_gcServer=1`); set it as an environment variable or in your app's `runtimeconfig.json` (`System.GC.Server`). |
+
+**Not a knob, measured:** forcing more collections (`DOTNET_GCgen0size` well below default) raised neither throughput nor
+stability, and `DOTNET_TieredCompilation=0` did not change the UPDATE cell's behaviour — neither is a tuning lever for this
+engine. The write path is dominated by per-operation allocations on the order of **1 kB per UPDATE** (parse ~528 B,
+engine-write ~302 B, row-locate-index ~279 B, `SHARPCOREDB_MAIN_PROFILE_UPDATE=1`), which is why the GC mode moves the
+numbers and a micro-tuned JIT does not.
 
 ## 7.8 Query-writing rules of thumb
 

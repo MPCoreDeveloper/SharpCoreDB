@@ -20,6 +20,10 @@
 #   pwsh scripts/quiet-machine.ps1 -Apply                 # also apply the fixes it can (NEEDS ADMIN)
 #   pwsh scripts/quiet-machine.ps1 -Apply -StopServices    # ...and stop Search/SysMain/DiagTrack
 #
+# Run it from the repository root, or pass the absolute path to this file. `pwsh scripts/quiet-machine.ps1`
+# typed from any other directory (C:\Users\<you>, for example) fails to resolve the path before the script
+# starts, so nothing runs and nothing is measured.
+#
 # Exits 0 when the verdict is QUIET, 1 when NOISY, 2 on error - so it can gate a session:
 #   pwsh scripts/quiet-machine.ps1; if ($LASTEXITCODE -ne 0) { 'do not record a baseline' }
 

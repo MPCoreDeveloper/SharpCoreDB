@@ -1,8 +1,8 @@
-# SharpCoreDB 2.1.2 — Performance-First Database Engine
+# SharpCoreDB 2.1.3 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
 
-> **This is the 2.1.x release line (current: 2.1.2)** — it targets **net11.0 only** with
+> **This is the 2.1.x release line (current: 2.1.3)** — it targets **net11.0 only** with
 > **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages are the v2.0 stable
 > line, parked on `release/v2.0`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
@@ -13,6 +13,25 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![.NET 11](https://img.shields.io/badge/.NET-11-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.1.3
+
+The **LINQ to DB adapter executes on SharpCoreDB** instead of on a SQLite file. `SharpCoreDBDataConnection`
+used to pass its connection string to `ProviderName.SQLite`, which resolves to Microsoft.Data.Sqlite and the
+native `e_sqlite3` library: a password was refused, and without one the rows landed in an unencrypted
+`SQLite format 3` file. linq2db still generates the SQL with its SQLite **dialect**; the connection, the file
+and the AES-256-GCM encryption are SharpCoreDB's.
+
+```csharp
+await using var db = new SharpCoreDBDataConnection("Data Source=app.scdb;Password=…");
+await db.CreateTableAsync<Note>();
+await db.InsertAsync(new Note { Id = 1, Body = "it's a probe" });
+```
+
+Seven engine defects that blocked generated SQL are fixed with it: pretty-printed `INSERT`s, SELECT-list
+projection (order and aliases), bare and negated boolean `WHERE`, `LIKE … ESCAPE`, scalar `EXISTS`, hex
+`byte[]`/`Guid` literals, and a reader that threw `Invalid read position` when asked for a type before the
+first `Read()`. Full list: `docs/CHANGELOG.md` › `[2.1.3]`.
 
 ## What's New in 2.1.2
 
@@ -293,16 +312,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.2
+dotnet add package SharpCoreDB --version 2.1.3
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.1.2
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.2
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.2
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.2
+dotnet add package SharpCoreDB.Functional --version 2.1.3
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.3
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.3
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.3
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -330,10 +349,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.1.2 (October 2026)  
+**Latest Version:** 2.1.3 (November 2026)  
 **Target:** .NET 11 / C# 15 (preview)  
-**Tests:** core suite 2,107 (0 failed) · VectorSearch 255 · EF Core 116 · linq2db 24  
-**Status:** ✅ Released — 2.1.2 (net11.0-only performance line)  
+**Tests:** core suite 2,149 (0 failed) · linq2DB 25 · EF Core 116 · Functional 38 · Dapper 3  
+**Status:** ✅ Released — 2.1.3 (net11.0-only performance line)  
 **Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 

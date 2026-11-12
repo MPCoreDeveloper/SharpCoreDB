@@ -502,10 +502,19 @@ public partial class Table
         // helper had closed on 2026-09-15.
         long validateOnlyStart = Diagnostics.WritePathProfiler.Stamp();
 
+        // Which columns the statement names is a property of the STATEMENT, not of a row: derive the presence mask
+        // once per batch. It used to be a `bool[Columns.Count]` allocated inside NormalizeInsertRow for every row and
+        // rebuilt from the same columnIndexMap each time (measured 2026-11-12: part of `validate-only`'s 384 B/row).
+        var presentColumns = new bool[this.Columns.Count];
+        for (int c = 0; c < columnIndexMap.Length; c++)
+        {
+            presentColumns[columnIndexMap[c]] = true;
+        }
+
         var normalizedRows = new object[rows.Length][];
         for (int rowIdx = 0; rowIdx < rows.Length; rowIdx++)
         {
-            normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, rowIdx);
+            normalizedRows[rowIdx] = NormalizeInsertRow(rows[rowIdx], columnIndexMap, presentColumns, rowIdx);
         }
 
         Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.ValidateOnly, validateOnlyStart);
@@ -628,23 +637,21 @@ public partial class Table
     /// </summary>
     /// <summary>
     /// Column-ordered array variant of <see cref="InsertBatchCriticalSection"/>.
-    private object[] NormalizeInsertRow(object[] values, int[] columnIndexMap, int rowIdx)
+    private object[] NormalizeInsertRow(object[] values, int[] columnIndexMap, bool[] presentColumns, int rowIdx)
     {
         var normalized = new object[this.Columns.Count];
 
-        // Place parsed values at their table column positions and track which columns
-        // are explicitly present in the statement (explicit NULLs must stay NULL,
-        // matching the dictionary path — only absent columns get defaults).
-        var present = new bool[this.Columns.Count];
+        // Place parsed values at their table column positions. `presentColumns` is the statement's presence mask,
+        // computed once per batch: an absent column gets its default, an explicit NULL stays NULL (the dictionary
+        // path's rule). Hoisting it removed the per-row scratch bool[] this method used to allocate and rebuild.
         for (int c = 0; c < columnIndexMap.Length; c++)
         {
-            present[columnIndexMap[c]] = true;
             normalized[columnIndexMap[c]] = values[c];
         }
 
         for (int i = 0; i < this.Columns.Count; i++)
         {
-            normalized[i] = NormalizeColumnValue(i, normalized[i], present[i], rowIdx);
+            normalized[i] = NormalizeColumnValue(i, normalized[i], presentColumns[i], rowIdx);
         }
 
         ValidateNotNullBatch(normalized, rowIdx);

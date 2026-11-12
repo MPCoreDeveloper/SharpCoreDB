@@ -142,6 +142,7 @@ guide explaining when SharpCoreDB is fastest.
 - `Vectors/GRAPHRAG_WITH_DISKANN_EXAMPLE.md` — end-to-end GraphRAG + DISKANN workflow: setup, DDL, conditional ingestion, hybrid query, artifact verification
 - `Vectors/PERFORMANCE_NOTES.md` — measured vector-search numbers + open performance work
 - `performance/INSERT_UPDATE_PERFORMANCE_PLAN.md` — ⭐ **Insert & Update Performance Plan** (write-path phased plan: measurement protocol, encryption-tax removal, in-place records, targets, owner decisions)
+- `performance/NET11_C15_PERFORMANCE_PLAN.md` — ⭐ **.NET 11 GA / C# 15 performance plan** (measured per-stage costs, the refuted-dial list, the UPDATE-mode blocker, phases P0–P3 and the zero-regression rails)
 
 ## 7c. Lexical & hybrid search (2.1.0)
 
@@ -154,7 +155,10 @@ guide explaining when SharpCoreDB is fastest.
 - `net11/PROMOTION_TO_MAIN.md` — ⭐ **how the net11 line was promoted to `master`** and the net10 line
   parked on `release/v2.0`: the prepared commit series, the flip procedure, the GA checklist
 - `net11/UPGRADE.md` — what .NET 11 consumers get (Zstd, Runtime Async, `SharpCoreDB.Net11`)
-- `net11/UNION_TYPES_DESIGN.md` — union-types blueprint (deferred to .NET 11 GA)
+- `net11/GA_RELEASE_NOTES.md` — ⭐ **.NET 11 GA release notes + checklist** (measured effects, upgrade notes,
+  what the repository verified and the owner-only release steps)
+- `net11/UNION_TYPES_DESIGN.md` — union-types blueprint; **implemented at GA** as the opt-in
+  `SharpCoreDB.Unions` namespace (`QueryOutcome`, `ExecuteOutcome`, `TableLookup`)
 
 ## 8. Distributed, Sync, and Migration
 

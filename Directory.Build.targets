@@ -1,0 +1,17 @@
+<Project>
+
+  <!-- .NET 11 Runtime Async, defined once for every net11.0 project in the repository.
+       async/await then compiles to runtime-native async instead of a compiler-generated state machine per
+       method, and a synchronously-completing Task/Task<T>-returning method no longer allocates its result.
+       Measured on the .NET 11 GA SDK (11.0.100) with a 1.000-call loop: 71,4 B/call before, 0 B/call after,
+       and no IAsyncStateMachine types left in the assembly (async iterators keep theirs — see the canary).
+       Opt a single project out with <UseRuntimeAsync>false</UseRuntimeAsync>.
+       Canary: tests/SharpCoreDB.Tests/Net11/RuntimeAsyncCodegenTests.cs.
+       This lives in Directory.Build.targets rather than Directory.Build.props on purpose: props are
+       evaluated before the project body, where $(TargetFramework) is still empty, so a TFM-conditioned
+       switch there silently never applies. Targets are imported after the body and see the TFM. -->
+  <PropertyGroup Condition="$(TargetFramework.StartsWith('net11.0')) AND '$(UseRuntimeAsync)' != 'false'">
+    <Features>$(Features);runtime-async=on</Features>
+  </PropertyGroup>
+
+</Project>

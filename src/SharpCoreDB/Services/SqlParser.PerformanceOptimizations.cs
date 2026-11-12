@@ -412,21 +412,8 @@ public static partial class SqlParserPerformanceOptimizations
         
         // Remove quotes (and collapse SQL doubling)
         valueStr = SqlLiteralScanner.Unquote(valueStr);
-        
-        // Simple LIKE: convert SQL wildcards to regex
-        var pattern = "^" + System.Text.RegularExpressions.Regex.Escape(valueStr)
-            .Replace("%", ".*")
-            .Replace("_", ".")
-            + "$";
-        
-        try
-        {
-            return System.Text.RegularExpressions.Regex.IsMatch(
-                value.ToString() ?? string.Empty,
-                pattern,
-                RegexOptions.IgnoreCase,
-                TimeSpan.FromSeconds(1));
-        }
-        catch { return false; }
+
+        // One definition of LIKE, shared with the statement evaluators and the collation comparator.
+        return SqlLikePattern.IsMatch(value.ToString() ?? string.Empty, valueStr);
     }
 }

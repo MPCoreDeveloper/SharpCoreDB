@@ -1763,6 +1763,26 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         // malformed column name ("(a").
         trimmedCondition = SqlInPredicate.StripOuterParentheses(trimmedCondition);
 
+        // A single column reference is SQLite's truth test (`WHERE is_active`), optionally negated
+        // (`WHERE NOT is_active`) — both are the shapes linq2db's SQLite dialect emits for a boolean property used
+        // as a predicate. It has to be recognised on the whole condition, before the AND/OR split:
+        // "price BETWEEN 10 AND 16" contains a bare "16" fragment that must keep going down the ordinary path.
+        bool negatedTruthTest = false;
+        var truthCandidate = trimmedCondition;
+        if (truthCandidate.StartsWith("NOT", StringComparison.OrdinalIgnoreCase) &&
+            truthCandidate.Length > "NOT".Length && char.IsWhiteSpace(truthCandidate["NOT".Length]))
+        {
+            negatedTruthTest = true;
+            truthCandidate = truthCandidate["NOT".Length..].Trim();
+        }
+
+        if (IsBareColumnReference(truthCandidate))
+        {
+            var bareColumn = NormalizeColumnName(truthCandidate);
+            bool truth = row.TryGetValue(bareColumn, out var bareValue) && SqlBooleanValue.IsTrue(bareValue);
+            return negatedTruthTest ? !truth : truth;
+        }
+
         // ✅ Parity: BETWEEN contains " AND " as part of its syntax; don't split on it.
         if (trimmedCondition.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase))
         {
@@ -1786,47 +1806,86 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         return EvaluateSingleCondition(row, trimmedCondition);
     }
 
+    /// <summary>
+    /// Matches a column reference as SQLite allows it to be written: bare, qualified (<c>t.col</c>), or quoted
+    /// with double quotes, brackets or backticks — the last of which is what SQL generators emit for a
+    /// single-table query (<c>[e].[name] LIKE 'a~_%' ESCAPE '~'</c>, linq2db's shape for string.StartsWith).
+    /// </summary>
+    private const string ColumnReferencePattern =
+        @"(?:[A-Za-z_]\w*|\[[^\]]+\]|""[^""]+""|`[^`]+`)(?:\.(?:[A-Za-z_]\w*|\[[^\]]+\]|""[^""]+""|`[^`]+`))?";
+
+    /// <summary>
+    /// Returns <c>true</c> when the whole condition is one column reference — a bare, qualified or quoted
+    /// identifier, never a literal or a number — so it can be evaluated as SQLite's truth test.
+    /// </summary>
+    /// <param name="condition">The condition text.</param>
+    /// <returns><c>true</c> when it is a single column reference.</returns>
+    private static bool IsBareColumnReference(string condition)
+    {
+        if (condition.Length == 0 || condition.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+
+        if (!System.Text.RegularExpressions.Regex.IsMatch(
+                condition, "^" + ColumnReferencePattern + "$",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+        {
+            return false;
+        }
+
+        var name = NormalizeColumnName(condition);
+        return name.Length > 0 && !char.IsDigit(name[0]);
+    }
+
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
     {
         var trimmed = condition.Trim();
 
         // ✅ Parity: support IS NULL / IS NOT NULL (previously ignored → all rows returned)
         var isNullMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+IS\s+(NOT\s+)?NULL$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            trimmed, "^(?<col>" + ColumnReferencePattern + @")\s+IS\s+(?<neg>NOT\s+)?NULL$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (isNullMatch.Success)
         {
-            var col = NormalizeColumnName(isNullMatch.Groups[1].Value);
-            var negated = isNullMatch.Groups[2].Success;
+            var col = NormalizeColumnName(isNullMatch.Groups["col"].Value);
+            var negated = isNullMatch.Groups["neg"].Success;
             var isNull = !row.TryGetValue(col, out var v) || v is null or DBNull;
             return negated ? !isNull : isNull;
         }
 
-        // ✅ Parity: support LIKE (previously ignored)
+        // ✅ Parity: support LIKE / NOT LIKE with SQLite's optional ESCAPE clause (previously ignored, and the
+        // pattern was re-implemented here rather than read from the shared matcher).
         var likeMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+LIKE\s+'([^']*)'$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            trimmed,
+            "^(?<col>" + ColumnReferencePattern + @")\s+(?<neg>NOT\s+)?LIKE\s+'(?<pattern>[^']*)'(?:\s+ESCAPE\s+'(?<escape>.)')?$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (likeMatch.Success)
         {
-            var col = NormalizeColumnName(likeMatch.Groups[1].Value);
+            var col = NormalizeColumnName(likeMatch.Groups["col"].Value);
             if (!row.TryGetValue(col, out var v) || v is null or DBNull)
             {
                 return false;
             }
 
-            var pattern = likeMatch.Groups[2].Value;
-            var regex = "^" + System.Text.RegularExpressions.Regex.Escape(pattern)
-                .Replace("%", ".*").Replace("_", ".") + "$";
-            return System.Text.RegularExpressions.Regex.IsMatch(
-                v.ToString() ?? string.Empty, regex, System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            var escapeGroup = likeMatch.Groups["escape"];
+            char? escape = escapeGroup.Success && escapeGroup.Value.Length > 0 ? escapeGroup.Value[0] : null;
+            var matched = SqlLikePattern.IsMatch(v.ToString() ?? string.Empty, likeMatch.Groups["pattern"].Value, escape);
+            return likeMatch.Groups["neg"].Success ? !matched : matched;
         }
 
         // ✅ Parity: support BETWEEN (previously ignored)
         var betweenMatch = System.Text.RegularExpressions.Regex.Match(
-            trimmed, @"^([A-Za-z_]\w*)\s+BETWEEN\s+([^\s]+)\s+AND\s+([^\s]+)$", System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+            trimmed, "^(?<col>" + ColumnReferencePattern + @")\s+BETWEEN\s+(?<low>[^\s]+)\s+AND\s+(?<high>[^\s]+)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (betweenMatch.Success)
         {
-            var col = NormalizeColumnName(betweenMatch.Groups[1].Value);
-            var lowStr = SqlLiteralScanner.Unquote(betweenMatch.Groups[2].Value.Trim());
-            var highStr = SqlLiteralScanner.Unquote(betweenMatch.Groups[3].Value.Trim());
+            var col = NormalizeColumnName(betweenMatch.Groups["col"].Value);
+            // Read the bounds by name: in .NET the unnamed groups are numbered before the named ones, so
+            // Groups[2]/Groups[3] were the high bound and the column — the comparison then matched the rows
+            // that were outside the range.
+            var lowStr = SqlLiteralScanner.Unquote(betweenMatch.Groups["low"].Value.Trim());
+            var highStr = SqlLiteralScanner.Unquote(betweenMatch.Groups["high"].Value.Trim());
             if (!row.TryGetValue(col, out var rowVal) || rowVal is null or DBNull)
             {
                 return false;
