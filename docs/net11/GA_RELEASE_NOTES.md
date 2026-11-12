@@ -59,6 +59,13 @@ Done and verified in the repository (evidence in `artifacts/`):
 
 Owner actions (policy: version metadata, packing and publishing are the owner's):
 
+- [ ] **Release blocker — `Aspire.Hosting` is vulnerable.** CI's *Fail on vulnerable NuGet packages* step fails on
+      **NU1903: `Aspire.Hosting` 13.6.4 has a known high-severity vulnerability**
+      (`GHSA-f7vh-h5g3-7jrh` / CVE-2026-120006, published 2026-11-10, **patched in 13.6.5**; `Aspire.Hosting.AppHost`
+      is affected by the same advisory). The package lives in `Directory.Packages.props` and is used by
+      `src/SharpCoreDB.Aspire.Hosting`. Bumping it is a **package-version change, which the standing rail keeps with
+      the owner** — hence it is recorded here instead of patched. It is not caused by this release's changes.
+
 - [ ] **Version bump** in the `src/**/*.csproj` files (`Version`, `AssemblyVersion`, `FileVersion`) plus
       `<PackageReleaseNotes>` / description / tags — the rail keeps the agent out of release metadata.
 - [ ] **Tag** the release (`v2.1.x`) after the merge.

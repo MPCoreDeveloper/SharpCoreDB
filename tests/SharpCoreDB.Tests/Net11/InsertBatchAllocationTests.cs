@@ -61,6 +61,7 @@ public sealed class InsertBatchAllocationTests : IDisposable
     /// it records what the path costs today so a regression shows up as a red test rather than as a slow commit.
     /// </summary>
     [Fact]
+    [Trait("Category", "Allocation")]
     public void InsertBatch_ArrayRows_AllocatesAtMostPerRow()
     {
         const int Rows = 2_000;

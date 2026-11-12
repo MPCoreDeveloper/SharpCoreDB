@@ -61,6 +61,7 @@ public sealed class RuntimeAsyncCodegenTests
     /// </para>
     /// </summary>
     [Fact]
+    [Trait("Category", "Allocation")]
     public async Task AwaitedSynchronouslyCompletingCall_DoesNotAllocatePerCall()
     {
         const int Calls = 1_000;

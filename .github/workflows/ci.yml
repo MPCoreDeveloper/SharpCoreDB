@@ -207,7 +207,12 @@ jobs:
 
     - name: Measure coverage and enforce the floor
       shell: pwsh
-      run: ./tools/measure-coverage.ps1 -Floor 0.18
+      # `Category!=Allocation` keeps the allocation-ceiling canaries out of an *instrumented* run. Code coverage
+      # changes what the JIT is allowed to do, so those assertions stop measuring the engine and start measuring
+      # dotnet-coverage: measured 2026-11-12 on this job, the Runtime Async elision disappeared (0 → 71.424 bytes
+      # over 1.000 awaited calls, i.e. exactly the classic figure) and the batch-INSERT canary read 902 instead of
+      # 894 B/row. They still run — and gate — in the uninstrumented `Build and Test` jobs above.
+      run: ./tools/measure-coverage.ps1 -Floor 0.18 -Filter "Category!=Debug&Category!=Manual&Category!=Performance&Category!=Allocation"
 
     - name: Upload coverage reports
       if: ${{ !cancelled() }}

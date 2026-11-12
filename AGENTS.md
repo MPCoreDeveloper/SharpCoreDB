@@ -60,6 +60,10 @@ former v2.1 RC line; see `docs/net11/PROMOTION_TO_MAIN.md`). The net10.0 / C# 14
 - CI runs the core suite with `Category!=Debug&Category!=Manual&Category!=Performance`; 30
   `Performance` and 3 `Debug` tests exist and are excluded by default. Tag new slow or benchmark
   tests `[Trait("Category","Performance")]` so they stay out of the default run.
+- Tag allocation-ceiling canaries `[Trait("Category","Allocation")]`. They stay in `Build and Test`, but the
+  **coverage** job adds `&Category!=Allocation`, because instrumentation changes what the JIT may do: measured
+  2026-11-12, code coverage made the Runtime Async elision disappear (0 → 71.424 bytes per 1.000 awaited calls,
+  exactly the classic figure) and pushed a batch-INSERT canary from 894 to 902 B/row.
 - A clean build still emits ~299 warnings. Do not chase them as part of unrelated work.
 - CI restores and builds `SharpCoreDB.CI.slnf` — not the `.sln` — with
   `--configfile NuGet.Config /p:UseLocalProjectReferences=true`.
