@@ -17,6 +17,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 > generator) are fixed in the engine: pretty-printed statements, SELECT-list projection, boolean truth tests,
 > `LIKE … ESCAPE`, scalar `EXISTS`, and hex `byte[]`/`Guid` literals. No API breaks.
 
+### Security
+
+- **Aspire 13.6.4 → 13.6.5 (CVE-2026-120006, high; CVE-2026-118740, critical).** The four pins move together for the first time: the AppHost's `Aspire.AppHost.Sdk`, `Aspire.Hosting`, `Aspire.Hosting.AppHost` and the two `Directory.Packages.props` entries. Dependabot's two PRs bumped one package each, which would have left the SDK and the central entries on the vulnerable version while the repository comment claimed they matched. These close Dependabot alerts #341/#342/#343/#644.
+- **`minimatch` 9.0.9 and 10.2.6 → 11.0.8 in the JavaScript client (GHSA-g3hv-75wg-m249, moderate).** Two copies resolved inside the vulnerable range (via `eslint`/`glob` and via `ts-jest` → `test-exclude` → `glob`); an `overrides` entry pins `^11.0.1` and the lockfile is regenerated. `overrides` applies to this project's install only, so the published `@sharpcoredb/client` graph is unchanged. Closes Dependabot alert #249. `deepmerge` (#246, low) has no patched release and stays open.
+
 ### Added
 
 - **Opt-in C# 15 union outcomes (`SharpCoreDB.Unions`).** `QueryOutcome` (rows / not found / failure), `ExecuteOutcome` (rows affected / failure) and `TableLookup` (found / missing) ship as `union` declarations with seven `record class` case types (`src/SharpCoreDB/Net11/Unions/UnionOutcomes.cs`), so a `switch` over them is exhaustive at compile time — dropping an arm is a build error. Purely additive: `QueryResult`, `ExecuteResult` and every `ExecuteSQL` signature are byte-identical, and `BuildResult` is deliberately **not** retrofitted (that would break a shipped type; it stays a `record` hierarchy). Unions are structs and case values box into `IUnion.Value`, so both pattern matching and generic inspection work. Tests: `tests/SharpCoreDB.Tests/Net11/UnionOutcomeTests.cs` — 3/3, with no discard arm in any switch, which is what makes exhaustiveness a compiler guarantee rather than a runtime assertion.
