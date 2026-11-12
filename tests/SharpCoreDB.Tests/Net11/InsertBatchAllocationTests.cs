@@ -65,12 +65,17 @@ public sealed class InsertBatchAllocationTests : IDisposable
     public void InsertBatch_ArrayRows_AllocatesAtMostPerRow()
     {
         const int Rows = 2_000;
-        // Measured 2026-11-12 (GA runtime): 1.838.776 bytes for 2.000 rows = 919 B/row through the dictionary-free
-        // object[] + column-order overload. The presence mask hoist (the statement's columns are a statement
-        // property, not a row property) took that to 1.787.608 bytes = 894 B/row, a measured -25 B/row with
-        // identical behaviour. The ceiling sits just above the current figure so it is a regression canary — a
-        // change that allocates more turns this red, and the next cut lowers it on purpose.
-        const int CeilingBytesPerRow = 900;
+        // Measured 2026-11-12 on the GA runtime (11.0.100) with this exact overload, same commit:
+        //   win-x64   894 B/row  (1.787.608 bytes / 2.000 rows) — after the presence-mask hoist
+        //   linux-x64 903 B/row  (1.806.872 bytes)
+        //   osx-arm64 903 B/row  (1.806.856 bytes)
+        // The 9 B/row delta between Windows and the Unix runners is the runtime's own accounting for the same
+        // code — the canary first ran on Windows only, so a single 900 ceiling failed both Unix jobs. An
+        // absolute-bytes canary has to carry the platform's own figure, or it reports a platform difference as
+        // a regression. The Unix ceiling stays ~1 % above its measured value and *below* the pre-hoist 919
+        // B/row (+9 on Unix), so reintroducing the allocation this test was written to catch still turns it red.
+        // Before the hoist the figure was 919 B/row on Windows (1.838.776 bytes), a measured -25 B/row.
+        int ceilingBytesPerRow = OperatingSystem.IsWindows() ? 900 : 915;
 
         // Warm the call shape first: a tiered-JIT promotion inside the measured call would be charged to it.
         db.InsertBatch("docs", BuildRows(0, 500), Columns);
@@ -82,8 +87,8 @@ public sealed class InsertBatchAllocationTests : IDisposable
 
         double perRow = allocated / (double)Rows;
         Assert.True(
-            allocated <= Rows * (long)CeilingBytesPerRow,
-            $"InsertBatch allocated {allocated:N0} bytes for {Rows:N0} rows ({perRow:F0} B/row); at most {CeilingBytesPerRow} B/row was expected.");
+            allocated <= Rows * (long)ceilingBytesPerRow,
+            $"InsertBatch allocated {allocated:N0} bytes for {Rows:N0} rows ({perRow:F0} B/row); at most {ceilingBytesPerRow} B/row was expected.");
     }
 
     private static List<object[]> BuildRows(int start, int count)
