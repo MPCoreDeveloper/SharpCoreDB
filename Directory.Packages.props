@@ -31,8 +31,8 @@
     <PackageVersion Include="SharpCoreDB.Server.Core" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.Server.Protocol" Version="$(SharpCoreDBVersion)" />
     <PackageVersion Include="SharpCoreDB.VectorSearch" Version="$(SharpCoreDBVersion)" />
-    <PackageVersion Include="Aspire.Hosting" Version="13.6.4" />
-    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.4" />
+    <PackageVersion Include="Aspire.Hosting" Version="13.6.5" />
+    <PackageVersion Include="Aspire.Hosting.AppHost" Version="13.6.5" />
     <PackageVersion Include="AngleSharp" Version="1.10.1" />
     <PackageVersion Include="AWSSDK.Core" Version="4.0.102.20" />
     <PackageVersion Include="Azure.Identity" Version="1.21.0" />

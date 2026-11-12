@@ -37,8 +37,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- Aspire hosting (matches SharpCoreDB.AppHost / Aspire.Hosting.AppHost 13.6.4). -->
-    <PackageReference Include="Aspire.Hosting" Version="13.6.4" />
+    <!-- Aspire hosting (matches SharpCoreDB.AppHost / Aspire.Hosting.AppHost 13.6.5). -->
+    <PackageReference Include="Aspire.Hosting" Version="13.6.5" />
   </ItemGroup>
 
   <ItemGroup>
