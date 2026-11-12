@@ -11,14 +11,18 @@ namespace SharpCoreDB.Functional.Linq2DB;
 public static class Extensions
 {
     /// <summary>
-    /// Creates DataOptions configured for SharpCoreDB.
+    /// Creates DataOptions configured for SharpCoreDB: linq2db's SQLite dialect over a SharpCoreDB connection.
     /// </summary>
+    /// <param name="options">The options to extend.</param>
+    /// <param name="connectionString">SharpCoreDB connection string.</param>
+    /// <returns>The extended options.</returns>
     public static DataOptions UseSharpCoreDB(this DataOptions options, string connectionString)
     {
+        ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
-        return options
-            .UseConnectionString(ProviderName.SQLite, connectionString)
-            .UseMappingSchema(SharpCoreDBMappingSchema.Instance);
+
+        var (provider, connection) = SharpCoreDBDataConnection.CreateProviderAndConnection(connectionString);
+        return SharpCoreDBDataConnection.Bind(options, provider, connection);
     }
 
     /// <summary>
@@ -77,24 +81,19 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Executes a query and returns the underlying SharpCoreDB database instance.
-    /// Useful for accessing native SharpCoreDB features not exposed through linq2db.
+    /// Gets the underlying SharpCoreDB ADO.NET connection — a <see cref="SharpCoreDB.Data.Provider.SharpCoreDBConnection"/>,
+    /// not a SQLite one — for DDL and features linq2db does not model.
     /// </summary>
-    /// <param name="connection">The data connection</param>
-    /// <returns>The underlying SharpCoreDB connection</returns>
+    /// <param name="connection">The data connection.</param>
+    /// <returns>The underlying SharpCoreDB connection.</returns>
     public static System.Data.Common.DbConnection GetUnderlyingConnection(
         this SharpCoreDBDataConnection connection)
     {
         ArgumentNullException.ThrowIfNull(connection);
 
-        // linq2db v6+ recommends TryGetDbConnection/OpenDbConnection. 
-        // We use .Connection (deprecated but stable in v6) for compatibility with current tests and to force close on Windows (SQLite file locking).
-        // The recommended TryGetDbConnection() returns the same underlying connection in practice for SQLite provider.
-        var conn = connection.Connection;
-        if (conn?.State == System.Data.ConnectionState.Open)
-        {
-            conn.Close(); // aggressively release file handle to mitigate Windows SQLite locking
-        }
-        return conn;
+        // linq2db v6+ recommends TryGetDbConnection/OpenDbConnection; .Connection is what the adapter opens
+        // eagerly, so return it as-is. It used to close it to release a Windows SQLite file handle — there is no
+        // SQLite handle any more, and closing it would make the next command fail.
+        return connection.Connection;
     }
 }

@@ -150,12 +150,13 @@ public sealed class SharpCoreDBDataReader : DbDataReader
 
     /// <summary>
     /// Gets the name of the source data type.
+    /// <para>
+    /// It must not read the current row: linq2db (and other consumers) ask for the type name while building the
+    /// row mapper, before the first <see cref="Read"/>, and reading a value there threw
+    /// <c>InvalidOperationException: Invalid read position</c>.
+    /// </para>
     /// </summary>
-    public override string GetDataTypeName(int ordinal)
-    {
-        var value = GetValue(ordinal);
-        return value?.GetType().Name ?? "Object";
-    }
+    public override string GetDataTypeName(int ordinal) => GetFieldType(ordinal).Name;
 
     /// <summary>
     /// Gets the value of the specified column as a DateTime.
@@ -185,11 +186,35 @@ public sealed class SharpCoreDBDataReader : DbDataReader
             return GetOptionType(_optionalFieldInnerTypes[ordinal]);
         }
 
-        if (_currentRow < 0 || _currentRow >= _results.Count)
-            return typeof(object);
+        // While a row is current its own value is the answer (O(1) per call). Before the first Read — which is
+        // when linq2db builds its mapper — the type has to be inferred from the result set instead of read.
+        if (_currentRow >= 0 && _currentRow < _results.Count)
+        {
+            var value = GetValue(ordinal);
+            if (value is not null and not DBNull)
+            {
+                return value.GetType();
+            }
+        }
 
-        var value = GetValue(ordinal);
-        return value?.GetType() ?? typeof(object);
+        return InferFieldType(ordinal);
+    }
+
+    /// <summary>
+    /// Infers a column's type from the first non-null value in the result set, without requiring a current row.
+    /// </summary>
+    private Type InferFieldType(int ordinal)
+    {
+        var name = _fieldNames[ordinal];
+        foreach (var row in _results)
+        {
+            if (row.TryGetValue(name, out var value) && value is not null and not DBNull)
+            {
+                return value.GetType();
+            }
+        }
+
+        return typeof(object);
     }
 
     /// <summary>

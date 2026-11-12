@@ -23,15 +23,15 @@ public sealed class Linq2DbTestFixture : IDisposable
         Connection = new SharpCoreDBDataConnection($"Data Source={DbPath}");
         FunctionalDb = new FunctionalLinq2DbContext(Connection);
 
-        // Ensure connection is open and create tables once
+        // Ensure connection is open and create tables once. One statement per command: SharpCoreDB executes a
+        // single statement per command, so a ';'-separated script is issued as separate commands.
         var underlyingConn = Connection.GetUnderlyingConnection();
         if (underlyingConn.State != System.Data.ConnectionState.Open)
             underlyingConn.Open();
 
-        using (var cmd = underlyingConn.CreateCommand())
+        var ddl = new[]
         {
-            cmd.CommandText = @"
-                CREATE TABLE IF NOT EXISTS TypedEntities (
+            @"CREATE TABLE IF NOT EXISTS TypedEntities (
                     ulid_value TEXT PRIMARY KEY,
                     name TEXT NOT NULL,
                     guid_value TEXT,
@@ -39,17 +39,23 @@ public sealed class Linq2DbTestFixture : IDisposable
                     is_active INTEGER,
                     binary_data BLOB,
                     optional_ulid TEXT
-                );
-                CREATE TABLE IF NOT EXISTS TestEntities (
+                )",
+            @"CREATE TABLE IF NOT EXISTS TestEntities (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
                     age INTEGER
-                );
-                CREATE TABLE IF NOT EXISTS Users (
+                )",
+            @"CREATE TABLE IF NOT EXISTS Users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     email TEXT NOT NULL,
                     is_active INTEGER
-                );";
+                )",
+        };
+
+        foreach (var statement in ddl)
+        {
+            using var cmd = underlyingConn.CreateCommand();
+            cmd.CommandText = statement;
             cmd.ExecuteNonQuery();
         }
     }

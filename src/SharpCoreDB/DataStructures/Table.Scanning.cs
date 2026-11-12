@@ -216,6 +216,53 @@ public partial class Table
     /// Supports operators: equals, not equals, greater than, less than, greater or equal, less or equal,
     /// IS NULL, IS NOT NULL, AND, OR.
     /// </summary>
+    /// <summary>
+    /// Evaluates a WHERE clause that is a bare column reference, or <c>NOT</c> followed by one — SQLite's truth
+    /// test. Returns <c>false</c> when the tokens are not of that shape, so the caller keeps its own handling.
+    /// </summary>
+    /// <param name="row">The row being tested.</param>
+    /// <param name="parts">The tokenized condition.</param>
+    /// <param name="result">The truth value, when the shape matched.</param>
+    /// <returns><c>true</c> when the condition was a truth test.</returns>
+    private static bool TryEvaluateTruthTest(Dictionary<string, object> row, List<string> parts, out bool result)
+    {
+        result = false;
+        bool negate = false;
+        string? reference = null;
+
+        if (parts.Count == 1)
+        {
+            reference = parts[0];
+        }
+        else if (parts.Count == 2 && parts[0].Equals("NOT", StringComparison.OrdinalIgnoreCase))
+        {
+            negate = true;
+            reference = parts[1];
+        }
+
+        if (reference is null)
+        {
+            return false;
+        }
+
+        var text = reference.Trim();
+        if (text.Length == 0 || text.Any(char.IsWhiteSpace))
+        {
+            return false;
+        }
+
+        var qualifier = text.LastIndexOf('.');
+        var column = (qualifier > 0 ? text[(qualifier + 1)..] : text).Trim('"', '[', ']', '`');
+        if (column.Length == 0 || char.IsDigit(column[0]))
+        {
+            return false;
+        }
+
+        bool truth = row.TryGetValue(column, out var value) && SqlBooleanValue.IsTrue(value);
+        result = negate ? !truth : truth;
+        return true;
+    }
+
     private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;
@@ -229,7 +276,18 @@ public partial class Table
         // quotes, so 'it''s fine, really' is one token and compares as it''s→it's after Unquote. Splitting on ' '
         // truncated such a value at its first space and the row could never match (known issue 7's shape).
         var parts = SqlLiteralScanner.SplitTopLevelWhitespace(where);
-        if (parts.Count < 3) return true;
+        if (parts.Count < 3)
+        {
+            // A single column reference is SQLite's truth test (`WHERE is_active`), optionally negated
+            // (`WHERE NOT is_active`) — both are the shapes linq2db's SQLite dialect emits for a boolean property
+            // used as a predicate. Treating it as "no condition" returned every row.
+            if (TryEvaluateTruthTest(row, parts, out var truth))
+            {
+                return truth;
+            }
+
+            return true;
+        }
 
         // ✅ Issue #348: split compound conditions on top-level AND/OR and evaluate each
         // operand recursively (via the full single-condition evaluator below). The previous
