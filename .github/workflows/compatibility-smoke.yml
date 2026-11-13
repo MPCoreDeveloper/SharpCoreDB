@@ -50,7 +50,9 @@ jobs:
         python-version: '3.12'
 
     - name: Install Python dependencies
-      run: pip install --quiet --only-binary=:all: requests==2.34.2
+      # Single-quoted: "--only-binary=:all:" inside a plain YAML scalar would be read as a nested mapping
+      # (": " ends the value), which makes GitHub reject the whole workflow file.
+      run: 'pip install --quiet --only-binary=:all: requests==2.34.2'
 
     - name: Restore server dependencies
       run: dotnet restore src/SharpCoreDB.Server/SharpCoreDB.Server.csproj
