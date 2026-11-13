@@ -217,34 +217,36 @@ Every module slice was executed once. This is the per-module picture the project
 |---|---|---|---|---|---|
 | `hybridsearch` | **73.91 %** | 17 | 5 | 1 | 23 s |
 | `search` | **68.67 %** | 346 | 173 | 4 | 262 s |
-| `cqrs` | 54.10 % | 195 | 129 | 39 | 288 s |
+| `projections` | **54.67 %** | 113 | 72 | 25 | 97 s |
+| `cqrs` | **54.10 %** | 195 | 129 | 39 | 288 s |
 | `eventsourcing` | 53.95 % | 239 | 120 | 84 | 215 s |
 | `functional` | 49.15 % | 174 | 70 | 110 | 207 s |
 | `analytics` | 44.39 % | 437 | 190 | 375 | 51 s |
-| `cqrs` | 42.35 % | 151 | 149 | 62 | 249 s |
+| `functional-linq2db` | 31.62 % | 37 | 44 | 36 | 242 s |
 | `provider-sync` | 30.76 % | 211 | 82 | 393 | 35 s |
-| `projections` | 54.67 % | 113 | 72 | 25 | 97 s |
 | `efcore` | 26.13 % | 555 | 288 | 1 284 | 317 s |
-| `functional-linq2db` | **31.62 %** | 37 | 44 | 36 | 242 s |
 | `functional-dapper` | **8.70 %** | 2 | 8 | 13 | 20 s |
 | `functional-efcore` | **6.45 %** | 2 | 10 | 19 | 13 s |
-| `identity` | timeout | — | — | — | 20 min |
-| `vectorsearch` | timeout | — | — | — | 30 min |
-| `graph-advanced` | timeout | — | — | — | 25 min |
+| `identity` | 47.43 % | 236 | 204 | 62 | 23 m 23 s |
+| `vectorsearch` | timeout | — | — | — | 30 min → 90 min, concurrency 3 |
+| `graph-advanced` | timeout | — | — | — | 25 min → 90 min, concurrency 3 |
 
-Aggregate over the 12 scored slices: **39.02 % — 2 328 killed of 5 966 mutants.** Read it per module, not as
-one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
-which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
-exactly the kind of fault a green suite hides.
+Aggregate over the 13 scored slices: **39.62 % — 2 564 killed of 6 472 mutants.** Read it per module, not as
+one number: `hybridsearch`, `search` and `projections` are in decent shape, while `functional-dapper` (8.70 %)
+and `functional-efcore` (6.45 %) sit below 10 % — their tests execute the code without pinning it — and
+`efcore` leaves **1 284** mutants in code no test reaches. That is the work queue, and it is exactly the kind
+of fault a green suite hides.
 
 A `timeout` row is **not a zero**: the slice did not finish inside its budget, so its score is *unknown* and
-it is excluded from the aggregate. All three were given 90 minutes after this run (`identity` 444 mutants,
-`vectorsearch` 1 962, `graph-advanced` 1 288 — the first is crypto-heavy per test, the other two are large).
-The runner reports them as a warning and does not fail the tier, but it never scores them.
+it is excluded from the aggregate. The runner reports them as a warning and does not fail the tier, but it
+never scores them. Two of the three were then made to fit the machine's budget rather than re-run until they
+did: `identity` completed at 90 minutes (444 mutants, 23 m 23 s — the crypto-heavy tests dominate), and
+`vectorsearch` (1 962 mutants) and `graph-advanced` (1 288) run at `concurrency: 3` on this six-core box,
+which is the documented lever when a slice's mutant count, not its test suite, is what exceeds the budget.
 
 ### The survivor→test loop, measured (same day)
 
-Two conversions, both with `git diff -- src/` empty — the movement is entirely new assertions:
+Eight conversions, every one with `git diff -- src/` empty — the movement is entirely new assertions:
 
 | Slice | File worked | Tests added | Before | After |
 |---|---|---|---|---|
@@ -270,9 +272,11 @@ the fix in `docs/CHANGELOG.md` (`[Unreleased] → Fixed`); pinned at the engine 
 `BatchStatementOrderTests` and at the store layer by
 `SaveCheckpointAsync_WhenCalledTwice_KeepsLatestSequence`.
 
-+27 and +35 killed mutants for 28 and 12 assertions respectively. The conversion is cheap when the survivor
-is an untested guard or an OTel wiring detail, and expensive when it needs a new integration fixture — so
-always pick the file with the highest survivor density, not the highest file count.
++27, +35, +26, +21 and +23 killed mutants for 28, 12, 20, 18 and 171 assertions respectively. The conversion
+is cheap when the survivor is an untested guard or a wiring detail, and expensive when it needs a new
+integration fixture or a hand-derived oracle (the stemmer) — so always pick the file with the highest
+survivor density, not the highest file count.
+
 ### Engine slices (nightly tier), validated
 
 | Slice | Scope | Killed | Survived | NoCoverage | Timeout | Score | Wall |
