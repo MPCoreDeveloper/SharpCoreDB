@@ -225,14 +225,14 @@ Every module slice was executed once. This is the per-module picture the project
 | `provider-sync` | 30.76 % | 211 | 82 | 393 | 35 s |
 | `projections` | 54.67 % | 113 | 72 | 25 | 97 s |
 | `efcore` | 26.13 % | 555 | 288 | 1 284 | 317 s |
-| `functional-linq2db` | **11.97 %** | 14 | 64 | 39 | 236 s |
+| `functional-linq2db` | **31.62 %** | 37 | 44 | 36 | 242 s |
 | `functional-dapper` | **8.70 %** | 2 | 8 | 13 | 20 s |
 | `functional-efcore` | **6.45 %** | 2 | 10 | 19 | 13 s |
 | `identity` | timeout | — | — | — | 20 min |
 | `vectorsearch` | timeout | — | — | — | 30 min |
 | `graph-advanced` | timeout | — | — | — | 25 min |
 
-Aggregate over the 12 scored slices: **37.90 % — 2 261 killed of 5 966 mutants.** Read it per module, not as
+Aggregate over the 12 scored slices: **38.28 % — 2 284 killed of 5 966 mutants.** Read it per module, not as
 one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
 which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
 exactly the kind of fault a green suite hides.
@@ -253,6 +253,7 @@ Two conversions, both with `git diff -- src/` empty — the movement is entirely
 | `projections` | `SharpCoreDbProjectionCheckpointStore.cs` (29 survivors) | 17 (guards, binding, escaping, NULL fallback) | 93 / 87 / 30 → 45.33 % | **113 / 72 / 25 → 54.67 %** |
 | `cqrs` | `SharpCoreDbOutboxStore.cs` (77 survivors) | 20 (backoff gating + schedule, dead-letter, legacy schema, guards) | 151 / 149 / 62 → 42.35 % | **195 / 129 / 39 → 54.10 %** |
 | `cqrs` | `OutboxDispatchService` + `OutboxDispatchBackgroundService` (38 survivors) | 15 (dispatch/cancel/failure paths, summary log, loop validation) | (same slice) | (same slice) |
+| `functional-linq2db` | `FunctionalLinq2DbContext.cs` (41 survivors) | 24 (every method's null + cancellation guard) | 14 / 64 / 39 → 11.97 % | **37 / 44 / 36 → 31.62 %** |
 
 `OpenTelemetryProjectionMetrics.cs` went from **34 survivors to zero** (37 killed, 4 ignored): instrument
 names, units, descriptions, every recorded value, all three tags and the failure branch are now pinned.
