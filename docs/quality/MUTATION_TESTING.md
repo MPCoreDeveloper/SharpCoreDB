@@ -161,9 +161,25 @@ The host matters, but not for the reason the first attempts assumed. Three runs,
 | `SharpCoreDB.Tests` (coverlet + MTP coverage extension + runsettings) | 2 257 | `Timed out waiting for coverage relay ack ... marking as Dubious` roughly every 12 s — unusable |
 | `SharpCoreDB.Tests` + `test-case-filter FullyQualifiedName~SqlFunctionsTests` | 11 | coverage for 11 tests captured in **3 s**, 49 mutants in 9 s, **11 m 01 s**, score **27.73 %** — identical to the clean harness |
 
-So the coverage-relay timeout storm is a **test-count** effect, not the collector stack: the same
-suite with the same collectors is fine once the filter brings the scope down. **Every engine slice
-must therefore carry a `test-case-filter`**; a full-suite engine run does not work.
+So the coverage-relay timeout storm is a **per-test duration** effect, not the collector stack and not the
+test count: Stryker derives each test's coverage-capture timeout from the measured suite, and any test slower
+than that is marked `Dubious` and re-run until it burns the budget. Two observations pinned it down:
+
+- the same monolith host with 11 filtered tests captured coverage in 3 s, but with 2 257 tests it produced a
+  `Dubious` line roughly every 12 s — the slow tests live in the full suite, not in the filter;
+- `vectorsearch` (only 255 tests, a small project) produced **84** `Dubious` lines until
+  `"additional-timeout": 60000` was set, after which all **255** tests captured in 2 m 33 s with **zero**
+  `Dubious` warnings.
+
+So two levers, in order:
+
+1. **`additional-timeout`** (and `timeout-ratio`) — the correct fix for a suite with individually slow tests
+   (vector index builds, crypto). It is a documented Stryker config key, passed through by the runner.
+2. **`test-case-filter`** — narrows what runs at all; useful when the slice's own tests are the wrong ones,
+   not when they are merely slow.
+
+**Every engine slice must carry a `test-case-filter` or a raised `additional-timeout`**; a full-suite engine
+run neither fits the budget nor captures coverage reliably.
 
 Two operational rules follow:
 
@@ -237,14 +253,39 @@ and `functional-efcore` (6.45 %) sit below 10 % — their tests execute the code
 `efcore` leaves **1 284** mutants in code no test reaches. That is the work queue, and it is exactly the kind
 of fault a green suite hides.
 
-A `timeout` row is **not a zero**: the slice did not finish inside its budget, so its score is *unknown* and
-it is excluded from the aggregate. The runner reports them as a warning and does not fail the tier, but it
-never scores them. Two of the three were then made to fit the machine's budget rather than re-run until they
-did: `identity` completed at 90 minutes (444 mutants, 23 m 23 s — the crypto-heavy tests dominate), and
-`vectorsearch` (1 962 mutants) and `graph-advanced` (1 288) run at `concurrency: 3` on this six-core box,
-which is the documented lever when a slice's mutant count, not its test suite, is what exceeds the budget.
+The table above is the **first full run**, kept as a record. Current state of the same tier:
 
-### The survivor→test loop, measured (same day)
+| Slice | Status |
+|---|---|
+| `identity` | scored — 47.43 % in 23 m 23 s with a 90-minute budget |
+| `vectorsearch` | **split into three** (`-index`, `-core`, `-artifacts`); `-index` is declared with a measured reason, the other two run at `additional-timeout: 15000` |
+| `graph-advanced` | runs at `additional-timeout: 15000` with a 120-minute budget |
+| `engine-datastructures`, `engine-storage` | enabled with namespace filters, validating |
+
+A `timeout` row is **not a zero**: the slice did not finish inside its budget, so its score is *unknown* and
+it is excluded from the aggregate. The runner reports it as a warning and does not fail the tier, but it never
+scores it. `concurrency` was tried as a lever and is **not** the answer here — raising it from 2 to 3 changed
+nothing measurable, while `additional-timeout` and splitting the slice did.
+
+### Fitting a slice to the machine's budget
+
+Three levers, in the order they were needed:
+
+1. **`timeout-minutes`** — the wall-clock ceiling. `identity` needed 23 m 23 s for 444 crypto-heavy mutants;
+   the earlier 20-minute ceiling was simply too small.
+2. **`additional-timeout`** — Stryker's per-test / per-mutant timeout headroom. Without it `vectorsearch`
+   produced 84 `Dubious` warnings for 255 tests; with `60000` all 255 captured in 2 m 33 s and none did.
+   This is the fix for suites with individually slow tests, not a bigger `concurrency`.
+   <br/>The value is a **trade-off, measured**: at `60000` the 550-mutant slice still had not finished after
+   45 minutes, because every mutant that makes a test hang then costs a full minute. At `15000` the capture
+   takes 6 minutes and 45 of the 255 tests are `Dubious`, but mutant testing runs roughly four times faster.
+   Choose the smallest value that captures the suite, and remember that a `Dubious` test contributes no
+   coverage — its mutants become `NoCoverage`, which is honest but pessimistic.
+3. **Split the slice** — when the mutant count itself exceeds the budget. `vectorsearch` (1 624 mutants to
+   test) did not finish in 90 minutes, so it is now three folder slices (`vectorsearch-index`,
+   `-core`, `-artifacts`) of roughly a third each. This is the same reasoning that produced the engine tier:
+   a slice is a unit of *time*, not a unit of source layout.
+
 
 Eight conversions, every one with `git diff -- src/` empty — the movement is entirely new assertions:
 

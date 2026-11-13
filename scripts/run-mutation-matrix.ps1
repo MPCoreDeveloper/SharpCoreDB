@@ -170,6 +170,15 @@ function Invoke-Slice {
         $cfg.'test-case-filter' = $SliceDef.'test-case-filter'
     }
 
+    # Stryker's per-mutant / per-test timeouts are derived from the measured suite duration; a slice whose
+    # tests are individually slow (vector index builds, crypto) needs headroom or every one of them is
+    # marked "Dubious". Pass-through of the documented knobs:
+    foreach ($knob in 'additional-timeout', 'timeout-ratio') {
+        if ($SliceDef.PSObject.Properties.Name -contains $knob) {
+            $cfg.$knob = $SliceDef.$knob
+        }
+    }
+
     $configPath = Join-Path $configDir ("{0}.json" -f $SliceDef.name)
     [ordered]@{ 'stryker-config' = $cfg } | ConvertTo-Json -Depth 8 | Set-Content -Path $configPath -Encoding utf8
 

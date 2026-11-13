@@ -59,14 +59,48 @@
       "timeout-minutes": 90
     },
     {
-      "name": "vectorsearch",
+      "name": "vectorsearch-index",
+      "tier": "pr",
+      "enabled": false,
+      "reason": "629 mutants; measured >5.7 s per mutant on this box (vector index builds), so it exceeds a 60-minute slice. Split below ~400 mutants per slice or run it on a machine with more cores.",
+      "project": "SharpCoreDB.VectorSearch.csproj",
+      "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
+      "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
+      "mutate": ["**/src/SharpCoreDB.VectorSearch/Index/**/*.cs"],
+      "additional-timeout": 15000,
+      "timeout-minutes": 60
+    },
+    {
+      "name": "vectorsearch-core",
       "tier": "pr",
       "project": "SharpCoreDB.VectorSearch.csproj",
       "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
       "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
-      "mutate": ["**/SharpCoreDB.VectorSearch/**/*.cs"],
-      "concurrency": 3,
-      "timeout-minutes": 90
+      "mutate": [
+        "**/src/SharpCoreDB.VectorSearch/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Distance/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Quantization/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Records/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Routing/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Shard/**/*.cs"
+      ],
+      "additional-timeout": 15000,
+      "timeout-minutes": 60
+    },
+    {
+      "name": "vectorsearch-artifacts",
+      "tier": "pr",
+      "project": "SharpCoreDB.VectorSearch.csproj",
+      "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
+      "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB.VectorSearch/Artifacts/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Storage/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Store/**/*.cs",
+        "**/src/SharpCoreDB.VectorSearch/Fusion/**/*.cs"
+      ],
+      "additional-timeout": 15000,
+      "timeout-minutes": 60
     },
     {
       "name": "hybridsearch",
@@ -93,8 +127,8 @@
       "run-from": "tests/SharpCoreDB.Graph.Advanced.Tests",
       "test-projects": ["SharpCoreDB.Graph.Advanced.Tests.csproj"],
       "mutate": ["**/SharpCoreDB.Graph.Advanced/**/*.cs"],
-      "concurrency": 3,
-      "timeout-minutes": 90
+      "additional-timeout": 15000,
+      "timeout-minutes": 120
     },
     {
       "name": "analytics",
