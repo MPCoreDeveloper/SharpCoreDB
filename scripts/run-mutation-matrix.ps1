@@ -67,10 +67,23 @@ else {
 }
 
 if ($List) {
-    $selected | ForEach-Object { '{0,-22} {1,-8} {2}' -f $_.name, $_.tier, $_.project }
+    $selected | ForEach-Object {
+        $flag = if ($_.PSObject.Properties.Name -contains 'enabled' -and $_.enabled -eq $false) { 'disabled' } else { 'enabled' }
+        '{0,-24} {1,-8} {2,-9} {3}' -f $_.name, $_.tier, $flag, $_.project
+    }
     return
 }
 if ($selected.Count -eq 0) { throw "No slice matched (Tier=$Tier, Slice=$($Slice -join ','))." }
+
+# A slice with "enabled": false is declared for the roadmap but has not been validated end to end
+# (for example: an engine folder with no test filter yet, which would hit the coverage-relay
+# timeout storm). It is skipped, and named in the summary so it cannot be mistaken for a pass.
+$skipped = @($selected | Where-Object { $_.PSObject.Properties.Name -contains 'enabled' -and $_.enabled -eq $false })
+$selected = @($selected | Where-Object { -not ($_.PSObject.Properties.Name -contains 'enabled' -and $_.enabled -eq $false) })
+if ($selected.Count -eq 0 -and $skipped.Count -gt 0) {
+    Write-Host ("All selected slices are disabled: {0}" -f (($skipped | ForEach-Object { $_.name }) -join ', ')) -ForegroundColor Yellow
+    return
+}
 
 function Get-SliceSetting {
     param($SliceDef, [string] $Name, $Fallback)
@@ -79,8 +92,26 @@ function Get-SliceSetting {
     return $Fallback
 }
 
+function ConvertTo-MatchPattern {
+    param([string] $Glob)
+    $g = $Glob.Replace('\', '/').Replace('/**/', '/')
+    if ($g.StartsWith('**/')) { $g = $g.Substring(3) }
+    return $g.Replace('**', '*')
+}
+
+function Test-InScope {
+    param([string] $Path, [string[]] $Patterns)
+    if (-not $Patterns -or $Patterns.Count -eq 0) { return $true }
+    $p = $Path.Replace('\', '/')
+    foreach ($glob in $Patterns) {
+        if ($glob.StartsWith('!')) { continue }
+        if ($p -like ('*' + (ConvertTo-MatchPattern $glob))) { return $true }
+    }
+    return $false
+}
+
 function Get-SliceCounts {
-    param([string] $ReportPath)
+    param([string] $ReportPath, [string[]] $MutatePatterns = @())
     $counts = [ordered]@{
         killed = 0; survived = 0; timeout = 0; runtimeError = 0
         noCoverage = 0; compileError = 0; ignored = 0; candidates = 0; score = $null
@@ -89,6 +120,9 @@ function Get-SliceCounts {
 
     $report = Get-Content $ReportPath -Raw | ConvertFrom-Json
     foreach ($file in $report.files.PSObject.Properties) {
+        # Stryker's report contains every mutant in the assembly; only the slice's own files are
+        # its result, otherwise a one-file slice reports the whole project's compile errors.
+        if (-not (Test-InScope -Path $file.Name -Patterns $MutatePatterns)) { continue }
         foreach ($m in $file.Value.mutants) {
             switch ($m.status) {
                 'Killed'       { $counts.killed++ }
@@ -159,7 +193,7 @@ function Invoke-Slice {
     $sw.Stop()
 
     $reportPath = Join-Path $sliceDir 'reports/mutation-report.json'
-    $counts = Get-SliceCounts -ReportPath $reportPath
+    $counts = Get-SliceCounts -ReportPath $reportPath -MutatePatterns @($SliceDef.mutate)
 
     $status = 'ok'
     if ($timedOut) { $status = 'timeout' }
@@ -213,7 +247,7 @@ else {
     foreach ($def in $selected) {
         $reportPath = Join-Path (Join-Path $artifactRoot $def.name) 'reports/mutation-report.json'
         if (-not (Test-Path $reportPath)) { continue }
-        $counts = Get-SliceCounts -ReportPath $reportPath
+        $counts = Get-SliceCounts -ReportPath $reportPath -MutatePatterns @($def.mutate)
         $results += [pscustomobject][ordered]@{
             name = $def.name; tier = $def.tier; project = $def.project; status = 'ok'
             score = $counts.score; killed = $counts.killed; survived = $counts.survived
@@ -247,6 +281,18 @@ foreach ($r in $results) {
 }
 
 $scored = @($results | Where-Object { $null -ne $_.score })
+if ($skipped.Count -gt 0) {
+    $lines += ''
+    $lines += '## Declared but disabled'
+    $lines += ''
+    $lines += 'These slices are in the manifest but not validated end to end, so they are skipped rather than'
+    $lines += 'silently scored. Enable one only after a single run has completed on the target machine.'
+    $lines += ''
+    foreach ($s in $skipped) {
+        $reason = if ($s.PSObject.Properties.Name -contains 'reason') { $s.reason } else { 'not validated' }
+        $lines += ('- `{0}` — {1}' -f $s.name, $reason)
+    }
+}
 if ($scored.Count -gt 0) {
     $totalKilled = ($scored | Measure-Object -Property killed -Sum).Sum
     $totalCandidates = ($scored | Measure-Object -Property candidates -Sum).Sum

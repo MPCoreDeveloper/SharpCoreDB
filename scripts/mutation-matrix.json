@@ -149,17 +149,45 @@
       "timeout-minutes": 25
     },
     {
+      "name": "engine-sqlfunctions",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "test-case-filter": "FullyQualifiedName~SqlFunctionsTests",
+      "mutate": ["**/SqlFunctions.cs"],
+      "timeout-minutes": 60
+    },
+    {
+      "name": "engine-timeseries-query",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "test-case-filter": "FullyQualifiedName~TimeSeries",
+      "mutate": [
+        "**/src/SharpCoreDB/TimeSeries/**/*.cs",
+        "**/src/SharpCoreDB/Query/**/*.cs",
+        "**/src/SharpCoreDB/Linq/**/*.cs",
+        "**/src/SharpCoreDB/Planning/**/*.cs"
+      ],
+      "timeout-minutes": 60
+    },
+    {
       "name": "engine-services",
       "tier": "nightly",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "test-case-filter": "FullyQualifiedName~Tests.Sql",
       "mutate": ["**/src/SharpCoreDB/Services/**/*.cs"],
       "timeout-minutes": 120
     },
     {
       "name": "engine-storage",
       "tier": "nightly",
+      "enabled": false,
+      "reason": "candidate filter FullyQualifiedName~Tests.Storage, not yet validated end to end on this machine",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
@@ -172,12 +200,15 @@
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "test-case-filter": "FullyQualifiedName~Tests.DataStructures",
       "mutate": ["**/src/SharpCoreDB/DataStructures/**/*.cs"],
       "timeout-minutes": 120
     },
     {
       "name": "engine-database",
       "tier": "nightly",
+      "enabled": false,
+      "reason": "no narrow test-case-filter yet; Database/ and Execution/ are covered by the default namespace",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
@@ -190,6 +221,8 @@
     {
       "name": "engine-core",
       "tier": "nightly",
+      "enabled": false,
+      "reason": "no narrow test-case-filter yet; Core/, Interfaces/, Memory/, MVCC/ are covered across namespaces",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
@@ -205,6 +238,8 @@
     {
       "name": "engine-optimizations",
       "tier": "nightly",
+      "enabled": false,
+      "reason": "candidate filter FullyQualifiedName~Pooling|FullyQualifiedName~Indexing, not yet validated end to end",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
@@ -217,22 +252,10 @@
       "timeout-minutes": 90
     },
     {
-      "name": "engine-timeseries-query",
-      "tier": "nightly",
-      "project": "SharpCoreDB.csproj",
-      "run-from": "tests/SharpCoreDB.Tests",
-      "test-projects": ["SharpCoreDB.Tests.csproj"],
-      "mutate": [
-        "**/src/SharpCoreDB/TimeSeries/**/*.cs",
-        "**/src/SharpCoreDB/Query/**/*.cs",
-        "**/src/SharpCoreDB/Linq/**/*.cs",
-        "**/src/SharpCoreDB/Planning/**/*.cs"
-      ],
-      "timeout-minutes": 90
-    },
-    {
       "name": "engine-misc",
       "tier": "nightly",
+      "enabled": false,
+      "reason": "Compression/OptionalCompressionLevel.cs produced 0 testable mutants (144 mutants all removed by Stryker Safe Mode as compile errors); the remaining folders need their own validated filter",
       "project": "SharpCoreDB.csproj",
       "run-from": "tests/SharpCoreDB.Tests",
       "test-projects": ["SharpCoreDB.Tests.csproj"],
@@ -249,3 +272,4 @@
     }
   ]
 }
+

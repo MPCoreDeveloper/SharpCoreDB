@@ -150,6 +150,32 @@ mutant). Two consequences drive the matrix design:
 `SqlFunctions` is a good example of what mutation testing is for: a file with passing tests, 70 mutants no
 test reaches at all, and 16 wrong behaviours that a green suite accepts. That is the work queue.
 
+## Choosing the test host (measured 2026-11-13)
+
+The host matters, but not for the reason the first attempts assumed. Three runs, each with
+`coverage-analysis: perTest`:
+
+| Host | Tests in scope | Outcome |
+|---|---|---|
+| minimal clean harness (engine only, no coverage stack) | 11 | coverage captured, 49 mutants tested in 2 s, 10 m 41 s total |
+| `SharpCoreDB.Tests` (coverlet + MTP coverage extension + runsettings) | 2 257 | `Timed out waiting for coverage relay ack ... marking as Dubious` roughly every 12 s — unusable |
+| `SharpCoreDB.Tests` + `test-case-filter FullyQualifiedName~SqlFunctionsTests` | 11 | coverage for 11 tests captured in **3 s**, 49 mutants in 9 s, **11 m 01 s**, score **27.73 %** — identical to the clean harness |
+
+So the coverage-relay timeout storm is a **test-count** effect, not the collector stack: the same
+suite with the same collectors is fine once the filter brings the scope down. **Every engine slice
+must therefore carry a `test-case-filter`**; a full-suite engine run does not work.
+
+Two operational rules follow:
+
+- A slice without a validated filter is declared in the manifest with `"enabled": false` and a
+  `reason`, and the runner skips it and lists it under "Declared but disabled". It is never scored
+  and never silently skipped.
+- Some files produce **zero testable mutants**: `Compression/OptionalCompressionLevel.cs` yielded 144
+  mutants that Stryker removed in Safe Mode as compile errors (mutations that make the file not
+  compile, e.g. `CS0165 Use of unassigned local variable` inside the mutated method). A slice whose
+  whole scope behaves that way reports "unable to calculate a mutation score" — that means "nothing
+  testable here", not a pass.
+
 ## The slice matrix
 
 Config lives in one place: `scripts/mutation-matrix.json`. A slice is *(project under test, test host, mutate
@@ -165,11 +191,13 @@ pwsh scripts/run-mutation-matrix.ps1 -AggregateOnly       # re-render the summar
 ```
 
 - `pr` tier: one slice per adapter/module project, each with its own test host.
-- `nightly` tier: the engine in eight folder slices (`engine-services`, `engine-storage`,
-  `engine-datastructures`, `engine-database`, `engine-core`, `engine-optimizations`,
-  `engine-timeseries-query`, `engine-misc`), hosted by `SharpCoreDB.Tests` with `perTest`.
+- `nightly` tier: the engine, sliced per folder. `engine-sqlfunctions` (49 mutants, 11 m) and
+  `engine-timeseries-query` (1 007 mutants, 15 m 35 s) are validated end to end; `engine-services` and
+  `engine-datastructures` carry a candidate `test-case-filter`; the remaining five are declared with
+  `"enabled": false` and a `reason`, because an unfiltered engine run hits the coverage-relay timeout storm.
 - The script exits non-zero only when a slice *could not run* (error, timeout, missing report). A low score
-  is reported, not enforced, until `-BreakAt` is passed.
+  is reported, not enforced, until `-BreakAt` is passed. Disabled slices are listed under "Declared but
+  disabled", never scored.
 - `.github/workflows/mutation.yml` runs the `pr` tier on a PR labelled `mutation`, the `nightly` tier on a
   schedule, or any tier manually. It uploads per-slice reports and publishes the summary to the job summary.
 
@@ -181,14 +209,18 @@ pwsh scripts/run-mutation-matrix.ps1 -AggregateOnly       # re-render the summar
 - Quote the slice and the mutant count with the score. "41.53 %" alone is not a fact about a module; "147
   killed / 87 survived / 120 no-coverage over 354 mutants in `SharpCoreDB.Functional`" is.
 
-### First matrix datapoint (2026-11-13)
+### First matrix datapoints (2026-11-13)
 
-| Slice | Scope | Killed | Survived | NoCoverage | Score | Wall |
-|---|---|---|---|---|---|---|
-| `functional` | whole project, 11 files | 147 | 87 | 120 | **41.53 %** | 188 s |
+| Slice | Scope | Killed | Survived | NoCoverage | Timeout | Score | Wall |
+|---|---|---|---|---|---|---|---|
+| `functional` | whole project, 11 files | 147 | 87 | 120 | 0 | **41.53 %** | 188 s |
+| `engine-timeseries-query` | 28 files, 87 filtered tests | 625 | 364 | 969 | 18 | **32.54 %** | 15 m 35 s |
+| `engine-sqlfunctions` | `SqlFunctions.cs`, 11 filtered tests | 33 | 16 | 70 | 0 | **27.73 %** | 11 m 01 s |
 
 `Option.cs` alone scores 100 % after the tests added in the first session; the module score is 41.53 %
-because the other ten files still carry 87 surviving mutants and 120 uncovered ones.
+because the other ten files still carry 87 surviving mutants and 120 uncovered ones. The time-series slice
+names 16 files with survivors (`GorillaCodec`, `DeltaOfDeltaCodec`, `TimeRangeIndex`, `RetentionPolicy`,
+`TimeSeriesAggregator`, ...): that list, not the percentage, is the work queue.
 
 ## Rules of use
 
