@@ -25,8 +25,9 @@ jobs:
 
     - name: Install dependencies
       run: |
-        python -m pip install --upgrade pip
-        pip install build twine
+        # Wheels only, so nothing from the index runs a build script at install time (SonarCloud S8541).
+        python -m pip install --upgrade pip --only-binary=:all:
+        pip install --only-binary=:all: build twine
 
     - name: Build package
       run: python -m build

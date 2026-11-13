@@ -114,7 +114,11 @@ jobs:
 
     - name: Log in to NuGet.org (trusted publishing)
       id: nuget-login
-      uses: NuGet/login@v1
+      # Pinned to a commit SHA instead of the moving `v1` tag: a tag can be repointed at new code without a
+      # review, which is a supply-chain hole in the one step that handles the publishing credentials
+      # (SonarCloud S7637 — the same rule `ci.yml` already applies to codecov-action). The trailing comment
+      # records the tag this SHA corresponded to when it was pinned.
+      uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1
       with:
         user: ${{ vars.NUGET_USER || 'MPCoreDeveloper' }}
 
@@ -136,21 +140,25 @@ jobs:
         : > "$SEEN_FILE"
 
         nuspec_field() {
-          # $1 = nupkg, $2 = nuspec element name (id, version). `|| true` keeps `pipefail` from aborting
-          # the step when head closes the pipe early; an empty result fails the caller's guard.
-          unzip -p "$1" '*.nuspec' 2>/dev/null | grep -oP "(?<=<$2>)[^<]+" | head -n1 || true
+          # $1 = nupkg, $2 = nuspec element name (id, version). Bound to named locals rather than used as bare
+          # positionals (SonarCloud S7679): a bare `$1` reads whatever the caller happened to pass.
+          local package="$1" element="$2"
+          # `|| true` keeps `pipefail` from aborting the step when head closes the pipe early; an empty
+          # result fails the caller's guard.
+          unzip -p "$package" '*.nuspec' 2>/dev/null | grep -oP "(?<=<$element>)[^<]+" | head -n1 || true
         }
 
         already_on_feed() {
           # $1 = package id, $2 = version. 0 = present, 1 = absent.
+          local id="$1" version="$2"
           local id_lower code
-          id_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+          id_lower="$(printf '%s' "$id" | tr '[:upper:]' '[:lower:]')"
           code="$(curl -s -o /tmp/nuget-versions.json -w '%{http_code}' \
             "https://api.nuget.org/v3-flatcontainer/${id_lower}/index.json")"
           [ "$code" = "200" ] || return 1
           # Case-insensitive: the feed lowercases pre-release labels ("2.1.0-rc.3"), the nuspec declares
           # them as authored ("2.1.0-RC.3").
-          grep -qi "\"$2\"" /tmp/nuget-versions.json
+          grep -qi "\"$version\"" /tmp/nuget-versions.json
         }
 
         push_layer() {

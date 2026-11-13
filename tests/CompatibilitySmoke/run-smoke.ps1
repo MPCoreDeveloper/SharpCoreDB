@@ -221,7 +221,7 @@ try {
     $env:PYTHONIOENCODING = "utf-8"
     try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }
 
-    & $python -m pip install requests --quiet --disable-pip-version-check 2>&1 | Out-Null
+    & $python -m pip install requests --quiet --disable-pip-version-check --only-binary=:all: 2>&1 | Out-Null
 
     & $python (Join-Path $SmokeDir "smoke_tests.py") `
         --host 127.0.0.1 `

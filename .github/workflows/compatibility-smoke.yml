@@ -50,7 +50,7 @@ jobs:
         python-version: '3.12'
 
     - name: Install Python dependencies
-      run: pip install requests --quiet
+      run: pip install --quiet --only-binary=:all: requests
 
     - name: Restore server dependencies
       run: dotnet restore src/SharpCoreDB.Server/SharpCoreDB.Server.csproj
