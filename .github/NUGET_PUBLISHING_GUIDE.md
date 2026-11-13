@@ -1,288 +1,63 @@
-# NuGet Package Publishing Automation Guide
+# NuGet publishing
 
-## Overview
+SharpCoreDB publishes to NuGet.org through **nuget.org trusted publishing** — there is no long-lived API
+key on the net11 line any more.
 
-Your SharpCoreDB project now has **fully automated NuGet package publishing** through GitHub Actions. Packages are automatically published to NuGet.org on every successful push to the `master` branch.
-
-## How It Works
-
-### Workflow Jobs
-
-1. **build** - Runs tests on all platforms (Windows, Linux, macOS)
-2. **pack** - Creates NuGet packages (`.nupkg` files)
-3. **publish** - Publishes packages to NuGet.org (NEW)
+## How a release is published
 
 ```
 Push to master
     ↓
-Build & Test (multiple OS)
+CI/CD Pipeline (ci.yml): Build & Test on ubuntu/windows/macos → Pack → uploads the `nuget-packages` artifact
     ↓
-Pack NuGet Packages
-    ↓
-Publish to NuGet.org
+Publish to NuGet.org (publish.yml): runs after a green CI run, downloads that artifact,
+    exchanges its OIDC token for a one-hour key, and pushes only the packages the feed does not have
 ```
 
-## Setup Required
+- **The pushing job lives in `.github/workflows/publish.yml` and nowhere else.** The nuget.org policy
+  `SharpCoreDBPolicy` is bound to this repository **and to that file name**; `NuGet/login@v1` is refused
+  when it runs from a different workflow file. Moving the job back into `ci.yml` breaks publishing.
+- The job requests `id-token: write` (the OIDC token) and `actions: read` (downloading the CI artifact).
+- The account name passed to `NuGet/login` is the repository variable **`NUGET_USER`**, defaulting to
+  `MPCoreDeveloper`. It is the nuget.org *user name* — not the policy name, and not a secret.
+- `pack` stays in `ci.yml` and runs only on a push to `master`; `publish.yml` reuses that artifact so
+  nothing is built or tested twice.
 
-### 1. Create NuGet API Key
+## Manual publishing
 
-1. Go to https://www.nuget.org/account/apikeys
-2. Create a new API key with:
-   - **Key type**: Push new packages and package versions
-   - **Scope**: All packages (or specific packages if preferred)
-   - **Expiration**: Set appropriately (e.g., 1 year)
+Run the **Publish to NuGet.org** workflow (`workflow_dispatch`):
 
-### 2. Add Secret to GitHub Repository
+- with **no input**, it reuses the newest successful `ci.yml` run on `master` (so a re-run after a failed
+  publish pushes exactly the packages that run packed);
+- with an explicit **`version`** (e.g. `2.1.4`), it packs the `SharpCoreDB.CI.slnf` itself with
+  `/p:Version=<version>` and publishes that.
 
-1. Navigate to: **GitHub Repository → Settings → Secrets and variables → Actions**
-2. Click **New repository secret**
-3. Configure:
-   - **Name**: `NUGET_API_KEY`
-   - **Value**: Paste your API key from step 1
+The former `publish-manual.yml` was removed with the move to trusted publishing: its job — pack with an
+explicit version or suffix and push in dependency order — is covered by the `version` input.
 
-## Publishing Scenarios
+## Why the push is selective
 
-### Scenario A: Automatic Publishing (Current Setup)
+NuGet.org rate-limits pushes and answers `403 Quota Exceeded` once the budget is gone, and
+`--skip-duplicate` does not avoid the charge: a duplicate is still a PUT. `publish.yml` therefore asks the
+flat-container feed what exists and pushes only what is missing, in dependency order (core → dependents →
+mid-level → top-level → catch-all), waiting 30 s for indexing between layers that actually pushed.
 
-Every push to `master` that passes all tests will automatically:
-1. Build packages in Release mode
-2. Publish all `.nupkg` files to NuGet.org
-3. Skip duplicate versions automatically
+## What is deliberately not used
 
-**When to use**: For CI/CD continuous delivery
-
-### Scenario B: Manual Publishing (Current Setup)
-
-The repo ships with `.github/workflows/publish-manual.yml` (**"Manual NuGet Publish"**), triggerable from the
-Actions tab with a **`workflow_dispatch`** input. It builds and pushes all packages to NuGet.org in dependency
-order (with `--skip-duplicate`):
-
-| Input | Description |
-|---|---|
-| `reason` | Free-text note shown in the run summary |
-| `versionSuffix` | Optional NuGet pre-release suffix. **Empty** → stable version from the `.csproj` files (e.g. `2.0.0.0`). **`preview.1`**, **`rc.1`**, **`beta.1`** → `2.0.0.0-preview.1` etc. |
-| `packVersion` | Explicit full package version (e.g. `2.1.0-RC.3`) passed as `/p:Version=…` to the whole pack. Leave empty to use the version each project declares. |
-
-This workflow packs **`SharpCoreDB.CI.slnf`**, i.e. every packable package in the family, and pushes
-them in dependency layers (core → dependents → mid-level → top-level → remaining).
-
-> `src/SharpCoreDB.Server` is **not** in that set: it is `IsPackable=false` (a standalone executable
-> shipped as the `sharpcoredb-server` binary and the `ghcr.io/mpcoredeveloper/sharpcoredb-server`
-> container image). Its packable libraries are `SharpCoreDB.Server.Core` and
-> `SharpCoreDB.Server.Protocol`, both of which *are* published.
-
-### Scenario B2: Publishing the 2.1.0-RC.3 release (click-by-click)
-
-1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
-2. In the left sidebar, select **"Manual NuGet Publish"**
-3. Click the blue **"Run workflow"** button (top right)
-4. In the dialog:
-   - **Branch**: `release/v2.1.0.0-RC.3` (the net11.0 / C# 15 preview RC line)
-   - **packVersion**: `2.1.0-RC.3`
-   - **versionSuffix**: leave **empty** (an explicit `packVersion` is supplied)
-   - **reason**: e.g. `2.1.0-RC.3 – validated RC of the net11.0 line (2,897 tests green)`
-5. Click **"Run workflow"**
-6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
-   dependency layers (core → dependents → mid-level → top-level).
-7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — `2.1.0` should appear, and every other
-   package in the family should show the same version.
-
-> `2.1.0` is a **normal release**: NuGet resolves it without *Include prerelease*. The `2.1.0-RC.3`
-> packages published on 2026-09-17 stay on NuGet.org as pre-release versions.
-
-### Scenario B3: Publishing only the core package (quick path)
-
-The primary workflow `.github/workflows/ci.yml` (triggered on `master` and manually) has a
-`workflow_dispatch` **publish-core** job that packs and pushes **only** `src/SharpCoreDB/SharpCoreDB.csproj`
-at its declared version. Use it when only the core package changed; use Scenario B2 for a full release.
-
-### Scenario B4: Publishing the 2.0.0.2 release (click-by-click)
-
-1. Go to **https://github.com/MPCoreDeveloper/SharpCoreDB → Actions** (tab on top)
-2. In the left sidebar, select **"Manual NuGet Publish"**
-3. Click the blue **"Run workflow"** button (top right)
-4. In the dialog:
-   - **Branch**: `master` (the v2.0 stable trunk)
-   - **versionSuffix**: leave **empty** for the stable `2.0.0.2` release
-   - **packVersion**: leave **empty** (each project declares its own version)
-   - **reason**: e.g. `2.0.0.2 – performance-first v2 release`
-5. Click **"Run workflow"**
-6. Open the run to watch it: the **Publish** job logs show `↗ Pushing <package>` per `.nupkg`, grouped in
-   dependency layers (core → dependents → mid-level → top-level).
-7. Verify: **https://www.nuget.org/packages/SharpCoreDB/** — the `2.0.0.2` version should appear.
-
-> **Requires** the `NUGET_API_KEY` repository secret (`Settings → Secrets and variables → Actions`). If it was
-> used for the 1.9.7 publish it is already configured.
-
-### Scenario C: Tag-Based Release Publishing
-
-To publish only on git tags (recommended for production):
-
-```yaml
-on:
-  push:
-    tags:
-      - 'v*'
-```
-
-## Version Management
-
-SharpCoreDB uses **4-part versions** (`n.n.n.n`, e.g. `2.0.0.0`) for its stable lines, and a
-**3-part version plus a prerelease label** for the pre-release lines (`2.1.0-RC.3`). The versions come
-from the `<Version>` tags in `.csproj` files, but the **single source of truth for the SharpCoreDB
-package family is `<SharpCoreDBVersion>` in `Directory.Packages.props`** (used by all central package
-references).
-
-**Current line state (2026-10-10):**
-
-| Line | Branch | Version | Latest published |
-|---|---|---|---|
-| 2.1.0 (net11.0 / C# 15 preview) | `master` | `2.1.0` | `2.1.0-RC.3` (2026-09-17) |
-| v2.0 stable (net10.0 / C# 14, parked) | `release/v2.0` | `2.0.0.3` | `2.0.0.3` |
-
-Every one of the **46 `.csproj` files on the 2.1.0 line** carries the same `<Version>` — the
-release checklist is `git grep "<Version>" -- '*.csproj'` and it must return exactly one distinct value.
-
-Each packable project file carries the same version:
-
-```xml
-<PropertyGroup>
-  <Version>2.1.0-RC.3</Version>
-  <AssemblyVersion>2.1.0.0</AssemblyVersion>
-  <FileVersion>2.1.0.0</FileVersion>
-</PropertyGroup>
-```
-
-### Automated Versioning (Optional)
-
-To automatically version based on git commits, use:
-
-```xml
-<PropertyGroup>
-  <Version>2.0.0.0</Version>
-  <InformationalVersion>2.0.0.0+$(GitCommitHash)</InformationalVersion>
-</PropertyGroup>
-```
-
-Or use a tool like [MinVer](https://github.com/adamralph/minver) for semantic versioning from git tags.
-
-## Monitoring Publishes
-
-### View Publishing Results
-
-1. Go to **GitHub Repository → Actions**
-2. Look for the workflow run corresponding to your commit
-3. Check the **publish** job logs for:
-   - ✅ Successful push messages
-   - ⚠️ Duplicate package warnings (normal - automatically skipped)
-   - ❌ Authentication errors (check `NUGET_API_KEY` secret)
-
-### Verify on NuGet.org
-
-- Navigate to https://www.nuget.org/packages/SharpCoreDB/
-- New versions appear within 1-2 minutes after successful publishing
+- **No `NUGET_API_KEY` secret.** The key it held expired on 2026-11-12 and turned master's publish job red
+  (`403: The specified API key has expired`). Do not reintroduce a static key for this line.
+- **`.github/workflows/ci-net10.yml`** (the parked net10.0 line on `release/v2.0`) still uses the shared
+  `NUGET_API_KEY`. That line only runs on `release/v2.0`/`v2.0*` tags, so it is dormant; if 2.0.x servicing
+  resumes, it needs its own trusted-publishing policy or a fresh key.
+- **`src/SharpCoreDB/.github/workflows/nuget-build.yml`** is a legacy nested workflow (not a root workflow,
+  so GitHub never runs it). It is kept only as history.
 
 ## Troubleshooting
 
-### Issue: "401 Unauthorized" during publish
-
-**Solution**: 
-- Verify `NUGET_API_KEY` is correctly set in GitHub Secrets
-- Check API key hasn't expired on NuGet.org
-- Ensure API key has "Push new packages" permission
-
-### Issue: "Package already exists"
-
-**Solution**: 
-- This is expected if version hasn't changed
-- The workflow uses `--skip-duplicate` flag to automatically skip
-- Change version in `.csproj` to publish a new release
-
-### Issue: Publish job doesn't run
-
-**Solution**:
-- Verify push is to `master` branch (not `develop` or PR)
-- Check that `build` job passed all tests
-- Look for errors in the `build` job first
-
-## Best Practices
-
-### 1. Semantic Versioning
-
-Follow [semver.org](https://semver.org/):
-- **Major**: Breaking changes (2.0.0)
-- **Minor**: New features (1.1.0)
-- **Patch**: Bug fixes (1.0.1)
-
-### 2. Release Notes
-
-Create GitHub Releases for each version:
-1. Go to **Releases → New Release**
-2. Create tag: `v1.7.0`
-3. Add release notes describing changes
-4. Publish release
-
-### 3. Pre-release Packages
-
-For pre-releases of the v2.0.0.0 line (e.g. `2.0.0.0-preview.1`), **do not edit the `.csproj` files** — trigger the
-"Manual NuGet Publish" workflow with a `versionSuffix` (see Scenario B2). The workflow passes
-`/p:Version=2.0.0.0-<suffix>` to the whole solution, so every package and every internal
-`ProjectReference` dependency stays consistent on the same pre-release version.
-
-Consumers opt in explicitly — pre-release packages are **not** selected by default:
-
-```bash
-dotnet add package SharpCoreDB --version 2.0.0.0-preview.1
-```
-
-Or in Visual Studio: **Manage NuGet Packages → tick "Include prerelease"**.
-
-### 4. Package Metadata
-
-Ensure each `.csproj` has:
-```xml
-<PropertyGroup>
-  <PackageId>SharpCoreDB</PackageId>
-  <Title>SharpCoreDB - High Performance Database Engine</Title>
-  <Description>A .NET 11 high-performance database engine with zero-allocation principles</Description>
-  <Authors>MPCoreDeveloper</Authors>
-  <PackageProjectUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</PackageProjectUrl>
-  <PackageLicenseExpression>MIT</PackageLicenseExpression>
-  <RepositoryUrl>https://github.com/MPCoreDeveloper/SharpCoreDB</RepositoryUrl>
-  <RepositoryType>git</RepositoryType>
-  <PackageTags>database;performance;dotnet11;sharpcoredb</PackageTags>
-</PropertyGroup>
-```
-
-## Environment Variables
-
-The workflow automatically sets:
-- `DOTNET_SKIP_FIRST_TIME_EXPERIENCE=true`
-- `DOTNET_CLI_TELEMETRY_OPTOUT=true`
-- `DOTNET_NOLOGO=true`
-
-These optimize CI performance and disable telemetry.
-
-## Files Modified
-
-- `.github/workflows/ci.yml` - Added `publish` job and artifact handling
-
-## Next Steps
-
-1. ✅ Add `NUGET_API_KEY` secret to GitHub
-2. ✅ Verify version numbers in `.csproj` files
-3. ✅ Commit and push changes to `master`
-4. ✅ Monitor the GitHub Actions workflow
-5. ✅ Verify packages appear on NuGet.org
-
-## Support
-
-For questions:
-- Check GitHub Actions logs for detailed errors
-- Review [NuGet Publishing Documentation](https://docs.microsoft.com/nuget/nuget-org/publish-a-package)
-- Consult [dotnet nuget push](https://learn.microsoft.com/en-us/dotnet/core/tools/dotnet-nuget-push) documentation
-
----
-
-**Created**: 2025-01-28  
-**Last Updated**: 2026-09-17 (v2.1.0-RC.3 release preparation)
+| Symptom | Cause |
+|---|---|
+| `403 The specified API key has expired` | A static key is being used somewhere; only `publish.yml` should push, and it uses the OIDC exchange. |
+| `NuGet/login` fails with a policy mismatch | The job was moved out of `publish.yml`, or the workflow file was renamed; the policy is bound to the file name. |
+| `NuGet/login` fails with an unknown user | `NUGET_USER` is missing or is not the nuget.org account name (it is not the policy name). |
+| Publish job skipped | The triggering `CI/CD Pipeline` run did not succeed (`if:` requires `conclusion == 'success'`). |
+| Nothing pushed, summary says so | Every package in the artifact is already on the feed at that version — bump `SharpCoreDBVersion`, or dispatch with `version`. |

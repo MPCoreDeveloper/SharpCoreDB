@@ -1,0 +1,269 @@
+# Publishing to NuGet.org, through nuget.org trusted publishing — no long-lived API key.
+#
+# The nuget.org policy `SharpCoreDBPolicy` is bound to this repository *and* to this file name, so the
+# publishing job has to live here: `NuGet/login@v1` exchanges the job's OIDC token for a one-hour API key,
+# and nuget.org only accepts that exchange from the workflow file the policy names. The shared
+# `NUGET_API_KEY` secret is neither used nor needed — the previous key expired on 2026-11-12 and turned
+# master's publish job red with `403: The specified API key has expired` (run 43313201150).
+#
+# Two ways in:
+#   * automatically, when `CI/CD Pipeline` finishes green on master. This reuses the `nuget-packages`
+#     artifact that run already packed, so nothing is built or tested twice.
+#   * manually (`workflow_dispatch`), to re-publish or to publish an explicit version. A manual run packs
+#     again only when an explicit version is given or no CI artifact can be reused.
+#
+# The account name passed to `NuGet/login` comes from the `NUGET_USER` repository variable and defaults to
+# `MPCoreDeveloper`. It is the *user name* on nuget.org (the policy name is not used here).
+
+name: Publish to NuGet.org
+
+on:
+  workflow_run:
+    workflows: ["CI/CD Pipeline"]
+    types: [completed]
+    branches: [master]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Explicit package version (e.g. 2.1.4). Empty = the version each project declares.'
+        required: false
+        default: ''
+      reason:
+        description: 'Why this manual publish is needed (recorded in the run summary).'
+        required: false
+        default: 'Manual publish'
+
+permissions:
+  contents: read
+  id-token: write   # NuGet/login exchanges this OIDC token for a short-lived API key
+  actions: read     # download the nuget-packages artifact of the triggering CI run
+
+env:
+  DOTNET_VERSION: '11.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+  NUGET_SOURCE: https://api.nuget.org/v3/index.json
+
+jobs:
+  publish:
+    name: Publish to NuGet.org
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    # An automatic run publishes only after a green CI run; a manual dispatch always runs.
+    if: github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success'
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 11 (GA)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    # The packages belong to the CI run, not to this workflow, so that run's id has to be resolved
+    # explicitly. A manual run without an input uses the newest successful CI run on master.
+    - name: Resolve the CI run that packed the packages
+      id: source
+      shell: bash
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        RUN_ID: ${{ github.event.workflow_run.id }}
+      run: |
+        set -euo pipefail
+        run_id="${RUN_ID:-}"
+        if [ -z "$run_id" ]; then
+          run_id="$(gh run list --workflow=ci.yml --branch=master --status=success --limit 1 \
+            --json databaseId --jq '.[0].databaseId // empty')"
+        fi
+        echo "run_id=${run_id}" >> "$GITHUB_OUTPUT"
+        echo "Packed artifacts come from CI run ${run_id:-<none found>}"
+
+    - name: Download the packed packages
+      if: steps.source.outputs.run_id != ''
+      uses: actions/download-artifact@v8
+      with:
+        name: nuget-packages
+        path: ./artifacts
+        run-id: ${{ steps.source.outputs.run_id }}
+        github-token: ${{ secrets.GITHUB_TOKEN }}
+
+    # Only for a manual run with an explicit version, or when no CI artifact could be found.
+    - name: Pack
+      if: (github.event_name == 'workflow_dispatch' && inputs.version != '') || steps.source.outputs.run_id == ''
+      shell: bash
+      env:
+        VERSION: ${{ inputs.version }}
+      run: |
+        set -euo pipefail
+        dotnet restore SharpCoreDB.CI.slnf --configfile NuGet.Config
+        args=(SharpCoreDB.CI.slnf
+              --configuration Release
+              --output ./artifacts
+              /p:ContinuousIntegrationBuild=true
+              /p:UseLocalProjectReferences=true
+              --configfile NuGet.Config)
+        if [ -n "${VERSION:-}" ]; then
+          args+=("/p:Version=${VERSION}")
+          echo "::warning::Packing with explicit version ${VERSION}"
+        fi
+        dotnet pack "${args[@]}"
+
+    - name: Log in to NuGet.org (trusted publishing)
+      id: nuget-login
+      uses: NuGet/login@v1
+      with:
+        user: ${{ vars.NUGET_USER || 'MPCoreDeveloper' }}
+
+    - name: Publish packages in dependency order
+      shell: bash
+      env:
+        NUGET_API_KEY: ${{ steps.nuget-login.outputs.NUGET_API_KEY }}
+      run: |
+        set -euo pipefail
+
+        # NuGet.org rate-limits pushes and answers 403 "Quota Exceeded" once the budget is gone, and
+        # `--skip-duplicate` does not help: a duplicate is still a PUT and still counts against the quota.
+        # Ask the feed first and push only what is actually missing.
+        PUSHED_FILE=/tmp/pushed.txt
+        SKIPPED_FILE=/tmp/skipped.txt
+        SEEN_FILE=/tmp/seen.txt
+        : > "$PUSHED_FILE"
+        : > "$SKIPPED_FILE"
+        : > "$SEEN_FILE"
+
+        nuspec_field() {
+          # $1 = nupkg, $2 = nuspec element name (id, version). `|| true` keeps `pipefail` from aborting
+          # the step when head closes the pipe early; an empty result fails the caller's guard.
+          unzip -p "$1" '*.nuspec' 2>/dev/null | grep -oP "(?<=<$2>)[^<]+" | head -n1 || true
+        }
+
+        already_on_feed() {
+          # $1 = package id, $2 = version. 0 = present, 1 = absent.
+          local id_lower code
+          id_lower="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+          code="$(curl -s -o /tmp/nuget-versions.json -w '%{http_code}' \
+            "https://api.nuget.org/v3-flatcontainer/${id_lower}/index.json")"
+          [ "$code" = "200" ] || return 1
+          # Case-insensitive: the feed lowercases pre-release labels ("2.1.0-rc.3"), the nuspec declares
+          # them as authored ("2.1.0-RC.3").
+          grep -qi "\"$2\"" /tmp/nuget-versions.json
+        }
+
+        push_layer() {
+          local layer_name="$1"
+          shift
+          local pushed_any=false
+
+          echo "::group::Publishing $layer_name"
+          for pattern in "$@"; do
+            for pkg in ./artifacts/${pattern}; do
+              [ -f "$pkg" ] || continue
+              # The catch-all layer re-visits packages the layers above already handled. Visit each
+              # artifact once: a no-op run then costs one GET per package, not two.
+              local base="$(basename "$pkg")"
+              if grep -qxF "$base" "$SEEN_FILE"; then
+                continue
+              fi
+              echo "$base" >> "$SEEN_FILE"
+              local id version
+              id="$(nuspec_field "$pkg" id)"
+              version="$(nuspec_field "$pkg" version)"
+              if [ -z "$id" ] || [ -z "$version" ]; then
+                echo "  Cannot read id/version from $(basename "$pkg")" >&2
+                exit 1
+              fi
+              if already_on_feed "$id" "$version"; then
+                echo "  Skip $id $version (already on NuGet.org)"
+                echo "$id $version" >> "$SKIPPED_FILE"
+                continue
+              fi
+              echo "  Publishing $id $version"
+              dotnet nuget push "$pkg" \
+                --api-key "$NUGET_API_KEY" \
+                --source "$NUGET_SOURCE" \
+                --skip-duplicate
+              echo "$id $version" >> "$PUSHED_FILE"
+              pushed_any=true
+            done
+          done
+          echo "::endgroup::"
+
+          if [ "$pushed_any" = true ]; then
+            echo "Waiting 30s for NuGet.org to index $layer_name..."
+            sleep 30
+          fi
+        }
+
+        push_layer "Layer 0 (core)" \
+          "SharpCoreDB.[0-9]*.nupkg" \
+          "SharpCoreDB.Aspire.Hosting.*.nupkg" \
+          "SharpCoreDB.Client.Protocol.*.nupkg" \
+          "SharpCoreDB.Server.Protocol.*.nupkg"
+
+        push_layer "Layer 1 (core dependents)" \
+          "SharpCoreDB.Graph.[0-9]*.nupkg" \
+          "SharpCoreDB.VectorSearch.*.nupkg" \
+          "SharpCoreDB.Functional.[0-9]*.nupkg" \
+          "SharpCoreDB.EventSourcing.*.nupkg" \
+          "SharpCoreDB.Analytics.*.nupkg" \
+          "SharpCoreDB.Distributed.*.nupkg" \
+          "SharpCoreDB.Identity.*.nupkg" \
+          "SharpCoreDB.Serilog.Sinks.*.nupkg"
+
+        push_layer "Layer 2 (mid-level)" \
+          "SharpCoreDB.Client.[0-9]*.nupkg" \
+          "SharpCoreDB.EntityFrameworkCore.[0-9]*.nupkg" \
+          "SharpCoreDB.Extensions.*.nupkg" \
+          "SharpCoreDB.Data.Provider.*.nupkg" \
+          "SharpCoreDB.Server.Core.*.nupkg" \
+          "SharpCoreDB.CQRS.*.nupkg" \
+          "SharpCoreDB.Projections.*.nupkg"
+
+        push_layer "Layer 3 (top-level)" \
+          "SharpCoreDB.Server.[0-9]*.nupkg" \
+          "SharpCoreDB.Graph.Advanced.*.nupkg" \
+          "SharpCoreDB.Provider.Sync.*.nupkg" \
+          "SharpCoreDB.Provider.YesSql.*.nupkg" \
+          "SharpCoreDB.Functional.Dapper.*.nupkg" \
+          "SharpCoreDB.Functional.EntityFrameworkCore.*.nupkg" \
+          "SharpCoreDB.Functional.Linq2DB.*.nupkg"
+
+        # Catch-all for anything the layers above do not name. It does not re-PUT what they already
+        # published: the feed check in push_layer skips it.
+        push_layer "Remaining packages" \
+          "*.nupkg"
+
+        echo "Push complete: $(wc -l < "$PUSHED_FILE") published, $(wc -l < "$SKIPPED_FILE") already on NuGet.org."
+
+    - name: Create release summary
+      if: always()
+      env:
+        REASON: ${{ inputs.reason }}
+      run: |
+        pushed=$(wc -l < /tmp/pushed.txt 2>/dev/null || echo 0)
+        skipped=$(wc -l < /tmp/skipped.txt 2>/dev/null || echo 0)
+        {
+          echo "## NuGet packages (trusted publishing)"
+          echo ""
+          echo "- Trigger: \`${{ github.event_name }}\` by @${{ github.actor }}"
+          echo "- Packed artifacts: ${{ steps.source.outputs.run_id != '' && format('CI run {0}', steps.source.outputs.run_id) || 'packed in this run' }}"
+          [ -n "${REASON:-}" ] && echo "- Reason: ${REASON}"
+          echo "- **${pushed} pushed, ${skipped} already on NuGet.org**"
+          echo ""
+          if [ "$pushed" = "0" ]; then
+            echo "Nothing was pushed: every package here is already published at the version this tree"
+            echo "declares. Bump the version, or dispatch this workflow with an explicit \`version\`."
+            echo ""
+          fi
+          if [ "$pushed" -gt 0 ]; then
+            echo "### Pushed"
+            sed 's/^/- /' /tmp/pushed.txt
+            echo ""
+          fi
+          echo "### Skipped (already on NuGet.org)"
+          sed 's/^/- /' /tmp/skipped.txt
+        } >> "$GITHUB_STEP_SUMMARY"
