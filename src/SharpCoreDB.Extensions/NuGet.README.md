@@ -81,7 +81,7 @@ var userId = connection.QuerySingle<int>(
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Extensions --version 2.1.3
+dotnet add package SharpCoreDB.Extensions --version 2.1.4
 ```
 
 **Requires:** SharpCoreDB v1.9.5+

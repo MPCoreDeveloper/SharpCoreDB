@@ -32,7 +32,7 @@ The SharpCoreDB Analytics Engine provides high-performance data aggregation, win
 ### Installation
 
 ```bash
-dotnet add package SharpCoreDB.Analytics --version 2.1.3
+dotnet add package SharpCoreDB.Analytics --version 2.1.4
 ```
 
 ### Basic Aggregation

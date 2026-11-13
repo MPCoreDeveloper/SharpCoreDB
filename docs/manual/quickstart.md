@@ -8,7 +8,7 @@
 ## 1.1 Install
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.3
+dotnet add package SharpCoreDB --version 2.1.4
 ```
 
 The engine targets **.NET 11** and **C# 15**. No native dependencies, no external processes —
