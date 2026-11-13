@@ -1287,6 +1287,18 @@ public partial class Database
         // allocated 6,2× per statement (plan §5.5 (ii), session 73). One implementation, two callers.
         var batch = ClassifyBatchStatements(statements);
 
+        // A mixed batch keeps the caller's statement order (SQLite semantics). The grouped executor runs
+        // inserts -> updates -> deletes, so [DELETE ..., INSERT ...] would delete the row it just inserted;
+        // only a homogeneous batch may take that path (2026-11-13).
+        if (!batch.IsHomogeneous)
+        {
+            foreach (var sql in statements)
+            {
+                ExecuteSQL(sql);
+            }
+            return;
+        }
+
         lock (_walLock)
         {
             // ✅ CRITICAL FIX: ALWAYS start outer transaction to prevent concurrent write corruption
@@ -1389,6 +1401,30 @@ public partial class Database
 
         /// <summary>Gets the statements no batch fast path claimed; the shared parser runs them.</summary>
         public List<string> NonInserts { get; } = [];
+
+        /// <summary>
+        /// Gets whether the batch holds exactly one kind of statement (all INSERTs, or all UPDATEs, or all
+        /// DELETEs, or only unclaimed statements).
+        /// <para>
+        /// The grouped executor runs its buckets in a fixed order — inserts, then updates, then deletes —
+        /// so it may only be used for a homogeneous batch. SQLite applies the statements of a batch in the
+        /// order they were given, and a mixed batch such as <c>[DELETE ..., INSERT ...]</c> would otherwise
+        /// delete the row it had just inserted (found 2026-11-13 through the projection checkpoint store,
+        /// whose save is exactly that shape).
+        /// </para>
+        /// </summary>
+        public bool IsHomogeneous
+        {
+            get
+            {
+                var kinds = 0;
+                if (InsertsByShape.Count > 0) { kinds++; }
+                if (UpdatesByTable.Count > 0) { kinds++; }
+                if (DeletesByTable.Count > 0) { kinds++; }
+                if (NonInserts.Count > 0) { kinds++; }
+                return kinds == 1;
+            }
+        }
     }
 
     /// <summary>
@@ -1971,6 +2007,17 @@ public partial class Database
         // classification time and 6,2× the allocation per statement (session 73). It runs the sync
         // dispatcher's DML half now — the one shared classifier and the one shared executor.
         var batch = ClassifyBatchStatements(statements);
+
+        // Same ordering contract as the sync dispatcher: a mixed batch is applied in the order given,
+        // because the grouped executor's fixed bucket order is only valid for one kind of statement.
+        if (!batch.IsHomogeneous)
+        {
+            foreach (var sql in statements)
+            {
+                await ExecuteSQLAsync(sql, cancellationToken).ConfigureAwait(false);
+            }
+            return;
+        }
 
         bool startedTransaction = false;
         Task commitTask = Task.CompletedTask;

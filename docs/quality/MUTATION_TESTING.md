@@ -222,7 +222,7 @@ Every module slice was executed once. This is the per-module picture the project
 | `analytics` | 44.39 % | 437 | 190 | 375 | 51 s |
 | `cqrs` | 42.35 % | 151 | 149 | 62 | 249 s |
 | `provider-sync` | 30.76 % | 211 | 82 | 393 | 35 s |
-| `projections` | 45.33 % | 93 | 87 | 30 | 48 s |
+| `projections` | 54.67 % | 113 | 72 | 25 | 97 s |
 | `efcore` | 26.13 % | 555 | 288 | 1 284 | 317 s |
 | `functional-linq2db` | **11.97 %** | 14 | 64 | 39 | 236 s |
 | `functional-dapper` | **8.70 %** | 2 | 8 | 13 | 20 s |
@@ -231,7 +231,7 @@ Every module slice was executed once. This is the per-module picture the project
 | `vectorsearch` | timeout | — | — | — | 30 min |
 | `graph-advanced` | timeout | — | — | — | 25 min |
 
-Aggregate over the 12 scored slices: **36.83 % — 2 197 killed of 5 966 mutants.** Read it per module, not as
+Aggregate over the 12 scored slices: **37.16 % — 2 217 killed of 5 966 mutants.** Read it per module, not as
 one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
 which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
 exactly the kind of fault a green suite hides.
@@ -249,11 +249,20 @@ Two conversions, both with `git diff -- src/` empty — the movement is entirely
 |---|---|---|---|---|
 | `functional` | `FunctionalDb.cs` (51 survivors) | 28 (guards, `DefaultIdColumn`) | 147 / 87 / 120 → 41.53 % | **174 / 70 / 110 → 49.15 %** |
 | `projections` | `OpenTelemetryProjectionMetrics.cs` (34 of 35 survived) | 12 (`MeterListener`) | 58 / 121 / 31 → 28.97 % | **93 / 87 / 30 → 45.33 %** |
+| `projections` | `SharpCoreDbProjectionCheckpointStore.cs` (29 survivors) | 17 (guards, binding, escaping, NULL fallback) | 93 / 87 / 30 → 45.33 % | **113 / 72 / 25 → 54.67 %** |
 
 `OpenTelemetryProjectionMetrics.cs` went from **34 survivors to zero** (37 killed, 4 ignored): instrument
 names, units, descriptions, every recorded value, all three tags and the failure branch are now pinned.
 That file is a good example of why this matters — every dashboard and alert binds to those strings, and the
 old test only asserted two counters.
+
+`SharpCoreDbProjectionCheckpointStore.cs` did more than raise a score: **writing the overwrite test found a
+product bug.** The store saves a checkpoint with a `[DELETE …, INSERT …]` batch, and `ExecuteBatchSQL`
+runs its groups inserts → updates → deletes, so the INSERT was applied first and the DELETE removed it. The
+store's existing test asserted only `GlobalSequence` on a first save, so nothing caught it. Full detail and
+the fix in `docs/CHANGELOG.md` (`[Unreleased] → Fixed`); pinned at the engine layer by
+`BatchStatementOrderTests` and at the store layer by
+`SaveCheckpointAsync_WhenCalledTwice_KeepsLatestSequence`.
 
 +27 and +35 killed mutants for 28 and 12 assertions respectively. The conversion is cheap when the survivor
 is an untested guard or an OTel wiring detail, and expensive when it needs a new integration fixture — so
