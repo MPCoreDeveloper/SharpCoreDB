@@ -11,7 +11,6 @@ using System;
 using System.Buffers;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
 using System.IO;
 using System.IO.MemoryMappedFiles;
 using System.Runtime.CompilerServices;
@@ -63,16 +62,14 @@ internal sealed record WriteOperation
 /// C# 15: Uses modern async patterns, primary constructors, field keyword.
 /// ✅ Phase 1 Optimized: Batched registry flush + pre-computed checksums.
 /// </summary>
-// SonarCloud S2083 ("I/O function should not be called with paths from untrusted data") flags every file
-// operation in this class. That is this class's contract: it opens, migrates, backs up and deletes the database
+// SonarCloud S2083 ("I/O function should not be called with paths from untrusted data") flags the file
+// operations in this class. That is this class's contract: it opens, migrates, backs up and deletes the database
 // file at the path the host supplied, exactly as SQLite does. The path is never derived from SQL text or from
 // network input — it is the argument the application passed to DatabaseOptions/DatabaseFactory, so the trust
-// boundary is the host. Suppressed here, on the class, so a genuine path-injection anywhere else in the codebase
-// is still reported.
-[SuppressMessage(
-    "Major Vulnerability",
-    "S2083:Change this code to not construct the path from directly user-controlled data",
-    Justification = "The database file path is the API contract, not untrusted input: it comes from the host that constructs DatabaseOptions, not from SQL text or the network.")]
+// boundary is the host. SonarCloud's server-side security analyzer ignores Roslyn [SuppressMessage], so the rule
+// is excluded per project settings for this file only (`sonar.issue.ignore.multicriteria`, recorded in
+// sonar-project.properties and docs/quality/SONAR_AND_COVERAGE.md); a genuine path-injection elsewhere is still
+// reported.
 public sealed class SingleFileStorageProvider : IStorageProvider
 {
     private readonly string _filePath;
