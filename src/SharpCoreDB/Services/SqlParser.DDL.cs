@@ -39,11 +39,11 @@ public partial class SqlParser
                               && parts[4].Equals("EXISTS", StringComparison.OrdinalIgnoreCase))
         {
             ifNotExists = true;
-            tableName = parts[5];
+            tableName = ReadCreateTableName(parts[5]);
         }
         else
         {
-            tableName = parts[2];
+            tableName = ReadCreateTableName(parts[2]);
         }
 
         // IF NOT EXISTS: skip creation when table already exists
@@ -144,7 +144,7 @@ public partial class SqlParser
                 continue; // an empty definition cannot declare a column
             }
 
-            var colName = partsDef[0];
+            var colName = ReadColumnName(def);
 
             // ✅ SQLite affinity: the whole declared type decides the column type, so a size argument
             // is stripped (VARCHAR(255) → VARCHAR) and multi-word types (DOUBLE PRECISION,
@@ -438,6 +438,51 @@ public partial class SqlParser
                 table.EnsureAutoHashIndexRegistered(table.Columns[primaryKeyIndex]);
             }
         }
+    }
+
+    /// <summary>
+    /// Reads the table name of a <c>CREATE TABLE</c> statement: a quoted name loses its quotes (<c>[notes]</c> →
+    /// <c>notes</c>) and a name with its column list attached (<c>notes(id INTEGER)</c>) loses the list. The
+    /// catalog is keyed by the bare name, which is what every later statement resolves — the INSERT path reads
+    /// its target through <see cref="SqlIdentifierScanner.IdentifierText"/>.
+    /// <para>
+    /// This used to take the token verbatim, so <c>CREATE TABLE [notes] (…)</c> — the shape linq2db's SQLite
+    /// dialect, EF Core and most generators emit — registered the table as <c>[notes]</c>, and the next
+    /// <c>INSERT INTO [notes] …</c> on that connection threw <em>Table notes does not exist</em>. Found while
+    /// reproducing issue #497: a LINQ to DB model over a directory-mode database (<c>Data Source=probe.db</c>,
+    /// i.e. no <c>.scdb</c> extension) created its table and then could not insert a single row.
+    /// </para>
+    /// </summary>
+    /// <param name="token">The table-name token as split out of the statement.</param>
+    /// <returns>The name the catalog is keyed by.</returns>
+    private static string ReadCreateTableName(string token)
+    {
+        var parenIndex = token.IndexOf('(');
+        var name = parenIndex >= 0 ? token[..parenIndex] : token;
+        return SqlIdentifierScanner.IdentifierText(name.AsSpan());
+    }
+
+    /// <summary>
+    /// Reads the column name from a column definition (<c>[id] INTEGER NOT NULL</c> → <c>id</c>). The name is an
+    /// identifier: it may be quoted — <c>[…]</c>, <c>"…"</c> or <c>`…`</c> — and a quoted name may contain spaces,
+    /// so it is read as one token instead of "the text up to the first space". Without this the catalog stored the
+    /// quoting: <c>CREATE TABLE notes ([id] INTEGER, [body] TEXT)</c> registered the columns as <c>[id]</c> and
+    /// <c>[body]</c>, and every statement that named them as SQL does (<c>INSERT INTO notes (id, body) …</c>)
+    /// resolved nothing — <c>table.ColumnTypes[IndexOf("id")]</c> is an index of <c>-1</c> and threw
+    /// <see cref="ArgumentOutOfRangeException"/>. Part of issue #497: quoted identifiers are what linq2db's SQLite
+    /// dialect, EF Core and most generators emit.
+    /// </summary>
+    /// <param name="definition">A column definition as split out of the statement.</param>
+    /// <returns>The column name the catalog is keyed by.</returns>
+    private static string ReadColumnName(string definition)
+    {
+        if (SqlIdentifierScanner.TryReadIdentifier(definition, 0, out int start, out int end))
+        {
+            return SqlIdentifierScanner.IdentifierText(definition.AsSpan(start, end - start));
+        }
+
+        int space = definition.IndexOf(' ', StringComparison.Ordinal);
+        return space < 0 ? definition.Trim() : definition[..space];
     }
 
     /// <summary>
@@ -881,7 +926,7 @@ public partial class SqlParser
 
         var column = new ColumnDefinition
         {
-            Name = parts[0],
+            Name = ReadColumnName(columnDefStr),
             DataType = parts[1]
         };
 

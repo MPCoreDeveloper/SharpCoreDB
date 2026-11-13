@@ -504,6 +504,10 @@ dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.0.0.3
 
 Contributions are welcome. Please open an issue for ideas, bug reports, and feature proposals, or submit a PR directly.
 
+Everyone who has improved the project is acknowledged in [`CONTRIBUTORS.md`](CONTRIBUTORS.md) — including the
+reporter of [issue #497](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/497), whose minimal reproduction
+exposed two DDL defects that the suite had missed.
+
 ---
 
 ## License
