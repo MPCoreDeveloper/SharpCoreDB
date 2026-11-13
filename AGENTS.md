@@ -132,6 +132,13 @@ in `docs/` (start at `docs/INDEX.md`); the live performance mission is
   be handed on — and then it is logged with evidence and marked `BLOCKED`, never dropped.
 - Two defects were fixed under this rule in session 62 (the five-copy DDL type map and the
   disconnect-logged-as-auth-failure); the mechanical rules live in `.clinerules/00-bug-fix-duty.md`.
+- **An issue is closed only after the reporter's own case has been re-run in this session and passes, and
+  a regression test named for it exists in the repository.** "Fixed in master", a green unit test and a
+  fix inferred from the code are not a test of their case; the closing comment names the version that was
+  actually executed and what it did. When the fix is on `master` but unreleased, the issue stays open.
+  The mechanical rules — including how to prove the regression test red, and the 2026-11-13 worked example
+  (issue #497, where re-running the reporter's second code path found two further defects *after* the
+  first close) — live in `.clinerules/30-issue-closure.md`.
 
 ## Measurement environment — closed, never re-litigate (owner directive, 2026-09-26)
 
