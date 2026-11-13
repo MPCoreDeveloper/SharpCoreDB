@@ -216,7 +216,7 @@ Every module slice was executed once. This is the per-module picture the project
 | Slice | Score | Killed | Survived | NoCoverage | Wall |
 |---|---|---|---|---|---|
 | `hybridsearch` | **73.91 %** | 17 | 5 | 1 | 23 s |
-| `search` | **64.78 %** | 323 | 187 | 12 | 256 s |
+| `search` | **68.67 %** | 346 | 173 | 4 | 262 s |
 | `cqrs` | 54.10 % | 195 | 129 | 39 | 288 s |
 | `eventsourcing` | 53.95 % | 239 | 120 | 84 | 215 s |
 | `functional` | 49.15 % | 174 | 70 | 110 | 207 s |
@@ -232,7 +232,7 @@ Every module slice was executed once. This is the per-module picture the project
 | `vectorsearch` | timeout | — | — | — | 30 min |
 | `graph-advanced` | timeout | — | — | — | 25 min |
 
-Aggregate over the 12 scored slices: **38.64 % — 2 305 killed of 5 966 mutants.** Read it per module, not as
+Aggregate over the 12 scored slices: **39.02 % — 2 328 killed of 5 966 mutants.** Read it per module, not as
 one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
 which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
 exactly the kind of fault a green suite hides.
@@ -255,6 +255,7 @@ Two conversions, both with `git diff -- src/` empty — the movement is entirely
 | `cqrs` | `OutboxDispatchService` + `OutboxDispatchBackgroundService` (38 survivors) | 15 (dispatch/cancel/failure paths, summary log, loop validation) | (same slice) | (same slice) |
 | `functional-linq2db` | `FunctionalLinq2DbContext.cs` (41 survivors) | 24 (every method's null + cancellation guard) | 14 / 64 / 39 → 11.97 % | **37 / 44 / 36 → 31.62 %** |
 | `eventsourcing` | `SharpCoreDbEventStore.cs` (48 survivors) | 18 (sequence assignment, expected-version contract, range reads, validation) | 218 / 116 / 109 → 49.21 % | **239 / 120 / 84 → 53.95 %** |
+| `search` | `EnglishWordStemmer.cs` (112 survivors) | 171 (Porter's own word pairs + fixed-point invariant + word-only contract) | 323 / 187 / 12 → 64.78 % | **346 / 173 / 4 → 68.67 %** |
 
 `OpenTelemetryProjectionMetrics.cs` went from **34 survivors to zero** (37 killed, 4 ignored): instrument
 names, units, descriptions, every recorded value, all three tags and the failure branch are now pinned.
