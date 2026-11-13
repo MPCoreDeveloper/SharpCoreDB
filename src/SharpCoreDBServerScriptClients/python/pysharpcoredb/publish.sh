@@ -20,15 +20,16 @@ if ! command -v python &> /dev/null; then
 fi
 
 # --only-binary=:all: installs wheels only, so no setup.py from the index is executed at install time
-# (SonarCloud S8541). Both build and twine publish wheels for every supported Python.
+# (SonarCloud S8541), and the exact versions keep the toolchain reproducible instead of resolving whatever the
+# index serves today (SonarCloud S8544). Both publish wheels for every supported Python.
 if ! python -c "import build" 2>/dev/null; then
     echo "Installing build tool..."
-    python -m pip install --user --only-binary=:all: build
+    python -m pip install --user --only-binary=:all: build==1.6.1
 fi
 
 if ! python -c "import twine" 2>/dev/null; then
     echo "Installing twine..."
-    python -m pip install --user --only-binary=:all: twine
+    python -m pip install --user --only-binary=:all: twine==7.0.0
 fi
 
 # Clean previous builds
