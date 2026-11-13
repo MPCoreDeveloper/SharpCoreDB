@@ -209,18 +209,61 @@ pwsh scripts/run-mutation-matrix.ps1 -AggregateOnly       # re-render the summar
 - Quote the slice and the mutant count with the score. "41.53 %" alone is not a fact about a module; "147
   killed / 87 survived / 120 no-coverage over 354 mutants in `SharpCoreDB.Functional`" is.
 
-### First matrix datapoints (2026-11-13)
+### Whole `pr` tier, first full run (2026-11-13, 15 slices)
+
+Every module slice was executed once. This is the per-module picture the project did not have before:
+
+| Slice | Score | Killed | Survived | NoCoverage | Wall |
+|---|---|---|---|---|---|
+| `hybridsearch` | **73.91 %** | 17 | 5 | 1 | 23 s |
+| `search` | **64.78 %** | 323 | 187 | 12 | 256 s |
+| `eventsourcing` | 49.21 % | 218 | 116 | 109 | 138 s |
+| `functional` | 49.15 % | 174 | 70 | 110 | 207 s |
+| `analytics` | 44.39 % | 437 | 190 | 375 | 51 s |
+| `cqrs` | 42.35 % | 151 | 149 | 62 | 249 s |
+| `provider-sync` | 30.76 % | 211 | 82 | 393 | 35 s |
+| `projections` | 28.97 % | 58 | 121 | 31 | 51 s |
+| `efcore` | 26.13 % | 555 | 288 | 1 284 | 317 s |
+| `functional-linq2db` | **11.97 %** | 14 | 64 | 39 | 236 s |
+| `functional-dapper` | **8.70 %** | 2 | 8 | 13 | 20 s |
+| `functional-efcore` | **6.45 %** | 2 | 10 | 19 | 13 s |
+| `identity` | timeout | — | — | — | 20 min |
+| `vectorsearch` | timeout | — | — | — | 30 min |
+| `graph-advanced` | timeout | — | — | — | 25 min |
+
+Aggregate over the 12 scored slices: **36.24 % — 2 162 killed of 5 966 mutants.** Read it per module, not as
+one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
+which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
+exactly the kind of fault a green suite hides.
+
+A `timeout` row is **not a zero**: the slice did not finish inside its budget, so its score is *unknown* and
+it is excluded from the aggregate. All three were given 90 minutes after this run (`identity` 444 mutants,
+`vectorsearch` 1 962, `graph-advanced` 1 288 — the first is crypto-heavy per test, the other two are large).
+The runner reports them as a warning and does not fail the tier, but it never scores them.
+
+### The survivor→test loop, measured (same day)
+
+`FunctionalDb.cs` carried 51 surviving mutants. `FunctionalDbGuardTests.cs` (28 cases, guards +
+`DefaultIdColumn` choice) moved the `functional` slice with no product source change:
+
+| | Killed | Survived | NoCoverage | Score |
+|---|---|---|---|---|
+| before | 147 | 87 | 120 | 41.53 % |
+| after | **174** | **70** | **110** | **49.15 %** |
+
++27 killed, −17 survivors, −10 uncovered holes for 28 assertions, and `git diff -- src/` empty. That is
+the conversion rate to expect when a survivor is an untested guard rather than a genuine equivalent.
+### Engine slices (nightly tier), validated
 
 | Slice | Scope | Killed | Survived | NoCoverage | Timeout | Score | Wall |
 |---|---|---|---|---|---|---|---|
-| `functional` | whole project, 11 files | 147 | 87 | 120 | 0 | **41.53 %** | 188 s |
 | `engine-timeseries-query` | 28 files, 87 filtered tests | 625 | 364 | 969 | 18 | **32.54 %** | 15 m 35 s |
 | `engine-sqlfunctions` | `SqlFunctions.cs`, 11 filtered tests | 33 | 16 | 70 | 0 | **27.73 %** | 11 m 01 s |
 
-`Option.cs` alone scores 100 % after the tests added in the first session; the module score is 41.53 %
-because the other ten files still carry 87 surviving mutants and 120 uncovered ones. The time-series slice
-names 16 files with survivors (`GorillaCodec`, `DeltaOfDeltaCodec`, `TimeRangeIndex`, `RetentionPolicy`,
-`TimeSeriesAggregator`, ...): that list, not the percentage, is the work queue.
+`Option.cs` scores 100 % after the first session's tests; `FunctionalDb.cs` is still the largest single
+survivor pool in the functional module. The time-series slice names 16 files with survivors
+(`GorillaCodec`, `DeltaOfDeltaCodec`, `TimeRangeIndex`, `RetentionPolicy`, `TimeSeriesAggregator`, ...):
+that list, not the percentage, is the work queue.
 
 ## Rules of use
 

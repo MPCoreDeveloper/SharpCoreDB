@@ -56,7 +56,7 @@
       "run-from": "tests/SharpCoreDB.Identity.Tests",
       "test-projects": ["SharpCoreDB.Identity.Tests.csproj"],
       "mutate": ["**/SharpCoreDB.Identity/**/*.cs"],
-      "timeout-minutes": 20
+      "timeout-minutes": 90
     },
     {
       "name": "vectorsearch",
@@ -65,7 +65,7 @@
       "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
       "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
       "mutate": ["**/SharpCoreDB.VectorSearch/**/*.cs"],
-      "timeout-minutes": 30
+      "timeout-minutes": 90
     },
     {
       "name": "hybridsearch",
@@ -92,7 +92,7 @@
       "run-from": "tests/SharpCoreDB.Graph.Advanced.Tests",
       "test-projects": ["SharpCoreDB.Graph.Advanced.Tests.csproj"],
       "mutate": ["**/SharpCoreDB.Graph.Advanced/**/*.cs"],
-      "timeout-minutes": 25
+      "timeout-minutes": 90
     },
     {
       "name": "analytics",

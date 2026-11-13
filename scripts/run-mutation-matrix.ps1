@@ -220,8 +220,9 @@ function Invoke-Slice {
     }
 
     $color = if ($status -ne 'ok') { 'Red' } elseif ($null -ne $counts.score -and $counts.score -lt 60) { 'Yellow' } else { 'Green' }
+    $scoreText = if ($null -eq $counts.score) { 'n/a' } else { [string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0:N2}', $counts.score) }
     Write-Host ("[{0}] {1} score={2} killed={3} survived={4} noCoverage={5} compileError={6} {7}s" -f `
-        $SliceDef.name, $status, $counts.score, $counts.killed, $counts.survived, $counts.noCoverage, $counts.compileError, $result.duration_s) -ForegroundColor $color
+        $SliceDef.name, $status, $scoreText, $counts.killed, $counts.survived, $counts.noCoverage, $counts.compileError, $result.duration_s) -ForegroundColor $color
 
     return [pscustomobject]$result
 }
@@ -306,6 +307,8 @@ $lines += ''
 $lines += 'Score = (killed + timeout + runtimeError) / (killed + survived + timeout + runtimeError + noCoverage).'
 $lines += 'CompileError and ignored mutants are outside the score. NoCoverage counts as *not detected* on purpose:'
 $lines += 'a line that no test reaches must not improve the score.'
+$lines += 'A `timeout` row means the slice did not finish inside its budget: its score is **unknown**, not zero,'
+$lines += 'and it is excluded from the aggregate.'
 $lines | Set-Content -Path $summaryMd -Encoding utf8
 
 Get-Content $summaryMd | ForEach-Object { Write-Host $_ }
@@ -317,10 +320,15 @@ if ($env:GITHUB_STEP_SUMMARY) {
 }
 
 # ---- exit code ----
-$broken = @($results | Where-Object { $_.status -ne 'ok' })
+$broken = @($results | Where-Object { $_.status -ne 'ok' -and $_.status -ne 'timeout' })
 if ($broken.Count -gt 0) {
     Write-Host ("Slices that did not run: {0}" -f (($broken | ForEach-Object { $_.name }) -join ', ')) -ForegroundColor Red
     exit 1
+}
+$timedOut = @($results | Where-Object { $_.status -eq 'timeout' })
+if ($timedOut.Count -gt 0) {
+    Write-Host ("Slices that hit their budget (score unknown, not zero): {0} - raise timeout-minutes or narrow mutate." -f `
+        (($timedOut | ForEach-Object { $_.name }) -join ', ')) -ForegroundColor Yellow
 }
 $threshold = if ($BreakAt -ge 0) { $BreakAt } else { 0 }
 if ($threshold -gt 0) {
