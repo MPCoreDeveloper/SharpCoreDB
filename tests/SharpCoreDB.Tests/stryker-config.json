@@ -1,0 +1,26 @@
+{
+  "stryker-config": {
+    "project": "SharpCoreDB.csproj",
+    "test-projects": [
+      "SharpCoreDB.Tests.csproj"
+    ],
+    "test-runner": "mtp",
+    "configuration": "Release",
+    "target-framework": "net11.0",
+    "coverage-analysis": "off",
+    "concurrency": 2,
+    "break-on-initial-test-failure": true,
+    "reporters": ["html", "json", "cleartext"],
+    "thresholds": {
+      "high": 80,
+      "low": 60,
+      "break": 0
+    },
+    "mutate": [
+      "**/SqlFunctions.cs"
+    ]
+  }
+}
+
+
+

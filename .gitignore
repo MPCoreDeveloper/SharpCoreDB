@@ -406,6 +406,8 @@ PageCacheTest/
 
 # NuGet packaging artifacts
 artifacts/
+# Stryker's default output folder when --output is not passed
+StrykerOutput/
 # ...but keep SOURCE folders named Artifacts (the ignore above matches case-insensitively on Windows)
 !src/**/Artifacts/
 !src/**/Artifacts/**

@@ -202,6 +202,8 @@ guide explaining when SharpCoreDB is fastest.
 
 - `../.github/CODING_STANDARDS.md`
 - `../.github/SIMD_STANDARDS.md`
+- `quality/SONAR_AND_COVERAGE.md` — SonarCloud gate and coverage state
+- `quality/MUTATION_TESTING.md` — Stryker.NET setup, calibrated baseline, the blocked engine-project scope
 
 ## Documentation Governance
 
