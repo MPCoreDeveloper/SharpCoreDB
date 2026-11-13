@@ -217,7 +217,7 @@ Every module slice was executed once. This is the per-module picture the project
 |---|---|---|---|---|---|
 | `hybridsearch` | **73.91 %** | 17 | 5 | 1 | 23 s |
 | `search` | **64.78 %** | 323 | 187 | 12 | 256 s |
-| `cqrs` | 49.45 % | 177 | 131 | 54 | 285 s |
+| `cqrs` | 54.10 % | 195 | 129 | 39 | 288 s |
 | `eventsourcing` | 49.21 % | 218 | 116 | 109 | 138 s |
 | `functional` | 49.15 % | 174 | 70 | 110 | 207 s |
 | `analytics` | 44.39 % | 437 | 190 | 375 | 51 s |
@@ -232,7 +232,7 @@ Every module slice was executed once. This is the per-module picture the project
 | `vectorsearch` | timeout | — | — | — | 30 min |
 | `graph-advanced` | timeout | — | — | — | 25 min |
 
-Aggregate over the 12 scored slices: **37.60 % — 2 243 killed of 5 966 mutants.** Read it per module, not as
+Aggregate over the 12 scored slices: **37.90 % — 2 261 killed of 5 966 mutants.** Read it per module, not as
 one number: `search` and `hybridsearch` are in decent shape, while the three adapter packages sit at 6–12 %,
 which means their tests execute the code without pinning its behaviour. That is the work queue, and it is
 exactly the kind of fault a green suite hides.
@@ -251,7 +251,8 @@ Two conversions, both with `git diff -- src/` empty — the movement is entirely
 | `functional` | `FunctionalDb.cs` (51 survivors) | 28 (guards, `DefaultIdColumn`) | 147 / 87 / 120 → 41.53 % | **174 / 70 / 110 → 49.15 %** |
 | `projections` | `OpenTelemetryProjectionMetrics.cs` (34 of 35 survived) | 12 (`MeterListener`) | 58 / 121 / 31 → 28.97 % | **93 / 87 / 30 → 45.33 %** |
 | `projections` | `SharpCoreDbProjectionCheckpointStore.cs` (29 survivors) | 17 (guards, binding, escaping, NULL fallback) | 93 / 87 / 30 → 45.33 % | **113 / 72 / 25 → 54.67 %** |
-| `cqrs` | `SharpCoreDbOutboxStore.cs` (77 survivors) | 20 (backoff gating + schedule, dead-letter, legacy schema, guards) | 151 / 149 / 62 → 42.35 % | **177 / 131 / 54 → 49.45 %** |
+| `cqrs` | `SharpCoreDbOutboxStore.cs` (77 survivors) | 20 (backoff gating + schedule, dead-letter, legacy schema, guards) | 151 / 149 / 62 → 42.35 % | **195 / 129 / 39 → 54.10 %** |
+| `cqrs` | `OutboxDispatchService` + `OutboxDispatchBackgroundService` (38 survivors) | 15 (dispatch/cancel/failure paths, summary log, loop validation) | (same slice) | (same slice) |
 
 `OpenTelemetryProjectionMetrics.cs` went from **34 survivors to zero** (37 killed, 4 ignored): instrument
 names, units, descriptions, every recorded value, all three tags and the failure branch are now pinned.
