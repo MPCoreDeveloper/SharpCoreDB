@@ -105,54 +105,99 @@ source was changed**; the source was mutated, measured, and restored (`git diff 
 
 ## Seeds noticed while calibrating (documented, not re-litigated)
 
-- Each **mutant costs a full rebuild**, so budget minutes, not seconds: `concurrency: 2` on this 4-core box
-  is about right, and a 33-mutant file takes ~30 s while the same file with `coverage-analysis: off` and
-  38 tests took ~2 minutes (more mutants reach the full suite).
-- `coverage-analysis: perTest` is the better default here: it marked 20 mutants `NoCoverage` instead of
-  running the suite on them, and it was *faster* (34 s vs 115 s) at the same score.
+- `coverage-analysis: perTest` is the better default here: it marks mutants `NoCoverage` instead of running
+  the suite on them, it supports mutant *mixing* (one instrumented build, one activation per mutant), and it
+  was faster at the same score (34 s vs 115 s with `off`). Under `perTest` the per-mutant cost is small —
+  the 2026-11-13 engine calibration tested 49 mutants in **2 s**. Under `coverage-analysis: off` each mutant
+  pays a full rebuild, and that is the setting that made the earlier engine attempts look hopeless.
 - Keep `break-on-initial-test-failure: true`. A malformed config then fails in seconds with a real message
   instead of stalling.
 
-## BLOCKED: the engine project (`src/SharpCoreDB/SharpCoreDB.csproj`)
+## The engine project is runnable — corrected 2026-11-13
 
-`tests/SharpCoreDB.Tests/stryker-config.json` carries the correct settings for the engine
-(`project: SharpCoreDB.csproj`, `test-projects: SharpCoreDB.Tests.csproj`, `test-runner: mtp`,
-`mutate: ["**/SqlFunctions.cs"]`), but **it does not finish on this box** — measured 2026-11-13, three
-attempts:
+An earlier revision of this file marked `src/SharpCoreDB` **BLOCKED** ("initial run never returns"). That was
+wrong, and the correction matters because it changes the whole budget model.
 
-| Attempt | Settings | Observed |
-|---|---|---|
-| 1 | `coverage-analysis: perTest`, relative `mutate` pattern that matched nothing | the whole project stayed in scope; instrumentation enumeration at ~6 s per mutant, ids past 32 000 — never reached the tests |
-| 2 | `coverage-analysis: off`, `**/SqlFunctions.cs`, `concurrency: 2` | `Number of tests found: 2257`, then `Initial test run started` and no further output for 10+ min |
-| 3 | `coverage-analysis: off`, `**/SqlFunctions.cs{176..230}`, `--test-case-filter FullyQualifiedName~SqlFunctionsTests`, `concurrency: 1` | `Number of tests found: 11`, then `Initial test run started` and no further output; the `dotnet` process had burned **500 s of CPU** and **no test host was ever created** in the output tree |
+What actually happens: Stryker spends a long time in its own analysis phase before the first mutant is tested,
+and it does that **inside its own process** — no test host is created and the CPU sits at ~1.2 cores. The
+phase completes; it just takes longer than the 10-minute timeout the earlier attempts used.
 
-The control rules out test volume and parallelism: the same suite finishes in **119 s / 2265 tests, all
-green** when run directly (`SharpCoreDB.Tests.exe`), and 11 filtered tests take under a second. The
-functional project completes the identical phases (analysis → build → 70 tests found → initial run →
-mutants) in **17 s**.
+Measured with a **clean minimal host** (`ProjectReference` to the engine only, no coverlet, no MTP coverage
+extension, no runsettings, no serial xunit config, 11 tests) to rule the test host out as the cause:
 
-Scale explains the cost: the engine is **366 files / 110 249 lines / 1.89 MB IL** against the functional
-project's 11 files / 1 410 lines / 49 KB — roughly 39×. Stryker pays a whole-assembly weave per run, and on
-this hardware that does not converge within any budget worth spending for a baseline.
+| Phase | Observed |
+|---|---|
+| analysis + build + `Number of tests found: 11` | 14 s |
+| mutation generation (52 192 mutants for the 110 249-line assembly) | **9 m 44 s** |
+| `coverage-analysis: off` — 119 mutants for `SqlFunctions.cs` | killed at 10 min (rebuild per mutant) |
+| `coverage-analysis: perTest` — 49 mutants for `SqlFunctions.cs` | **2 s** of testing, 10 m 41 s total |
 
-**Status: BLOCKED** — a tool/hardware cost, not a defect in this repository, so nothing here is "fixed" by
-editing code. What unblocks it, in order of cost:
+So the engine is mutatable on this box. The 10-minute analysis is a **fixed cost per run**, and under
+`perTest` the testing itself is nearly free (mutation switching: one instrumented build, one activation per
+mutant). Two consequences drive the matrix design:
 
-1. Run the same config on a CI/build agent with more cores and no Defender scanning of the working tree —
-   nothing needs to change in the repository.
-2. `--mutation-level Basic` (fewer mutants, not a smaller weave) — untested here, one long run will tell.
-3. Mutate an adapter-sized project that carries engine behaviour through its own tests (the functional and
-   linq2DB suites do this today), and keep the engine score for release-time agents.
+1. **Amortise the fixed cost** — slice per folder, not per file. A per-file slice pays 10 minutes for a
+   handful of mutants.
+2. **Never use `coverage-analysis: off` on the engine** — that is what turns 119 mutants into an hour of
+   rebuilds and made the first attempts look like a hang.
 
-Until then, **do not quote an engine-project mutation score**: there isn't one, and the `0/0` table a
-stalled run prints looks like a clean pass while being exactly the opposite.
+### First real engine numbers (`SqlFunctions.cs`, 11 tests, `perTest`)
+
+| Mutants | Killed | Survived | NoCoverage | CompileError | Score |
+|---|---|---|---|---|---|
+| 119 in scope | **33** | **16** | **70** | 41 (assembly-wide) | **27.73 %** |
+
+`SqlFunctions` is a good example of what mutation testing is for: a file with passing tests, 70 mutants no
+test reaches at all, and 16 wrong behaviours that a green suite accepts. That is the work queue.
+
+## The slice matrix
+
+Config lives in one place: `scripts/mutation-matrix.json`. A slice is *(project under test, test host, mutate
+scope)*; `scripts/run-mutation-matrix.ps1` writes a temporary Stryker config per slice, runs it, and
+aggregates every JSON report into `artifacts/mutation/summary.{json,md}`.
+
+```powershell
+pwsh scripts/run-mutation-matrix.ps1 -List -Tier all      # what exists
+pwsh scripts/run-mutation-matrix.ps1 -Tier pr             # fast modules (~15 slices)
+pwsh scripts/run-mutation-matrix.ps1 -Tier nightly        # engine slices (8)
+pwsh scripts/run-mutation-matrix.ps1 -Slice functional -BreakAt 90
+pwsh scripts/run-mutation-matrix.ps1 -AggregateOnly       # re-render the summary
+```
+
+- `pr` tier: one slice per adapter/module project, each with its own test host.
+- `nightly` tier: the engine in eight folder slices (`engine-services`, `engine-storage`,
+  `engine-datastructures`, `engine-database`, `engine-core`, `engine-optimizations`,
+  `engine-timeseries-query`, `engine-misc`), hosted by `SharpCoreDB.Tests` with `perTest`.
+- The script exits non-zero only when a slice *could not run* (error, timeout, missing report). A low score
+  is reported, not enforced, until `-BreakAt` is passed.
+- `.github/workflows/mutation.yml` runs the `pr` tier on a PR labelled `mutation`, the `nightly` tier on a
+  schedule, or any tier manually. It uploads per-slice reports and publishes the summary to the job summary.
+
+### Score reporting rules
+
+- Score = `(killed + timeout + runtimeError) / (killed + survived + timeout + runtimeError + noCoverage)`.
+  `CompileError` and `Ignored` are outside the score, and `NoCoverage` counts as **not detected**: a line no
+  test reaches must not raise the score.
+- Quote the slice and the mutant count with the score. "41.53 %" alone is not a fact about a module; "147
+  killed / 87 survived / 120 no-coverage over 354 mutants in `SharpCoreDB.Functional`" is.
+
+### First matrix datapoint (2026-11-13)
+
+| Slice | Scope | Killed | Survived | NoCoverage | Score | Wall |
+|---|---|---|---|---|---|---|
+| `functional` | whole project, 11 files | 147 | 87 | 120 | **41.53 %** | 188 s |
+
+`Option.cs` alone scores 100 % after the tests added in the first session; the module score is 41.53 %
+because the other ten files still carry 87 surviving mutants and 120 uncovered ones.
 
 ## Rules of use
 
-- Treat the mutation score as **informational**. It is not wired into CI, and no workflow was changed.
-- Scope `mutate` to the files under work; a whole-project run pays a rebuild per mutant and buys a number
-  nobody reads.
-- Keep the config next to the test project, and run from that directory.
+- Treat the mutation score as **informational** first. The workflow never blocks `ci.yml`, and `--break-at`
+  stays 0 until a slice's scope is stable enough that a threshold means something.
+- Slice by folder/file under work and keep the scope small enough to read; the report's value is the
+  survivor list, not the percentage.
+- Keep the per-test-project config (e.g. `tests/SharpCoreDB.Functional.Tests/stryker-config.json`) for
+  interactive runs, and the manifest for anything automated. Both use path-agnostic `mutate` globs.
 - When a survivor turns up: reproduce it by hand **before** deciding it is equivalent — the 2026-11-13
   `GetHashCode` survivor and the async `Match` survivor were both real, and one of them was only visible
   with the right `T`.

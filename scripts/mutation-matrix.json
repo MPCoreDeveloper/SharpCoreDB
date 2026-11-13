@@ -1,0 +1,251 @@
+{
+  "$schema-version": 1,
+  "description": "Mutation-testing slice matrix. One slice = one project under test + its test host + a mutate scope. The runner (scripts/run-mutation-matrix.ps1) writes a temporary Stryker config per slice and aggregates the JSON reports. Paths are repo-relative. `project`, `test-projects` and `mutate` follow Stryker's own rules: project/test-projects are file names resolved from `run-from`, mutate patterns are path-agnostic globs matched against absolute paths.",
+  "defaults": {
+    "test-runner": "mtp",
+    "configuration": "Release",
+    "target-framework": "net11.0",
+    "mutation-level": "Standard",
+    "coverage-analysis": "perTest",
+    "concurrency": 2,
+    "break-on-initial-test-failure": true,
+    "reporters": ["json", "cleartext", "html"],
+    "thresholds": { "high": 80, "low": 60, "break": 0 }
+  },
+  "slices": [
+    {
+      "name": "functional",
+      "tier": "pr",
+      "project": "SharpCoreDB.Functional.csproj",
+      "run-from": "tests/SharpCoreDB.Functional.Tests",
+      "test-projects": ["SharpCoreDB.Functional.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Functional/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "functional-linq2db",
+      "tier": "pr",
+      "project": "SharpCoreDB.Functional.Linq2DB.csproj",
+      "run-from": "tests/SharpCoreDB.Functional.Linq2DB.Tests",
+      "test-projects": ["SharpCoreDB.Functional.Linq2DB.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Functional.Linq2DB/**/*.cs"],
+      "timeout-minutes": 25
+    },
+    {
+      "name": "functional-dapper",
+      "tier": "pr",
+      "project": "SharpCoreDB.Functional.Dapper.csproj",
+      "run-from": "tests/SharpCoreDB.Functional.Dapper.Tests",
+      "test-projects": ["SharpCoreDB.Functional.Dapper.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Functional.Dapper/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "functional-efcore",
+      "tier": "pr",
+      "project": "SharpCoreDB.Functional.EntityFrameworkCore.csproj",
+      "run-from": "tests/SharpCoreDB.Functional.EntityFrameworkCore.Tests",
+      "test-projects": ["SharpCoreDB.Functional.EntityFrameworkCore.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Functional.EntityFrameworkCore/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "identity",
+      "tier": "pr",
+      "project": "SharpCoreDB.Identity.csproj",
+      "run-from": "tests/SharpCoreDB.Identity.Tests",
+      "test-projects": ["SharpCoreDB.Identity.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Identity/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "vectorsearch",
+      "tier": "pr",
+      "project": "SharpCoreDB.VectorSearch.csproj",
+      "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
+      "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.VectorSearch/**/*.cs"],
+      "timeout-minutes": 30
+    },
+    {
+      "name": "hybridsearch",
+      "tier": "pr",
+      "project": "SharpCoreDB.HybridSearch.csproj",
+      "run-from": "tests/SharpCoreDB.HybridSearch.Tests",
+      "test-projects": ["SharpCoreDB.HybridSearch.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.HybridSearch/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "search",
+      "tier": "pr",
+      "project": "SharpCoreDB.Search.csproj",
+      "run-from": "tests/SharpCoreDB.Search.Tests",
+      "test-projects": ["SharpCoreDB.Search.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Search/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "graph-advanced",
+      "tier": "pr",
+      "project": "SharpCoreDB.Graph.Advanced.csproj",
+      "run-from": "tests/SharpCoreDB.Graph.Advanced.Tests",
+      "test-projects": ["SharpCoreDB.Graph.Advanced.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Graph.Advanced/**/*.cs"],
+      "timeout-minutes": 25
+    },
+    {
+      "name": "analytics",
+      "tier": "pr",
+      "project": "SharpCoreDB.Analytics.csproj",
+      "run-from": "tests/SharpCoreDB.Analytics.Tests",
+      "test-projects": ["SharpCoreDB.Analytics.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Analytics/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "cqrs",
+      "tier": "pr",
+      "project": "SharpCoreDB.CQRS.csproj",
+      "run-from": "tests/SharpCoreDB.CQRS.Tests",
+      "test-projects": ["SharpCoreDB.CQRS.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.CQRS/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "eventsourcing",
+      "tier": "pr",
+      "project": "SharpCoreDB.EventSourcing.csproj",
+      "run-from": "tests/SharpCoreDB.EventSourcing.Tests",
+      "test-projects": ["SharpCoreDB.EventSourcing.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.EventSourcing/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "projections",
+      "tier": "pr",
+      "project": "SharpCoreDB.Projections.csproj",
+      "run-from": "tests/SharpCoreDB.Projections.Tests",
+      "test-projects": ["SharpCoreDB.Projections.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Projections/**/*.cs"],
+      "timeout-minutes": 20
+    },
+    {
+      "name": "provider-sync",
+      "tier": "pr",
+      "project": "SharpCoreDB.Provider.Sync.csproj",
+      "run-from": "tests/SharpCoreDB.Provider.Sync.Tests",
+      "test-projects": ["SharpCoreDB.Provider.Sync.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.Provider.Sync/**/*.cs"],
+      "timeout-minutes": 25
+    },
+    {
+      "name": "efcore",
+      "tier": "pr",
+      "project": "SharpCoreDB.EntityFrameworkCore.csproj",
+      "run-from": "tests/SharpCoreDB.EntityFrameworkCore.Tests",
+      "test-projects": ["SharpCoreDB.EntityFrameworkCore.Tests.csproj"],
+      "mutate": ["**/SharpCoreDB.EntityFrameworkCore/**/*.cs"],
+      "timeout-minutes": 25
+    },
+    {
+      "name": "engine-services",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": ["**/src/SharpCoreDB/Services/**/*.cs"],
+      "timeout-minutes": 120
+    },
+    {
+      "name": "engine-storage",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": ["**/src/SharpCoreDB/Storage/**/*.cs"],
+      "timeout-minutes": 120
+    },
+    {
+      "name": "engine-datastructures",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": ["**/src/SharpCoreDB/DataStructures/**/*.cs"],
+      "timeout-minutes": 120
+    },
+    {
+      "name": "engine-database",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB/Database/**/*.cs",
+        "**/src/SharpCoreDB/Execution/**/*.cs"
+      ],
+      "timeout-minutes": 90
+    },
+    {
+      "name": "engine-core",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB/Core/**/*.cs",
+        "**/src/SharpCoreDB/Interfaces/**/*.cs",
+        "**/src/SharpCoreDB/Memory/**/*.cs",
+        "**/src/SharpCoreDB/MVCC/**/*.cs",
+        "**/src/SharpCoreDB/Platform/**/*.cs"
+      ],
+      "timeout-minutes": 90
+    },
+    {
+      "name": "engine-optimizations",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB/Optimization/**/*.cs",
+        "**/src/SharpCoreDB/Optimizations/**/*.cs",
+        "**/src/SharpCoreDB/Pooling/**/*.cs",
+        "**/src/SharpCoreDB/Indexing/**/*.cs"
+      ],
+      "timeout-minutes": 90
+    },
+    {
+      "name": "engine-timeseries-query",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB/TimeSeries/**/*.cs",
+        "**/src/SharpCoreDB/Query/**/*.cs",
+        "**/src/SharpCoreDB/Linq/**/*.cs",
+        "**/src/SharpCoreDB/Planning/**/*.cs"
+      ],
+      "timeout-minutes": 90
+    },
+    {
+      "name": "engine-misc",
+      "tier": "nightly",
+      "project": "SharpCoreDB.csproj",
+      "run-from": "tests/SharpCoreDB.Tests",
+      "test-projects": ["SharpCoreDB.Tests.csproj"],
+      "mutate": [
+        "**/src/SharpCoreDB/Compression/**/*.cs",
+        "**/src/SharpCoreDB/Encoding/**/*.cs",
+        "**/src/SharpCoreDB/Text/**/*.cs",
+        "**/src/SharpCoreDB/Constants/**/*.cs",
+        "**/src/SharpCoreDB/Diagnostics/**/*.cs",
+        "**/src/SharpCoreDB/Migration/**/*.cs",
+        "**/src/SharpCoreDB/Net11/**/*.cs"
+      ],
+      "timeout-minutes": 90
+    }
+  ]
+}

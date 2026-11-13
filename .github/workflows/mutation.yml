@@ -1,0 +1,154 @@
+# Mutation testing (Stryker.NET) across the slice matrix in scripts/mutation-matrix.json.
+#
+# Deliberately additive: this workflow never replaces `ci.yml` and never weakens a green suite.
+# The score is INFORMATIONAL by default -- a slice fails the job only when it could not run at all
+# (Stryker error, missing report, timeout). Pass `break_at` to ratchet a threshold once a module's
+# slice is stable.
+#
+# When it runs:
+#   - nightly schedule  -> the `nightly` tier (the engine slices, which need a long budget)
+#   - workflow_dispatch -> tier/slice of your choice
+#   - PR labelled `mutation` -> the `pr` tier (fast modules only)
+name: Mutation Testing
+
+on:
+  schedule:
+    - cron: '0 3 * * *'
+  workflow_dispatch:
+    inputs:
+      tier:
+        description: 'Slices to run'
+        type: choice
+        options: [pr, nightly, all]
+        default: pr
+      slice:
+        description: 'Optional comma-separated slice names (overrides tier)'
+        required: false
+        default: ''
+      break_at:
+        description: 'Fail when a slice scores below this (0 = never)'
+        required: false
+        default: '0'
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+
+env:
+  DOTNET_VERSION: '11.0.x'
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+  DOTNET_NOLOGO: true
+
+jobs:
+  prepare:
+    # A PR run needs the `mutation` label; other events run unconditionally.
+    if: github.event_name != 'pull_request' || github.event.label.name == 'mutation'
+    name: Select slices
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.select.outputs.matrix }}
+      tier: ${{ steps.select.outputs.tier }}
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Build the slice matrix
+      id: select
+      shell: pwsh
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        INPUT_TIER: ${{ github.event.inputs.tier }}
+        INPUT_SLICE: ${{ github.event.inputs.slice }}
+      run: |
+        $tier = switch ($env:EVENT_NAME) {
+          'schedule'          { 'nightly' }
+          'workflow_dispatch' { if ($env:INPUT_TIER) { $env:INPUT_TIER } else { 'pr' } }
+          default             { 'pr' }
+        }
+        $names = @()
+        if ($env:INPUT_SLICE) { $names = @($env:INPUT_SLICE -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ }) }
+
+        $manifest = Get-Content 'scripts/mutation-matrix.json' -Raw | ConvertFrom-Json
+        $slices = @($manifest.slices)
+        if ($names.Count -gt 0) {
+          # a PR label never runs nightly slices by accident
+          $selected = @($slices | Where-Object { $names -contains $_.name })
+        } elseif ($tier -eq 'all') {
+          $selected = @($slices)
+        } else {
+          $selected = @($slices | Where-Object { $_.tier -eq $tier })
+        }
+        if ($selected.Count -eq 0) { throw "No slice matched tier '$tier'." }
+
+        $matrix = @($selected | ForEach-Object {
+          [ordered]@{ name = $_.name; 'timeout-minutes' = [int]$_.'timeout-minutes'; 'run-from' = $_.'run-from' }
+        })
+        $json = $matrix | ConvertTo-Json -Depth 5 -Compress
+        if ($selected.Count -eq 1) { $json = "[$json]" }
+        Write-Host "Slices: $(($selected | ForEach-Object { $_.name }) -join ', ')"
+        "matrix=$json" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+        "tier=$tier"   | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+  mutate:
+    name: Mutation (${{ matrix.name }})
+    needs: prepare
+    runs-on: windows-latest
+    # Per-slice budget comes from the manifest; this is the hard ceiling for the job.
+    timeout-minutes: ${{ matrix.timeout-minutes }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.prepare.outputs.matrix) }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET 11 (GA)
+      uses: actions/setup-dotnet@v6
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Restore tools (Stryker is a local tool)
+      run: dotnet tool restore
+
+    - name: Run slice
+      shell: pwsh
+      run: pwsh scripts/run-mutation-matrix.ps1 -Slice '${{ matrix.name }}' -BreakAt ${{ github.event.inputs.break_at || 0 }}
+
+    - name: Upload reports
+      if: always()
+      uses: actions/upload-artifact@v7
+      with:
+        name: mutation-${{ matrix.name }}
+        path: artifacts/mutation/${{ matrix.name }}
+        if-no-files-found: warn
+
+  report:
+    name: Aggregate
+    needs: mutate
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v7
+
+    - name: Download slice reports
+      if: needs.mutate.result != 'skipped'
+      uses: actions/download-artifact@v8
+      with:
+        pattern: mutation-*
+        merge-multiple: true
+        path: artifacts/mutation
+
+    - name: Aggregate and publish summary
+      shell: pwsh
+      env:
+        TIER: ${{ needs.prepare.outputs.tier }}
+      run: |
+        $tier = if ($env:TIER) { $env:TIER } else { 'pr' }
+        pwsh scripts/run-mutation-matrix.ps1 -AggregateOnly -Tier $tier
