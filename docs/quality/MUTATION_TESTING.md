@@ -285,6 +285,10 @@ Three levers, in the order they were needed:
    test) did not finish in 90 minutes, so it is now three folder slices (`vectorsearch-index`,
    `-core`, `-artifacts`) of roughly a third each. This is the same reasoning that produced the engine tier:
    a slice is a unit of *time*, not a unit of source layout.
+   <br/>That was not enough either: `-artifacts` (499 mutants) still exceeded 60 minutes, which measures the
+   module at **~5–6 s per mutant** on this box — 1 624 mutants is a ~2,5-hour job at concurrency 2. All three
+   splits are therefore declared with that arithmetic rather than re-run until one happens to fit; measuring
+   `vectorsearch` needs a 2–3-hour nightly, ≤300-mutant slices, or a machine with more cores.
 
 
 Eight conversions, every one with `git diff -- src/` empty — the movement is entirely new assertions:

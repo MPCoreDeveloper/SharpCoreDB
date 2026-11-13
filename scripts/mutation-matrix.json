@@ -73,6 +73,8 @@
     {
       "name": "vectorsearch-core",
       "tier": "pr",
+      "enabled": false,
+      "reason": "not run yet; the module measures ~5-6 s per mutant here, so even a third of it exceeded a 60-minute slice",
       "project": "SharpCoreDB.VectorSearch.csproj",
       "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
       "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
@@ -90,6 +92,8 @@
     {
       "name": "vectorsearch-artifacts",
       "tier": "pr",
+      "enabled": false,
+      "reason": "499 mutants took more than 60 minutes (measured ~5-6 s per mutant: vector index builds); raise the budget to 2-3 h or split to <=300 mutants per slice",
       "project": "SharpCoreDB.VectorSearch.csproj",
       "run-from": "tests/SharpCoreDB.VectorSearch.Tests",
       "test-projects": ["SharpCoreDB.VectorSearch.Tests.csproj"],
