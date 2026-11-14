@@ -44,6 +44,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
+# `pwsh -File script.ps1 -Slice a,b,c` binds the whole list as ONE string, so the documented comma form
+# would arrive as a single unknown name. Split it here so the shell form and the in-PowerShell array form
+# behave the same.
+$Slice = @($Slice | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $manifestPath = Join-Path $PSScriptRoot 'mutation-matrix.json'
 $artifactRoot = Join-Path $repoRoot 'artifacts/mutation'
