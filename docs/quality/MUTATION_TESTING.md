@@ -357,6 +357,41 @@ survivor pool in the functional module. The time-series slice names 16 files wit
 (`GorillaCodec`, `DeltaOfDeltaCodec`, `TimeRangeIndex`, `RetentionPolicy`, `TimeSeriesAggregator`, ...):
 that list, not the percentage, is the work queue.
 
+## Release gate: delta scope plus per-slice thresholds
+
+Two things make the score *actionable* before a release, and both are wired:
+
+**1. Delta scope — `--since <committish>`.** Only the files that changed since a tag are mutated, so the gate
+measures the release delta instead of the whole module:
+
+```powershell
+pwsh scripts/run-mutation-matrix.ps1 -Tier pr -Since v2.1.4
+```
+
+Measured: on `functional-efcore`, which has not changed since `v2.1.4`, Stryker reports
+`41 mutants got status Ignored. Reason: Removed by since filter` and the run finishes in 20.7 s with no score
+(an empty delta is a pass, not a zero).
+
+**2. Per-slice break thresholds.** A slice can carry `thresholds.break` in the manifest, and the **runner**
+enforces it — Stryker's own `break` is pinned to `0` in the generated config so a gate miss is reported as
+`BELOW BREAK` instead of being misread as a crashed run (a non-zero Stryker exit means the run itself broke).
+`-BreakAt <n>` overrides every slice for one invocation.
+
+| Slice | Measured | `break` |
+|---|---|---|
+| `hybridsearch` | 73.91 % | 70 |
+| `search` | 68.67 % | 65 |
+| `projections` | 54.67 % | 50 |
+| `cqrs` | 54.10 % | 50 |
+| `eventsourcing` | 53.95 % | 50 |
+
+Everything else is deliberately **ungated**: a threshold on a module at 6–31 % would be noise, and the point of
+a gate is to catch a regression, not to restate a known gap. Raise a slice's `break` only after its scope has
+been stable for a few runs.
+
+Both directions were checked: the default run exits `0` with the break column populated, and
+`-BreakAt 95` exits `1` listing every slice under it.
+
 ## Rules of use
 
 - Treat the mutation score as **informational** first. The workflow never blocks `ci.yml`, and `--break-at`

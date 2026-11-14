@@ -36,6 +36,10 @@ param(
 
     [int] $BreakAt = -1,
 
+    # Release-delta gating (Stryker's --since): mutate only the files that changed since this
+    # committish, so a release gate measures the delta instead of the whole module. Empty = off.
+    [string] $Since = '',
+
     [switch] $AggregateOnly,
 
     [switch] $List
@@ -157,6 +161,14 @@ function Invoke-Slice {
     $runFrom = Join-Path $repoRoot $SliceDef.'run-from'
     if (-not (Test-Path $runFrom)) { throw "run-from path missing for '$($SliceDef.name)': $runFrom" }
 
+    # A slice may carry its own thresholds. `break` is enforced HERE, not by Stryker: Stryker's own break is
+    # pinned to 0 in the generated config so that a score below the gate is reported as "below break" rather
+    # than misread as a failed run (a non-zero Stryker exit is what "the run itself broke" means).
+    $sliceThresholds = Get-SliceSetting -SliceDef $SliceDef -Name 'thresholds' -Fallback ([ordered]@{ high = 80; low = 60; break = 0 })
+    $sliceBreak = if ($BreakAt -ge 0) { [double]$BreakAt }
+                  elseif ($null -ne $sliceThresholds.break) { [double]$sliceThresholds.break }
+                  else { 0 }
+
     $cfg = [ordered]@{
         'project'                       = $SliceDef.project
         'test-projects'                 = @($SliceDef.'test-projects')
@@ -168,7 +180,7 @@ function Invoke-Slice {
         'concurrency'                   = Get-SliceSetting -SliceDef $SliceDef -Name 'concurrency' -Fallback 2
         'break-on-initial-test-failure' = Get-SliceSetting -SliceDef $SliceDef -Name 'break-on-initial-test-failure' -Fallback $true
         'reporters'                     = @(Get-SliceSetting -SliceDef $SliceDef -Name 'reporters' -Fallback @('json', 'cleartext'))
-        'thresholds'                    = Get-SliceSetting -SliceDef $SliceDef -Name 'thresholds' -Fallback ([ordered]@{ high = 80; low = 60; break = 0 })
+        'thresholds'                    = [ordered]@{ high = [int]$sliceThresholds.high; low = [int]$sliceThresholds.low; break = 0 }
         'mutate'                        = @($SliceDef.mutate)
     }
     if ($SliceDef.PSObject.Properties.Name -contains 'test-case-filter') {
@@ -194,8 +206,15 @@ function Invoke-Slice {
 
     Write-Host ("[{0}] running (timeout {1} min) ..." -f $SliceDef.name, $SliceDef.'timeout-minutes') -ForegroundColor Cyan
     $sw = [Diagnostics.Stopwatch]::StartNew()
+    $strykerArgs = @('stryker', '--config-file', $configRel, '--output', $outputRel, '--verbosity', 'info', '--skip-version-check')
+    if ($Since) {
+        # Only the changed files are mutated: the release gate measures the delta, not the module.
+        $strykerArgs += "--since:$Since"
+        Write-Host ("[{0}] diff scope: since {1}" -f $SliceDef.name, $Since) -ForegroundColor DarkCyan
+    }
+
     $proc = Start-Process -FilePath 'dotnet' `
-        -ArgumentList 'stryker', '--config-file', $configRel, '--output', $outputRel, '--verbosity', 'info', '--skip-version-check' `
+        -ArgumentList $strykerArgs `
         -WorkingDirectory $runFrom -NoNewWindow -PassThru `
         -RedirectStandardOutput $logPath -RedirectStandardError $errPath
 
@@ -214,12 +233,17 @@ function Invoke-Slice {
     elseif ($proc.HasExited -and $proc.ExitCode -ne 0) { $status = 'error' }
     elseif (-not (Test-Path $reportPath)) { $status = 'no-report' }
 
+    # The gate is a statement about the score, not about the run: keep it separate from $status.
+    $belowBreak = $status -eq 'ok' -and $null -ne $counts.score -and $sliceBreak -gt 0 -and ([double]$counts.score -lt $sliceBreak)
+
     $result = [ordered]@{
         name         = $SliceDef.name
         tier         = $SliceDef.tier
         project      = $SliceDef.project
         status       = $status
         score        = $counts.score
+        break        = $sliceBreak
+        belowBreak   = $belowBreak
         killed       = $counts.killed
         survived     = $counts.survived
         timeout      = $counts.timeout
@@ -252,7 +276,8 @@ if (-not $AggregateOnly) {
             Write-Host ("[{0}] FAILED: {1}" -f $def.name, $_.Exception.Message) -ForegroundColor Red
             $results += [pscustomobject][ordered]@{
                 name = $def.name; tier = $def.tier; project = $def.project; status = 'error'
-                score = $null; killed = 0; survived = 0; timeout = 0; runtimeError = 0; noCoverage = 0
+                score = $null; break = 0; belowBreak = $false
+                killed = 0; survived = 0; timeout = 0; runtimeError = 0; noCoverage = 0
                 compileError = 0; ignored = 0; candidates = 0; duration_s = 0; report = $null; log = $null
             }
         }
@@ -263,9 +288,15 @@ else {
         $reportPath = Join-Path (Join-Path $artifactRoot $def.name) 'reports/mutation-report.json'
         if (-not (Test-Path $reportPath)) { continue }
         $counts = Get-SliceCounts -ReportPath $reportPath -MutatePatterns @($def.mutate)
+        $defThresholds = Get-SliceSetting -SliceDef $def -Name 'thresholds' -Fallback ([ordered]@{ high = 80; low = 60; break = 0 })
+        $defBreak = if ($BreakAt -ge 0) { [double]$BreakAt }
+                    elseif ($null -ne $defThresholds.break) { [double]$defThresholds.break }
+                    else { 0 }
         $results += [pscustomobject][ordered]@{
             name = $def.name; tier = $def.tier; project = $def.project; status = 'ok'
-            score = $counts.score; killed = $counts.killed; survived = $counts.survived
+            score = $counts.score; break = $defBreak
+            belowBreak = ($null -ne $counts.score -and $defBreak -gt 0 -and ([double]$counts.score -lt $defBreak))
+            killed = $counts.killed; survived = $counts.survived
             timeout = $counts.timeout; runtimeError = $counts.runtimeError
             noCoverage = $counts.noCoverage; compileError = $counts.compileError
             ignored = $counts.ignored; candidates = $counts.candidates; duration_s = 0
@@ -287,12 +318,14 @@ $lines += '# Mutation-testing slice matrix'
 $lines += ''
 $lines += ('Run: {0} UTC' -f (Get-Date).ToUniversalTime().ToString('yyyy-MM-dd HH:mm'))
 $lines += ''
-$lines += '| Slice | Tier | Status | Score | Killed | Survived | NoCoverage | CompileError | Wall |'
-$lines += '|---|---|---|---|---|---|---|---|---|'
+$lines += '| Slice | Tier | Status | Score | Break | Killed | Survived | NoCoverage | CompileError | Wall |'
+$lines += '|---|---|---|---|---|---|---|---|---|---|'
 $inv = [Globalization.CultureInfo]::InvariantCulture
 foreach ($r in $results) {
     $score = if ($null -eq $r.score) { 'n/a' } else { [string]::Format($inv, '{0:N2} %', $r.score) }
-    $lines += ('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8}s |' -f $r.name, $r.tier, $r.status, $score, $r.killed, $r.survived, $r.noCoverage, $r.compileError, $r.duration_s)
+    $breakText = if ($null -eq $r.break -or $r.break -le 0) { '-' } else { [string]::Format($inv, '{0:N2} %', $r.break) }
+    $statusText = if ($r.belowBreak) { "$($r.status) (BELOW BREAK)" } else { $r.status }
+    $lines += ('| {0} | {1} | {2} | {3} | {4} | {5} | {6} | {7} | {8} | {9}s |' -f $r.name, $r.tier, $statusText, $score, $breakText, $r.killed, $r.survived, $r.noCoverage, $r.compileError, $r.duration_s)
 }
 
 $scored = @($results | Where-Object { $null -ne $_.score })
@@ -344,13 +377,11 @@ if ($timedOut.Count -gt 0) {
     Write-Host ("Slices that hit their budget (score unknown, not zero): {0} - raise timeout-minutes or narrow mutate." -f `
         (($timedOut | ForEach-Object { $_.name }) -join ', ')) -ForegroundColor Yellow
 }
-$threshold = if ($BreakAt -ge 0) { $BreakAt } else { 0 }
-if ($threshold -gt 0) {
-    $low = @($results | Where-Object { $null -ne $_.score -and $_.score -lt $threshold })
-    if ($low.Count -gt 0) {
-        Write-Host ("Below break-at {0}: {1}" -f $threshold, (($low | ForEach-Object { "$($_.name)=$($_.score)%" }) -join ', ')) -ForegroundColor Red
-        exit 1
-    }
+$below = @($results | Where-Object { $_.belowBreak })
+if ($below.Count -gt 0) {
+    Write-Host ("Below the slice's break threshold: {0}" -f `
+        (($below | ForEach-Object { "$($_.name)=$($_.score)% (break $($_.break))" }) -join ', ')) -ForegroundColor Red
+    exit 1
 }
 exit 0
 

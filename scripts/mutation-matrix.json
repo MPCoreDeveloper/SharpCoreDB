@@ -108,6 +108,7 @@
     },
     {
       "name": "hybridsearch",
+      "thresholds": { "high": 80, "low": 60, "break": 70 },
       "tier": "pr",
       "project": "SharpCoreDB.HybridSearch.csproj",
       "run-from": "tests/SharpCoreDB.HybridSearch.Tests",
@@ -117,6 +118,7 @@
     },
     {
       "name": "search",
+      "thresholds": { "high": 80, "low": 60, "break": 65 },
       "tier": "pr",
       "project": "SharpCoreDB.Search.csproj",
       "run-from": "tests/SharpCoreDB.Search.Tests",
@@ -130,6 +132,7 @@
       "project": "SharpCoreDB.Graph.Advanced.csproj",
       "run-from": "tests/SharpCoreDB.Graph.Advanced.Tests",
       "test-projects": ["SharpCoreDB.Graph.Advanced.Tests.csproj"],
+      "test-case-filter": "FullyQualifiedName!~PerformanceBenchmarks",
       "mutate": ["**/SharpCoreDB.Graph.Advanced/**/*.cs"],
       "additional-timeout": 15000,
       "timeout-minutes": 120
@@ -145,6 +148,7 @@
     },
     {
       "name": "cqrs",
+      "thresholds": { "high": 80, "low": 60, "break": 50 },
       "tier": "pr",
       "project": "SharpCoreDB.CQRS.csproj",
       "run-from": "tests/SharpCoreDB.CQRS.Tests",
@@ -154,6 +158,7 @@
     },
     {
       "name": "eventsourcing",
+      "thresholds": { "high": 80, "low": 60, "break": 50 },
       "tier": "pr",
       "project": "SharpCoreDB.EventSourcing.csproj",
       "run-from": "tests/SharpCoreDB.EventSourcing.Tests",
@@ -163,6 +168,7 @@
     },
     {
       "name": "projections",
+      "thresholds": { "high": 80, "low": 60, "break": 50 },
       "tier": "pr",
       "project": "SharpCoreDB.Projections.csproj",
       "run-from": "tests/SharpCoreDB.Projections.Tests",
