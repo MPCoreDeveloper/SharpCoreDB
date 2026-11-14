@@ -53,6 +53,29 @@ dotnet stryker --config-file tests\SharpCoreDB.Functional.Tests\stryker-config.j
 Reports land in `<output>/reports/mutation-report.{html,json}`; `artifacts/` is gitignored, so nothing large
 is ever committed. Exit code is driven by the `break` threshold (0 here), so a run cannot fail a pipeline.
 
+### Unattended batches: launch once, collect later
+
+A multi-hour batch must **not** be supervised by polling — that is how a session gets bloated and loses state
+(this file exists partly because that happened). `scripts/run-mutation-queue.ps1` wraps the matrix so the
+batch is resumable instead:
+
+```powershell
+# inspect without running anything
+pwsh scripts/run-mutation-queue.ps1 -Status
+
+# launch (returns immediately; results are collected from the marker, not by watching)
+pwsh scripts/run-mutation-queue.ps1 -Slice graph-advanced,engine-datastructures,engine-storage
+
+# later, from any shell
+pwsh scripts/run-mutation-queue.ps1 -Status      # per-slice state from disk
+Test-Path artifacts/mutation/queue.done          # did the batch finish?
+```
+
+A slice that already has a report is **skipped**, so re-running resumes rather than restarts (`-Force`
+overrides). Everything is appended to `artifacts/mutation/queue.log` and summarised in `queue.json`. The same
+script is the entry point a nightly CI job should call for the heavy slices, which need a budget this box
+cannot give them.
+
 
 ## The calibrated baseline (2026-11-13, functional project)
 
