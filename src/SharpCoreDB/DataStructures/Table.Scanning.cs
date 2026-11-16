@@ -263,6 +263,12 @@ public partial class Table
         return true;
     }
 
+    /// <summary>
+    /// Evaluates <paramref name="where"/> against a row with this table's WHERE semantics — the evaluator
+    /// <c>ExecuteQuery</c> uses. <c>Database.ExecuteQueryFast</c> calls it for its StructRow scan.
+    /// </summary>
+    internal bool MatchesWhere(Dictionary<string, object> row, string? where) => EvaluateWhere(row, where);
+
     private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;

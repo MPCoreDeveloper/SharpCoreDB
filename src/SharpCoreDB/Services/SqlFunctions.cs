@@ -30,7 +30,8 @@ public static class SqlFunctions
     /// <returns>Formatted date string.</returns>
     public static string StrFTime(DateTime dateTime, string format)
     {
-        return dateTime.ToString(format);
+        // Invariant culture: with the current one, th-TH printed the year 2026 as 2569 (its Buddhist calendar).
+        return dateTime.ToString(format, System.Globalization.CultureInfo.InvariantCulture);
     }
 
     /// <summary>
@@ -283,9 +284,15 @@ public static class SqlFunctions
             "CURRENT_DATE" => CurrentDate(),
             "CURRENT_TIME" => CurrentTime(),
             "SYNC_TIMESTAMP" => SyncTimestamp(),
-            "DATE" => arguments.Count > 0 && arguments[0] is DateTime dt ? Date(dt) : null,
+            // SQLite's date family through the engine's one implementation (SqlDateTimeFunctions). The legacy
+            // (DateTime[, .NET format]) shapes this method answered before keep their behaviour.
+            "DATE" => arguments.Count > 0 && arguments[0] is DateTime dt
+                ? Date(dt)
+                : SqlDateTimeFunctions.Evaluate("DATE", [.. arguments]),
             "STRFTIME" => arguments.Count >= 2 && arguments[0] is DateTime dt2 && arguments[1] is string fmt
-                ? StrFTime(dt2, fmt) : null,
+                ? StrFTime(dt2, fmt)
+                : SqlDateTimeFunctions.Evaluate("STRFTIME", [.. arguments]),
+            "TIME" or "DATETIME" or "JULIANDAY" or "UNIXEPOCH" => SqlDateTimeFunctions.Evaluate(upperName, [.. arguments]),
             "DATEADD" => arguments.Count >= 3 && arguments[0] is DateTime dt3 && arguments[1] is int val && arguments[2] is string unit
                 ? DateAdd(dt3, val, unit) : null,
             "UNHEX" => arguments.Count >= 1 && arguments[0] is not null ? Unhex(arguments[0].ToString() ?? string.Empty) : null,

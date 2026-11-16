@@ -421,6 +421,93 @@ attribution before merge.
 
 ---
 
+## 8. 🔴 OPEN — An UPDATE that moves a PRIMARY KEY onto an existing key loses or duplicates a row
+
+> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/linq2db-adapter-and-scalar-functions`).** Reproduced on both storage
+> modes with the statements below; not fixed in this change.
+
+Found 2026-11-17. Neither storage mode checks the new key of an UPDATE that changes the primary key:
+
+```sql
+CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT);
+INSERT INTO t (id, email) VALUES (1, 'a@x');
+INSERT INTO t (id, email) VALUES (3, 'c@x');
+UPDATE t SET id = 1 WHERE id = 3;   -- SQLite: UNIQUE constraint failed: t.id
+SELECT id FROM t;
+```
+
+- **Directory storage:** the UPDATE is accepted and the original row `1` is **lost** (silent data loss).
+- **Single-file storage:** the UPDATE is accepted and two rows carry id `1`.
+
+**Why it is open:** the directory-mode fix belongs in `Table.Update`, the write path the performance gate in
+`docs/performance/AUTONOMOUS_AGENT_BRIEF.md` guards; it needs its own change with a gate run.
+
+---
+
+## 9. 🟠 OPEN — A column-level `UNIQUE` constraint is not enforced
+
+> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/linq2db-adapter-and-scalar-functions`).** Reproduced on both storage
+> modes; not fixed in this change.
+
+Found 2026-11-17. A column declared `UNIQUE` accepts duplicates on both storage modes:
+
+```sql
+CREATE TABLE t (id INTEGER PRIMARY KEY, email TEXT UNIQUE);
+INSERT INTO t (id, email) VALUES (1, 'a@x');
+INSERT INTO t (id, email) VALUES (2, 'a@x');   -- SQLite: UNIQUE constraint failed: t.email; SharpCoreDB: accepted
+```
+
+A UNIQUE *index* is enforced on directory storage; the column constraint is parsed and, on single-file storage,
+persisted as `ColumnFlags.Unique`, but no write path checks it. **Why it is open:** same write-path gate as §8.
+
+---
+
+## 10. 🟡 OPEN (owner decision) — Single-file storage ignores a column's declared `COLLATE`
+
+> ⚠️ **STILL TRUE (verified 2026-11-17), pending an owner decision** on the column-entry format extension below.
+
+Found 2026-11-17. On single-file storage `CREATE TABLE t (name TEXT COLLATE NOCASE)` behaves as BINARY: `WHERE
+name = 'X'` does not match `'x'`, and `ORDER BY name` sorts case-sensitively. Directory storage honours it.
+
+Three gaps make it up: the single-file `CREATE TABLE` parser (`DatabaseExtensions`) does not read `COLLATE`; the
+single-file column entry (`ColumnDefinitionEntry`, 48 bytes) has no collation field; and the single-file WHERE
+evaluator (`SingleFileTable.EvaluateSingleCondition`) is static and has no collation support.
+
+**Decision needed:** persisting the collation means claiming spare bits of `ColumnDefinitionEntry.Flags` (bits 8–11
+would hold `CollationType`; a file written before reads as 0 = BINARY, today's behaviour). That is compatible with
+`docs/manual/upgrade-and-downgrade.md` — old files keep working, downgrade is already unsupported — but it is an
+on-disk format extension. A `Locale(…)` collation would still need a name field. Pinned by the skipped
+`SingleTableOrderByTests.OrderBy_ColumnDeclaredNoCase_OnSingleFile_SortsCaseInsensitively`.
+
+---
+
+## 11. 🔴 OPEN (owner decision) — PRIMARY KEY uniqueness and composite keys
+
+> ⚠️ **STILL TRUE (verified 2026-11-17), pending an owner decision** on modelling composite keys. Single-file
+> enforcement was implemented and backed out in the same change because of the compatibility hazard below.
+
+Found 2026-11-17 while fixing single-file constraint enforcement.
+
+- **Single-file storage does not enforce PRIMARY KEY uniqueness.** `INSERT … VALUES (2, 'y'), (1, 'dup')` into a
+  table already holding id 1 leaves two rows with id 1.
+- **Neither mode models a composite key.** EF Core's `EnsureCreated` (`SharpCoreDBDatabaseCreator`) declares one
+  inline `PRIMARY KEY` per key column; both storage modes keep only the *last* such column as `PrimaryKeyIndex`.
+  Directory storage then enforces uniqueness on that one column — a false violation as soon as two rows share it
+  (order lines numbered 1, 2, … per order) — and single-file storage enforces nothing. SQLite rejects the
+  declaration outright ("table has more than one primary key").
+
+**Why single-file enforcement was not simply switched on:** its format persists `ColumnFlags.PrimaryKey` on that one
+column only, so a file cannot tell a single-column key from a composite key that lost its other columns. Enforcing
+single-column uniqueness would make existing EF Core single-file databases with composite keys reject legitimate
+inserts after an upgrade — exactly what `CompleteExampleIntegrationTests.CompositeKey_*` showed when it was tried.
+
+**Decision needed:** model composite keys (persist the `PrimaryKey` flag on every key column and enforce uniqueness
+on the tuple — for files written before, there is no way to recover the lost key columns, so they would stay
+unenforced), and only then enforce single-column uniqueness on single-file storage. Pinned by the skipped
+single-file cases in `PrimaryKeyUniquenessTests`.
+
+---
+
 ## Priority summary
 
 | # | Issue | Severity | Status in ServiceMq.SharpCoreDb | In SharpCoreDB 2.1.0 |
@@ -432,3 +519,7 @@ attribution before merge.
 | 5 | SQL validator `@` prefix | 🟡 Low | Keys without `@` prefix | **Fixed** — `NormalizeKey` strips `@` / `:` |
 | 6 | INTEGER → Int32 | 🟡 Low | `BIGINT` columns | **Still the default** — opt in with `UseSqliteIntegerAffinity` |
 | 7 | Bound text re-parsed as SQL | 🔴 High | Write through `ITable.Insert` instead of SQL text | **Fixed** — one `SqlLiteralScanner` (SQL/SQLite: a doubled quote is one quote, a backslash is data) behind every scanner; `ParseValue` strips one pair and un-collapses doubling; a tuple with too many values is rejected. `ParameterLiteralRoundTripTests` 74/74 |
+| 8 | PK-changing UPDATE loses/duplicates a row | 🔴 High | — | **Open** — directory loses the overwritten row, single-file duplicates the key; write-path gate needed (§8) |
+| 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Open** — both storage modes accept duplicates (§9) |
+| 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
+| 11 | PK uniqueness / composite keys | 🔴 High | — | **Open, owner decision** — single-file enforces no PK uniqueness; composite keys are modelled as their last column (§11) |

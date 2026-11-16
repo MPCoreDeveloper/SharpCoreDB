@@ -61,6 +61,12 @@ internal static class SqlScalarExpression
     /// <summary>Returns <c>true</c> when the node is a plain column reference.</summary>
     internal static bool IsColumn(Node node) => node is Column;
 
+    /// <summary>The column name of a plain column reference; <c>null</c> for anything else.</summary>
+    internal static string? ColumnName(Node node) => node is Column column ? column.Name : null;
+
+    /// <summary>Returns <c>true</c> for a column reference written with a table qualifier (<c>x.name</c>).</summary>
+    internal static bool IsQualified(Node node) => node is Column { Qualifier: not null };
+
     /// <summary>Evaluates a parsed expression against a row (<c>null</c> is SQL NULL).</summary>
     internal static object? Evaluate(Node node, Dictionary<string, object>? row) => Eval(node, row ?? EmptyRow);
 
@@ -922,7 +928,8 @@ internal static class SqlScalarExpression
 
     /// <summary>
     /// Compares two non-NULL values as SQLite does: numbers numerically (a numeric-looking text operand is read as a
-    /// number, the leniency the engine's other evaluators already apply), text by its bytes (BINARY collation), and
+    /// number when the other side is a number, the leniency the engine's other evaluators already apply), two text
+    /// values by their bytes (BINARY collation) — '01' is not '1' — and
     /// across classes numbers before text before blobs. Returns <c>false</c> when either side is NULL.
     /// </summary>
     internal static bool TryCompare(object? left, object? right, out int comparison)
@@ -945,8 +952,16 @@ internal static class SqlScalarExpression
             right = ToText(right);
         }
 
-        bool leftNumeric = IsNumeric(left) || (left is string ls && IsWholeNumber(ls));
-        bool rightNumeric = IsNumeric(right) || (right is string rs && IsWholeNumber(rs));
+        bool leftNumeric = IsNumeric(left);
+        bool rightNumeric = IsNumeric(right);
+        if (leftNumeric && !rightNumeric && right is string rs && IsWholeNumber(rs))
+        {
+            rightNumeric = true;
+        }
+        else if (rightNumeric && !leftNumeric && left is string ls && IsWholeNumber(ls))
+        {
+            leftNumeric = true;
+        }
         if (leftNumeric && rightNumeric)
         {
             var l = ToNumber(left);

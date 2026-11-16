@@ -488,8 +488,11 @@ public partial class SqlParser
         // because the batch core validates every row before writing any. The per-row loop leaves the rows it
         // had already written in place. That matches SQLite, where one multi-row INSERT is one atomic unit.
         const int MinRowsForBatchedInsert = 2;
+        // A single-file table takes the batch path too: its InsertBatch validates every row (NOT NULL) before caching
+        // any, which makes the statement atomic. Up to 2.1.4 it took the per-row loop, so a failing row
+        // left the rows before it in place.
         bool useBatchedInsert = allRowValues.Count >= MinRowsForBatchedInsert
-            && tableAsTable is { CanUseBatchedInsert: true }
+            && (tableAsTable is { CanUseBatchedInsert: true } || table is SingleFileTable)
             && !HasTriggersFor(tableName, TriggerEvent.Insert);
         List<Dictionary<string, object>>? batchedRows = useBatchedInsert
             ? new List<Dictionary<string, object>>(allRowValues.Count)
@@ -527,7 +530,14 @@ public partial class SqlParser
             // residual (dispatch minus its children) are the last unattributed third of a multi-row pass
             // (plan §9 priority 2), and they need different fixes, so they are separated here rather than argued.
             long tableBatchStart = Diagnostics.WritePathProfiler.Stamp();
-            tableAsTable!.InsertBatch(batchedRows);
+            if (tableAsTable is not null)
+            {
+                tableAsTable.InsertBatch(batchedRows);
+            }
+            else
+            {
+                table.InsertBatch(batchedRows);
+            }
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.TableBatch, tableBatchStart);
             insertedCount = batchedRows.Count;
             lastInsertedRow = batchedRows[^1];
@@ -537,7 +547,7 @@ public partial class SqlParser
             // the same value the per-row loop would have left, so IDatabase.GetLastInsertRowId() cannot
             // quietly change meaning for this one statement shape. The no-PK case needs nothing — the
             // position is exactly what Insert records there too.
-            int pkColIdx = tableAsTable.PrimaryKeyIndex;
+            int pkColIdx = table.PrimaryKeyIndex;
             if (pkColIdx >= 0
                 && lastInsertedRow.TryGetValue(table.Columns[pkColIdx], out var pkRowIdVal)
                 && pkRowIdVal is not null and not DBNull)
@@ -1055,6 +1065,17 @@ public partial class SqlParser
 
         (int? limit, int? offset) = ParseLimitClause(parts, limitIdx);
 
+        // The whole ORDER BY list as SQLite reads it — every key with its direction, expressions, aliases, ordinals,
+        // COLLATE and NULLS FIRST/LAST. The token-based `orderBy` above sees only the first key, so `ORDER BY grp, name`
+        // came back unsorted. A list SqlOrderBy cannot read (vec_distance_* keeps its vector-index route below) leaves
+        // the previous handling in place.
+        var orderTerms = orderIdx > 0 && parts.Length > orderIdx + 2 &&
+                         parts[orderIdx + 1].Equals(SqlConstants.BY, StringComparison.OrdinalIgnoreCase)
+            ? SqlOrderBy.TryParse(
+                string.Join(" ", parts.Skip(orderIdx + 2).Take((limitIdx > orderIdx ? limitIdx : parts.Length) - orderIdx - 2)),
+                selectClause)
+            : null;
+
         if (!this.tables.ContainsKey(tableName))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
@@ -1080,15 +1101,25 @@ public partial class SqlParser
             Constants.PersistenceConstants.InternalRowIdColumnName,
             StringComparison.OrdinalIgnoreCase);
 
+        var scanOrderBy = orderTerms is null ? orderBy : null;
         var results = requestsRowId && tableObj is Table tableWithRowId && tableWithRowId.HasInternalRowId
-            ? tableWithRowId.SelectIncludingRowId(whereStr, orderBy, asc, noEncrypt)
-            : tableObj.Select(whereStr, orderBy, asc, noEncrypt);
+            ? tableWithRowId.SelectIncludingRowId(whereStr, scanOrderBy, asc, noEncrypt)
+            : tableObj.Select(whereStr, scanOrderBy, asc, noEncrypt);
+
+        // Sorted here, before OFFSET/LIMIT, with SQLite's comparison: NULLs first ascending, BINARY text unless a
+        // COLLATE or the column's declared collation says otherwise. The scan's own sort compared text with the
+        // machine's culture.
+        if (orderTerms is not null)
+        {
+            results = SqlOrderBy.Sort(results, orderTerms, tableObj);
+        }
 
         // Apply limit and offset
         if (offset.HasValue && offset.Value > 0)
             results = [.. results.Skip(offset.Value)]; // ✅ C# 15: Collection expression with spread
 
-        if (limit.HasValue && limit.Value > 0)
+        // LIMIT 0 returns no rows, as in SQLite; up to 2.1.4 it returned every row.
+        if (limit.HasValue && limit.Value >= 0)
             results = [.. results.Take(limit.Value)];
 
         // Deduplicate by primary key
@@ -1302,7 +1333,7 @@ public partial class SqlParser
     /// Splits <c>expr AS alias</c> / <c>expr alias</c> into the expression and the unquoted alias. The alias is only
     /// taken when what precedes it parses as an expression, so <c>a || b</c> is not read as <c>a ||</c> aliased b.
     /// </summary>
-    private static (string Expression, string? Alias) SplitSelectItemAlias(string item)
+    internal static (string Expression, string? Alias) SplitSelectItemAlias(string item)
     {
         var match = System.Text.RegularExpressions.Regex.Match(
             item,
@@ -1738,6 +1769,28 @@ public partial class SqlParser
         if (limitIdx <= 0)
             return (null, null);
 
+        // SQLite's forms: LIMIT n, LIMIT n OFFSET m and LIMIT m, n; a negative count means no limit (linq2db writes
+        // LIMIT -1 OFFSET m for Skip without Take). Up to 2.1.4 the two OFFSET-bearing forms threw "Invalid LIMIT
+        // clause" — so every linq2db Skip()/Take() failed on this path.
+        var limitText = string.Join(" ", parts.Skip(limitIdx + 1)).Trim().TrimEnd(';').Trim();
+        var limitMatch = System.Text.RegularExpressions.Regex.Match(
+            limitText,
+            @"^(?:(?<count>[+-]?\d+)(?:\s+OFFSET\s+(?<offset>[+-]?\d+))?|(?<offset>\d+)\s*,\s*(?<count>[+-]?\d+))$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase,
+            TimeSpan.FromSeconds(1));
+        if (limitMatch.Success &&
+            long.TryParse(limitMatch.Groups["count"].Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var count))
+        {
+            int? offsetValue = null;
+            if (limitMatch.Groups["offset"].Success &&
+                long.TryParse(limitMatch.Groups["offset"].Value, System.Globalization.NumberStyles.AllowLeadingSign, System.Globalization.CultureInfo.InvariantCulture, out var offsetNumber))
+            {
+                offsetValue = (int)Math.Clamp(offsetNumber, 0, int.MaxValue);
+            }
+
+            return (count < 0 ? null : (int)Math.Min(count, int.MaxValue), offsetValue);
+        }
+
         var limitParts = parts.Skip(limitIdx + 1).ToArray();
         if (limitParts.Length == 1)
         {
@@ -1762,114 +1815,6 @@ public partial class SqlParser
         }
 
         throw new ArgumentException("Invalid LIMIT clause");
-    }
-
-    /// <summary>
-    /// Evaluates a scalar function call with the given arguments.
-    /// Includes COALESCE, IFNULL, NULLIF, IIF, TYPEOF, and more.
-    /// </summary>
-    private static object? EvaluateScalarFunction(FunctionCallNode functionCall, object?[] args)
-    {
-        // Normalize DBNull to null for consistency
-        for (int i = 0; i < args.Length; i++)
-        {
-            if (args[i] is DBNull)
-                args[i] = null;
-        }
-
-        // Phase 5.2: TIMESTAMPDIFF function with modern pattern matching
-        if (functionCall.FunctionName.Equals("TIMESTAMPDIFF", StringComparison.OrdinalIgnoreCase) && args.Length == 3)
-        {
-            return (args[0] is DateTime start && args[1] is DateTime end && args[2] is string unit)
-                ? unit.ToUpperInvariant() switch
-                {
-                    "MICROSECOND" => (end - start).TotalMilliseconds * 1000,
-                    "MILLISECOND" => (end - start).TotalMilliseconds,
-                    "SECOND" => (end - start).TotalSeconds,
-                    "MINUTE" => (end - start).TotalMinutes,
-                    "HOUR" => (end - start).TotalHours,
-                    "DAY" => (end - start).TotalDays,
-                    _ => null
-                }
-                : null;
-        }
-
-        // General scalar function evaluation
-        return functionCall.FunctionName.ToUpperInvariant() switch
-        {
-            "COALESCE" => args.FirstOrDefault(arg => arg is not null),
-            "IFNULL" => args.Length == 2 ? (args[0] ?? args[1]) : throw new ArgumentException("IFNULL requires 2 arguments"),
-            "NULLIF" => args.Length == 2 ? (SqlParser.AreValuesEqual(args[0], args[1]) ? null : args[0]) : throw new ArgumentException("NULLIF requires 2 arguments"),
-            "IIF" => args.Length == 3 ? (args[0] is bool condition ? (condition ? args[1] : args[2]) : null) : throw new ArgumentException("IIF requires 3 arguments"),
-            "TYPEOF" => args.Length == 1 ? (object?)(args[0] switch
-            {
-                null => "null",
-                int or long => "integer",
-                double or float => "real",
-                string => "text",
-                bool => "integer",
-                _ => "text"
-            }) : throw new ArgumentException("TYPEOF requires 1 argument"),
-            "ABS" => args.Length == 1 ? (object?)(args[0] switch
-            {
-                double d => Math.Abs(d),
-                int i => Math.Abs(i),
-                long l => Math.Abs(l),
-                _ => null
-            }) : throw new ArgumentException("ABS requires 1 argument"),
-            "ROUND" => args.Length >= 1 && args.Length <= 2 && args[0] is double rd ? (object?)Math.Round(rd, args.Length == 2 && args[1] is int ri ? ri : 0) : null,
-            "CEIL" or "CEILING" => args.Length == 1 && args[0] is double cd ? (object?)Math.Ceiling(cd) : null,
-            "FLOOR" => args.Length == 1 && args[0] is double fd ? (object?)Math.Floor(fd) : null,
-            "UPPER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToUpperInvariant() : throw new ArgumentException("UPPER requires 1 argument"),
-            "LOWER" => args.Length == 1 ? (object?)args[0]?.ToString()?.ToLowerInvariant() : throw new ArgumentException("LOWER requires 1 argument"),
-            "LENGTH" => args.Length == 1 ? (object?)(args[0]?.ToString()?.Length ?? 0) : throw new ArgumentException("LENGTH requires 1 argument"),
-            "TRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.Trim() : throw new ArgumentException("TRIM requires 1 argument"),
-            "LTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimStart() : throw new ArgumentException("LTRIM requires 1 argument"),
-            "RTRIM" => args.Length == 1 ? (object?)args[0]?.ToString()?.TrimEnd() : throw new ArgumentException("RTRIM requires 1 argument"),
-            "SUBSTR" or "SUBSTRING" => args.Length >= 2 && args.Length <= 3 ? (object?)(args[0]?.ToString() is string sstr && args[1] is int sstart ? sstr.Length >= sstart && sstart > 0 ? sstr.Substring(sstart - 1, Math.Min(args.Length == 3 && args[2] is int sl ? sl : sstr.Length - sstart + 1, sstr.Length - sstart + 1)) : "" : null) : throw new ArgumentException("SUBSTR requires 2 or 3 arguments"),
-            "REPLACE" => args.Length == 3 ? (object?)args[0]?.ToString()?.Replace(args[1]?.ToString() ?? "", args[2]?.ToString() ?? "") : throw new ArgumentException("REPLACE requires 3 arguments"),
-            "INSTR" => args.Length == 2 ? (object?)(args[0]?.ToString() is string istr && args[1]?.ToString() is string isubstr ? (istr.IndexOf(isubstr, StringComparison.Ordinal) is int iidx && iidx >= 0 ? iidx + 1 : 0) : 0) : throw new ArgumentException("INSTR requires 2 arguments"),
-            "REGEXP" => args.Length == 2 ? (object?)(args[0]?.ToString() is string rpattern && args[1]?.ToString() is string rinput ? Regex.IsMatch(rinput, rpattern, RegexOptions.None, TimeSpan.FromSeconds(1)) : false) : throw new ArgumentException("REGEXP requires 2 arguments"),
-            "GLOB" => args.Length == 2 ? (object?)(args[0]?.ToString() is string gpattern && args[1]?.ToString() is string gstr ? Regex.IsMatch(gstr, "^" + Regex.Escape(gpattern).Replace("\\*", ".*").Replace("\\?", ".") + "$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)) : false) : throw new ArgumentException("GLOB requires 2 arguments"),
-            "NOT" when args.Length == 1 && args[0] is bool nb => (object?)!nb,
-            "MOD" => args.Length == 2 ? (object?)(args[0] is double ma && args[1] is double mb && mb != 0 ? ma % mb : args[0] is int mia && args[1] is int mib && mib != 0 ? mia % mib : null) : throw new ArgumentException("MOD requires 2 arguments"),
-            "POW" or "POWER" => args.Length == 2 && args[0] is double pa && args[1] is double pb ? (object?)Math.Pow(pa, pb) : null,
-            "SQRT" => args.Length == 1 && args[0] is double sqd && sqd >= 0 ? (object?)Math.Sqrt(sqd) : null,
-            "SIGN" => args.Length == 1 ? (object?)(args[0] switch
-            {
-                double sd => Math.Sign(sd),
-                int si => Math.Sign(si),
-                long sl => Math.Sign(sl),
-                _ => 0
-            }) : throw new ArgumentException("SIGN requires 1 argument"),
-            "MIN" => args.Length == 2 ? (args[0] is double mina && args[1] is double minb ? Math.Min(mina, minb) : args[0] is int minia && args[1] is int minib ? Math.Min(minia, minib) : args[0]) : throw new ArgumentException("MIN requires 2 arguments"),
-            "MAX" => args.Length == 2 ? (args[0] is double maxa && args[1] is double maxb ? Math.Max(maxa, maxb) : args[0] is int maxia && args[1] is int maxib ? Math.Max(maxia, maxib) : args[0]) : throw new ArgumentException("MAX requires 2 arguments"),
-            "RANDOM" => (object?)Random.Shared.NextInt64(),
-            _ => throw new NotSupportedException("Function '" + functionCall.FunctionName + "' is not supported.")
-        };
-    }
-
-    /// <summary>
-    /// Evaluates a function call node against a row, resolving arguments from the row context.
-    /// </summary>
-    private object? EvaluateFunctionCall(FunctionCallNode functionCall, Dictionary<string, object> row)
-    {
-        ArgumentNullException.ThrowIfNull(functionCall);
-        ArgumentNullException.ThrowIfNull(row);
-
-        var args = new object?[functionCall.Arguments.Count];
-        for (int i = 0; i < functionCall.Arguments.Count; i++)
-        {
-            args[i] = functionCall.Arguments[i] switch
-            {
-                LiteralNode lit => lit.Value,
-                ColumnReferenceNode col => row.TryGetValue(col.ColumnName, out var v) ? v : null,
-                FunctionCallNode nested => EvaluateFunctionCall(nested, row),
-                _ => null
-            };
-        }
-
-        return EvaluateScalarFunction(functionCall, args);
     }
 
     private List<Dictionary<string, object>> HandleDerivedTable(string sql, bool noEncrypt, Dictionary<string, object?>? parameters = null)

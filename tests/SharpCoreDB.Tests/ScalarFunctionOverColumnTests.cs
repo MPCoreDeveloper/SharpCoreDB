@@ -139,6 +139,11 @@ public sealed class ScalarFunctionOverColumnTests : IDisposable
     [InlineData("single-file", "strftime('%Y', at) = '2026' OR name = 'beta'", new[] { 1, 2, 3 })]
     [InlineData("directory", "length(name) IS NULL", new[] { 4 })]
     [InlineData("single-file", "length(name) IS NULL", new[] { 4 })]
+    // Two text values compare as text, as in SQLite: '01' is not '1'.
+    [InlineData("directory", "substr(at, 6, 2) = '1'", new int[0])]
+    [InlineData("single-file", "substr(at, 6, 2) = '1'", new int[0])]
+    [InlineData("directory", "substr(at, 6, 2) = '01'", new[] { 1 })]
+    [InlineData("single-file", "substr(at, 6, 2) = '01'", new[] { 1 })]
     public void Where_FunctionOfColumn_FiltersRows(string mode, string where, int[] expectedIds)
     {
         var db = Open(mode);

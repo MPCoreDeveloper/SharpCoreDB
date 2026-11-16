@@ -47,8 +47,10 @@
     (Category!=Debug&Category!=Manual&Category!=Performance).
 
 .PARAMETER Projects
-    Test projects to measure, relative to the repository root. Default the three suites codecov.yml counts
-    (SharpCoreDB.Tests, SharpCoreDB.VectorSearch.Tests, SharpCoreDB.EntityFrameworkCore.Tests).
+    Test projects to measure, relative to the repository root. Default the four suites CI runs
+    (SharpCoreDB.Tests, SharpCoreDB.VectorSearch.Tests, SharpCoreDB.EntityFrameworkCore.Tests,
+    SharpCoreDB.Functional.Linq2DB.Tests). The linq2db suite was left out until 2026-11-17, so the adapter
+    assembly it covers counted as 0% covered — or, since it was never loaded by the other suites, not at all.
 
 .PARAMETER OutputDirectory
     Where the Cobertura reports are written, relative to the repository root. Default artifacts/coverage.
@@ -80,7 +82,8 @@ param(
     [string[]]$Projects = @(
         'tests/SharpCoreDB.Tests/SharpCoreDB.Tests.csproj',
         'tests/SharpCoreDB.VectorSearch.Tests/SharpCoreDB.VectorSearch.Tests.csproj',
-        'tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj'
+        'tests/SharpCoreDB.EntityFrameworkCore.Tests/SharpCoreDB.EntityFrameworkCore.Tests.csproj',
+        'tests/SharpCoreDB.Functional.Linq2DB.Tests/SharpCoreDB.Functional.Linq2DB.Tests.csproj'
     ),
     [string]$OutputDirectory = 'artifacts/coverage',
     [string]$Configuration = 'Release',
