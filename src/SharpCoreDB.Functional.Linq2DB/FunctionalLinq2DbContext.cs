@@ -1,12 +1,8 @@
-using System;
-using System.Collections.Generic;
 using System.Linq.Expressions;
-using System.Threading;
-using System.Threading.Tasks;
+using System.Runtime.InteropServices;
 using LinqToDB;
-using LinqToDB.Data;
 using LinqToDB.Async;
-using SharpCoreDB.Functional;
+using LinqToDB.Data;
 using static SharpCoreDB.Functional.Prelude;
 
 namespace SharpCoreDB.Functional.Linq2DB;
@@ -15,6 +11,11 @@ namespace SharpCoreDB.Functional.Linq2DB;
 /// Functional adapter over linq2db operations with Option/Fin return types.
 /// Provides railway-oriented programming patterns for SharpCoreDB queries.
 /// C# 15: Uses primary constructor for immutable dependency injection.
+/// <para>
+/// The error contract: methods returning <see cref="Option{T}"/> or <see cref="Seq{T}"/> throw when the query fails;
+/// methods returning <see cref="Fin{T}"/> capture the failure as <c>Fail</c>; and cancellation always surfaces as
+/// <see cref="OperationCanceledException"/> — before the call or during it — never as a failure.
+/// </para>
 /// </summary>
 /// <param name="connection">The underlying SharpCoreDB linq2db data connection</param>
 public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connection)
@@ -152,9 +153,11 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(predicate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        IQueryable<T> q = _connection.GetTable<T>().Where(predicate);
-        var list = await q.Take(1).ToListAsync(cancellationToken).ConfigureAwait(false); // Explicit Take(1) + ToListAsync for optimal linq2db translation and C# 15 overload resolution
-        var entity = list.FirstOrDefault();
+        // Called through linq2db's own extension class: since .NET 10 the BCL's System.Linq.AsyncEnumerable offers a
+        // FirstOrDefaultAsync for the same receiver, and that ambiguity is why this used Take(1).ToListAsync(), which
+        // allocated a list for one row.
+        var entity = await AsyncExtensions.FirstOrDefaultAsync(_connection.GetTable<T>().Where(predicate), cancellationToken)
+            .ConfigureAwait(false);
 
         return Optional(entity);
     }
@@ -166,7 +169,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="queryBuilder">Query builder callback</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A functional sequence of results</returns>
-    public async Task<Seq<T>> QueryAsync<T>(
+    public Task<Seq<T>> QueryAsync<T>(
         Func<IQueryable<T>, IQueryable<T>> queryBuilder,
         CancellationToken cancellationToken = default)
         where T : class
@@ -174,10 +177,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(queryBuilder);
         cancellationToken.ThrowIfCancellationRequested();
 
-        IQueryable<T> q = queryBuilder(_connection.GetTable<T>());
-        var result = await q.ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        return toSeq(result);
+        return ToSeqAsync(queryBuilder(_connection.GetTable<T>()), cancellationToken);
     }
 
     /// <summary>
@@ -187,7 +187,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="predicate">Filter predicate</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A functional sequence of matching results</returns>
-    public async Task<Seq<T>> QueryAsync<T>(
+    public Task<Seq<T>> QueryAsync<T>(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)
         where T : class
@@ -195,10 +195,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(predicate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        IQueryable<T> q = _connection.GetTable<T>().Where(predicate);
-        var result = await q.ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        return toSeq(result);
+        return ToSeqAsync(_connection.GetTable<T>().Where(predicate), cancellationToken);
     }
 
     /// <summary>
@@ -207,15 +204,12 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <typeparam name="T">Entity type</typeparam>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>A functional sequence of all entities</returns>
-    public async Task<Seq<T>> GetAllAsync<T>(CancellationToken cancellationToken = default)
+    public Task<Seq<T>> GetAllAsync<T>(CancellationToken cancellationToken = default)
         where T : class
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        IQueryable<T> q = _connection.GetTable<T>();
-        var result = await q.ToListAsync(cancellationToken).ConfigureAwait(false);
-
-        return toSeq(result);
+        return ToSeqAsync(_connection.GetTable<T>(), cancellationToken);
     }
 
     /// <summary>
@@ -225,7 +219,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="entity">Entity to insert</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success when persisted; failure with error otherwise</returns>
-    public async Task<Fin<Unit>> InsertAsync<T>(
+    public Task<Fin<Unit>> InsertAsync<T>(
         T entity,
         CancellationToken cancellationToken = default)
         where T : class
@@ -233,52 +227,75 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(entity);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        return RunAsync(async () =>
         {
             await _connection.InsertAsync(entity, token: cancellationToken).ConfigureAwait(false);
-            return FinSucc(unit);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<Unit>(Error.New(ex));
-        }
+            return unit;
+        });
     }
 
     /// <summary>
-    /// Inserts multiple entities in a batch using linq2db BulkCopy for high performance.
+    /// Inserts multiple entities in a batch using linq2db BulkCopy (multi-row SQL, up to 1000 rows per statement).
     /// </summary>
     /// <typeparam name="T">Entity type</typeparam>
     /// <param name="entities">Entities to insert</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success with row count; failure with error otherwise</returns>
+    public Task<Fin<int>> InsertBatchAsync<T>(
+        IEnumerable<T> entities,
+        CancellationToken cancellationToken = default)
+        where T : class
+        => InsertBatchAsync(entities, DefaultBulkCopyOptions, cancellationToken);
+
+    /// <summary>
+    /// Inserts multiple entities in a batch using linq2db BulkCopy with the caller's options — batch size,
+    /// parameters, row-copied notifications.
+    /// <para>
+    /// <see cref="BulkCopyType.ProviderSpecific"/> is replaced by <see cref="BulkCopyType.MultipleRows"/>: the
+    /// provider-specific path needs a native Microsoft.Data.Sqlite connection, and the adapter's connection is
+    /// SharpCoreDB's. The caller's <paramref name="options"/> instance is not modified.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="T">Entity type</typeparam>
+    /// <param name="entities">Entities to insert</param>
+    /// <param name="options">Bulk copy options</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>
+    /// Success with the row count; failure with error otherwise, including a count above <see cref="int.MaxValue"/>
+    /// (up to 2.1.4 the count was cast and wrapped to a negative number).
+    /// </returns>
     public async Task<Fin<int>> InsertBatchAsync<T>(
         IEnumerable<T> entities,
+        BulkCopyOptions options,
         CancellationToken cancellationToken = default)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(entities);
+        ArgumentNullException.ThrowIfNull(options);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
-        {
-            var options = new BulkCopyOptions
-            {
-                MaxBatchSize = 1000, // Tuned for typical SharpCoreDB workloads
-                UseParameters = true
-            };
+        var effective = options.BulkCopyType == BulkCopyType.ProviderSpecific
+            ? options with { BulkCopyType = BulkCopyType.MultipleRows }
+            : options;
 
-            var result = await _connection.BulkCopyAsync(
-                options,
-                entities,
-                cancellationToken).ConfigureAwait(false);
+        var copied = await RunAsync(async () =>
+            (await _connection.BulkCopyAsync(effective, entities, cancellationToken).ConfigureAwait(false)).RowsCopied)
+            .ConfigureAwait(false);
 
-            return FinSucc((int)result.RowsCopied);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<int>(Error.New(ex));
-        }
+        return copied.Bind(ToRowCount);
     }
+
+    /// <summary>
+    /// Converts a bulk-copy row count to the <see cref="int"/> the batch API returns: a count that does not fit is a
+    /// failure, not a wrapped negative number.
+    /// </summary>
+    /// <param name="rowsCopied">The row count linq2db reported.</param>
+    /// <returns>The count, or a failure carrying an <see cref="OverflowException"/>.</returns>
+    internal static Fin<int> ToRowCount(long rowsCopied) =>
+        rowsCopied <= int.MaxValue
+            ? FinSucc((int)rowsCopied)
+            : FinFail<int>(Error.New(new OverflowException(
+                $"{rowsCopied} rows were copied, more than an Int32 count can report; split the batch.")));
 
     /// <summary>
     /// Updates an existing entity.
@@ -287,7 +304,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="entity">Entity to update</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success when updated; failure with error otherwise</returns>
-    public async Task<Fin<Unit>> UpdateAsync<T>(
+    public Task<Fin<Unit>> UpdateAsync<T>(
         T entity,
         CancellationToken cancellationToken = default)
         where T : class
@@ -295,15 +312,11 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(entity);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        return RunAsync(async () =>
         {
             await _connection.UpdateAsync(entity, token: cancellationToken).ConfigureAwait(false);
-            return FinSucc(unit);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<Unit>(Error.New(ex));
-        }
+            return unit;
+        });
     }
 
     /// <summary>
@@ -313,7 +326,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="entity">Entity to delete</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success when deleted; failure with error otherwise</returns>
-    public async Task<Fin<Unit>> DeleteAsync<T>(
+    public Task<Fin<Unit>> DeleteAsync<T>(
         T entity,
         CancellationToken cancellationToken = default)
         where T : class
@@ -321,15 +334,11 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(entity);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        return RunAsync(async () =>
         {
             await _connection.DeleteAsync(entity, token: cancellationToken).ConfigureAwait(false);
-            return FinSucc(unit);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<Unit>(Error.New(ex));
-        }
+            return unit;
+        });
     }
 
     /// <summary>
@@ -339,7 +348,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="predicate">Filter predicate</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success with deleted count; failure with error otherwise</returns>
-    public async Task<Fin<int>> DeleteWhereAsync<T>(
+    public Task<Fin<int>> DeleteWhereAsync<T>(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)
         where T : class
@@ -347,19 +356,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(predicate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
-        {
-            var count = await _connection.GetTable<T>()
-                .Where(predicate)
-                .DeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
-
-            return FinSucc(count);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<int>(Error.New(ex));
-        }
+        return RunAsync(() => _connection.GetTable<T>().Where(predicate).DeleteAsync(cancellationToken));
     }
 
     /// <summary>
@@ -369,26 +366,20 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="predicate">Optional filter predicate</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success with count; failure with error otherwise</returns>
-    public async Task<Fin<long>> CountAsync<T>(
+    public Task<Fin<long>> CountAsync<T>(
         Expression<Func<T, bool>>? predicate = null,
         CancellationToken cancellationToken = default)
         where T : class
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        IQueryable<T> q = _connection.GetTable<T>();
+        if (predicate is not null)
         {
-            IQueryable<T> q = _connection.GetTable<T>();
-            long count = predicate == null
-                ? await q.LongCountAsync(cancellationToken).ConfigureAwait(false)
-                : await q.Where(predicate).LongCountAsync(cancellationToken).ConfigureAwait(false);
+            q = q.Where(predicate);
+        }
 
-            return FinSucc(count);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<long>(Error.New(ex));
-        }
+        return RunAsync(() => q.LongCountAsync(cancellationToken));
     }
 
     /// <summary>
@@ -398,7 +389,7 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     /// <param name="predicate">Filter predicate</param>
     /// <param name="cancellationToken">Cancellation token</param>
     /// <returns>Success with true/false; failure with error otherwise</returns>
-    public async Task<Fin<bool>> ExistsAsync<T>(
+    public Task<Fin<bool>> ExistsAsync<T>(
         Expression<Func<T, bool>> predicate,
         CancellationToken cancellationToken = default)
         where T : class
@@ -406,55 +397,98 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
         ArgumentNullException.ThrowIfNull(predicate);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
-        {
-            IQueryable<T> q = _connection.GetTable<T>().Where(predicate);
-            var exists = await q.AnyAsync(cancellationToken).ConfigureAwait(false);
-            return FinSucc(exists);
-        }
-        catch (Exception ex)
-        {
-            return FinFail<bool>(Error.New(ex));
-        }
+        return RunAsync(() => _connection.GetTable<T>().Where(predicate).AnyAsync(cancellationToken));
     }
 
     /// <summary>
-    /// Executes a transaction with functional error handling.
+    /// Executes <paramref name="action"/> in a transaction: committed when it completes, rolled back when it throws.
+    /// Prefer the overload that hands the action this context and the token.
     /// </summary>
     /// <typeparam name="TResult">Result type</typeparam>
     /// <param name="action">Transaction action</param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Success with result; failure with error if transaction rolls back</returns>
-    public async Task<Fin<TResult>> TransactionAsync<TResult>(
+    /// <returns>Success with result; failure with the action's error if the transaction rolls back</returns>
+    public Task<Fin<TResult>> TransactionAsync<TResult>(
         Func<Task<TResult>> action,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(action);
+
+        return TransactionAsync((_, _) => action(), cancellationToken);
+    }
+
+    /// <summary>
+    /// Executes <paramref name="action"/> in a transaction, passing it this context and the token so the work inside
+    /// is visibly bound to the transaction's connection: committed when it completes, rolled back when it throws.
+    /// <para>
+    /// The rollback runs with <see cref="CancellationToken.None"/>. Up to 2.1.4 it used the caller's token: once that
+    /// token was cancelled the rollback itself threw, and the action's own error was replaced by "The operation was
+    /// canceled". Cancellation surfaces as <see cref="OperationCanceledException"/>, never as a failure.
+    /// </para>
+    /// </summary>
+    /// <typeparam name="TResult">Result type</typeparam>
+    /// <param name="action">Transaction action, given this context and <paramref name="cancellationToken"/>.</param>
+    /// <param name="cancellationToken">Cancellation token</param>
+    /// <returns>Success with result; failure with the action's error if the transaction rolls back</returns>
+    public async Task<Fin<TResult>> TransactionAsync<TResult>(
+        Func<FunctionalLinq2DbContext, CancellationToken, Task<TResult>> action,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(action);
         cancellationToken.ThrowIfCancellationRequested();
 
-        try
+        return await RunAsync(async () =>
         {
             await using var transaction = await _connection.BeginTransactionAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                var result = await action().ConfigureAwait(false);
+                var result = await action(this, cancellationToken).ConfigureAwait(false);
                 await transaction.CommitAsync(cancellationToken).ConfigureAwait(false);
-                return FinSucc(result);
+                return result;
             }
             catch
             {
-                await transaction.RollbackAsync(cancellationToken).ConfigureAwait(false);
+                await transaction.RollbackAsync(CancellationToken.None).ConfigureAwait(false);
                 throw;
             }
-        }
-        catch (Exception ex)
-        {
-            return FinFail<TResult>(Error.New(ex));
-        }
+        }).ConfigureAwait(false);
     }
 
     /// <summary>
     /// Gets the underlying linq2db DataConnection for advanced scenarios.
     /// </summary>
     public SharpCoreDBDataConnection Connection => _connection;
+
+    private static readonly BulkCopyOptions DefaultBulkCopyOptions = new()
+    {
+        MaxBatchSize = 1000, // Tuned for typical SharpCoreDB workloads
+        UseParameters = true,
+    };
+
+    /// <summary>
+    /// The <c>Fin</c> contract in one place: a failure becomes <c>Fail</c>, and cancellation propagates as
+    /// <see cref="OperationCanceledException"/>. Up to 2.1.4 every method caught everything, so a token cancelled
+    /// during the call came back as a failure while one cancelled before it threw.
+    /// </summary>
+    private static async Task<Fin<TResult>> RunAsync<TResult>(Func<Task<TResult>> operation)
+    {
+        try
+        {
+            return FinSucc(await operation().ConfigureAwait(false));
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            return FinFail<TResult>(Error.New(ex));
+        }
+    }
+
+    /// <summary>
+    /// Materialises a query straight into the array a <see cref="Seq{T}"/> wraps. Up to 2.1.4 the rows were read into
+    /// a list and then copied again by <c>toSeq</c>.
+    /// </summary>
+    private static async Task<Seq<T>> ToSeqAsync<T>(IQueryable<T> query, CancellationToken cancellationToken)
+    {
+        var rows = await AsyncExtensions.ToArrayAsync(query, cancellationToken).ConfigureAwait(false);
+        return new Seq<T>(ImmutableCollectionsMarshal.AsImmutableArray(rows));
+    }
 }

@@ -1,6 +1,6 @@
 using LinqToDB;
-using LinqToDB.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SharpCoreDB.Functional.Linq2DB;
 
@@ -25,7 +25,9 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Adds SharpCoreDB linq2db DataConnection (via DataOptions) to the service collection.
+    /// Adds a SharpCoreDB linq2db <see cref="SharpCoreDBDataConnection"/> and a <see cref="FunctionalLinq2DbContext"/>
+    /// over it to the service collection, both with <paramref name="lifetime"/>. Each resolved connection opens its own
+    /// SharpCoreDB connection. A <see cref="FunctionalLinq2DbContext"/> registration the caller already made is kept.
     /// </summary>
     public static IServiceCollection AddSharpCoreDBLinq2Db(
         this IServiceCollection services,
@@ -38,12 +40,7 @@ public static class Extensions
         var options = new DataOptions()
             .UseSharpCoreDB(connectionString);
 
-        services.Add(new ServiceDescriptor(
-            typeof(SharpCoreDBDataConnection),
-            _ => new SharpCoreDBDataConnection(options),
-            lifetime));
-
-        return services;
+        return Register(services, options, lifetime);
     }
 
     /// <summary>
@@ -71,9 +68,24 @@ public static class Extensions
                       ?? throw new InvalidOperationException(
                           "The configureOptions callback returned null; return the configured DataOptions.");
 
+        return Register(services, options, lifetime);
+    }
+
+    /// <summary>
+    /// Registers the connection and the functional context over it. Up to 2.1.4 only the connection was registered,
+    /// so every caller wired <see cref="FunctionalLinq2DbContext"/> by hand — often as a singleton over one shared
+    /// connection.
+    /// </summary>
+    private static IServiceCollection Register(IServiceCollection services, DataOptions options, ServiceLifetime lifetime)
+    {
         services.Add(new ServiceDescriptor(
             typeof(SharpCoreDBDataConnection),
             _ => new SharpCoreDBDataConnection(options),
+            lifetime));
+
+        services.TryAdd(new ServiceDescriptor(
+            typeof(FunctionalLinq2DbContext),
+            sp => new FunctionalLinq2DbContext(sp.GetRequiredService<SharpCoreDBDataConnection>()),
             lifetime));
 
         return services;

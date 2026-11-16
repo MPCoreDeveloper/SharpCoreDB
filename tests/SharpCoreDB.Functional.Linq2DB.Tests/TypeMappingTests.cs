@@ -62,43 +62,20 @@ public sealed class Linq2DbTestFixture : IDisposable
 
     public void Dispose()
     {
+        // Disposing the connection disposes the SharpCoreDB connection it opened, which releases the file; there are
+        // no SQLite -wal/-shm sidecars to retry for since the adapter stopped writing SQLite files (2.1.3).
         Connection?.Dispose();
 
-        // Robust cleanup for Windows SQLite locking and sidecar files
-        var cleanupPaths = new[] { DbPath, DbPath + "-wal", DbPath + "-shm" };
-
-        for (int i = 0; i < 20; i++)
+        try
         {
-            try
+            if (File.Exists(DbPath))
             {
-                foreach (var path in cleanupPaths)
-                {
-                    if (File.Exists(path))
-                    {
-                        File.Delete(path);
-                    }
-                }
-
-                return;
+                File.Delete(DbPath);
             }
-            catch (IOException)
-            {
-                if (i == 19)
-                {
-                    return;
-                }
-
-                System.Threading.Thread.Sleep(200);
-            }
-            catch (UnauthorizedAccessException)
-            {
-                if (i == 19)
-                {
-                    return;
-                }
-
-                System.Threading.Thread.Sleep(200);
-            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup of a temp file.
         }
     }
 }
