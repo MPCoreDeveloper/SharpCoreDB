@@ -1,6 +1,6 @@
 using LinqToDB;
-using LinqToDB.Data;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 
 namespace SharpCoreDB.Functional.Linq2DB;
 
@@ -21,12 +21,13 @@ public static class Extensions
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        var (provider, connection) = SharpCoreDBDataConnection.CreateProviderAndConnection(connectionString);
-        return SharpCoreDBDataConnection.Bind(options, provider, connection);
+        return SharpCoreDBDataConnection.Bind(options, connectionString);
     }
 
     /// <summary>
-    /// Adds SharpCoreDB linq2db DataConnection (via DataOptions) to the service collection.
+    /// Adds a SharpCoreDB linq2db <see cref="SharpCoreDBDataConnection"/> and a <see cref="FunctionalLinq2DbContext"/>
+    /// over it to the service collection, both with <paramref name="lifetime"/>. Each resolved connection opens its own
+    /// SharpCoreDB connection. A <see cref="FunctionalLinq2DbContext"/> registration the caller already made is kept.
     /// </summary>
     public static IServiceCollection AddSharpCoreDBLinq2Db(
         this IServiceCollection services,
@@ -39,31 +40,52 @@ public static class Extensions
         var options = new DataOptions()
             .UseSharpCoreDB(connectionString);
 
-        services.Add(new ServiceDescriptor(
-            typeof(SharpCoreDBDataConnection),
-            _ => new SharpCoreDBDataConnection(options),
-            lifetime));
-
-        return services;
+        return Register(services, options, lifetime);
     }
 
     /// <summary>
-    /// Adds SharpCoreDB DataConnection with custom DataOptions configuration.
+    /// Adds SharpCoreDB DataConnection with custom DataOptions configuration, for example
+    /// <c>options =&gt; options.UseSharpCoreDB(connectionString).UseAdditionalMappingSchema(mySchema)</c>.
+    /// <para>
+    /// <see cref="DataOptions"/> is immutable — every <c>Use…</c> call returns a new instance — so the callback
+    /// returns the configured options. Up to 2.1.4 this overload took an <c>Action&lt;DataOptions&gt;</c>, discarded
+    /// what the callback built, and resolving the connection threw "Configuration string is not provided".
+    /// </para>
     /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">Builds the options from an empty <see cref="DataOptions"/>.</param>
+    /// <param name="lifetime">Lifetime of the registered connection.</param>
+    /// <returns>The service collection.</returns>
     public static IServiceCollection AddSharpCoreDBLinq2Db(
         this IServiceCollection services,
-        Action<DataOptions> configureOptions,
+        Func<DataOptions, DataOptions> configureOptions,
         ServiceLifetime lifetime = ServiceLifetime.Scoped)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configureOptions);
 
-        var options = new DataOptions();
-        configureOptions(options);
+        var options = configureOptions(new DataOptions())
+                      ?? throw new InvalidOperationException(
+                          "The configureOptions callback returned null; return the configured DataOptions.");
 
+        return Register(services, options, lifetime);
+    }
+
+    /// <summary>
+    /// Registers the connection and the functional context over it. Up to 2.1.4 only the connection was registered,
+    /// so every caller wired <see cref="FunctionalLinq2DbContext"/> by hand — often as a singleton over one shared
+    /// connection.
+    /// </summary>
+    private static IServiceCollection Register(IServiceCollection services, DataOptions options, ServiceLifetime lifetime)
+    {
         services.Add(new ServiceDescriptor(
             typeof(SharpCoreDBDataConnection),
             _ => new SharpCoreDBDataConnection(options),
+            lifetime));
+
+        services.TryAdd(new ServiceDescriptor(
+            typeof(FunctionalLinq2DbContext),
+            sp => new FunctionalLinq2DbContext(sp.GetRequiredService<SharpCoreDBDataConnection>()),
             lifetime));
 
         return services;

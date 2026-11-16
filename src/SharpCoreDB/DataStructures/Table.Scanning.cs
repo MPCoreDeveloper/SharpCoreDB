@@ -263,6 +263,12 @@ public partial class Table
         return true;
     }
 
+    /// <summary>
+    /// Evaluates <paramref name="where"/> against a row with this table's WHERE semantics — the evaluator
+    /// <c>ExecuteQuery</c> uses. <c>Database.ExecuteQueryFast</c> calls it for its StructRow scan.
+    /// </summary>
+    internal bool MatchesWhere(Dictionary<string, object> row, string? where) => EvaluateWhere(row, where);
+
     private bool EvaluateWhere(Dictionary<string, object> row, string? where)
     {
         if (string.IsNullOrEmpty(where)) return true;
@@ -309,6 +315,14 @@ public partial class Table
             {
                 return andParts.All(part => EvaluateWhere(row, part));
             }
+        }
+
+        // A computed operand — strftime('%Y', at) = '2026', length(name) > 3, CAST(… AS INTEGER) = 5 — is evaluated
+        // by the shared scalar evaluator. Below, the left token is read as a column name, so such a condition used to
+        // match no row: every date filter linq2db's SQLite dialect writes takes this shape.
+        if (SqlScalarExpression.TryEvaluateCondition(row, where, out var computedMatch))
+        {
+            return computedMatch;
         }
 
         // ✅ Issue #339/#340: support IN / NOT IN lists for all column types, including

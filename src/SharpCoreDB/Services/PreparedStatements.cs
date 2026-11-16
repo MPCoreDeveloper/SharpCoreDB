@@ -446,12 +446,15 @@ internal static class ParameterBinder
         {
             string str => $"'{EscapeSqlString(str)}'",
             bool b => b ? "1" : "0",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss.fff}'",
+            DateTime dt => SqlLiteralFormatter.Literal(dt),
+            DateTimeOffset dto => SqlLiteralFormatter.Literal(dto),
+            DateOnly date => SqlLiteralFormatter.Literal(date),
+            TimeOnly time => SqlLiteralFormatter.Literal(time),
             decimal d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
             double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
             float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
-            int i => i.ToString(),
-            long l => l.ToString(),
+            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
 
             // Vector parameters are rendered as the bracketed literal the parser reads back into a float[]
             // (VectorBinaryCodec), and the VALUES/SET splitters keep that literal in one piece. Without this a
@@ -461,7 +464,7 @@ internal static class ParameterBinder
             Memory<float> vectorBuffer => VectorBinaryCodec.ToJson(vectorBuffer.Span),
             double[] vectorDoubles => VectorBinaryCodec.ToJson(Array.ConvertAll(vectorDoubles, static d => (float)d)),
             byte[] bytes => $"0x{System.Convert.ToHexString(bytes)}",
-            _ => $"'{EscapeSqlString(value.ToString())}'",
+            _ => $"'{EscapeSqlString(SqlLiteralFormatter.Invariant(value))}'",
         };
     }
 

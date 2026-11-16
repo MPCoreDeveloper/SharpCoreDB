@@ -137,6 +137,13 @@ public static partial class SqlParserPerformanceOptimizations
         // Pattern: columnName [operator] value
         // Operators: =, !=, >, <, >=, <=
         
+        // The compiled form understands `column op value` chains only. A parenthesis means a function or other computed
+        // operand (length(name) = 3), which it would read as a column name; the shared evaluator handles it instead.
+        if (whereClause.Contains('('))
+        {
+            return row => SqlParser.EvaluateJoinWhere(row, whereClause);
+        }
+
         try
         {
             // Split by AND/OR (simple implementation)
@@ -147,9 +154,9 @@ public static partial class SqlParserPerformanceOptimizations
         }
         catch (Exception)
         {
-            // Fallback: Accept all rows if parsing fails
-            // Better than throwing exception
-            return row => true;
+            // A condition this cannot compile is evaluated by the shared evaluator. Up to 2.1.4 it accepted every row,
+            // so an unsupported WHERE silently returned the whole table.
+            return row => SqlParser.EvaluateJoinWhere(row, whereClause);
         }
     }
 

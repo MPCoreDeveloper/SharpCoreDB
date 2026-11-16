@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using LinqToDB;
 using LinqToDB.Data;
 using LinqToDB.Mapping;
@@ -15,11 +16,17 @@ using DataType = LinqToDB.DataType;
 public sealed class SharpCoreDBMappingSchema : MappingSchema
 {
     /// <summary>
+    /// The configuration name of this schema; it identifies the schema inside a combined one, so the adapter adds
+    /// it to a caller's options exactly once.
+    /// </summary>
+    internal const string ConfigurationName = "SharpCoreDB";
+
+    /// <summary>
     /// Gets the singleton instance of the SharpCoreDB mapping schema.
     /// </summary>
     public static readonly SharpCoreDBMappingSchema Instance = new();
 
-    private SharpCoreDBMappingSchema() : base("SharpCoreDB")
+    private SharpCoreDBMappingSchema() : base(ConfigurationName)
     {
         // === ULID Value Converter (critical for SQLite/linq2db parameter binding) ===
         // Simple SetConverter<string, Ulid> is insufficient for INSERT/parameter binding.
@@ -42,22 +49,26 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
                 : new DataParameter(null, DBNull.Value, DataType.NVarChar));
         SetConverter<string?, Ulid?>(str => string.IsNullOrWhiteSpace(str) ? null : Ulid.Parse(str));
 
-        // GUIDs as compact string. A DataParameter (like the ULID one below) is what makes the SQLite provider
-        // render the value as text: with only the CLR converter registered the parameter kept DataType.Guid and
-        // the provider rendered it as a 16-byte blob literal (X'…'), which a TEXT column then stored as the
-        // literal text and could not read back into a Guid.
+        // GUIDs as text in the hyphenated "D" form. A DataParameter (like the ULID one above) is what makes the SQLite
+        // provider render the value as text: with only the CLR converter registered the parameter kept
+        // DataType.Guid and the provider rendered it as a 16-byte blob literal (X'…'), which a TEXT column then
+        // stored as the literal text and could not read back into a Guid. Guid → string must use the same form as
+        // the parameter — up to 2.1.4 it used "N", so a value converted that way never matched a stored one.
         SetConverter<Guid, DataParameter>(guid =>
             new DataParameter(null, guid.ToString("D"), DataType.NVarChar));
-        SetConverter<Guid, string>(guid => guid.ToString("N"));
+        SetConverter<Guid, string>(guid => guid.ToString("D"));
         SetConverter<string, Guid>(str => Guid.Parse(str));
 
-        // DateTime as ISO string
-        SetConverter<DateTime, string>(dt => dt.ToString("O"));
-        SetConverter<string, DateTime>(str => DateTime.Parse(str));
+        // Dates are read and written with the invariant culture: up to 2.1.4 the current culture parsed them, so
+        // under a non-Gregorian calendar (th-TH) the stored year 2026 read back as 1483. RoundtripKind keeps the
+        // DateTimeKind that an "O" string carries ("Z" stays UTC) instead of converting it to local time.
+        SetConverter<DateTime, string>(dt => dt.ToString("O", CultureInfo.InvariantCulture));
+        SetConverter<string, DateTime>(str =>
+            DateTime.Parse(str, CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
 
         // DateTimeOffset
-        SetConverter<DateTimeOffset, string>(dto => dto.ToString("O"));
-        SetConverter<string, DateTimeOffset>(str => DateTimeOffset.Parse(str));
+        SetConverter<DateTimeOffset, string>(dto => dto.ToString("O", CultureInfo.InvariantCulture));
+        SetConverter<string, DateTimeOffset>(str => DateTimeOffset.Parse(str, CultureInfo.InvariantCulture));
 
         // Boolean <-> integer for SQLite compatibility
         SetConverter<bool, int>(b => b ? 1 : 0);
@@ -77,6 +88,8 @@ public sealed class SharpCoreDBMappingSchema : MappingSchema
     /// <typeparam name="TTarget">Target type</typeparam>
     /// <param name="toTarget">Conversion function to target</param>
     /// <param name="toSource">Conversion function to source</param>
+    [Obsolete("Changes the process-wide Instance shared by every connection. Register the converters on your own " +
+              "MappingSchema and add it with DataOptions.UseAdditionalMappingSchema; it takes priority over these defaults.")]
     public void ConfigureCustomMapping<TSource, TTarget>(
         Func<TSource, TTarget> toTarget,
         Func<TTarget, TSource> toSource)

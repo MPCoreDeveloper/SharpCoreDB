@@ -341,6 +341,14 @@ public partial class SqlParser
         // like "a = 1 OR b = 2" (a leading "(" would otherwise stick to the column name).
         where = SqlInPredicate.StripOuterParentheses(where);
 
+        // A computed operand (strftime('%Y', at) = '2025', length(name) = 4) is evaluated by the shared scalar
+        // evaluator. The whitespace split below cut a function call apart, so UPDATE and DELETE with such a WHERE
+        // changed no row.
+        if (SqlScalarExpression.TryEvaluateCondition(row, where, out var computedMatch))
+        {
+            return computedMatch;
+        }
+
         // SQL whitespace may be any kind: splitting on the space character alone left a tab- or
         // newline-separated condition as a single unusable token.
         var parts = where.Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries);

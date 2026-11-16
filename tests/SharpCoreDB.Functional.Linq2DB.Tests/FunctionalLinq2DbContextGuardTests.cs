@@ -173,7 +173,14 @@ public sealed class FunctionalLinq2DbContextGuardTests : IAsyncDisposable
     [Fact]
     public async Task TransactionAsync_WithNullAction_ThrowsArgumentNullException()
     {
-        await Assert.ThrowsAsync<ArgumentNullException>(() => _sut.TransactionAsync<int>(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => _sut.TransactionAsync((Func<Task<int>>)null!));
+    }
+
+    [Fact]
+    public async Task TransactionAsync_WithNullContextAction_ThrowsArgumentNullException()
+    {
+        await Assert.ThrowsAsync<ArgumentNullException>(() =>
+            _sut.TransactionAsync((Func<FunctionalLinq2DbContext, CancellationToken, Task<int>>)null!));
     }
 
     [Fact]

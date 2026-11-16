@@ -468,6 +468,10 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
                 {
                     table.DefaultExpressions.Add(null);
                 }
+
+                // UNIQUE constraints are enforced through automatic unique indexes; tables created before they existed
+                // get theirs here. Registration builds nothing, so rows stored earlier never block an open.
+                table.EnsureUniqueConstraintIndexes();
                 // ✅ Phase 2: Backward compatible — missing column check expressions default to null
                 // REQUIRED: Table.Insert indexes ColumnCheckExpressions[i] without bounds checks,
                 // so this list MUST be padded to the column count after deserialization.

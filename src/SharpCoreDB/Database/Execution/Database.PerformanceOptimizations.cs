@@ -42,16 +42,6 @@ public partial class Database
         TimeSpan.FromSeconds(1));
 
     /// <summary>
-    /// Cache for compiled WHERE clause expressions.
-    /// Eliminates re-parsing overhead for repeated queries.
-    /// 
-    /// Performance: 50-100x faster for repeated WHERE clauses.
-    /// Typical improvement: 0.5ms → 0.01ms per query.
-    /// </summary>
-    private static readonly LruCache<string, Func<Dictionary<string, object>, bool>>
-        WhereClauseExpressionCache = new LruCache<string, Func<Dictionary<string, object>, bool>>(1000);
-
-    /// <summary>
     /// Fast path for SELECT * queries using StructRow.
     /// Avoids Dictionary materialization, 25x less memory.
     /// 
@@ -120,59 +110,33 @@ public partial class Database
         }
         else
         {
-            // With WHERE clause: use WHERE cache but don't materialize to Dictionary
-            // This is still more efficient than ExecuteQuery() because:
-            // 1. StructRow avoids Dictionary allocation per row
-            // 2. WHERE predicate is cached
-            // 3. Only materializes values that match WHERE conditions
-            
-            var dictionaryPredicate = GetOrCompileWhereClause(whereClause);
-            
+            // With a WHERE clause the result is still StructRows; only the WHERE evaluation materialises a row's
+            // values — by column name, through the table's own evaluator, so the rows match ExecuteQuery's.
             return actualTable.SelectStructWhere(
-                    row => EvaluateWhereOnStructRow(row, dictionaryPredicate, actualTable),
+                    row => EvaluateWhereOnStructRow(row, whereClause, actualTable),
                     enableCaching: false)
                 .ToList();
         }
     }
-    
+
     /// <summary>
-    /// Helper to evaluate a WHERE predicate on StructRow by converting to temporary Dictionary.
-    /// This is still more efficient than the full Dictionary path because we only materialize
-    /// the rows that match the WHERE clause.
+    /// Evaluates the WHERE clause against a StructRow with the table's own WHERE evaluator — the one ExecuteQuery uses
+    /// (IN, LIKE, collations, functions over columns).
+    /// <para>
+    /// Up to 2.1.4 the values were keyed <c>col0</c>, <c>col1</c>, … and handed to a separately compiled predicate:
+    /// a condition naming a column matched no row, and one the compiler could not parse accepted every row.
+    /// </para>
     /// </summary>
-    private static bool EvaluateWhereOnStructRow(
-        StructRow row, 
-        Func<Dictionary<string, object>, bool> wherePredicate,
-        Table table)
+    private static bool EvaluateWhereOnStructRow(StructRow row, string whereClause, Table table)
     {
-        // Create a minimal temporary Dictionary just for WHERE evaluation
-        var tempRow = new Dictionary<string, object>();
-        
-        // We need column names - get them from the table
-        // For now, use a simple approach: enumerate columns and add their values
-        try
+        var names = row.GetColumnNames();
+        var values = new Dictionary<string, object>(names.Length, StringComparer.OrdinalIgnoreCase);
+        for (int i = 0; i < names.Length; i++)
         {
-            // Try to get columns 0-N until we hit an error
-            for (int i = 0; i < 256; i++)  // Reasonable upper limit
-            {
-                try
-                {
-                    var value = row.GetValue<object>(i);
-                    tempRow[$"col{i}"] = value ?? DBNull.Value;
-                }
-                catch
-                {
-                    break;  // No more columns
-                }
-            }
+            values[names[i]] = row.IsNull(i) ? DBNull.Value : row.GetValueBoxed(i);
         }
-        catch
-        {
-            // If something goes wrong, just accept the row
-            return true;
-        }
-        
-        return wherePredicate(tempRow);
+
+        return table.MatchesWhere(values, whereClause);
     }
 
     /// <summary>
@@ -205,121 +169,5 @@ public partial class Database
 
         table.Insert(row);
         return ValueTask.FromResult(1);
-    }
-
-    /// <summary>
-    /// Gets WHERE clause compiled expression from cache.
-    /// Returns cached compiled predicate or compiles new one.
-    /// 
-    /// Performance: Cache hit rate > 80% typical for OLTP.
-    /// First query: 0.5ms (parsing + compilation).
-    /// Subsequent: 0.01ms (cache lookup only).
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal Func<Dictionary<string, object>, bool> GetOrCompileWhereClause(string whereClause)
-    {
-        ArgumentNullException.ThrowIfNull(whereClause);
-        
-        whereClause = whereClause.Trim();
-        
-        // Empty WHERE clause = no filtering
-        if (string.IsNullOrEmpty(whereClause))
-        {
-            return row => true;
-        }
-        
-        // Try cache first
-        if (WhereClauseExpressionCache.TryGetValue(whereClause, out var cached))
-        {
-            return cached;
-        }
-        
-        // Cache miss: Compile new predicate
-        var compiled = SqlParserPerformanceOptimizations.CompileWhereClause(whereClause);
-        
-        // Store in cache for future use
-        WhereClauseExpressionCache.GetOrAdd(whereClause, _ => compiled);
-        
-        return compiled;
-    }
-
-    /// <summary>
-    /// Clear WHERE clause cache (on schema changes).
-    /// </summary>
-    [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    internal void ClearWhereClauseCache()
-    {
-        WhereClauseExpressionCache.Clear();
-    }
-}
-
-/// <summary>
-/// LRU Cache for compiled expressions.
-/// Simple thread-safe cache with capacity limit.
-/// </summary>
-internal sealed class LruCache<TKey, TValue> where TKey : notnull
-{
-    private readonly int _capacity;
-    private readonly Dictionary<TKey, (TValue value, long timestamp)> _cache;
-    private long _currentTimestamp;
-    private readonly Lock _lock = new();
-
-    public LruCache(int capacity)
-    {
-        _capacity = capacity;
-        _cache = new Dictionary<TKey, (TValue, long)>(capacity);
-    }
-
-    public bool TryGetValue(TKey key, out TValue value)
-    {
-        lock (_lock)
-        {
-            if (_cache.TryGetValue(key, out var entry))
-            {
-                // Update timestamp for LRU
-                _cache[key] = (entry.value, ++_currentTimestamp);
-                value = entry.value;
-                return true;
-            }
-
-            value = default;
-            return false;
-        }
-    }
-
-    public TValue GetOrAdd(TKey key, Func<TKey, TValue> factory)
-    {
-        lock (_lock)
-        {
-            if (_cache.TryGetValue(key, out var entry))
-            {
-                _cache[key] = (entry.value, ++_currentTimestamp);
-                return entry.value;
-            }
-
-            var newValue = factory(key);
-
-            // Evict oldest if at capacity
-            if (_cache.Count >= _capacity)
-            {
-                var oldestKey = _cache
-                    .OrderBy(x => x.Value.timestamp)
-                    .First()
-                    .Key;
-                _cache.Remove(oldestKey);
-            }
-
-            _cache[key] = (newValue, ++_currentTimestamp);
-            return newValue;
-        }
-    }
-
-    public void Clear()
-    {
-        lock (_lock)
-        {
-            _cache.Clear();
-            _currentTimestamp = 0;
-        }
     }
 }

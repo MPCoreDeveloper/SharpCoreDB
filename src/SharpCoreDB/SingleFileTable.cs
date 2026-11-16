@@ -173,13 +173,14 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         ColumnTypes = columnTypes;
         PrimaryKeyIndex = primaryKeyIndex;
 
-        // Copy constraint lists
+        // Defaults first, then the declared constraints. Up to 2.1.4 InitializeColumnMetadata() ran after the copy and
+        // reset NOT NULL and AUTOINCREMENT to false for the session that created the table.
+        InitializeColumnMetadata();
+
         IsNotNull.Clear();
         IsNotNull.AddRange(isNotNull);
         IsAuto.Clear();
         IsAuto.AddRange(isAuto);
-
-        InitializeColumnMetadata();
     }
 
     /// <inheritdoc />
@@ -254,6 +255,7 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         lock (_tableLock)
         {
             ApplyDefaults(row);
+            ValidateNotNull(row, rowIndex: null);
             _rowCache.Add(row);
             IndexRow(row);
             _isDirty = true;
@@ -277,10 +279,16 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
 
         lock (_tableLock)
         {
+            // Every row is checked before any is cached, so a NOT NULL violation leaves no part of the batch behind.
+            for (int i = 0; i < rows.Count; i++)
+            {
+                ApplyDefaults(rows[i]);
+                ValidateNotNull(rows[i], rowIndex: i);
+            }
+
             for (int i = 0; i < rows.Count; i++)
             {
                 var row = rows[i];
-                ApplyDefaults(row);
                 _rowCache.Add(row);
                 IndexRow(row);
                 positions[i] = _rowCache.Count - 1;
@@ -431,6 +439,10 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         bool updatesTouchPk = PrimaryKeyIndex >= 0 &&
             updates.Keys.Any(k => string.Equals(k, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase));
 
+        // SQLite raises NOT NULL only for a row the UPDATE actually changes, so it is checked at the first match,
+        // before anything is written.
+        var notNullViolation = FindNotNullViolation(updates);
+
         int affected = 0;
         lock (_tableLock)
         {
@@ -438,6 +450,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             {
                 if (string.IsNullOrWhiteSpace(condition) || EvaluateCondition(row, condition))
                 {
+                    if (notNullViolation is not null)
+                    {
+                        throw new InvalidOperationException($"Column '{notNullViolation}' cannot be NULL");
+                    }
+
                     string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
 
                     foreach (var update in updates)
@@ -1351,6 +1368,43 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             or DataType.Boolean or DataType.Guid or DataType.Ulid;
     }
 
+    /// <summary>
+    /// Enforces NOT NULL as the directory-mode table does. Up to 2.1.4 the single-file table never checked it, so a NULL
+    /// went into a NOT NULL column.
+    /// </summary>
+    private void ValidateNotNull(Dictionary<string, object> row, int? rowIndex)
+    {
+        for (int i = 0; i < Columns.Count && i < IsNotNull.Count; i++)
+        {
+            if (IsNotNull[i] && (!row.TryGetValue(Columns[i], out var value) || value is null or DBNull))
+            {
+                throw new InvalidOperationException(rowIndex is null
+                    ? $"Column '{Columns[i]}' cannot be NULL"
+                    : $"Column '{Columns[i]}' cannot be NULL in row {rowIndex}");
+            }
+        }
+    }
+
+    /// <summary>Returns the first NOT NULL column an UPDATE would set to NULL, or <c>null</c>.</summary>
+    private string? FindNotNullViolation(Dictionary<string, object> updates)
+    {
+        foreach (var (column, value) in updates)
+        {
+            if (value is not (null or DBNull))
+            {
+                continue;
+            }
+
+            int index = Columns.FindIndex(c => c.Equals(column, StringComparison.OrdinalIgnoreCase));
+            if (index >= 0 && index < IsNotNull.Count && IsNotNull[index])
+            {
+                return Columns[index];
+            }
+        }
+
+        return null;
+    }
+
     private void ApplyDefaults(Dictionary<string, object> row)
     {
         for (int i = 0; i < Columns.Count; i++)
@@ -1654,8 +1708,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             trimmed.Contains(" IN ", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("LIKE", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase))
+            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains('('))
         {
+            // A parenthesis means a function or other computed operand (strftime('%Y', at) = '2026'): compiled here it
+            // became a lookup of a column literally named "strftime('%Y', at)" and matched no row.
             return null;
         }
 
@@ -1841,6 +1898,13 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
     {
         var trimmed = condition.Trim();
+
+        // A computed operand (strftime, upper, length, CAST, …) is evaluated by the shared scalar evaluator; the
+        // patterns below read the left operand as a column name and matched no row.
+        if (SqlScalarExpression.TryEvaluateCondition(row, trimmed, out var computedMatch))
+        {
+            return computedMatch;
+        }
 
         // ✅ Parity: support IS NULL / IS NOT NULL (previously ignored → all rows returned)
         var isNullMatch = System.Text.RegularExpressions.Regex.Match(
