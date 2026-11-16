@@ -20,7 +20,11 @@ using System.Text.RegularExpressions;
 /// </summary>
 public partial class SqlParser
 {
-    private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*?)\s+WHERE\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
+    // The WHERE clause is OPTIONAL, as for DELETE: SQLite's `UPDATE t SET n = 0` changes every row, and this regex
+    // required a WHERE, so the statement threw "Invalid UPDATE syntax". The SET list and the WHERE clause are split by
+    // SplitUpdateSetAndWhere, at the first WHERE outside a quoted literal or parentheses — the regex split at the first
+    // WHERE anywhere, so `SET note = 'see where' WHERE id = 1` lost the rest of the literal.
+    private static readonly Regex UpdateRegex = new(@"UPDATE\s+[""'`\[]?(\w+)[""'`\]]?\s+SET\s+(.*)", RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled, TimeSpan.FromSeconds(1));
 
     // The WHERE clause is OPTIONAL (2026-09-27, session 73): SQLite accepts `DELETE FROM t` and removes every
     // row, and the table layer already reads a null/empty WHERE that way (Table.CRUD.cs — the full-scan filter
@@ -1940,23 +1944,35 @@ public partial class SqlParser
             currentRows = [.. currentRows.Where(r => EvaluateJoinRowWhere(r, whereClause))];
         }
 
-        // 4. Apply ORDER BY
+        // 4. Apply ORDER BY — the whole list as the single-table path reads it (SqlOrderBy): every key with its own
+        // direction, expressions (LENGTH(p.name), c.score * -1), aliases and ordinals. Up to 2.1.4 only the first token of
+        // the first key was read, so a second key, an expression or a DESC after an expression was ignored.
         var orderPos2 = FindKeywordPosition(sqlUpper, "ORDER BY");
         if (orderPos2 >= 0)
         {
             var limitPos = FindKeywordPosition(sqlUpper, SqlConstants.LIMIT, orderPos2 + 8);
             int end = limitPos >= 0 ? limitPos : sql.Length;
             var orderClause = sql.Substring(orderPos2 + 8, end - orderPos2 - 8).Trim();
-            currentRows = ApplyJoinOrderBy(currentRows, orderClause);
+            var joinSelect = System.Text.RegularExpressions.Regex.Match(
+                sql, @"SELECT\s+(.*?)\s+FROM\b",
+                System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline, TimeSpan.FromSeconds(1));
+            var orderTerms = SqlOrderBy.TryParse(orderClause, joinSelect.Success ? joinSelect.Groups[1].Value : "*");
+            currentRows = orderTerms is null
+                ? ApplyJoinOrderBy(currentRows, orderClause)
+                : SqlOrderBy.Sort(currentRows, orderTerms, table: null);
         }
 
-        // 5. Apply LIMIT
+        // 5. Apply LIMIT / OFFSET, in SQLite's three forms (LIMIT n, LIMIT n OFFSET m, LIMIT m, n). Up to 2.1.4 the OFFSET
+        // was ignored and LIMIT 0 returned every row.
         var limitPos2 = FindKeywordPosition(sqlUpper, SqlConstants.LIMIT);
         if (limitPos2 >= 0)
         {
-            var limitStr = sql[(limitPos2 + 5)..].Trim().Split(' ', ',')[0];
-            if (int.TryParse(limitStr, out var lim) && lim > 0)
-                currentRows = [.. currentRows.Take(lim)];
+            string[] limitParts = ["SELECT", .. sql[limitPos2..].Split([' ', '\t', '\r', '\n'], StringSplitOptions.RemoveEmptyEntries)];
+            var (joinLimit, joinOffset) = ParseLimitClause(limitParts, 1);
+            if (joinOffset is > 0)
+                currentRows = [.. currentRows.Skip(joinOffset.Value)];
+            if (joinLimit.HasValue)
+                currentRows = [.. currentRows.Take(joinLimit.Value)];
         }
 
         // 6. Apply SELECT column projection and aliases
@@ -2428,12 +2444,14 @@ public partial class SqlParser
         if (!tables.TryGetValue(tableName, out var table))
             throw new InvalidOperationException($"Table {tableName} does not exist");
 
+        var (setList, whereClause) = SplitUpdateSetAndWhere(updateMatch.Groups[2].Value);
+
         // Bracket-aware split: `SET embedding = [0.5, 0.25]` is one assignment, not two
         // (SqlInPredicate.SplitTopLevelComma honours quotes, parentheses and bracketed literals).
-        var setClauses = SqlInPredicate.SplitTopLevelComma(updateMatch.Groups[2].Value.Trim());
-        var whereClause = updateMatch.Groups[3].Value.Trim();
+        var setClauses = SqlInPredicate.SplitTopLevelComma(setList);
 
         var updates = new Dictionary<string, object?>();
+        List<KeyValuePair<string, Func<Dictionary<string, object>, object?>>>? computed = null;
         foreach (var setClause in setClauses)
         {
             // Split at the FIRST '=' only. A bound text value may contain '=' itself (a URL query string, a
@@ -2454,8 +2472,15 @@ public partial class SqlParser
                 if (colIndex >= 0)
                 {
                     var colType = table.ColumnTypes[colIndex];
-                    var value = SqlParser.ParseValue(valueStr, colType);
-                    updates[colName] = value;
+
+                    // `SET n = n + 1`, `SET name = upper(name)`: computed per row (see SqlParser.SetExpressions).
+                    if (IsComputedSetValue(valueStr, table.Columns, out var expression))
+                    {
+                        (computed ??= []).Add(new(colName, CompileSetExpression(expression, colType)));
+                        continue;
+                    }
+
+                    updates[colName] = ParseSetLiteral(valueStr, colType);
                 }
                 else
                 {
@@ -2470,7 +2495,9 @@ public partial class SqlParser
         // Issue #8: single-pass — UpdateAffectedCount applies the update AND returns the affected
         // count, so change-tracking no longer needs a separate full Select pass (the old code
         // materialized every matching row just to count them).
-        var affectedCount = table.UpdateAffectedCount(whereClause, updates);
+        var affectedCount = computed is null
+            ? table.UpdateAffectedCount(whereClause, updates)
+            : table.UpdateAffectedCount(whereClause, updates!, computed);
         _lastChanges = affectedCount;
         _totalChanges += affectedCount;
 
@@ -2482,6 +2509,57 @@ public partial class SqlParser
         }
 
         wal?.Log(sqlWithoutReturning);
+    }
+
+    /// <summary>
+    /// Splits the text after <c>SET</c> into the SET list and the WHERE clause (empty when there is none), at the first
+    /// WHERE keyword outside a quoted literal, a quoted identifier or parentheses.
+    /// </summary>
+    private static (string SetList, string Where) SplitUpdateSetAndWhere(string text)
+    {
+        int depth = 0;
+        for (int i = 0; i < text.Length; i++)
+        {
+            char c = text[i];
+            if (c is '\'' or '"' or '`' or '[')
+            {
+                char close = c == '[' ? ']' : c;
+                for (i++; i < text.Length; i++)
+                {
+                    if (text[i] != close)
+                    {
+                        continue;
+                    }
+
+                    if (close != ']' && i + 1 < text.Length && text[i + 1] == close)
+                    {
+                        i++; // a doubled quote is one quote of data
+                        continue;
+                    }
+
+                    break;
+                }
+
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                depth--;
+            }
+            else if (depth == 0 && (c is 'W' or 'w') && i > 0 && char.IsWhiteSpace(text[i - 1]) &&
+                     string.Compare(text, i, "WHERE", 0, 5, StringComparison.OrdinalIgnoreCase) == 0 &&
+                     (i + 5 == text.Length || char.IsWhiteSpace(text[i + 5]) || text[i + 5] == '('))
+            {
+                return (text[..i].Trim(), text[(i + 5)..].Trim());
+            }
+        }
+
+        return (text.Trim(), string.Empty);
     }
 
     /// <summary>
@@ -3286,22 +3364,29 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
         for (int i = 0; i < orderBy.Items.Count; i++)
         {
             var item = orderBy.Items[i];
+            var key = OrderKeySelector(item);
             if (i == 0)
             {
                 ordered = item.IsAscending
-                    ? rows.OrderBy(row => GetValue(row, item.Column), comparer)
-                    : rows.OrderByDescending(row => GetValue(row, item.Column), comparer);
+                    ? rows.OrderBy(key, comparer)
+                    : rows.OrderByDescending(key, comparer);
             }
             else
             {
                 ordered = item.IsAscending
-                    ? ordered.ThenBy(row => GetValue(row, item.Column), comparer)
-                    : ordered.ThenByDescending(row => GetValue(row, item.Column), comparer);
+                    ? ordered.ThenBy(key, comparer)
+                    : ordered.ThenByDescending(key, comparer);
             }
         }
 
         return [.. ordered];
     }
+
+    /// <summary>The sort key of an ORDER BY item: its expression's value (<c>LENGTH(name)</c>), else the column's.</summary>
+    internal static Func<Dictionary<string, object>, object?> OrderKeySelector(OrderByItem item) =>
+        item.Expression is { } expression && SqlScalarExpression.TryParse(expression, out var node)
+            ? row => SqlScalarExpression.Evaluate(node, row)
+            : row => GetValue(row, item.Column);
 
     private static List<Dictionary<string, object>> ApplyWindowing(List<Dictionary<string, object>> rows, int? offset, int? limit)
     {

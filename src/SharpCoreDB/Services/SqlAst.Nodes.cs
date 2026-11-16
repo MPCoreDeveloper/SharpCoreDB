@@ -388,6 +388,12 @@ public class OrderByItem
     /// Null when ordering by column name.
     /// </summary>
     public int? OrdinalPosition { get; set; }
+
+    /// <summary>
+    /// Gets or sets the key's expression text when the key is an expression rather than a column
+    /// (<c>ORDER BY LENGTH(name)</c>, <c>ORDER BY price * qty</c>); null for a column or an ordinal.
+    /// </summary>
+    public string? Expression { get; set; }
 }
 
 /// <summary>

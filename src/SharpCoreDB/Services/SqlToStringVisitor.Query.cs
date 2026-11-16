@@ -153,7 +153,7 @@ public sealed partial class SqlToStringVisitor
     {
         var items = node.Items.Select(i =>
         {
-            var col = i.Column.Accept(this);
+            var col = i.Expression ?? i.Column.Accept(this);
             return i.IsAscending ? col : $"{col} DESC";
         });
         return $"ORDER BY {string.Join(", ", items)}";

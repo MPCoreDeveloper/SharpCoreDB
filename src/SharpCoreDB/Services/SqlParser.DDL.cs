@@ -8,6 +8,7 @@ using SharpCoreDB.Constants;
 using SharpCoreDB.DataStructures;
 using SharpCoreDB.Interfaces;
 using SharpCoreDB.Storage.Hybrid;
+using System.Text.RegularExpressions;
 
 /// <summary>
 /// SqlParser partial class containing DDL (Data Definition Language) operations:
@@ -77,8 +78,12 @@ public partial class SqlParser
 
         // ✅ Phase 9: Per-column locale names (null for non-Locale collations)
         var columnLocaleNames = new List<string?>();
-        
-        // ✅ FIX: Determine default storage mode from DatabaseConfig if present
+
+        // Every column the PRIMARY KEY names — inline (`id INTEGER PRIMARY KEY`) or as a table constraint
+        // (`PRIMARY KEY (a, b)`). Resolved after the loop: one column is the table's key; several are a composite key.
+        var primaryKeyColumns = new List<string>();
+
+        // ✅ FIX: Determine default storage modefrom DatabaseConfig if present
         // This ensures encrypted PageBased databases create tables with PageBased mode
         var storageMode = this.config?.StorageEngineType switch
         {
@@ -114,8 +119,19 @@ public partial class SqlParser
 
         for (int i = 0; i < colDefs.Count; i++)
         {
-            var def = colDefs[i];
+            // A table constraint may carry a name (`CONSTRAINT pk_t PRIMARY KEY (a, b)`, as EF Core migrations write
+            // it). SQLite uses the name only in messages; it is dropped here. Up to 2.1.4 such a definition was read
+            // as a column called CONSTRAINT.
+            var def = StripConstraintName(colDefs[i]);
             var defUpper = def.ToUpperInvariant();
+
+            // A table-level PRIMARY KEY (a, b). Up to 2.1.4 it was read as a column called PRIMARY that became the
+            // primary key — always NULL, so a second row was a key violation and the table held one row.
+            if (TableLevelPrimaryKeyRegex.IsMatch(def))
+            {
+                primaryKeyColumns.AddRange(ParseUniqueConstraintColumns(def));
+                continue;
+            }
 
             if (defUpper.StartsWith("UNIQUE", StringComparison.OrdinalIgnoreCase))
             {
@@ -209,14 +225,16 @@ public partial class SqlParser
             
             if (isPrimary)
             {
-                primaryKeyIndex = i;
+                primaryKeyColumns.Add(colName);
             }
-            
+
             if (isUniqueCol)
             {
                 uniqueConstraints.Add([colName]);
             }
         }
+
+        primaryKeyIndex = ResolvePrimaryKey(primaryKeyColumns, columns, uniqueConstraints);
 
         // ✅ AUTO-ROWID: When no explicit PRIMARY KEY is defined, inject a hidden
         // _rowid column using ULID type. This ensures every table has a primary key
@@ -243,6 +261,7 @@ public partial class SqlParser
         // ✅ NEW: Parse FOREIGN KEY constraints (Phase 1.2)
         // Look for FOREIGN KEY definitions in the column definitions
         foreignKeys.AddRange(colDefs
+            .Select(StripConstraintName)
             .Where(def => def.Trim().ToUpper().StartsWith("FOREIGN KEY"))
             .Select(def => ParseForeignKeyFromString(def.Trim()))
             .Where(fk => fk is not null));
@@ -481,6 +500,58 @@ public partial class SqlParser
     /// </summary>
     /// <param name="definition">A column definition as split out of the statement.</param>
     /// <returns>The column name the catalog is keyed by.</returns>
+    private static readonly Regex TableLevelPrimaryKeyRegex = new(
+        @"^\s*PRIMARY\s+KEY\s*\(",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    private static readonly Regex ConstraintNameRegex = new(
+        @"^\s*CONSTRAINT\s+(?:""[^""]*""|\[[^\]]*\]|`[^`]*`|[A-Za-z_][\w$]*)\s+",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled,
+        TimeSpan.FromSeconds(1));
+
+    /// <summary>Drops a leading <c>CONSTRAINT name</c> from a table-constraint definition.</summary>
+    private static string StripConstraintName(string definition)
+    {
+        var match = ConstraintNameRegex.Match(definition);
+        return match.Success ? definition[match.Length..] : definition;
+    }
+
+    /// <summary>
+    /// Resolves the declared PRIMARY KEY columns to the table's key column. One column is the key. Several — a
+    /// table-level <c>PRIMARY KEY (a, b)</c>, or <c>PRIMARY KEY</c> written on more than one column, which is how EF
+    /// Core's <c>EnsureCreated</c> declares a composite key — are a composite key: as in a SQLite rowid table, the
+    /// table keeps its row id as the storage key and the composite key is enforced as a UNIQUE constraint over all
+    /// its columns. Up to 2.1.4 the last of several inline PRIMARY KEY columns silently became the whole key, so rows
+    /// that differed only in the other key columns were refused as duplicates.
+    /// </summary>
+    /// <returns>The index of the single key column, or <c>-1</c> when there is none (or the key is composite).</returns>
+    private static int ResolvePrimaryKey(List<string> primaryKeyColumns, List<string> columns, List<List<string>> uniqueConstraints)
+    {
+        var resolved = new List<string>(primaryKeyColumns.Count);
+        foreach (var name in primaryKeyColumns)
+        {
+            var column = columns.Find(c => c.Equals(name, StringComparison.OrdinalIgnoreCase))
+                ?? throw new InvalidOperationException($"PRIMARY KEY names column '{name}', which the table does not have");
+            if (!resolved.Contains(column, StringComparer.OrdinalIgnoreCase))
+            {
+                resolved.Add(column);
+            }
+        }
+
+        if (resolved.Count == 1)
+        {
+            return columns.IndexOf(resolved[0]);
+        }
+
+        if (resolved.Count > 1)
+        {
+            uniqueConstraints.Add(resolved);
+        }
+
+        return -1;
+    }
+
     private static string ReadColumnName(string definition)
     {
         if (SqlIdentifierScanner.TryReadIdentifier(definition, 0, out int start, out int end))

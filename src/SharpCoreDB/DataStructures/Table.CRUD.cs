@@ -1772,6 +1772,15 @@ public partial class Table
                 ValidateKeyChanges([(rows.ConvertAll(r => r.Row), updates)]);
             }
 
+            // NOT NULL and CHECK are checked for every matched row before the first one is written, so a statement that
+            // fails on its third row leaves the first two unchanged — SQLite's statement atomicity. Up to 2.1.4 each row
+            // was validated as it was written and a failure kept the rows before it.
+            bool hasCheckConstraints = HasCheckConstraints();
+            foreach (var (_, row) in rows)
+            {
+                ValidateRowAfterUpdate(row, updates, hasCheckConstraints);
+            }
+
             foreach (var (rowPos, row) in rows)
             {
                 affected++;
@@ -1814,13 +1823,11 @@ public partial class Table
                 .Where(row.ContainsKey)
                 .ToDictionary(key => key, key => row[key]);
 
-        // Apply updates to the row
+        // Apply updates to the row (validated by the caller, for every matched row, before any was written)
         foreach (var update in updates)
         {
             row[update.Key] = update.Value;
         }
-
-        ValidateUpdatedRow(row);
 
         if (StorageMode == StorageMode.Columnar)
         {
@@ -1874,6 +1881,60 @@ public partial class Table
         }
 
         return false;
+    }
+
+    /// <summary>Returns <c>true</c> when the table has a column-level or table-level CHECK constraint. Allocates nothing.</summary>
+    private bool HasCheckConstraints()
+    {
+        if (this.TableCheckConstraints.Count > 0)
+        {
+            return true;
+        }
+
+        foreach (var expression in this.ColumnCheckExpressions) // NOSONAR:S3267 - write hot path: LINQ would allocate
+        {
+            if (expression is not null)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Validates <paramref name="row"/> as <paramref name="updates"/> would leave it, without changing it: NOT NULL is
+    /// read through the SET list and allocates nothing; only a table with CHECK constraints builds the updated row.
+    /// </summary>
+    private void ValidateRowAfterUpdate(Dictionary<string, object> row, Dictionary<string, object> updates, bool hasCheckConstraints)
+    {
+        for (int i = 0; i < this.Columns.Count && i < this.IsNotNull.Count; i++)
+        {
+            if (!this.IsNotNull[i])
+            {
+                continue;
+            }
+
+            var column = this.Columns[i];
+            var value = TryGetUpdateValue(updates, column, out var updated)
+                ? updated
+                : row.TryGetValue(column, out var current) ? current : null;
+            if (value is null or DBNull)
+            {
+                throw new InvalidOperationException($"Column '{column}' cannot be NULL");
+            }
+        }
+
+        if (hasCheckConstraints)
+        {
+            var updatedRow = new Dictionary<string, object>(row, row.Comparer);
+            foreach (var (column, value) in updates)
+            {
+                updatedRow[column] = value;
+            }
+
+            ValidateUpdatedRow(updatedRow);
+        }
     }
 
     private void ValidateUpdatedRow(Dictionary<string, object> row)

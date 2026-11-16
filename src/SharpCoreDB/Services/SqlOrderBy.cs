@@ -24,6 +24,28 @@ using SharpCoreDB.Interfaces;
 /// </summary>
 internal static class SqlOrderBy
 {
+    /// <summary>
+    /// Compares sort keys as SQLite does: NULL first, numbers and text by <see cref="SqlScalarExpression.TryCompare"/>.
+    /// </summary>
+    internal sealed class KeyComparer : IComparer<object?>
+    {
+        public static readonly KeyComparer Instance = new();
+
+        public int Compare(object? x, object? y)
+        {
+            bool xNull = x is null or DBNull;
+            bool yNull = y is null or DBNull;
+            if (xNull || yNull)
+            {
+                return xNull == yNull ? 0 : xNull ? -1 : 1;
+            }
+
+            return x is string xs && y is string ys
+                ? string.CompareOrdinal(xs, ys)
+                : SqlScalarExpression.TryCompare(x, y, out var c) ? c : 0;
+        }
+    }
+
     /// <summary>One ORDER BY key.</summary>
     internal sealed class Term(SqlScalarExpression.Node key, bool descending, bool nullsFirst, string? collation, string? columnName)
     {
@@ -96,11 +118,11 @@ internal static class SqlOrderBy
     /// <summary>Sorts rows by the terms (stable), before any OFFSET/LIMIT is applied.</summary>
     /// <param name="rows">The rows to sort.</param>
     /// <param name="terms">The ORDER BY terms.</param>
-    /// <param name="table">The table, for declared column collations.</param>
+    /// <param name="table">The table, for declared column collations; <c>null</c> for a JOIN result (BINARY unless COLLATE).</param>
     internal static List<Dictionary<string, object>> Sort(
         List<Dictionary<string, object>> rows,
         IReadOnlyList<Term> terms,
-        ITable table)
+        ITable? table)
     {
         if (rows.Count < 2)
         {
@@ -168,7 +190,7 @@ internal static class SqlOrderBy
     }
 
     /// <summary>The text comparer for a term: its COLLATE, else the column's declared collation, else BINARY (null).</summary>
-    private static IComparer<string>? TextComparerFor(Term term, ITable table)
+    private static IComparer<string>? TextComparerFor(Term term, ITable? table)
     {
         switch (term.Collation)
         {
@@ -180,7 +202,7 @@ internal static class SqlOrderBy
                 return null;
         }
 
-        if (term.ColumnName is null)
+        if (term.ColumnName is null || table is null)
         {
             return null;
         }

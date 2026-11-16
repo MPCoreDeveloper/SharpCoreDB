@@ -32,6 +32,7 @@ internal static class SqlScalarExpression
 
     private static readonly ConcurrentDictionary<string, Node?> ExpressionCache = new(StringComparer.Ordinal);
     private static readonly ConcurrentDictionary<string, Condition?> ConditionCache = new(StringComparer.Ordinal);
+    private static readonly ConcurrentDictionary<string, Condition?> CheckCache = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, object> EmptyRow = new(StringComparer.OrdinalIgnoreCase);
 
     private static readonly Regex NumericPrefix = new(
@@ -95,6 +96,33 @@ internal static class SqlScalarExpression
         result = compiled.Evaluate(row) == true;
         return true;
     }
+
+    /// <summary>
+    /// Evaluates a CHECK constraint as SQLite does: the row passes unless the expression is <em>false</em> — a NULL
+    /// (unknown) result passes, so <c>CHECK (price &gt; 0)</c> accepts a row without a price. Returns <c>false</c> —
+    /// "not mine" — when the expression uses syntax this evaluator does not cover (IN, BETWEEN, a subquery), so the
+    /// caller's own evaluator stays in charge of it.
+    /// </summary>
+    internal static bool TryEvaluateCheck(string expression, Dictionary<string, object> row, out bool passes)
+    {
+        var compiled = GetOrAdd(CheckCache, expression, static c => ConditionCompiler.CompileAny(c));
+        passes = compiled is null || compiled.Evaluate(row) != false;
+        return compiled is not null;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the expression reads a column for which <paramref name="isColumn"/> holds, or calls a
+    /// function or CAST — that is, when its value can differ from row to row. Constant arithmetic such as
+    /// <c>2024-01-15</c> returns <c>false</c>.
+    /// </summary>
+    internal static bool ReferencesColumnOrFunction(Node node, Func<string, bool> isColumn) => node switch
+    {
+        Column column => isColumn(column.Name),
+        Call or Cast => true,
+        Binary binary => ReferencesColumnOrFunction(binary.Left, isColumn) || ReferencesColumnOrFunction(binary.Right, isColumn),
+        Negate negate => ReferencesColumnOrFunction(negate.Operand, isColumn),
+        _ => false,
+    };
 
     /// <summary>SQLite's text form of a value (what <c>upper</c>, <c>length</c>, <c>||</c> and CAST AS TEXT see).</summary>
     internal static string ToText(object? value) => value switch
@@ -1150,6 +1178,9 @@ internal static class SqlScalarExpression
             var compiled = compiler.CompileCondition(condition);
             return compiled is not null && compiler._hasComputedOperand ? compiled : null;
         }
+
+        /// <summary>Compiles any condition this evaluator covers, computed operand or not (CHECK constraints).</summary>
+        public static Condition? CompileAny(string condition) => new ConditionCompiler().CompileCondition(condition);
 
         private Condition? CompileCondition(string text)
         {

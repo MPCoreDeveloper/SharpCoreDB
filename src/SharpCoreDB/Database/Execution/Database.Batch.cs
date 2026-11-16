@@ -1099,8 +1099,10 @@ public partial class Database
         operation = (string.Empty, null, null, null, null!);
 
         // Phase-2 fast path: canonical single-column shape
-        // `UPDATE <table> SET <col> = <literal> WHERE <col> = <literal>` — regex-free.
-        if (TryScanCanonicalDml(sql, out var fastTable, out var setCol, out var setValRaw, out var whereCol, out var whereValRaw))
+        // `UPDATE <table> SET <col> = <literal> WHERE <col> = <literal>` — regex-free. A canonical DELETE has no SET
+        // column and is never an UPDATE.
+        if (TryScanCanonicalDml(sql, out var fastTable, out var setCol, out var setValRaw, out var whereCol, out var whereValRaw) &&
+            setCol.Length > 0)
         {
             if (!tables.TryGetValue(fastTable, out var fastTableMeta))
             {
@@ -1108,8 +1110,9 @@ public partial class Database
             }
 
             int colIdx = fastTableMeta.Columns.IndexOf(setCol);
-            if (colIdx < 0)
+            if (colIdx < 0 || SqlParser.IsComputedSetValue(setValRaw, fastTableMeta.Columns, out _))
             {
+                // A computed SET value (`SET n = n + 1`) is evaluated per row by the shared parser's UPDATE path.
                 return false;
             }
 
@@ -1178,7 +1181,7 @@ public partial class Database
             var valStr = setPart[(eqIdx + 1)..].Trim();
 
             var fallbackColIdx = table.Columns.IndexOf(colName);
-            if (fallbackColIdx < 0) return false;
+            if (fallbackColIdx < 0 || SqlParser.IsComputedSetValue(valStr, table.Columns, out _)) return false;
 
             var fallbackParsed = SqlParser.ParseValue(valStr, table.ColumnTypes[fallbackColIdx]);
             fallbackUpdates[colName] = fallbackParsed ?? DBNull.Value;
@@ -1218,8 +1221,13 @@ public partial class Database
         whereLiteral = null;
 
         // Phase-2 fast path: canonical single-row shape
-        // `DELETE FROM <table> WHERE <col> = <literal>` — regex-free.
-        if (TryScanCanonicalDml(sql, out var fastTable, out _, out _, out var whereCol, out var whereValRaw))
+        // `DELETE FROM <table> WHERE <col> = <literal>` — regex-free. The scanner accepts the canonical UPDATE shape
+        // too, so a statement it read as an UPDATE (a SET column was found) is never a DELETE. Up to 2.1.4 this did not
+        // check, and an UPDATE the UPDATE classifier declined — a quoted SET column such as `SET "n" = 5`, which linq2db
+        // and EF Core write — was executed here as `DELETE ... WHERE <col> = <literal>`: the batch deleted the rows it
+        // was asked to update.
+        if (TryScanCanonicalDml(sql, out var fastTable, out var scannedSetColumn, out _, out var whereCol, out var whereValRaw) &&
+            scannedSetColumn.Length == 0)
         {
             if (!tables.ContainsKey(fastTable))
             {
