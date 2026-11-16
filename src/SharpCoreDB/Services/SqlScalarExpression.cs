@@ -820,7 +820,7 @@ internal static class SqlScalarExpression
         // NUMERIC: an integer when the value is integral, otherwise a real.
         return ToNumber(value) switch
         {
-            double d when d == Math.Floor(d) && Math.Abs(d) < 9.2e18 => (long)d,
+            double d when double.IsInteger(d) && Math.Abs(d) < 9.2e18 => (long)d,
             var n => n,
         };
     }
