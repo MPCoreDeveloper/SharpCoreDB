@@ -442,14 +442,59 @@ public partial class Storage
     /// overwritten bytes immediately.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private SafeFileHandle GetOrOpenWriteHandle(string path) =>
-        _writeHandleCache.GetOrAdd(path, static p =>
+    private SafeFileHandle GetOrOpenWriteHandle(string path)
+    {
+        // Every caller writes through the handle, so the file now holds bytes that are not on the physical disk yet:
+        // SyncPendingWrites forces them there at the next durability boundary — under WalDurabilityMode.FullSync, the
+        // default; Async leaves them to the operating system and tracks nothing.
+        if (syncInPlaceWrites)
+        {
+            _unsyncedWritePaths.TryAdd(path, 0);
+        }
+
+        return _writeHandleCache.GetOrAdd(path, static p =>
             File.OpenHandle(
                 p,
                 FileMode.Open,
                 FileAccess.Write,
                 FileShare.ReadWrite | FileShare.Delete,
                 FileOptions.None));
+    }
+
+    /// <summary>
+    /// Files written in place through a cached handle (buffered, <see cref="FileOptions.None"/>) since their last sync.
+    /// Up to 2.1.4 nothing forced those writes to disk — appends are written through, but an UPDATE patched in place and
+    /// a DELETE's tombstone marker were not — so a power loss could lose a committed UPDATE or DELETE.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _unsyncedWritePaths = new(StringComparer.Ordinal);
+
+    /// <inheritdoc />
+    public void SyncPendingWrites()
+    {
+        if (_unsyncedWritePaths.IsEmpty)
+        {
+            return;
+        }
+
+        foreach (var path in _unsyncedWritePaths.Keys)
+        {
+            if (_unsyncedWritePaths.TryRemove(path, out _) &&
+                _writeHandleCache.TryGetValue(path, out var handle) &&
+                !handle.IsClosed)
+            {
+                RandomAccess.FlushToDisk(handle);
+            }
+        }
+    }
+
+    /// <summary>Forces a handle's pending writes to disk before it is closed (closing does not).</summary>
+    private void SyncBeforeClose(string path, SafeFileHandle handle)
+    {
+        if (_unsyncedWritePaths.TryRemove(path, out _) && !handle.IsClosed)
+        {
+            RandomAccess.FlushToDisk(handle);
+        }
+    }
 
     /// <summary>
     /// B7: performs an in-place overwrite of a length-prefixed record through the cached write handle
@@ -479,6 +524,7 @@ public partial class Storage
         {
             if (_writeHandleCache.TryRemove(handleKey, out _))
             {
+                SyncBeforeClose(handleKey, handle);
                 handle.Dispose();
             }
         }
@@ -511,6 +557,7 @@ public partial class Storage
 
         if (_writeHandleCache.TryRemove(path, out var writeHandle))
         {
+            SyncBeforeClose(path, writeHandle);
             writeHandle.Dispose();
         }
     }
@@ -1070,6 +1117,7 @@ public partial class Storage
         }
         finally
         {
+            ovfStream?.Flush(flushToDisk: true);
             ovfStream?.Dispose();
         }
     }
@@ -1258,6 +1306,9 @@ public partial class Storage
             Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.CommitOverwrites, overwritesStart);
 
             ApplyBufferedTombstones();
+
+            // The commit is a durability boundary: the overwrites and tombstones just written go to disk.
+            SyncPendingWrites();
         }
     }
 

@@ -33,17 +33,26 @@ public partial class Storage
         }
         
         // Normal write (not in transaction)
-        if (this.noEncryption)
+        WriteFileAtomically(path, this.noEncryption ? plain : this.crypto.Encrypt(this.key, plain));
+        InvalidateReadEncryption(path);
+    }
+
+    /// <summary>
+    /// Replaces a whole file so that a crash leaves either the old or the new content, never a mix: the bytes go to
+    /// <c>path.tmp</c>, are forced to disk, and the temp file is renamed over <paramref name="path"/>. Up to 2.1.4 the
+    /// database metadata was written in place with <c>File.WriteAllBytes</c> (truncate, then write, no fsync), so a crash
+    /// or power loss in the middle of a save left a damaged <c>meta.dat</c> and the database would not open.
+    /// </summary>
+    internal static void WriteFileAtomically(string path, ReadOnlySpan<byte> data)
+    {
+        var temp = path + ".tmp";
+        using (var stream = new FileStream(temp, FileMode.Create, FileAccess.Write, FileShare.None, 4096, FileOptions.WriteThrough))
         {
-            File.WriteAllBytes(path, plain);
-        }
-        else
-        {
-            var encrypted = this.crypto.Encrypt(this.key, plain);
-            File.WriteAllBytes(path, encrypted);
+            stream.Write(data);
+            stream.Flush(flushToDisk: true);
         }
 
-        InvalidateReadEncryption(path);
+        File.Move(temp, path, overwrite: true);
     }
 
     /// <inheritdoc />
@@ -315,7 +324,16 @@ public partial class Storage
     /// </summary>
     internal void WriteStoredBytes(string path, byte[] storedData)
     {
-        File.WriteAllBytes(path, storedData);
+        // Atomic replace, unless a cached handle is open on the file: a rename would leave that handle on the old file.
+        if (_readHandleCache.ContainsKey(path) || _writeHandleCache.ContainsKey(path))
+        {
+            File.WriteAllBytes(path, storedData);
+        }
+        else
+        {
+            WriteFileAtomically(path, storedData);
+        }
+
         InvalidateReadEncryption(path);
         if (this.pageCache != null)
         {

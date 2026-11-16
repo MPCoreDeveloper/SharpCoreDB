@@ -159,6 +159,7 @@ public partial class Database
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SyncAutocommitWrites();
             SharpCoreDB.Diagnostics.WritePathProfiler.Add(
                 SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
@@ -223,6 +224,7 @@ public partial class Database
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SyncAutocommitWrites();
             SharpCoreDB.Diagnostics.WritePathProfiler.Add(
                 SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
@@ -306,6 +308,7 @@ public partial class Database
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, null);
+            SyncAutocommitWrites();
             SharpCoreDB.Diagnostics.WritePathProfiler.Add(
                 SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
@@ -368,6 +371,7 @@ public partial class Database
         {
             var sqlParser = GetSharedSqlParser();
             sqlParser.Execute(sql, parameters, null);
+            SyncAutocommitWrites();
             SharpCoreDB.Diagnostics.WritePathProfiler.Add(
                 SharpCoreDB.Diagnostics.WritePathProfiler.Stage.Dispatch, dispatchStart);
             
