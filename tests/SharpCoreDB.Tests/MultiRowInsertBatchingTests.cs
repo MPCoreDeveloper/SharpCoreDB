@@ -137,13 +137,19 @@ public sealed class MultiRowInsertBatchingTests : IDisposable
     }
 
     [Fact]
-    public void CanUseBatchedInsert_IsFalse_WithUniqueSecondaryIndex()
+    public void CanUseBatchedInsert_IsTrue_WithUniqueSecondaryIndex_BecauseTheBatchCoreEnforcesIt()
     {
+        // Up to 2.1.4 a unique secondary index forced the per-row loop, because the batch core did not enforce it. The
+        // batch core now validates unique indexes (Table.UniqueKeys), so the batched path stays on — and still rejects a
+        // duplicate, keeping none of the statement's rows.
         var db = Open(NewDir("gate_unique"));
         db.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, name TEXT NOT NULL, score INTEGER)");
         TableOf(db).CreateHashIndex("idx_t_name_unique", "name", isUnique: true);
+        db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES (1, 'a', 1)");
 
-        Assert.False(TableOf(db).CanUseBatchedInsert);
+        Assert.True(TableOf(db).CanUseBatchedInsert);
+        Assert.ThrowsAny<Exception>(() => db.ExecuteSQL("INSERT INTO t (id, name, score) VALUES (2, 'b', 2), (3, 'a', 3)"));
+        Assert.Single(db.ExecuteQuery("SELECT id FROM t"));
         (db as IDisposable)?.Dispose();
     }
 

@@ -374,6 +374,13 @@ public partial class SqlParser
             ColumnLocaleNames = columnLocaleNames,
         });
 
+        // A UNIQUE column gets an automatic unique index, as SQLite's sqlite_autoindex_…: it is what enforces the
+        // constraint. Up to 2.1.4 the constraint was stored and never checked.
+        if (table is SharpCoreDB.DataStructures.Table createdTable)
+        {
+            createdTable.EnsureUniqueConstraintIndexes();
+        }
+
         table.Name = tableName;
 
         // B7+: new columnar tables with an explicitly declared PRIMARY KEY default to the fixed-width
