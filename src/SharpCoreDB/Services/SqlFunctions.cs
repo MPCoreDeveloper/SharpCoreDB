@@ -210,8 +210,10 @@ public static class SqlFunctions
             string s => $"'{s.Replace("'", "''", StringComparison.Ordinal)}'",
             bool b => b ? "1" : "0",
             byte[] bytes => $"X'{Convert.ToHexString(bytes)}'",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
-            DateTimeOffset dto => $"'{dto:yyyy-MM-dd HH:mm:ss zzz}'",
+            DateTime dt => SqlLiteralFormatter.Literal(dt),
+            DateTimeOffset dto => SqlLiteralFormatter.Literal(dto),
+            DateOnly date => SqlLiteralFormatter.Literal(date),
+            TimeOnly time => SqlLiteralFormatter.Literal(time),
             _ => Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture)
                  ?? "NULL",
         };

@@ -340,26 +340,30 @@ public class CompiledQueryExecutor
     /// <summary>
     /// Formats a parameter value for SQL substitution.
     /// </summary>
-    private static string FormatParameterValue(object? value)
+    internal static string FormatParameterValue(object? value)
     {
         if (value == null) return "NULL";
         
         return value switch
         {
             string s => $"'{s.Replace("'", "''")}'",
-            int i => i.ToString(),
-            long l => l.ToString(),
+            int i => i.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            long l => l.ToString(System.Globalization.CultureInfo.InvariantCulture),
             double d => d.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            float f => f.ToString(System.Globalization.CultureInfo.InvariantCulture),
             decimal m => m.ToString(System.Globalization.CultureInfo.InvariantCulture),
             bool b => b ? "1" : "0",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
+            DateTime dt => SqlLiteralFormatter.Literal(dt),
+            DateTimeOffset dto => SqlLiteralFormatter.Literal(dto),
+            DateOnly date => SqlLiteralFormatter.Literal(date),
+            TimeOnly time => SqlLiteralFormatter.Literal(time),
 
             // Same vector-literal rendering as ParameterBinder.FormatParameter, so both binders agree.
             float[] vector => VectorBinaryCodec.ToJson(vector),
             ReadOnlyMemory<float> vectorMemory => VectorBinaryCodec.ToJson(vectorMemory.Span),
             Memory<float> vectorBuffer => VectorBinaryCodec.ToJson(vectorBuffer.Span),
             double[] vectorDoubles => VectorBinaryCodec.ToJson(Array.ConvertAll(vectorDoubles, static d => (float)d)),
-            _ => $"'{value.ToString()?.Replace("'", "''") ?? string.Empty}'"
+            _ => $"'{SqlLiteralFormatter.Invariant(value).Replace("'", "''")}'"
         };
     }
 

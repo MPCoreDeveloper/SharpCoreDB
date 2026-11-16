@@ -637,15 +637,18 @@ public partial class Table
     /// Helper method to format a value for SQL WHERE clause.
     /// </summary>
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
-    private static string FormatValue(object? value)
+    internal static string FormatValue(object? value)
     {
         return value switch
         {
             null => "NULL",
             string s => $"'{s.Replace("'", "''")}'",
             bool b => b ? "1" : "0",
-            DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss}'",
-            _ => value.ToString() ?? "NULL",
+            DateTime dt => SqlLiteralFormatter.Literal(dt),
+            DateTimeOffset dto => SqlLiteralFormatter.Literal(dto),
+            DateOnly date => SqlLiteralFormatter.Literal(date),
+            TimeOnly time => SqlLiteralFormatter.Literal(time),
+            _ => SqlLiteralFormatter.Invariant(value),
         };
     }
 

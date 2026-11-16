@@ -89,10 +89,35 @@ SharpCoreDB-specific SQL that linq2db does not model.
 
 ---
 
+## Dependency injection, connections and mapping schemas
+
+```csharp
+// One SharpCoreDBDataConnection per scope, each with its own SharpCoreDB connection.
+services.AddSharpCoreDBLinq2Db("Data Source=./app.scdb;Password=…");
+
+// Or configure the options yourself. DataOptions is immutable, so the callback returns them.
+services.AddSharpCoreDBLinq2Db(options => options
+    .UseSharpCoreDB("Data Source=./app.scdb;Password=…")
+    .UseAdditionalMappingSchema(myFluentMappings));
+```
+
+- The options built by `CreateOptions`, `UseSharpCoreDB` and `AddSharpCoreDBLinq2Db` hold a connection
+  **factory**: every `SharpCoreDBDataConnection` opens its own `SharpCoreDBConnection` and disposes it with itself,
+  so options can be reused safely. (Up to 2.1.4 they held one live connection that every DI scope shared.)
+- Your own mapping schema — fluent mappings, attribute overrides, converters — is **kept** and takes priority over
+  the SharpCoreDB type mappings. Add it with `UseAdditionalMappingSchema` (or `UseMappingSchema` before
+  `UseSharpCoreDB`). `SharpCoreDBMappingSchema.ConfigureCustomMapping` is obsolete: it changed the process-wide
+  `Instance` shared by every connection.
+- `FunctionalLinq2DbContext.GetByIdAsync<T>(keys)` looks the row up by the entity's mapped primary key — one value
+  per key column, in `PrimaryKey(order)` order — and throws `ArgumentException` on a key-count mismatch.
+
+---
+
 ## Key Production Features
 
 - **BulkCopy support** in `InsertBatchAsync` for high-speed ingestion (GraphRAG, analytics)
-- **Full type mapping** (ULID as string, GUID as compact string, DateTime ISO, bool→int for SQLite compat)
+- **Type mapping** (ULID as text, GUID as hyphenated `D`-format text, dates read and written culture-invariantly,
+  bool→int for SQLite compat)
 - **Transaction support** with `TransactionAsync<TResult>`
 - **DeleteWhereAsync**, `CountAsync`, `ExistsAsync`, `GetAllAsync`
 - **Seamless with SharpCoreDB.Functional** (`Prelude`, `Option`, `Fin`, `Seq`, `Error`)

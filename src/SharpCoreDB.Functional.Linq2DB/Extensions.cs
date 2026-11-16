@@ -21,8 +21,7 @@ public static class Extensions
         ArgumentNullException.ThrowIfNull(options);
         ArgumentException.ThrowIfNullOrWhiteSpace(connectionString);
 
-        var (provider, connection) = SharpCoreDBDataConnection.CreateProviderAndConnection(connectionString);
-        return SharpCoreDBDataConnection.Bind(options, provider, connection);
+        return SharpCoreDBDataConnection.Bind(options, connectionString);
     }
 
     /// <summary>
@@ -48,18 +47,29 @@ public static class Extensions
     }
 
     /// <summary>
-    /// Adds SharpCoreDB DataConnection with custom DataOptions configuration.
+    /// Adds SharpCoreDB DataConnection with custom DataOptions configuration, for example
+    /// <c>options =&gt; options.UseSharpCoreDB(connectionString).UseAdditionalMappingSchema(mySchema)</c>.
+    /// <para>
+    /// <see cref="DataOptions"/> is immutable — every <c>Use…</c> call returns a new instance — so the callback
+    /// returns the configured options. Up to 2.1.4 this overload took an <c>Action&lt;DataOptions&gt;</c>, discarded
+    /// what the callback built, and resolving the connection threw "Configuration string is not provided".
+    /// </para>
     /// </summary>
+    /// <param name="services">The service collection.</param>
+    /// <param name="configureOptions">Builds the options from an empty <see cref="DataOptions"/>.</param>
+    /// <param name="lifetime">Lifetime of the registered connection.</param>
+    /// <returns>The service collection.</returns>
     public static IServiceCollection AddSharpCoreDBLinq2Db(
         this IServiceCollection services,
-        Action<DataOptions> configureOptions,
+        Func<DataOptions, DataOptions> configureOptions,
         ServiceLifetime lifetime = ServiceLifetime.Scoped)
     {
         ArgumentNullException.ThrowIfNull(services);
         ArgumentNullException.ThrowIfNull(configureOptions);
 
-        var options = new DataOptions();
-        configureOptions(options);
+        var options = configureOptions(new DataOptions())
+                      ?? throw new InvalidOperationException(
+                          "The configureOptions callback returned null; return the configured DataOptions.");
 
         services.Add(new ServiceDescriptor(
             typeof(SharpCoreDBDataConnection),

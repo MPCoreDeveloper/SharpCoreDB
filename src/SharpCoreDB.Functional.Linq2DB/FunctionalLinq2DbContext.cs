@@ -22,40 +22,119 @@ public sealed class FunctionalLinq2DbContext(SharpCoreDBDataConnection connectio
     private readonly SharpCoreDBDataConnection _connection = connection ?? throw new ArgumentNullException(nameof(connection));
 
     /// <summary>
-    /// Gets an entity by its primary key.
+    /// Gets an entity by its mapped primary key.
+    /// <para>
+    /// Up to 2.1.4 this ignored <paramref name="keyValues"/> and returned the first row of the table, and it turned
+    /// every exception into <c>None</c>. A query that fails now throws, as <see cref="FindOneAsync{T}"/> does.
+    /// </para>
     /// </summary>
     /// <typeparam name="T">Entity type</typeparam>
-    /// <param name="keyValues">Primary key value(s). For single-column PKs pass a single-element array or use overloads in future versions.</param>
+    /// <param name="keyValues">
+    /// One value per primary-key column, in <c>PrimaryKey(order)</c> order. A value of another numeric type (an
+    /// <see cref="int"/> for a <see cref="long"/> key) is converted to the member's type.
+    /// </param>
     /// <param name="cancellationToken">Cancellation token</param>
-    /// <returns>Some entity when found; none otherwise. For production, prefer <see cref="FindOneAsync{T}(Expression{Func{T,bool}},CancellationToken)"/> with explicit predicates for complex keys.</returns>
+    /// <returns>Some entity when a row has that key; none otherwise.</returns>
+    /// <exception cref="ArgumentException">
+    /// The number of values differs from the number of key columns, or a value cannot be converted to its column's type.
+    /// </exception>
+    /// <exception cref="InvalidOperationException"><typeparamref name="T"/> has no mapped primary key.</exception>
     public async Task<Option<T>> GetByIdAsync<T>(
         object[] keyValues,
         CancellationToken cancellationToken = default)
         where T : class
     {
         ArgumentNullException.ThrowIfNull(keyValues);
-        if (keyValues.Length == 0)
-            return None<T>();
-
         cancellationToken.ThrowIfCancellationRequested();
 
-        // Production implementation note: Full PK metadata lookup (via MappingSchema or ITable metadata) is complex for arbitrary entities.
-        // For now, we provide a simple first-match for single-PK tables (common case). Users should use FindOneAsync with explicit predicates for robustness.
-        // This avoids reflection overhead and mapping schema inspection in the hot path.
+        var predicate = BuildPrimaryKeyPredicate<T>(keyValues);
+        return await FindOneAsync(predicate, cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Builds <c>row =&gt; row.Key1 == keyValues[0] &amp;&amp; …</c> from the entity's mapped primary-key columns.
+    /// The values are read through a holder object, the same shape as a compiler-generated closure, so linq2db binds
+    /// them as parameters and caches one query per entity type instead of one per key.
+    /// </summary>
+    private Expression<Func<T, bool>> BuildPrimaryKeyPredicate<T>(object[] keyValues)
+        where T : class
+    {
+        var keyColumns = _connection.MappingSchema
+            .GetEntityDescriptor(typeof(T), _connection.Options.ConnectionOptions.OnEntityDescriptorCreated)
+            .Columns
+            .Where(column => column.IsPrimaryKey)
+            .OrderBy(column => column.PrimaryKeyOrder)
+            .ToArray();
+
+        if (keyColumns.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"{typeof(T).Name} has no mapped primary key; use FindOneAsync with an explicit predicate.");
+        }
+
+        if (keyValues.Length != keyColumns.Length)
+        {
+            throw new ArgumentException(
+                $"{typeof(T).Name} has {keyColumns.Length} primary-key column(s) " +
+                $"({string.Join(", ", keyColumns.Select(column => column.MemberName))}), " +
+                $"but {keyValues.Length} key value(s) were supplied.",
+                nameof(keyValues));
+        }
+
+        var holder = new KeyValueHolder(new object?[keyColumns.Length]);
+        for (var i = 0; i < keyColumns.Length; i++)
+        {
+            holder.Values[i] = ConvertKeyValue(keyValues[i], keyColumns[i].MemberType, keyColumns[i].MemberName);
+        }
+
+        var row = Expression.Parameter(typeof(T), "row");
+        var values = Expression.Field(Expression.Constant(holder), nameof(KeyValueHolder.Values));
+        Expression? body = null;
+        for (var i = 0; i < keyColumns.Length; i++)
+        {
+            var equal = Expression.Equal(
+                Expression.MakeMemberAccess(row, keyColumns[i].MemberInfo),
+                Expression.Convert(Expression.ArrayIndex(values, Expression.Constant(i)), keyColumns[i].MemberType));
+            body = body is null ? equal : Expression.AndAlso(body, equal);
+        }
+
+        return Expression.Lambda<Func<T, bool>>(body!, row);
+    }
+
+    private static object? ConvertKeyValue(object? value, Type memberType, string memberName)
+    {
+        var targetType = Nullable.GetUnderlyingType(memberType) ?? memberType;
+        if (value is null)
+        {
+            return !memberType.IsValueType || targetType != memberType
+                ? null
+                : throw new ArgumentException($"Key value for {memberName} cannot be null.", "keyValues");
+        }
+
+        if (targetType.IsInstanceOfType(value))
+        {
+            return value;
+        }
+
         try
         {
-            IQueryable<T> q = _connection.GetTable<T>();
-            var list = await q.Take(1).ToListAsync(cancellationToken).ConfigureAwait(false); // Limit to avoid full table scan in fallback
-            var entity = list.FirstOrDefault();
-
-            return Optional(entity);
+            return targetType.IsEnum
+                ? Enum.ToObject(targetType, value)
+                : Convert.ChangeType(value, targetType, System.Globalization.CultureInfo.InvariantCulture);
         }
-        catch (Exception)
+        catch (Exception ex) when (ex is InvalidCastException or FormatException or OverflowException
+                                       or ArgumentException)
         {
-            // In production GetByIdAsync, we could log but here we return None to maintain Option semantics (no exception leakage).
-            // Advanced users can catch via TransactionAsync or use raw linq2db.
-            return None<T>();
+            throw new ArgumentException(
+                $"Key value '{value}' ({value.GetType().Name}) cannot be converted to {targetType.Name} for {memberName}.",
+                "keyValues",
+                ex);
         }
+    }
+
+    private sealed class KeyValueHolder(object?[] values)
+    {
+        public readonly object?[] Values = values;
     }
 
     /// <summary>
