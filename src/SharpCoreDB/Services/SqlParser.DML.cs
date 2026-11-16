@@ -1226,7 +1226,9 @@ public partial class SqlParser
             clause = clause["DISTINCT".Length..].Trim();
         }
 
-        foreach (var item in SqlInPredicate.SplitTopLevelComma(clause))
+        var items = SqlInPredicate.SplitTopLevelComma(clause);
+        bool hasExpression = false;
+        foreach (var item in items)
         {
             var text = item.Trim();
             if (text.Length == 0 || text == "*" || text.EndsWith(".*", StringComparison.Ordinal))
@@ -1238,13 +1240,82 @@ public partial class SqlParser
             {
                 if (c is '(' or ')' or '\'' or '+' or '-' or '/' or '%' or '|' or '=' or '<' or '>' or '~' or '*')
                 {
-                    // An expression, not a column reference: leave the row as the scan produced it.
-                    return rows;
+                    hasExpression = true;
+                    break;
                 }
             }
         }
 
-        return ProjectColumns(rows, clause);
+        return hasExpression ? ProjectSelectListWithExpressions(rows, items) : ProjectColumns(rows, clause);
+    }
+
+    /// <summary>
+    /// Projects a SELECT list that contains computed items — <c>upper(name)</c>, <c>strftime('%Y', at) AS y</c>,
+    /// <c>CAST(… AS INTEGER)</c> — evaluating each one per row with <see cref="SqlScalarExpression"/>. Plain column
+    /// items are resolved exactly as <see cref="ProjectColumns"/> resolves them. A computed item is named by its alias,
+    /// or by its text as written, as in SQLite.
+    /// <para>
+    /// Up to 2.1.4 a list with any expression in it returned the scanned row unchanged, so <c>SELECT upper(name)
+    /// FROM t</c> handed an ordinal-based reader the row's first column (its <c>id</c>) instead of the function value.
+    /// An item this evaluator cannot parse still leaves the rows as scanned.
+    /// </para>
+    /// </summary>
+    /// <param name="rows">The scanned rows.</param>
+    /// <param name="items">The SELECT-list items, split at top-level commas.</param>
+    /// <returns>The projected rows.</returns>
+    private static List<Dictionary<string, object>> ProjectSelectListWithExpressions(
+        List<Dictionary<string, object>> rows,
+        List<string> items)
+    {
+        var projections = new List<(string OutputName, string SourceText, SqlScalarExpression.Node? Computed)>(items.Count);
+        foreach (var item in items)
+        {
+            var text = item.Trim();
+            var (expressionText, alias) = SplitSelectItemAlias(text);
+            if (!SqlScalarExpression.TryParse(expressionText, out var node))
+            {
+                return rows;
+            }
+
+            projections.Add(SqlScalarExpression.IsColumn(node)
+                ? (alias ?? ExtractBareColumn(expressionText), expressionText, null)
+                : (alias ?? expressionText, expressionText, node));
+        }
+
+        var result = new List<Dictionary<string, object>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var projected = new Dictionary<string, object>(projections.Count, StringComparer.OrdinalIgnoreCase);
+            foreach (var (outputName, sourceText, computed) in projections)
+            {
+                var value = computed is null ? FindValue(row, sourceText) : SqlScalarExpression.Evaluate(computed, row);
+                projected[outputName] = value ?? DBNull.Value;
+            }
+
+            result.Add(projected);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Splits <c>expr AS alias</c> / <c>expr alias</c> into the expression and the unquoted alias. The alias is only
+    /// taken when what precedes it parses as an expression, so <c>a || b</c> is not read as <c>a ||</c> aliased b.
+    /// </summary>
+    private static (string Expression, string? Alias) SplitSelectItemAlias(string item)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            item,
+            @"^(?<expr>.+?)\s+(?:AS\s+)?(?<alias>[A-Za-z_]\w*|\[[^\]]+\]|""[^""]+""|`[^`]+`)$",
+            System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline,
+            TimeSpan.FromSeconds(1));
+
+        if (match.Success && SqlScalarExpression.TryParse(match.Groups["expr"].Value.Trim(), out _))
+        {
+            return (match.Groups["expr"].Value.Trim(), SqlIdentifierScanner.IdentifierText(match.Groups["alias"].Value));
+        }
+
+        return (item, null);
     }
 
 
@@ -3173,7 +3244,7 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             "POW" or "POWER" => args.Length == 2 && ToDouble(args[0]) is double pa && ToDouble(args[1]) is double pb ? (object?)Math.Pow(pa, pb) : null,
             "SQRT" => args.Length == 1 && ToDouble(args[0]) is double sd && sd >= 0 ? (object?)Math.Sqrt(sd) : null,
             "RANDOM" => (object?)Random.Shared.NextInt64(),
-            _ => null
+            _ => SqlScalarExpression.TryInvokeScalarFunction(name, args, out var shared) ? shared : null
         };
     }
 
@@ -3402,7 +3473,9 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             LiteralNode literal => literal.Value,
             ColumnReferenceNode column => GetValue(row, column),
             ParameterNode parameter => ResolveParameter(parameter.ParameterName),
-            FunctionCallNode => null, // Function calls in WHERE are handled by EvaluateBinaryExpression
+            // A function operand is evaluated like a SELECT-list function; it used to be NULL, so
+            // strftime('%Y', at) = '2026' matched no row on this path either.
+            FunctionCallNode func => EvaluateFunctionCallInRow(func, row),
             _ => throw new NotSupportedException($"Expression type '{expression.GetType().Name}' is not supported for value extraction.")
         };
     }

@@ -1654,8 +1654,11 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
             trimmed.Contains(" IN ", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("LIKE", StringComparison.OrdinalIgnoreCase) ||
             trimmed.Contains("BETWEEN", StringComparison.OrdinalIgnoreCase) ||
-            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase))
+            trimmed.Contains(" IS ", StringComparison.OrdinalIgnoreCase) ||
+            trimmed.Contains('('))
         {
+            // A parenthesis means a function or other computed operand (strftime('%Y', at) = '2026'): compiled here it
+            // became a lookup of a column literally named "strftime('%Y', at)" and matched no row.
             return null;
         }
 
@@ -1841,6 +1844,13 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
     private static bool EvaluateSingleCondition(Dictionary<string, object> row, string condition)
     {
         var trimmed = condition.Trim();
+
+        // A computed operand (strftime, upper, length, CAST, …) is evaluated by the shared scalar evaluator; the
+        // patterns below read the left operand as a column name and matched no row.
+        if (SqlScalarExpression.TryEvaluateCondition(row, trimmed, out var computedMatch))
+        {
+            return computedMatch;
+        }
 
         // ✅ Parity: support IS NULL / IS NOT NULL (previously ignored → all rows returned)
         var isNullMatch = System.Text.RegularExpressions.Regex.Match(

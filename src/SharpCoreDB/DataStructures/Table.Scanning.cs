@@ -311,6 +311,14 @@ public partial class Table
             }
         }
 
+        // A computed operand — strftime('%Y', at) = '2026', length(name) > 3, CAST(… AS INTEGER) = 5 — is evaluated
+        // by the shared scalar evaluator. Below, the left token is read as a column name, so such a condition used to
+        // match no row: every date filter linq2db's SQLite dialect writes takes this shape.
+        if (SqlScalarExpression.TryEvaluateCondition(row, where, out var computedMatch))
+        {
+            return computedMatch;
+        }
+
         // ✅ Issue #339/#340: support IN / NOT IN lists for all column types, including
         // SQLite VALUES forms and tuple predicates. Previously the list was split on spaces
         // (losing everything after the first comma when the SQL contains spaces, e.g.
