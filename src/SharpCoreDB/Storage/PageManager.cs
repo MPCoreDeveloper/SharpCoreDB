@@ -276,7 +276,9 @@ public partial class PageManager : IDisposable
                     var slotOffset = slotAreaStart + (i * SLOT_SIZE);
                     var offset16 = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(slotOffset));
                     var length = BinaryPrimitives.ReadUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2));
-                    page.Slots.Add((offset16, length, RecordFlags.Active));
+
+                    // A slot stored with length 0 is a deleted record (see WritePage).
+                    page.Slots.Add((offset16, length, length == 0 ? RecordFlags.Deleted : RecordFlags.Active));
                 }
 
                 return page;
@@ -317,8 +319,16 @@ public partial class PageManager : IDisposable
                 for (int i = 0; i < page.Slots.Count && i < page.RecordCount; i++)
                 {
                     var slotOffset = slotAreaStart + (i * SLOT_SIZE);
-                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset), page.Slots[i].offset);
-                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2), page.Slots[i].length);
+                    var slot = page.Slots[i];
+
+                    // A slot holds only offset and length (SLOT_SIZE = 4), so a deleted record is stored with length 0 —
+                    // a length no record has (a serialized row is never empty) — and ReadPage reads it back as deleted.
+                    // Up to 2.1.4 the Deleted flag was never written and ReadPage marked every slot Active, so every
+                    // PageBased DELETE was undone by a reopen: the deleted rows came back. A file written before keeps
+                    // its old deleted slots' real lengths and still reads as it always did.
+                    bool deleted = (slot.flags & RecordFlags.Deleted) == RecordFlags.Deleted;
+                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset), slot.offset);
+                    BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2), deleted ? (ushort)0 : slot.length);
                 }
 
                 pagesFile.Seek(offset, SeekOrigin.Begin);

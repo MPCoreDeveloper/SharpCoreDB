@@ -526,6 +526,47 @@ on the tuple — for files written before, there is no way to recover the lost k
 unenforced), and only then enforce single-column uniqueness on single-file storage. Pinned by the skipped
 single-file cases in `PrimaryKeyUniquenessTests`.
 
+## 12. 🟠 OPEN — Inside a transaction, a columnar full scan does not see the transaction's own UPDATEs and DELETEs
+
+> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/returning-check-in-tx-reads`).** Found while investigating
+> read-your-own-writes; the two commit defects found with it are fixed (see the CHANGELOG), this is not.
+
+Inside `BeginBatchUpdate()` / `EndBatchUpdate()` — the transaction an ADO.NET `DbTransaction` opens, and so linq2db's
+`TransactionAsync` and EF Core's transactions — a columnar table answers reads inconsistently until the commit:
+
+| Read after `UPDATE t SET n = 50 WHERE id = 1` (then `DELETE FROM t WHERE id = 1`) | Columnar | PageBased |
+|---|---|---|
+| `SELECT n FROM t WHERE id = 1` (primary-key lookup) | 50 (then still 50) | 50 (then none) |
+| `SELECT id, n FROM t` (full scan) | 1 — the old value (then still listed) | 50 (then gone) |
+| `SELECT id FROM t WHERE n = 50` (scan with a filter) | no row | the row |
+
+**Cause:** the columnar full scan reads the data file through `Storage.ReadBytesWithRecordOffsets`, which returns what
+is on disk; the transaction's in-place overwrites and its deletes are held in the storage layer's buffers until the
+commit, and only the primary-key path (`engine.Read`) consults them. INSERTs are visible because appends are placed
+where the scan finds them. After the commit every read is correct (`BatchUpdateTransactionTests`).
+
+**Fix outline:** overlay the transaction's buffered overwrites and deletes on the scanned records (keyed by physical
+record offset, which the scan already carries for its stale-version filter). It is a read-path change on the hottest
+scan, so it needs the write-path gate and a read benchmark; not attempted in this change.
+
+## 13. 🔴 OPEN — PageBased storage cannot roll a transaction back
+
+> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/returning-check-in-tx-reads`).**
+
+`CancelBatchUpdate()` (an ADO.NET `DbTransaction.Rollback()`) does not undo a PageBased table's changes: a rolled-back
+UPDATE or INSERT is still there — also after a reopen — and a rolled-back DELETE stays deleted. Columnar tables roll
+back correctly (`BatchUpdateTransactionTests.CancelBatchUpdate_Columnar_DiscardsTheUpdate`).
+
+**Cause:** the PageBased engine writes into its page cache and page files directly, outside the storage transaction
+buffer, and `PageBasedEngine.Rollback()` is a stub ("For simplicity, we don't support rollback in this POC — a
+production implementation would use WAL or shadow paging"). `Database.CancelBatchUpdate` rolls back only the storage
+buffer and removes rows it recorded as inserted.
+
+**Fix outline:** an undo image per page touched inside the transaction (copy the page on its first write, restore the
+copies and drop the cache entries on rollback), with dirty pages withheld from disk until commit. That is a change to
+the PageBased engine's durability path and needs the reopen round-trip matrix and the write-path gate; not attempted
+in this change.
+
 ---
 
 ## Priority summary
@@ -543,3 +584,5 @@ single-file cases in `PrimaryKeyUniquenessTests`.
 | 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Fixed on directory storage** — automatic unique index, composite `UNIQUE (a, b)` included; single-file still open (format decision, §10/§11) |
 | 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
 | 11 | PK uniqueness / composite keys | 🔴 High | — | **Fixed on directory storage for new tables** (composite key = UNIQUE over its columns); **open, owner decision** for single-file storage, which enforces no PK uniqueness (§11) |
+| 12 | Columnar scan inside a transaction misses its own UPDATE/DELETE | 🟠 Medium | Read by primary key, or commit first | **Open** — buffered overwrites/deletes are not overlaid on the scan (§12) |
+| 13 | PageBased transaction rollback | 🔴 High | Columnar storage for tables that need rollback | **Open** — `PageBasedEngine.Rollback()` is a stub (§13) |

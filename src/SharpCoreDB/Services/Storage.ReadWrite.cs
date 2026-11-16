@@ -206,6 +206,20 @@ public partial class Storage
         return DecryptTableFileToPlaintext(path, out physicalOffsets);
     }
 
+    /// <summary>
+    /// Writes bytes that are already in their on-disk form (encrypted when the store is) — a committed transaction's
+    /// buffered whole-file write — and drops what the read caches hold for the file.
+    /// </summary>
+    internal void WriteStoredBytes(string path, byte[] storedData)
+    {
+        File.WriteAllBytes(path, storedData);
+        InvalidateReadEncryption(path);
+        if (this.pageCache != null)
+        {
+            this.pageCache.Clear(flushDirty: false);
+        }
+    }
+
     /// <inheritdoc />
     public void WriteBytes(string path, byte[] data)
     {
