@@ -100,7 +100,7 @@
     <PackageVersion Include="Microsoft.Testing.Extensions.CodeCoverage" Version="18.12.0" />
     <PackageVersion Include="Microsoft.SourceLink.GitHub" Version="10.0.403" />
     <PackageVersion Include="Microsoft.VisualStudio.DiagnosticsHub.BenchmarkDotNetDiagnosers" Version="18.13.37903.2" />
-    <PackageVersion Include="MimeKit" Version="4.18.2" />
+    <PackageVersion Include="MimeKit" Version="5.0.0" />
     <PackageVersion Include="Moq" Version="4.21.0" />
     <!-- Transitive pins for the OrchardCore example: OrchardCore 3.0.1 resolves vulnerable
          SixLabors.ImageSharp 3.1.11 (NU1902/NU1903) and MySqlConnector 2.4.0 (NU1902).
