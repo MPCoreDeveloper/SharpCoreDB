@@ -459,9 +459,8 @@ public sealed class SubqueryExecutor
         foreach (var item in orderBy.Items)
         {
             var key = AstExecutor.OrderKeySelector(item);
-            ordered = ordered is null
-                ? item.IsAscending ? rows.OrderBy(key, SqlOrderBy.KeyComparer.Instance) : rows.OrderByDescending(key, SqlOrderBy.KeyComparer.Instance)
-                : item.IsAscending ? ordered.ThenBy(key, SqlOrderBy.KeyComparer.Instance) : ordered.ThenByDescending(key, SqlOrderBy.KeyComparer.Instance);
+            var itemComparer = SqlOrderBy.ItemComparer(item, SqlOrderBy.KeyComparer.Instance);
+            ordered = ordered is null ? rows.OrderBy(key, itemComparer) : ordered.ThenBy(key, itemComparer);
         }
 
         return [.. ordered!];

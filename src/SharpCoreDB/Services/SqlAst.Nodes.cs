@@ -394,6 +394,15 @@ public class OrderByItem
     /// (<c>ORDER BY LENGTH(name)</c>, <c>ORDER BY price * qty</c>); null for a column or an ordinal.
     /// </summary>
     public string? Expression { get; set; }
+
+    /// <summary>Gets or sets the key's <c>COLLATE</c> name (upper case: NOCASE, RTRIM, BINARY); null when none is written.</summary>
+    public string? Collation { get; set; }
+
+    /// <summary>
+    /// Gets or sets <c>NULLS FIRST</c> (true) or <c>NULLS LAST</c> (false); null when not written, which means SQLite's
+    /// default — NULLs first ascending, last descending.
+    /// </summary>
+    public bool? NullsFirst { get; set; }
 }
 
 /// <summary>

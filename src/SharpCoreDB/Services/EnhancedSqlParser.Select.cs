@@ -981,6 +981,26 @@ public partial class EnhancedSqlParser
         return node;
     }
 
+    /// <summary>
+    /// Reads what may follow an ORDER BY key, in SQLite's order: <c>COLLATE name</c>, <c>ASC|DESC</c>,
+    /// <c>NULLS FIRST|LAST</c>. Up to 2.1.4 only ASC/DESC was read, so <c>COLLATE NOCASE DESC</c> lost its direction as
+    /// well and the rest was left as unparsed trailing content.
+    /// </summary>
+    private void ParseOrderItemSuffix(OrderByItem item)
+    {
+        if (MatchKeyword("COLLATE"))
+        {
+            item.Collation = ConsumeIdentifier()?.ToUpperInvariant();
+        }
+
+        item.IsAscending = !MatchKeyword("DESC");
+        MatchKeyword("ASC");
+        if (MatchKeyword("NULLS"))
+        {
+            item.NullsFirst = MatchKeyword("FIRST") ? true : MatchKeyword("LAST") ? false : null;
+        }
+    }
+
     /// <summary>Returns <c>true</c> when the text after the current position continues an expression (a call, an operator).</summary>
     private bool ContinuesAsExpression()
     {
@@ -1002,12 +1022,28 @@ public partial class EnhancedSqlParser
         item = null!;
         int end = FindOrderItemEnd(itemStart);
         var text = _sql[itemStart..end].Trim();
+        bool? nullsFirst = null;
+        var nulls = Regex.Match(text, @"\s+NULLS\s+(FIRST|LAST)$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        if (nulls.Success)
+        {
+            nullsFirst = nulls.Groups[1].Value.Equals("FIRST", StringComparison.OrdinalIgnoreCase);
+            text = text[..nulls.Index].TrimEnd();
+        }
+
         bool ascending = true;
         var direction = Regex.Match(text, @"\s+(ASC|DESC)$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
         if (direction.Success)
         {
             ascending = direction.Groups[1].Value.Equals("ASC", StringComparison.OrdinalIgnoreCase);
             text = text[..direction.Index].TrimEnd();
+        }
+
+        string? collation = null;
+        var collate = Regex.Match(text, @"\s+COLLATE\s+(\w+)$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        if (collate.Success)
+        {
+            collation = collate.Groups[1].Value.ToUpperInvariant();
+            text = text[..collate.Index].TrimEnd();
         }
 
         if (text.Length == 0 || !SqlScalarExpression.TryParse(text, out _))
@@ -1020,6 +1056,8 @@ public partial class EnhancedSqlParser
             Column = new ColumnReferenceNode { ColumnName = text },
             Expression = text,
             IsAscending = ascending,
+            Collation = collation,
+            NullsFirst = nullsFirst,
         };
         _position = end;
         return true;
@@ -1087,9 +1125,8 @@ public partial class EnhancedSqlParser
                     {
                         Column = new ColumnReferenceNode { ColumnName = ordinal.ToString() },
                         OrdinalPosition = ordinal,
-                        IsAscending = !MatchKeyword("DESC")
                     };
-                    MatchKeyword("ASC");
+                    ParseOrderItemSuffix(item);
                     node.Items.Add(item);
                 }
                 else
@@ -1130,10 +1167,9 @@ public partial class EnhancedSqlParser
                     var item = new OrderByItem
                     {
                         Column = new ColumnReferenceNode { TableAlias = tableAlias, ColumnName = columnName },
-                        IsAscending = !MatchKeyword("DESC")
                     };
 
-                    MatchKeyword("ASC");
+                    ParseOrderItemSuffix(item);
                     node.Items.Add(item);
                 }
             } while (MatchToken(","));

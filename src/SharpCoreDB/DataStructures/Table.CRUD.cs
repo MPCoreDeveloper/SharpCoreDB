@@ -5302,7 +5302,9 @@ public partial class Table
                 candidateRow.TryGetValue(constraintColumn, out var existingValue);
                 row.TryGetValue(constraintColumn, out var incomingValue);
 
-                if (!SqlParser.AreValuesEqual(existingValue, incomingValue))
+                // The column's declared collation decides, as it does for INSERT and UPDATE (Table.UniqueKeys): a
+                // NOCASE column conflicts on 'ABC' against 'abc', a BINARY one does not.
+                if (!CompositeComponentEquals(constraintColumn, existingValue, incomingValue))
                 {
                     allColumnsMatch = false;
                     break;
@@ -5321,7 +5323,7 @@ public partial class Table
         return false;
     }
 
-    private static bool TryResolveConflictingPrimaryKey(
+    private bool TryResolveConflictingPrimaryKey(
         Dictionary<string, object> existingRow,
         string primaryKeyColumn,
         object? currentPrimaryKeyValue,
@@ -5334,10 +5336,11 @@ public partial class Table
 
         if (currentPrimaryKeyValue is not null && currentPrimaryKeyValue is not DBNull)
         {
-            var samePrimaryKey = string.Equals(
+            // "The same row" is decided with the primary key's collation; up to 2.1.4 it was always case-insensitive,
+            // so on a BINARY text key a row 'ABC' was taken for the row 'abc' and its UNIQUE conflict was missed.
+            var samePrimaryKey = UniqueKeyComparer(primaryKeyColumn).Equals(
                 existingPrimaryKeyValue.ToString(),
-                currentPrimaryKeyValue.ToString(),
-                StringComparison.OrdinalIgnoreCase);
+                currentPrimaryKeyValue.ToString());
 
             if (samePrimaryKey)
                 return false;

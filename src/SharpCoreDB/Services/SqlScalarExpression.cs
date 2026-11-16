@@ -111,6 +111,17 @@ internal static class SqlScalarExpression
     }
 
     /// <summary>
+    /// Evaluates a filter condition (WHERE semantics: only a true result matches; NULL does not). Returns <c>false</c> —
+    /// "not mine" — when the condition uses syntax this evaluator does not cover.
+    /// </summary>
+    internal static bool TryEvaluateFilter(string condition, Dictionary<string, object> row, out bool matches)
+    {
+        var compiled = GetOrAdd(CheckCache, condition, static c => ConditionCompiler.CompileAny(c));
+        matches = compiled is not null && compiled.Evaluate(row) == true;
+        return compiled is not null;
+    }
+
+    /// <summary>
     /// Returns <c>true</c> when the expression reads a column for which <paramref name="isColumn"/> holds, or calls a
     /// function or CAST — that is, when its value can differ from row to row. Constant arithmetic such as
     /// <c>2024-01-15</c> returns <c>false</c>.

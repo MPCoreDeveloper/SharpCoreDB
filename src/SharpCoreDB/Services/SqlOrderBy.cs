@@ -25,6 +25,38 @@ using SharpCoreDB.Interfaces;
 internal static class SqlOrderBy
 {
     /// <summary>
+    /// The comparer for one AST ORDER BY item: its direction, its NULL placement (NULLS FIRST/LAST, else SQLite's default
+    /// — first ascending, last descending) and its COLLATE, over <paramref name="values"/> for the non-NULL values. The
+    /// caller sorts ascending with it; the direction is inside.
+    /// </summary>
+    internal static IComparer<object?> ItemComparer(OrderByItem item, IComparer<object?> values)
+    {
+        bool descending = !item.IsAscending;
+        bool nullsFirst = item.NullsFirst ?? !descending;
+        IComparer<string>? text = item.Collation switch
+        {
+            "NOCASE" => StringComparer.OrdinalIgnoreCase,
+            "RTRIM" => RTrimComparer,
+            "BINARY" => StringComparer.Ordinal,
+            _ => null,
+        };
+
+        return Comparer<object?>.Create((x, y) =>
+        {
+            bool xNull = x is null or DBNull;
+            bool yNull = y is null or DBNull;
+            if (xNull || yNull)
+            {
+                return xNull == yNull ? 0 : xNull == nullsFirst ? -1 : 1;
+            }
+
+            int c = text is not null && x is string xs && y is string ys ? text.Compare(xs, ys) : values.Compare(x, y);
+            c = Math.Sign(c);
+            return descending ? -c : c;
+        });
+    }
+
+    /// <summary>
     /// Compares sort keys as SQLite does: NULL first, numbers and text by <see cref="SqlScalarExpression.TryCompare"/>.
     /// </summary>
     internal sealed class KeyComparer : IComparer<object?>
