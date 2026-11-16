@@ -98,21 +98,6 @@ public partial class Table
             }
         }
 
-        // ✅ UNIQUE validation (outside lock)
-        foreach (var uniqueConstraint in this.UniqueConstraints)
-        {
-            if (uniqueConstraint.Count == 1) // Single column unique
-            {
-                var colName = uniqueConstraint[0];
-                var colIndex = this.Columns.IndexOf(colName);
-                if (colIndex >= 0 && row.TryGetValue(colName, out var value) && value != null && value != DBNull.Value)
-                {
-                    // Check if value already exists (simplified - would need index lookup in real impl)
-                    // For now, just validate non-null for single column unique
-                }
-            }
-        }
-
         // ✅ CHECK constraint validation (outside lock)
         for (int i = 0; i < this.Columns.Count; i++)
         {
@@ -189,7 +174,7 @@ public partial class Table
                             continue;
                         }
 
-                        if (!row.TryGetValue(registeredCol, out var value) || value is null)
+                        if (!row.TryGetValue(registeredCol, out var value) || value is null or DBNull)
                         {
                             continue;
                         }
@@ -201,6 +186,10 @@ public partial class Table
                         }
                     }
                 }
+
+                // UNIQUE columns and unique indexes, on every storage mode (the check above runs for columnar tables
+                // only and skips an index it has not loaded). Returns at once for a table without unique indexes.
+                ValidateUniqueValues(row);
 
                 // ✅ NEW: Route through storage engine
                 var engine = GetOrCreateStorageEngine();
@@ -278,8 +267,8 @@ public partial class Table
     /// this table — i.e. when nothing in the table's schema relies on the per-row-only semantics that the
     /// batch core does not implement.
     /// <para>
-    /// What the batch core does NOT do: CHECK-constraint evaluation (per-column and table-level) and non-PK
-    /// unique-index enforcement. PK and NOT NULL validation <em>are</em> implemented on both paths, and the
+    /// What the batch core does NOT do: CHECK-constraint evaluation (per-column and table-level). PK, NOT NULL and
+    /// UNIQUE (column constraints and unique indexes) validation <em>are</em> implemented on both paths, and the
     /// batch core joins an open engine transaction rather than nesting one
     /// (<c>InsertBatchCriticalSection</c>: <c>needsTransaction = !engine.IsInTransaction</c>).
     /// </para>
@@ -302,14 +291,6 @@ public partial class Table
             for (int i = 0; i < this.ColumnCheckExpressions.Count; i++)
             {
                 if (this.ColumnCheckExpressions[i] is not null)
-                {
-                    return false;
-                }
-            }
-
-            foreach (var metadata in this.registeredIndexes.Values)
-            {
-                if (metadata.IsUnique)
                 {
                     return false;
                 }
@@ -802,6 +783,9 @@ public partial class Table
         // Validate primary keys (requires lock for index access)
         ValidateExistingPrimaryKeys(validatedRows);
 
+        // UNIQUE columns and unique indexes: up to 2.1.4 the batched path checked neither.
+        ValidateUniqueValues(validatedRows);
+
         var engine = GetOrCreateStorageEngine();
         bool needsTransaction = !engine.IsInTransaction;
 
@@ -882,6 +866,9 @@ public partial class Table
         List<Dictionary<string, object>> validatedRows, 
         List<byte[]> serializedRows)
     {
+        // UNIQUE columns and unique indexes: up to 2.1.4 the batched path checked neither.
+        ValidateUniqueValues(validatedRows);
+
         // Validate primary keys (requires lock for index access)
         if (this.PrimaryKeyIndex >= 0)
         {
@@ -1778,6 +1765,13 @@ public partial class Table
             var rows = ResolveUpdateRows(where);
             int affected = 0;
 
+            // A new PRIMARY KEY or UNIQUE value must not be another row's, and is checked before any row is written.
+            // Up to 2.1.4 a primary key moved onto an existing key re-pointed the index and lost the original row.
+            if (rows.Count > 0 && UpdateTouchesKeyColumns(updates))
+            {
+                ValidateKeyChanges([(rows.ConvertAll(r => r.Row), updates)]);
+            }
+
             foreach (var (rowPos, row) in rows)
             {
                 affected++;
@@ -2509,6 +2503,9 @@ public partial class Table
             // only from a profile. Accumulated in a local and published once per batch — the counter must not
             // put an atomic per operation into the loop it measures.
             long structuredOps = 0;
+
+            // Key changes are validated for the whole batch before any operation is written (known issues §8/§9).
+            ValidateBatchKeyChanges(operations);
 
             foreach (var (where, structuredKeyColumn, structuredKeyValue, structuredKeyLiteral, updates) in operations)
             {
@@ -5325,6 +5322,11 @@ public partial class Table
             var row = DeserializeRow(data);
             if (row == null)
                 return false;
+
+            if (UpdateTouchesKeyColumns(updates))
+            {
+                ValidateKeyChanges([([row], updates)]);
+            }
 
             // WP13: capture only what index maintenance needs instead of copying the whole row.
             Dictionary<string, object>? oldHashKeys = null;

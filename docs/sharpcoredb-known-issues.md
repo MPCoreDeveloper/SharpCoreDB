@@ -421,10 +421,14 @@ attribution before merge.
 
 ---
 
-## 8. 🔴 OPEN — An UPDATE that moves a PRIMARY KEY onto an existing key loses or duplicates a row
+## 8. ✅ FIXED (directory storage) — An UPDATE that moves a PRIMARY KEY onto an existing key lost a row
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/linq2db-adapter-and-scalar-functions`).** Reproduced on both storage
-> modes with the statements below; not fixed in this change.
+> ✅ **FIXED (2026-11-17, `fix/pk-update-and-unique-constraints`) on directory storage.** Every UPDATE path —
+> `Table.UpdateAffectedCount` (SQL UPDATE), `UpdateMultipleCore` (`ExecuteBatchSQL` and the structured batch API) and
+> `UpdateByPrimaryKey` — now validates a new key before any row is written: a key another row holds, or a SET of the key
+> that matches more than one row, is rejected and nothing changes. Pinned by `PrimaryKeyUpdateTests` (columnar and
+> page-based, in the session and after a reopen). The single-file half — a duplicated key, not a lost row — is the same
+> composite-key question as §11 and is tracked there.
 
 Found 2026-11-17. Neither storage mode checks the new key of an UPDATE that changes the primary key:
 
@@ -444,10 +448,17 @@ SELECT id FROM t;
 
 ---
 
-## 9. 🟠 OPEN — A column-level `UNIQUE` constraint is not enforced
+## 9. ✅ FIXED (directory storage) — A column-level `UNIQUE` constraint was not enforced
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/linq2db-adapter-and-scalar-functions`).** Reproduced on both storage
-> modes; not fixed in this change.
+> ✅ **FIXED (2026-11-17, `fix/pk-update-and-unique-constraints`) on directory storage.** A single-column UNIQUE
+> (column-level or table-level `UNIQUE (col)`) gets an automatic unique hash index, as SQLite's `sqlite_autoindex_…` —
+> registered at CREATE TABLE and on every open, so existing tables are covered. INSERT, multi-row INSERT (now atomic on
+> tables with a unique index) and every UPDATE path are checked; NULLs never conflict. On the way: a UNIQUE *index* was
+> enforced only by a single-row INSERT into a columnar table, and a second NULL was rejected as a duplicate. Pinned by
+> `UniqueConstraintTests` (columnar and page-based). **Still open:** single-file storage (its persisted
+> `ColumnFlags.Unique` is also written for every inline PRIMARY KEY column, so a reopened file cannot tell a declared
+> UNIQUE from an EF Core composite key's column — the format decision of §10/§11; tried and backed out when
+> `CompleteExampleIntegrationTests.CompositeKey_*` failed) and a composite `UNIQUE (a, b)` on INSERT.
 
 Found 2026-11-17. A column declared `UNIQUE` accepts duplicates on both storage modes:
 
@@ -489,7 +500,8 @@ on-disk format extension. A `Locale(…)` collation would still need a name fiel
 Found 2026-11-17 while fixing single-file constraint enforcement.
 
 - **Single-file storage does not enforce PRIMARY KEY uniqueness.** `INSERT … VALUES (2, 'y'), (1, 'dup')` into a
-  table already holding id 1 leaves two rows with id 1.
+  table already holding id 1 leaves two rows with id 1, and an UPDATE that moves a key onto an existing one (§8's
+  single-file half) duplicates it.
 - **Neither mode models a composite key.** EF Core's `EnsureCreated` (`SharpCoreDBDatabaseCreator`) declares one
   inline `PRIMARY KEY` per key column; both storage modes keep only the *last* such column as `PrimaryKeyIndex`.
   Directory storage then enforces uniqueness on that one column — a false violation as soon as two rows share it
@@ -519,7 +531,7 @@ single-file cases in `PrimaryKeyUniquenessTests`.
 | 5 | SQL validator `@` prefix | 🟡 Low | Keys without `@` prefix | **Fixed** — `NormalizeKey` strips `@` / `:` |
 | 6 | INTEGER → Int32 | 🟡 Low | `BIGINT` columns | **Still the default** — opt in with `UseSqliteIntegerAffinity` |
 | 7 | Bound text re-parsed as SQL | 🔴 High | Write through `ITable.Insert` instead of SQL text | **Fixed** — one `SqlLiteralScanner` (SQL/SQLite: a doubled quote is one quote, a backslash is data) behind every scanner; `ParseValue` strips one pair and un-collapses doubling; a tuple with too many values is rejected. `ParameterLiteralRoundTripTests` 74/74 |
-| 8 | PK-changing UPDATE loses/duplicates a row | 🔴 High | — | **Open** — directory loses the overwritten row, single-file duplicates the key; write-path gate needed (§8) |
-| 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Open** — both storage modes accept duplicates (§9) |
+| 8 | PK-changing UPDATE loses/duplicates a row | 🔴 High | — | **Fixed on directory storage** — every UPDATE path validates the new key first; single-file part tracked in §11 |
+| 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Fixed on directory storage** — automatic unique index; single-file (format decision, §10/§11) and composite `UNIQUE (a, b)` still open |
 | 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
 | 11 | PK uniqueness / composite keys | 🔴 High | — | **Open, owner decision** — single-file enforces no PK uniqueness; composite keys are modelled as their last column (§11) |

@@ -106,7 +106,7 @@ public class HashIndex : IDisposable
             {
                 // Unique path: atomic check + add under outer lock
                 var keyBytes = BuildUnsafeKey(normalizedKey);
-                if (HasUnsafeRowsForKey(keyBytes))
+                if (normalizedKey is not DBNull && HasUnsafeRowsForKey(keyBytes))
                 {
                     throw new InvalidOperationException(
                         $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
@@ -122,7 +122,7 @@ public class HashIndex : IDisposable
                 list = [];
                 _index[normalizedKey] = list;
             }
-            else if (_isUnique && list.Count > 0)
+            else if (_isUnique && list.Count > 0 && normalizedKey is not DBNull)
             {
                 throw new InvalidOperationException(
                     $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
@@ -463,7 +463,7 @@ public class HashIndex : IDisposable
             {
                 // Unique path: atomic check + add under outer lock.
                 var keyBytes = BuildUnsafeKey(normalizedKey);
-                if (HasUnsafeRowsForKey(keyBytes))
+                if (normalizedKey is not DBNull && HasUnsafeRowsForKey(keyBytes))
                 {
                     throw new InvalidOperationException(
                         $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
@@ -479,7 +479,7 @@ public class HashIndex : IDisposable
                 list = [];
                 _index[normalizedKey] = list;
             }
-            else if (_isUnique && list.Count > 0)
+            else if (_isUnique && list.Count > 0 && normalizedKey is not DBNull)
             {
                 throw new InvalidOperationException(
                     $"Duplicate key value '{keys[i]}' violates unique constraint on index '{_columnName}'");
@@ -552,7 +552,7 @@ public class HashIndex : IDisposable
                 {
                     // Unique path: atomic check + add under outer lock
                     var keyBytes = BuildUnsafeKey(normalizedKey);
-                    if (HasUnsafeRowsForKey(keyBytes))
+                    if (normalizedKey is not DBNull && HasUnsafeRowsForKey(keyBytes))
                     {
                         throw new InvalidOperationException(
                             $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
@@ -567,7 +567,7 @@ public class HashIndex : IDisposable
                     list = [];
                     _index[normalizedKey] = list;
                 }
-                else if (_isUnique && list.Count > 0)
+                else if (_isUnique && list.Count > 0 && normalizedKey is not DBNull)
                 {
                     throw new InvalidOperationException(
                         $"Duplicate key value '{key}' violates unique constraint on index '{_columnName}'");
