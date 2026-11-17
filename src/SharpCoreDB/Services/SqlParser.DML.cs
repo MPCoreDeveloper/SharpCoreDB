@@ -343,7 +343,7 @@ public partial class SqlParser
                     foreach (var kv in sourceRow)
                         newRow[kv.Key] = kv.Value;
                 }
-                if (selectConflict is not null && ResolveInsertConflict(tableName, table, newRow, selectConflict, null, ref selectChanges))
+                if (selectConflict is not null && ResolveInsertConflict(table, newRow, selectConflict, null, ref selectChanges))
                 {
                     continue;
                 }
@@ -522,7 +522,7 @@ public partial class SqlParser
         {
             var row = BuildRowFromValues(rowValues);
 
-            if (conflictClause is not null && ResolveInsertConflict(tableName, table, row, conflictClause, returningRows, ref conflictChanges))
+            if (conflictClause is not null && ResolveInsertConflict(table, row, conflictClause, returningRows, ref conflictChanges))
             {
                 continue;
             }
@@ -2573,49 +2573,8 @@ public partial class SqlParser
     /// </summary>
     private static (string SetList, string Where) SplitUpdateSetAndWhere(string text)
     {
-        int depth = 0;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c is '\'' or '"' or '`' or '[')
-            {
-                char close = c == '[' ? ']' : c;
-                for (i++; i < text.Length; i++)
-                {
-                    if (text[i] != close)
-                    {
-                        continue;
-                    }
-
-                    if (close != ']' && i + 1 < text.Length && text[i + 1] == close)
-                    {
-                        i++; // a doubled quote is one quote of data
-                        continue;
-                    }
-
-                    break;
-                }
-
-                continue;
-            }
-
-            if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                depth--;
-            }
-            else if (depth == 0 && (c is 'W' or 'w') && i > 0 && char.IsWhiteSpace(text[i - 1]) &&
-                     string.Compare(text, i, "WHERE", 0, 5, StringComparison.OrdinalIgnoreCase) == 0 &&
-                     (i + 5 == text.Length || char.IsWhiteSpace(text[i + 5]) || text[i + 5] == '('))
-            {
-                return (text[..i].Trim(), text[(i + 5)..].Trim());
-            }
-        }
-
-        return (text.Trim(), string.Empty);
+        int at = SqlLiteralScanner.FindTopLevel(text, 0, static (t, i) => i > 0 && SqlLiteralScanner.IsKeywordAt(t, i, "WHERE"));
+        return at < 0 ? (text.Trim(), string.Empty) : (text[..at].Trim(), text[(at + 5)..].Trim());
     }
 
     /// <summary>
