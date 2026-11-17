@@ -80,6 +80,73 @@ internal static class SqlLiteralScanner
     }
 
     /// <summary>
+    /// Finds the first position at parenthesis depth 0, outside quoted literals and quoted identifiers (<c>'…'</c>,
+    /// <c>"…"</c>, <c>`…`</c>, <c>[…]</c>), where <paramref name="matchesAt"/> holds. With
+    /// <paramref name="stopAtUnmatchedClose"/>, a closing parenthesis that has no opening one in the scanned text (the
+    /// end of an enclosing subquery) also ends the search there. Returns -1 when nothing matches.
+    /// </summary>
+    /// <param name="text">The text to scan.</param>
+    /// <param name="start">The index to start at.</param>
+    /// <param name="matchesAt">Tests one top-level position.</param>
+    /// <param name="stopAtUnmatchedClose">Whether an unmatched <c>)</c> ends the search.</param>
+    internal static int FindTopLevel(string text, int start, Func<string, int, bool> matchesAt, bool stopAtUnmatchedClose = false)
+    {
+        int depth = 0;
+        int i = start;
+        while (i < text.Length)
+        {
+            char c = text[i];
+            if (c is '\'' or '"' or '`')
+            {
+                int after = SkipLiteral(text.AsSpan(), i);
+                i = after < 0 ? text.Length : after;
+                continue;
+            }
+
+            if (c == '[')
+            {
+                int close = text.IndexOf(']', i + 1);
+                i = close < 0 ? text.Length : close + 1;
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                if (depth == 0 && stopAtUnmatchedClose)
+                {
+                    return i;
+                }
+
+                depth--;
+            }
+            else if (depth == 0 && matchesAt(text, i))
+            {
+                return i;
+            }
+
+            i++;
+        }
+
+        return -1;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when <paramref name="keyword"/> starts at <paramref name="index"/> as a whole word (no letter,
+    /// digit or underscore on either side).
+    /// </summary>
+    internal static bool IsKeywordAt(string text, int index, string keyword) =>
+        index + keyword.Length <= text.Length &&
+        (index == 0 || !IsWordChar(text[index - 1])) &&
+        string.Compare(text, index, keyword, 0, keyword.Length, StringComparison.OrdinalIgnoreCase) == 0 &&
+        (index + keyword.Length == text.Length || !IsWordChar(text[index + keyword.Length]));
+
+    private static bool IsWordChar(char c) => char.IsLetterOrDigit(c) || c == '_';
+
+    /// <summary>
     /// Splits a condition on whitespace that is <b>not</b> inside a quoted literal, a parenthesized group or a
     /// bracketed literal, returning the tokens with their text unaltered.
     /// <para>
