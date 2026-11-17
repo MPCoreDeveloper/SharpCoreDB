@@ -95,6 +95,13 @@ public partial class PageManager : IDisposable
     protected const int PAGE_SIZE = 8192;
     protected const int PAGE_HEADER_SIZE = 32;
     protected const int SLOT_SIZE = 4;
+
+    // Page checksum (known issue §19): CRC32C of the page — computed with these four bytes left out — in header bytes 9–12,
+    // and a format flag in byte 13. The header is 32 bytes and only bytes 0–8 were ever written, so a page written before
+    // has flag 0 and is read unverified, as it always was; nothing else in the page moves.
+    private const int ChecksumOffset = 9;
+    private const int FormatFlagsOffset = 13;
+    private const byte ChecksummedFlag = 0x01;
     protected const int MIN_RECORD_SIZE = 16;
     protected const int MAX_RECORD_SIZE = PAGE_SIZE - PAGE_HEADER_SIZE - SLOT_SIZE;
 
@@ -115,6 +122,10 @@ public partial class PageManager : IDisposable
 
     // O(1) Free list implementation
     private readonly Queue<ulong> freePageList = new();
+
+    // True while InitializeFromDisk scans every page header to rebuild the page index at open: a damaged page must not stop
+    // the whole table from opening, so the checksum is verified when the page's records are read, not here.
+    private bool skipChecksumVerification;
 
     // Transaction undo scope (see BeginUndoScope). Null outside a scope, so a write outside a transaction pays one null
     // check. Maps each page changed inside the scope to its image before the first change, or to null for a page the
@@ -222,6 +233,19 @@ public partial class PageManager : IDisposable
         tablePagesIndex.Clear();
         freePageList.Clear();
 
+        skipChecksumVerification = true;
+        try
+        {
+            ScanPageHeaders(totalPages);
+        }
+        finally
+        {
+            skipChecksumVerification = false;
+        }
+    }
+
+    private void ScanPageHeaders(ulong totalPages)
+    {
         for (ulong pageNumber = 1; pageNumber <= totalPages; pageNumber++)
         {
             var page = ReadPage(new PageId(pageNumber));
@@ -268,6 +292,17 @@ public partial class PageManager : IDisposable
                     return new();
 
                 var bufferSpan = buffer.AsSpan();
+                if (!skipChecksumVerification && bytesRead == PAGE_SIZE &&
+                    (bufferSpan[FormatFlagsOffset] & ChecksummedFlag) != 0 &&
+                    BinaryPrimitives.ReadUInt32LittleEndian(bufferSpan.Slice(ChecksumOffset)) != ComputePageChecksum(bufferSpan[..PAGE_SIZE]))
+                {
+                    // Up to 2.1.4 a torn page read as a page whose slots are empty: its rows vanished without an error and
+                    // the table went on accepting writes on top of it (known issue §19).
+                    throw new InvalidDataException(
+                        $"PageBased page {pageId.Value} of '{pagesFile.Name}' failed its checksum: the page is damaged " +
+                        "(for example by a write a crash or power loss interrupted). Restore the table from a backup.");
+                }
+
                 var page = new Page
                 {
                     TableId = BinaryPrimitives.ReadUInt32LittleEndian(bufferSpan),
@@ -344,6 +379,9 @@ public partial class PageManager : IDisposable
                     BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset), slot.offset);
                     BinaryPrimitives.WriteUInt16LittleEndian(bufferSpan.Slice(slotOffset + 2), deleted ? (ushort)0 : slot.length);
                 }
+
+                bufferSpan[FormatFlagsOffset] = ChecksummedFlag;
+                BinaryPrimitives.WriteUInt32LittleEndian(bufferSpan.Slice(ChecksumOffset), ComputePageChecksum(bufferSpan));
 
                 pagesFile.Seek(offset, SeekOrigin.Begin);
                 pagesFile.Write(buffer, 0, PAGE_SIZE);
@@ -791,16 +829,25 @@ public partial class PageManager : IDisposable
                 return;
             }
 
+            // A page the open transaction changed stays dirty and in memory: a flush in the middle of a transaction (an
+            // ExecuteQuery inside BeginBatchUpdate flushes, to make batched writes visible) wrote it to the file, and a
+            // crash before the commit or rollback kept the uncommitted change (known issue §18). The commit flushes it.
             foreach (var pageId in dirtyPages.ToList())
             {
+                if (IsPinned(pageId))
+                {
+                    continue;
+                }
+
                 if (pageCache.TryGetValue(pageId, out var page))
                 {
                     WritePage(new PageId(pageId), page);
                     page.IsDirty = false;
                     pageCache[pageId] = page;
                 }
+
+                dirtyPages.Remove(pageId);
             }
-            dirtyPages.Clear();
 
             // PERF: Single OS-level flush after all pages written (a disk sync under FullSync only)
             pagesFile?.Flush(flushToDisk: syncOnFlush);
@@ -874,28 +921,61 @@ public partial class PageManager : IDisposable
     
     private void EvictIfNeeded()
     {
-        while (pageCache.Count > cacheCapacity)
+        // Least recently used first. A dirty page the open transaction changed is pinned: evicting it would write an
+        // uncommitted change to the file, and a crash before the commit or rollback kept it (known issue §18 — measured:
+        // an uncommitted UPDATE and DELETE survived a crash after a large read). The cache may then exceed its capacity
+        // until the transaction ends. The walk also ends when the list is exhausted; the previous loop spun forever when
+        // the cache held more pages than its capacity and none of them was in the LRU list.
+        var node = lruList.Last;
+        while (pageCache.Count > cacheCapacity && node is not null)
         {
-            // Evict least recently used
-            if (lruList.Last != null)
+            var previous = node.Previous;
+            var candidate = node.Value;
+            if (!IsPinned(candidate))
             {
-                var evictPageId = lruList.Last.Value;
-                lruList.RemoveLast();
-                lruNodeMap.Remove(evictPageId);
-                
-                // Flush if dirty
-                if (dirtyPages.Contains(evictPageId))
+                lruList.Remove(node);
+                lruNodeMap.Remove(candidate);
+                if (dirtyPages.Remove(candidate) && pageCache.TryGetValue(candidate, out var page))
                 {
-                    if (pageCache.TryGetValue(evictPageId, out var page))
-                    {
-                        WritePage(new PageId(evictPageId), page);
-                    }
-                    dirtyPages.Remove(evictPageId);
+                    WritePage(new PageId(candidate), page);
                 }
-                
-                pageCache.Remove(evictPageId);
+
+                pageCache.Remove(candidate);
             }
+
+            node = previous;
         }
+    }
+
+    /// <summary>True for a dirty page changed inside the open undo scope: it must not reach the file before the commit.</summary>
+    private bool IsPinned(ulong pageId) =>
+        undoImages is not null && undoImages.ContainsKey(pageId) && dirtyPages.Contains(pageId);
+
+    /// <summary>
+    /// CRC32C of an 8 KB page with its checksum bytes (header 9–12) left out, using the CPU's CRC32 instruction where there
+    /// is one (<see cref="System.Numerics.BitOperations.Crc32C(uint, ulong)"/> falls back to software elsewhere).
+    /// </summary>
+    internal static uint ComputePageChecksum(ReadOnlySpan<byte> page)
+    {
+        uint crc = Crc32C(uint.MaxValue, page[..ChecksumOffset]);
+        crc = Crc32C(crc, page[(ChecksumOffset + 4)..]);
+        return ~crc;
+    }
+
+    private static uint Crc32C(uint crc, ReadOnlySpan<byte> data)
+    {
+        int i = 0;
+        for (; i + 8 <= data.Length; i += 8)
+        {
+            crc = System.Numerics.BitOperations.Crc32C(crc, BinaryPrimitives.ReadUInt64LittleEndian(data.Slice(i)));
+        }
+
+        for (; i < data.Length; i++)
+        {
+            crc = System.Numerics.BitOperations.Crc32C(crc, data[i]);
+        }
+
+        return crc;
     }
 
     /// <summary>
