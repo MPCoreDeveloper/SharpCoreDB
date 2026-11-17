@@ -997,7 +997,14 @@ public partial class EnhancedSqlParser
         MatchKeyword("ASC");
         if (MatchKeyword("NULLS"))
         {
-            item.NullsFirst = MatchKeyword("FIRST") ? true : MatchKeyword("LAST") ? false : null;
+            if (MatchKeyword("FIRST"))
+            {
+                item.NullsFirst = true;
+            }
+            else if (MatchKeyword("LAST"))
+            {
+                item.NullsFirst = false;
+            }
         }
     }
 
@@ -1067,45 +1074,12 @@ public partial class EnhancedSqlParser
     /// that ends a subquery, LIMIT/OFFSET/a set operator, a semicolon or the end of the statement.</summary>
     private int FindOrderItemEnd(int start)
     {
-        int depth = 0;
-        for (int i = start; i < _sql.Length; i++)
-        {
-            char c = _sql[i];
-            if (c is '\'' or '"' or '`' or '[')
-            {
-                char close = c == '[' ? ']' : c;
-                for (i++; i < _sql.Length && _sql[i] != close; i++)
-                {
-                }
-
-                continue;
-            }
-
-            if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                if (depth == 0)
-                {
-                    return i;
-                }
-
-                depth--;
-            }
-            else if (depth == 0 && (c is ',' or ';'))
-            {
-                return i;
-            }
-            else if (depth == 0 && char.IsWhiteSpace(c) &&
-                     Regex.IsMatch(_sql[(i + 1)..], @"^(LIMIT|OFFSET|UNION|INTERSECT|EXCEPT)\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
-            {
-                return i;
-            }
-        }
-
-        return _sql.Length;
+        int end = SqlLiteralScanner.FindTopLevel(_sql, start, static (text, i) =>
+            text[i] is ',' or ';' ||
+            (char.IsWhiteSpace(text[i]) &&
+             Regex.IsMatch(text[(i + 1)..], @"^(LIMIT|OFFSET|UNION|INTERSECT|EXCEPT)\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1))),
+            stopAtUnmatchedClose: true);
+        return end < 0 ? _sql.Length : end;
     }
 
     private OrderByNode ParseOrderBy()

@@ -41,19 +41,39 @@ internal static class SqlOrderBy
             _ => null,
         };
 
-        return Comparer<object?>.Create((x, y) =>
-        {
-            bool xNull = x is null or DBNull;
-            bool yNull = y is null or DBNull;
-            if (xNull || yNull)
-            {
-                return xNull == yNull ? 0 : xNull == nullsFirst ? -1 : 1;
-            }
+        return Comparer<object?>.Create((x, y) => CompareItemKeys(x, y, descending, nullsFirst, text, values));
+    }
 
-            int c = text is not null && x is string xs && y is string ys ? text.Compare(xs, ys) : values.Compare(x, y);
-            c = Math.Sign(c);
-            return descending ? -c : c;
-        });
+    private static int CompareItemKeys(
+        object? x, object? y, bool descending, bool nullsFirst, IComparer<string>? text, IComparer<object?> values)
+    {
+        int nulls = CompareNulls(x, y, nullsFirst);
+        if (nulls != 2)
+        {
+            return nulls;
+        }
+
+        int c = text is not null && x is string xs && y is string ys ? text.Compare(xs, ys) : values.Compare(x, y);
+        c = Math.Sign(c);
+        return descending ? -c : c;
+    }
+
+    /// <summary>The order of two keys when either is NULL (-1, 0, 1), or 2 when neither is.</summary>
+    private static int CompareNulls(object? x, object? y, bool nullsFirst)
+    {
+        bool xNull = x is null or DBNull;
+        bool yNull = y is null or DBNull;
+        if (!xNull && !yNull)
+        {
+            return 2;
+        }
+
+        if (xNull == yNull)
+        {
+            return 0;
+        }
+
+        return xNull == nullsFirst ? -1 : 1;
     }
 
     /// <summary>
@@ -65,11 +85,10 @@ internal static class SqlOrderBy
 
         public int Compare(object? x, object? y)
         {
-            bool xNull = x is null or DBNull;
-            bool yNull = y is null or DBNull;
-            if (xNull || yNull)
+            int nulls = CompareNulls(x, y, nullsFirst: true);
+            if (nulls != 2)
             {
-                return xNull == yNull ? 0 : xNull ? -1 : 1;
+                return nulls;
             }
 
             return x is string xs && y is string ys

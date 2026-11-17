@@ -54,20 +54,10 @@ public partial class SqlParser
     /// </summary>
     private static InsertConflictClause? ReadInsertConflictClause(string statement, ref string valuesText)
     {
-        var policy = InsertConflictPolicy.None;
-        var policyMatch = InsertOrPolicyRegex.Match(statement);
-        if (policyMatch.Success)
-        {
-            policy = policyMatch.Groups[1].Value.ToUpperInvariant() switch
-            {
-                "REPLACE" => InsertConflictPolicy.Replace,
-                "IGNORE" => InsertConflictPolicy.Ignore,
-                "FAIL" => InsertConflictPolicy.Fail,
-                _ => InsertConflictPolicy.Abort, // ABORT, and ROLLBACK (no statement-level transaction here)
-            };
-        }
-
-        int onAt = FindTopLevelOnConflict(valuesText);
+        var policy = ReadInsertOrPolicy(statement);
+        int onAt = SqlLiteralScanner.FindTopLevel(valuesText, 0, static (t, i) =>
+            SqlLiteralScanner.IsKeywordAt(t, i, "ON") &&
+            Regex.IsMatch(t[i..], @"^ON\s+CONFLICT\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)));
         if (onAt < 0)
         {
             return policy == InsertConflictPolicy.None ? null : new InsertConflictClause { Policy = policy };
@@ -81,17 +71,11 @@ public partial class SqlParser
             throw new InvalidOperationException($"Unrecognised ON CONFLICT clause: {clauseText}");
         }
 
-        var targets = new List<string>();
-        if (match.Groups["targets"].Success)
-        {
-            foreach (var target in SqlInPredicate.SplitTopLevelComma(match.Groups["targets"].Value))
-            {
-                if (!string.IsNullOrWhiteSpace(target))
-                {
-                    targets.Add(SqlIdentifierScanner.IdentifierText(target.Trim()));
-                }
-            }
-        }
+        List<string> targets = match.Groups["targets"].Success
+            ? [.. SqlInPredicate.SplitTopLevelComma(match.Groups["targets"].Value)
+                .Where(static target => !string.IsNullOrWhiteSpace(target))
+                .Select(static target => SqlIdentifierScanner.IdentifierText(target.Trim()))]
+            : [];
 
         if (match.Groups["nothing"].Success)
         {
@@ -99,6 +83,37 @@ public partial class SqlParser
         }
 
         var (setList, where) = SplitUpdateSetAndWhere(match.Groups["set"].Value);
+        return new InsertConflictClause
+        {
+            Policy = policy,
+            Action = InsertOnConflictAction.DoUpdate,
+            Targets = targets,
+            Assignments = ReadDoUpdateAssignments(setList),
+            Where = where.Length == 0 ? null : where,
+        };
+    }
+
+    /// <summary>The statement's <c>INSERT OR …</c> policy, or <see cref="InsertConflictPolicy.None"/>.</summary>
+    private static InsertConflictPolicy ReadInsertOrPolicy(string statement)
+    {
+        var policyMatch = InsertOrPolicyRegex.Match(statement);
+        if (!policyMatch.Success)
+        {
+            return InsertConflictPolicy.None;
+        }
+
+        return policyMatch.Groups[1].Value.ToUpperInvariant() switch
+        {
+            "REPLACE" => InsertConflictPolicy.Replace,
+            "IGNORE" => InsertConflictPolicy.Ignore,
+            "FAIL" => InsertConflictPolicy.Fail,
+            _ => InsertConflictPolicy.Abort, // ABORT, and ROLLBACK (no statement-level transaction here)
+        };
+    }
+
+    /// <summary>The <c>col = expression</c> pairs of a DO UPDATE SET list.</summary>
+    private static List<KeyValuePair<string, string>> ReadDoUpdateAssignments(string setList)
+    {
         var assignments = new List<KeyValuePair<string, string>>();
         foreach (var assignment in SqlInPredicate.SplitTopLevelComma(setList))
         {
@@ -111,61 +126,7 @@ public partial class SqlParser
             assignments.Add(new(SqlIdentifierScanner.IdentifierText(assignment[..eq].Trim()), assignment[(eq + 1)..].Trim()));
         }
 
-        return new InsertConflictClause
-        {
-            Policy = policy,
-            Action = InsertOnConflictAction.DoUpdate,
-            Targets = targets,
-            Assignments = assignments,
-            Where = where.Length == 0 ? null : where,
-        };
-    }
-
-    /// <summary>The position of a top-level <c>ON CONFLICT</c> (outside quotes and parentheses), or -1.</summary>
-    private static int FindTopLevelOnConflict(string text)
-    {
-        int depth = 0;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c is '\'' or '"' or '`' or '[')
-            {
-                char close = c == '[' ? ']' : c;
-                for (i++; i < text.Length; i++)
-                {
-                    if (text[i] != close)
-                    {
-                        continue;
-                    }
-
-                    if (close != ']' && i + 1 < text.Length && text[i + 1] == close)
-                    {
-                        i++;
-                        continue;
-                    }
-
-                    break;
-                }
-
-                continue;
-            }
-
-            if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                depth--;
-            }
-            else if (depth == 0 && (c is 'O' or 'o') && (i == 0 || char.IsWhiteSpace(text[i - 1]) || text[i - 1] == ')') &&
-                     Regex.IsMatch(text[i..], @"^ON\s+CONFLICT\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
-            {
-                return i;
-            }
-        }
-
-        return -1;
+        return assignments;
     }
 
     /// <summary>
@@ -173,8 +134,7 @@ public partial class SqlParser
     /// not be inserted (skipped, or merged into the existing row by DO UPDATE); <c>false</c> to insert it — no conflict,
     /// or REPLACE removed the conflicting rows. ABORT/FAIL, and a conflict the clause does not cover, raise the error.
     /// </summary>
-    private bool ResolveInsertConflict(
-        string tableName,
+    private static bool ResolveInsertConflict(
         ITable table,
         Dictionary<string, object> row,
         InsertConflictClause clause,
@@ -208,20 +168,22 @@ public partial class SqlParser
             case InsertConflictPolicy.Ignore:
                 return true;
             case InsertConflictPolicy.Replace when conflictingKey is not null:
-                // Every row the new one conflicts with is deleted (a PRIMARY KEY and a UNIQUE conflict can be two rows).
-                for (int guard = 0; guard < 64 && conflictingKey is not null; guard++)
-                {
-                    if (!table.DeleteByPrimaryKey(conflictingKey))
-                    {
-                        break;
-                    }
-
-                    TryDetectInsertConflict(table, row, [], out conflictingKey, out _);
-                }
-
+                DeleteConflictingRows(table, row, conflictingKey);
                 return false;
             default:
                 throw new InvalidOperationException(string.IsNullOrEmpty(message) ? "UNIQUE constraint failed" : message);
+        }
+    }
+
+    /// <summary>
+    /// REPLACE: deletes every row the new one conflicts with — a PRIMARY KEY and a UNIQUE conflict can be two rows.
+    /// </summary>
+    private static void DeleteConflictingRows(ITable table, Dictionary<string, object> row, object conflictingKey)
+    {
+        object? next = conflictingKey;
+        for (int guard = 0; guard < 64 && next is not null && table.DeleteByPrimaryKey(next); guard++)
+        {
+            TryDetectInsertConflict(table, row, [], out next, out _);
         }
     }
 
