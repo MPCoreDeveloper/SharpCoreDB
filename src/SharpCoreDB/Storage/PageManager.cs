@@ -123,6 +123,9 @@ public partial class PageManager : IDisposable
     private Dictionary<uint, List<ulong>>? undoTablePages;
     private ulong[]? undoFreePages;
     
+    /// <summary>Whether <see cref="FlushDirtyPages"/> syncs the page file to disk (WalDurabilityMode.FullSync).</summary>
+    private readonly bool syncOnFlush = true;
+
     // Cache statistics
     private long cacheHits = 0;
     private long cacheMisses = 0;
@@ -180,6 +183,10 @@ public partial class PageManager : IDisposable
     public PageManager(string databasePath, uint tableId, DatabaseConfig? config)
     {
         cacheCapacity = config?.PageCacheCapacity ?? 1024;
+
+        // FullSync (the default) forces flushed pages to the physical disk; Async writes them to the file and leaves the
+        // sync to the operating system — the same split as the columnar in-place writes (known issue §17).
+        syncOnFlush = (config?.WalDurabilityMode ?? Services.DurabilityMode.FullSync) == Services.DurabilityMode.FullSync;
         var pagesFilePath = Path.Combine(databasePath, $"table_{tableId}.pages");
         pagesFile = new FileStream(pagesFilePath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.ReadWrite);
 
@@ -777,6 +784,13 @@ public partial class PageManager : IDisposable
     {
         lock (writeLock)
         {
+            // Nothing to write: no fsync either. The flush now runs after every autocommit statement (known issue §15),
+            // and a SELECT must not pay a disk sync for it.
+            if (dirtyPages.Count == 0)
+            {
+                return;
+            }
+
             foreach (var pageId in dirtyPages.ToList())
             {
                 if (pageCache.TryGetValue(pageId, out var page))
@@ -788,8 +802,8 @@ public partial class PageManager : IDisposable
             }
             dirtyPages.Clear();
 
-            // PERF: Single OS-level flush after all pages written
-            pagesFile?.Flush(flushToDisk: true);
+            // PERF: Single OS-level flush after all pages written (a disk sync under FullSync only)
+            pagesFile?.Flush(flushToDisk: syncOnFlush);
         }
     }
     

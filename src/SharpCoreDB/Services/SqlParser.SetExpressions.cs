@@ -30,7 +30,7 @@ public partial class SqlParser
     internal static bool IsComputedSetValue(string valueText, IReadOnlyList<string> columns, out SqlScalarExpression.Node node)
     {
         node = null!;
-        if (IsPlainSetLiteral(valueText) || !SqlScalarExpression.TryParse(valueText.Trim(), out var parsed))
+        if (IsPlainSetLiteral(valueText) || !SqlScalarExpression.TryParseValue(valueText.Trim(), out var parsed))
         {
             return false;
         }

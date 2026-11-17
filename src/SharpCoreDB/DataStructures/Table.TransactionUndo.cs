@@ -35,6 +35,23 @@ public partial class Table
         if (_storageEngine is PageBasedEngine engine)
         {
             engine.CommitUndoScope();
+
+            // The commit is the durability boundary: the transaction's pages go to the file now. EndBatchUpdate flushed
+            // already; an ExecuteBatchSQL commit did not, so up to 2.1.4 a crash after a returned batch lost it (§15).
+            engine.Flush();
+        }
+    }
+
+    /// <summary>
+    /// After an autocommit statement: writes the PageBased engine's dirty pages to the file (and syncs it), so a crash
+    /// after the statement returned keeps it. Up to 2.1.4 the pages stayed in the cache until an explicit Flush(), a
+    /// commit, an eviction or Dispose (known issue §15). Free when the statement changed no page.
+    /// </summary>
+    internal void FlushAutocommitPages()
+    {
+        if (_storageEngine is PageBasedEngine engine)
+        {
+            engine.Flush();
         }
     }
 

@@ -104,6 +104,34 @@ public sealed class UpdateSetExpressionTests : IDisposable
         Assert.Equal(["1,6"], Rows(db, "SELECT id, n FROM t"));
     }
 
+    [Fact]
+    public void Update_ComputedValues_AreConvertedToEachColumnsType()
+    {
+        var (db, _) = Open("columnar", "CREATE TABLE t (id INTEGER PRIMARY KEY, r REAL, big BIGINT, flag BOOLEAN, d DATETIME, label TEXT)");
+        db.ExecuteSQL("INSERT INTO t (id, r, big, flag, d, label) VALUES (1, 1.5, 10, 0, '2026-01-01 00:00:00', 'x')");
+
+        db.ExecuteSQL("UPDATE t SET r = r * 2, big = big * 1000000000, flag = length(label) > 0, " +
+                      "d = datetime(d, '+1 day'), label = id || '-' || r WHERE id = 1");
+
+        var row = db.ExecuteQuery("SELECT r, big, flag, d, label FROM t WHERE id = 1").Single();
+        Assert.Equal(3.0, Convert.ToDouble(row["r"], CultureInfo.InvariantCulture));
+        Assert.Equal(10_000_000_000L, Convert.ToInt64(row["big"], CultureInfo.InvariantCulture));
+        Assert.True(Convert.ToBoolean(row["flag"], CultureInfo.InvariantCulture));
+        Assert.Equal(new DateTime(2026, 1, 2), Convert.ToDateTime(row["d"], CultureInfo.InvariantCulture).Date);
+        Assert.Equal("1-1.5", row["label"]);
+    }
+
+    [Fact]
+    public void Update_ComputedValueTooLargeForAnIntegerColumn_IsRejectedAndChangesNothing()
+    {
+        var (db, _) = Open("columnar", "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER)");
+        db.ExecuteSQL("INSERT INTO t (id, n) VALUES (1, 2000000000)");
+
+        Assert.ThrowsAny<Exception>(() => db.ExecuteSQL("UPDATE t SET n = n * 4 WHERE id = 1"));
+
+        Assert.Equal(["1,2000000000"], Rows(db, "SELECT id, n FROM t"));
+    }
+
     [Theory]
     [MemberData(nameof(Modes))]
     public void BatchUpdate_SetValueReadsTheRow_SeesTheEarlierStatement(string mode)
