@@ -453,12 +453,18 @@ public sealed class SubqueryExecutor
     {
         if (orderBy.Items.Count == 0) return rows;
 
-        var firstItem = orderBy.Items[0];
-        var columnName = firstItem.Column.ColumnName;
+        // Every key, each with its own direction, and an expression key evaluated per row. Up to 2.1.4 only the first key
+        // was read, as a column name, so `ORDER BY grp, name` and `ORDER BY LENGTH(name)` came back unsorted.
+        IOrderedEnumerable<Dictionary<string, object>>? ordered = null;
+        foreach (var item in orderBy.Items)
+        {
+            var key = AstExecutor.OrderKeySelector(item);
+            ordered = ordered is null
+                ? item.IsAscending ? rows.OrderBy(key, SqlOrderBy.KeyComparer.Instance) : rows.OrderByDescending(key, SqlOrderBy.KeyComparer.Instance)
+                : item.IsAscending ? ordered.ThenBy(key, SqlOrderBy.KeyComparer.Instance) : ordered.ThenByDescending(key, SqlOrderBy.KeyComparer.Instance);
+        }
 
-        return firstItem.IsAscending
-            ? rows.OrderBy(r => r.TryGetValue(columnName, out var v) ? v : null).ToList()
-            : rows.OrderByDescending(r => r.TryGetValue(columnName, out var v) ? v : null).ToList();
+        return [.. ordered!];
     }
 
     /// <summary>

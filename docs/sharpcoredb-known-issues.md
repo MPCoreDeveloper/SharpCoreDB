@@ -455,10 +455,11 @@ SELECT id FROM t;
 > registered at CREATE TABLE and on every open, so existing tables are covered. INSERT, multi-row INSERT (now atomic on
 > tables with a unique index) and every UPDATE path are checked; NULLs never conflict. On the way: a UNIQUE *index* was
 > enforced only by a single-row INSERT into a columnar table, and a second NULL was rejected as a duplicate. Pinned by
-> `UniqueConstraintTests` (columnar and page-based). **Still open:** single-file storage (its persisted
-> `ColumnFlags.Unique` is also written for every inline PRIMARY KEY column, so a reopened file cannot tell a declared
-> UNIQUE from an EF Core composite key's column — the format decision of §10/§11; tried and backed out when
-> `CompleteExampleIntegrationTests.CompositeKey_*` failed) and a composite `UNIQUE (a, b)` on INSERT.
+> `UniqueConstraintTests` (columnar and page-based). A multi-column `UNIQUE (a, b)` is enforced too since
+> `fix/composite-keys-update-atomicity-orderby` (INSERT, multi-row INSERT and UPDATE; `CompositeKeyTests`). **Still
+> open:** single-file storage (its persisted `ColumnFlags.Unique` is also written for every inline PRIMARY KEY column, so
+> a reopened file cannot tell a declared UNIQUE from an EF Core composite key's column — the format decision of
+> §10/§11; tried and backed out when `CompleteExampleIntegrationTests.CompositeKey_*` failed).
 
 Found 2026-11-17. A column declared `UNIQUE` accepts duplicates on both storage modes:
 
@@ -494,8 +495,15 @@ on-disk format extension. A `Locale(…)` collation would still need a name fiel
 
 ## 11. 🔴 OPEN (owner decision) — PRIMARY KEY uniqueness and composite keys
 
-> ⚠️ **STILL TRUE (verified 2026-11-17), pending an owner decision** on modelling composite keys. Single-file
-> enforcement was implemented and backed out in the same change because of the compatibility hazard below.
+> ⚠️ **STILL TRUE for single-file storage (verified 2026-11-17), pending an owner decision** on modelling composite
+> keys there. Single-file enforcement was implemented and backed out because of the compatibility hazard below.
+> **Directory storage is fixed for tables created from `fix/composite-keys-update-atomicity-orderby` on:** a composite
+> key — table-level `PRIMARY KEY (a, b)`, `CONSTRAINT name PRIMARY KEY (a, b)`, or `PRIMARY KEY` written on several
+> columns as EF Core's `EnsureCreated` writes it — is enforced as SQLite enforces it in a rowid table: a UNIQUE
+> constraint over all its columns, the row id staying the storage key (`CompositeKeyTests`). A directory table created
+> earlier keeps the key it was created with (its last key column; the other columns were never recorded) and needs to
+> be re-created to drop the false violations. The table-level form was worse than described below: it was read as a
+> column called `PRIMARY` (or `CONSTRAINT`) that became the key, always NULL, so such a table held one row.
 
 Found 2026-11-17 while fixing single-file constraint enforcement.
 
@@ -532,6 +540,6 @@ single-file cases in `PrimaryKeyUniquenessTests`.
 | 6 | INTEGER → Int32 | 🟡 Low | `BIGINT` columns | **Still the default** — opt in with `UseSqliteIntegerAffinity` |
 | 7 | Bound text re-parsed as SQL | 🔴 High | Write through `ITable.Insert` instead of SQL text | **Fixed** — one `SqlLiteralScanner` (SQL/SQLite: a doubled quote is one quote, a backslash is data) behind every scanner; `ParseValue` strips one pair and un-collapses doubling; a tuple with too many values is rejected. `ParameterLiteralRoundTripTests` 74/74 |
 | 8 | PK-changing UPDATE loses/duplicates a row | 🔴 High | — | **Fixed on directory storage** — every UPDATE path validates the new key first; single-file part tracked in §11 |
-| 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Fixed on directory storage** — automatic unique index; single-file (format decision, §10/§11) and composite `UNIQUE (a, b)` still open |
+| 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Fixed on directory storage** — automatic unique index, composite `UNIQUE (a, b)` included; single-file still open (format decision, §10/§11) |
 | 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
-| 11 | PK uniqueness / composite keys | 🔴 High | — | **Open, owner decision** — single-file enforces no PK uniqueness; composite keys are modelled as their last column (§11) |
+| 11 | PK uniqueness / composite keys | 🔴 High | — | **Fixed on directory storage for new tables** (composite key = UNIQUE over its columns); **open, owner decision** for single-file storage, which enforces no PK uniqueness (§11) |

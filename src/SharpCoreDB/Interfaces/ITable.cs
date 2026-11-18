@@ -233,6 +233,24 @@ public interface ITable
     }
 
     /// <summary>
+    /// Updates rows matching <paramref name="where"/> with SET values that are computed per row
+    /// (<c>SET n = n + 1</c>) and returns the number of affected rows. Every function reads the row as it was before
+    /// the statement, and every value is computed before the first row is written. The default implementation throws
+    /// <see cref="NotSupportedException"/>; <see cref="Table"/> and <see cref="SingleFileTable"/> implement it.
+    /// </summary>
+    /// <param name="where">The where clause string.</param>
+    /// <param name="updates">The SET values that are the same for every row.</param>
+    /// <param name="computed">The SET columns whose value is computed from the row, with the function computing it.</param>
+    /// <returns>The number of affected rows.</returns>
+    int UpdateAffectedCount(
+        string? where,
+        Dictionary<string, object> updates,
+        IReadOnlyList<KeyValuePair<string, Func<Dictionary<string, object>, object?>>> computed) =>
+        computed.Count == 0
+            ? UpdateAffectedCount(where, updates)
+            : throw new NotSupportedException($"{GetType().Name} does not support an UPDATE whose SET value is an expression.");
+
+    /// <summary>
     /// Deletes rows from the table.
     /// </summary>
     /// <param name="where">The where clause string.</param>

@@ -136,16 +136,43 @@ public static class TypeConverter
         if (string.IsNullOrEmpty(expression))
             return true;
 
+        // A table-level constraint is stored as written — `CHECK (n <> id)` — and up to 2.1.4 the keyword reached the
+        // evaluator, failed to parse and so rejected every row: a table with a table-level CHECK accepted no INSERT.
+        expression = StripCheckKeyword(expression.Trim());
+
+        // SQLite semantics first: three-valued logic (a NULL operand passes), `<>`, functions and expressions. Syntax
+        // that evaluator does not cover keeps the original evaluator below.
+        if (SqlScalarExpression.TryEvaluateCheck(expression, row, out var passes))
+        {
+            return passes;
+        }
+
         try
         {
             // Parse and evaluate the full expression
-            return EvaluateExpression(expression.Trim(), row, columnTypes);
+            return EvaluateExpression(expression, row, columnTypes);
         }
         catch
         {
             // If evaluation fails, consider the constraint violated
             return false;
         }
+    }
+
+    private static string StripCheckKeyword(string expression)
+    {
+        if (expression.Length > 5 &&
+            expression.StartsWith("CHECK", StringComparison.OrdinalIgnoreCase) &&
+            (char.IsWhiteSpace(expression[5]) || expression[5] == '('))
+        {
+            var rest = expression[5..].Trim();
+            if (rest.Length > 1 && rest[0] == '(')
+            {
+                return SqlInPredicate.StripOuterParentheses(rest);
+            }
+        }
+
+        return expression;
     }
 
     /// <summary>

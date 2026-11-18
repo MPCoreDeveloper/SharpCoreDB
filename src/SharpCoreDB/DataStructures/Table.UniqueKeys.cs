@@ -10,7 +10,7 @@ using System.Collections.Generic;
 using System.Globalization;
 
 /// <summary>
-/// Table partial — uniqueness of the PRIMARY KEY and of single-column UNIQUE constraints on every write path.
+/// Table partial — uniqueness of the PRIMARY KEY and of UNIQUE constraints (single- and multi-column) on every write path.
 /// <para>
 /// Up to 2.1.4 two guarantees were missing (known issues §8 and §9). An UPDATE that changed the primary key never
 /// checked the new key: <c>UPDATE t SET id = 1 WHERE id = 3</c> with a row 1 present was accepted, the primary-key
@@ -20,8 +20,10 @@ using System.Globalization;
 /// </para>
 /// <para>
 /// A UNIQUE column now gets an automatic unique hash index, as SQLite gives it a <c>sqlite_autoindex_…</c>, so the
-/// check is a hash lookup. Every check starts with a test that allocates nothing and returns at once for a table or a
-/// statement without keys to protect, which keeps the measured write paths unchanged.
+/// check is a hash lookup. A multi-column UNIQUE (a, b) — a composite PRIMARY KEY is one — gets a hash index on its
+/// first column, which narrows the check to the rows sharing that value; up to 2.1.4 it was never checked at all. Every
+/// check starts with a test that allocates nothing and returns at once for a table or a statement without keys to
+/// protect, which keeps the measured write paths unchanged.
 /// </para>
 /// </summary>
 public partial class Table
@@ -37,19 +39,26 @@ public partial class Table
         for (int i = 0; i < this.UniqueConstraints.Count; i++)
         {
             var constraint = this.UniqueConstraints[i];
-            if (constraint.Count != 1)
+            var indexName = $"sqlite_autoindex_{this.Name}_{i + 1}";
+            if (constraint.Count == 0 || this.indexNameToColumn.ContainsKey(indexName))
             {
+                continue;
+            }
+
+            if (constraint.Count > 1)
+            {
+                // A multi-column constraint: a non-unique index on its first column finds the candidate rows.
+                var columns = ResolveCompositeConstraint(constraint);
+                if (columns is not null)
+                {
+                    CreateHashIndex(indexName, columns[0], isUnique: false);
+                }
+
                 continue;
             }
 
             var column = this.Columns.Find(c => c.Equals(constraint[0], StringComparison.OrdinalIgnoreCase));
             if (column is null || (this.PrimaryKeyIndex >= 0 && column == this.Columns[this.PrimaryKeyIndex]))
-            {
-                continue;
-            }
-
-            var indexName = $"sqlite_autoindex_{this.Name}_{i + 1}";
-            if (this.indexNameToColumn.ContainsKey(indexName))
             {
                 continue;
             }
@@ -93,6 +102,36 @@ public partial class Table
             }
         }
 
+        foreach (var constraint in this.UniqueConstraints) // NOSONAR:S3267 - write hot path: LINQ would allocate
+        {
+            if (constraint.Count < 2)
+            {
+                continue;
+            }
+
+            foreach (var column in constraint) // NOSONAR:S3267 - write hot path: LINQ would allocate
+            {
+                if (TryGetUpdateValue(updates, column, out _))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>Returns <c>true</c> when the table has a multi-column UNIQUE constraint. Allocates nothing.</summary>
+    private bool HasCompositeUniqueConstraint()
+    {
+        foreach (var constraint in this.UniqueConstraints) // NOSONAR:S3267 - write hot path: LINQ would allocate
+        {
+            if (constraint.Count > 1)
+            {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -103,7 +142,7 @@ public partial class Table
     /// <summary>Validates one inserted row against the unique indexes. Returns at once without any.</summary>
     private void ValidateUniqueValues(Dictionary<string, object> row)
     {
-        if (HasUniqueIndex())
+        if (HasUniqueIndex() || HasCompositeUniqueConstraint())
         {
             ValidateUniqueValuesCore(row);
         }
@@ -112,7 +151,7 @@ public partial class Table
     /// <summary>Validates inserted rows (one statement) against the unique indexes and against each other.</summary>
     private void ValidateUniqueValues(IReadOnlyList<Dictionary<string, object>> rows)
     {
-        if (HasUniqueIndex())
+        if (HasUniqueIndex() || HasCompositeUniqueConstraint())
         {
             ValidateUniqueValuesCore(rows);
         }
@@ -121,7 +160,7 @@ public partial class Table
     /// <summary>Validates inserted rows in table column order (the batch parser's shape).</summary>
     private void ValidateUniqueValues(object[][] rows)
     {
-        if (HasUniqueIndex())
+        if (HasUniqueIndex() || HasCompositeUniqueConstraint())
         {
             ValidateUniqueValuesCore(rows);
         }
@@ -161,6 +200,31 @@ public partial class Table
                 }
             }
         }
+
+        foreach (var constraint in CompositeUniqueConstraints())
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+            var values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+            for (int r = 0; r < rowCount; r++)
+            {
+                values.Clear();
+                foreach (var column in constraint)
+                {
+                    values[column] = valueAt(r, column)!;
+                }
+
+                var key = CompositeKey(constraint, values);
+                if (key is null)
+                {
+                    continue; // a NULL in any column never conflicts, as in SQLite
+                }
+
+                if (!seen.Add(key) || FindCompositeKeyHolders(constraint, values).Count > 0)
+                {
+                    throw DuplicateCompositeValue(constraint, values);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -189,6 +253,86 @@ public partial class Table
                 UniqueKeyComparer(column),
                 (_, value) => hashIndex is not null && hashIndex.ContainsKey(value),
                 isPrimaryKey: false);
+        }
+
+        foreach (var constraint in CompositeUniqueConstraints())
+        {
+            ValidateCompositeKeyChanges(changes, constraint);
+        }
+    }
+
+    /// <summary>
+    /// Validates the changes to one multi-column UNIQUE constraint. The statement is judged by its end state: every
+    /// touched row's key after all its SET lists (a later change sees an earlier one) must be unique among the touched
+    /// rows, and a changed key may be held by no untouched row — a row the statement moves away from a key releases it.
+    /// </summary>
+    private void ValidateCompositeKeyChanges(
+        IReadOnlyList<(IReadOnlyList<Dictionary<string, object>> Rows, Dictionary<string, object> Updates)> changes,
+        List<string> constraint)
+    {
+        var pkColumn = this.PrimaryKeyIndex >= 0 ? this.Columns[this.PrimaryKeyIndex] : null;
+        var finalValues = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
+        var originalKeys = new Dictionary<string, string?>(StringComparer.Ordinal);
+        int anonymous = 0;
+        foreach (var (rows, updates) in changes)
+        {
+            if (!TouchesAnyColumn(updates, constraint))
+            {
+                continue;
+            }
+
+            foreach (var row in rows)
+            {
+                var identity = RowIdentity(row, pkColumn) ?? $"#{anonymous++}";
+                if (!finalValues.TryGetValue(identity, out var values))
+                {
+                    values = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+                    foreach (var column in constraint)
+                    {
+                        values[column] = row.TryGetValue(column, out var current) ? current : null!;
+                    }
+
+                    finalValues[identity] = values;
+                    originalKeys[identity] = CompositeKey(constraint, values);
+                }
+
+                foreach (var column in constraint)
+                {
+                    if (TryGetUpdateValue(updates, column, out var newValue))
+                    {
+                        values[column] = newValue!;
+                    }
+                }
+            }
+        }
+
+        var claimed = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (identity, values) in finalValues)
+        {
+            var key = CompositeKey(constraint, values);
+            if (key is null)
+            {
+                continue;
+            }
+
+            if (!claimed.Add(key))
+            {
+                throw DuplicateCompositeValue(constraint, values);
+            }
+
+            if (string.Equals(key, originalKeys[identity], StringComparison.Ordinal))
+            {
+                continue; // the row keeps its own key
+            }
+
+            foreach (var holder in FindCompositeKeyHolders(constraint, values))
+            {
+                var holderIdentity = RowIdentity(holder, pkColumn);
+                if (holderIdentity is null || !finalValues.ContainsKey(holderIdentity))
+                {
+                    throw DuplicateCompositeValue(constraint, values);
+                }
+            }
         }
     }
 
@@ -296,6 +440,123 @@ public partial class Table
 
         return columns;
     }
+
+    /// <summary>
+    /// The multi-column UNIQUE constraints, with their columns resolved to the table's own names. A constraint that
+    /// names a missing column, or includes the primary key (and so can never be violated), is left out.
+    /// </summary>
+    private List<List<string>> CompositeUniqueConstraints()
+    {
+        var result = new List<List<string>>();
+        foreach (var constraint in this.UniqueConstraints)
+        {
+            if (constraint.Count > 1 && ResolveCompositeConstraint(constraint) is { } columns)
+            {
+                result.Add(columns);
+            }
+        }
+
+        return result;
+    }
+
+    private List<string>? ResolveCompositeConstraint(List<string> constraint)
+    {
+        var columns = new List<string>(constraint.Count);
+        foreach (var name in constraint)
+        {
+            var column = this.Columns.Find(c => c.Equals(name, StringComparison.OrdinalIgnoreCase));
+            if (column is null || IsPrimaryKeyColumn(column))
+            {
+                return null;
+            }
+
+            columns.Add(column);
+        }
+
+        return columns;
+    }
+
+    /// <summary>
+    /// The stored rows whose values in every column of <paramref name="constraint"/> equal <paramref name="values"/>,
+    /// found through the hash index on the constraint's first column.
+    /// </summary>
+    private List<Dictionary<string, object>> FindCompositeKeyHolders(List<string> constraint, Dictionary<string, object> values)
+    {
+        var holders = new List<Dictionary<string, object>>();
+        var seed = constraint[0];
+        foreach (var candidate in this.registeredIndexes.ContainsKey(seed)
+                     ? FindByIndex(seed, values[seed])
+                     : SelectInternal(null, orderBy: null, asc: true, noEncrypt: false))
+        {
+            bool match = true;
+            foreach (var column in constraint)
+            {
+                candidate.TryGetValue(column, out var stored);
+                if (!CompositeComponentEquals(column, stored, values[column]))
+                {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match)
+            {
+                holders.Add(candidate);
+            }
+        }
+
+        return holders;
+    }
+
+    private bool CompositeComponentEquals(string column, object? stored, object? value) =>
+        stored is not null and not DBNull && value is not null and not DBNull &&
+        UniqueKeyComparer(column).Equals(UniqueKey(stored), UniqueKey(value));
+
+    /// <summary>The composite key of <paramref name="values"/>, or <c>null</c> when any of its columns is NULL.</summary>
+    private string? CompositeKey(List<string> constraint, Dictionary<string, object> values)
+    {
+        var key = new System.Text.StringBuilder();
+        foreach (var column in constraint)
+        {
+            if (!values.TryGetValue(column, out var value) || value is null or DBNull)
+            {
+                return null;
+            }
+
+            var text = UniqueKey(value);
+            if (ReferenceEquals(UniqueKeyComparer(column), StringComparer.OrdinalIgnoreCase))
+            {
+                text = text.ToUpperInvariant();
+            }
+
+            // Length-prefixed, so ("ab", "c") and ("a", "bc") stay distinct.
+            key.Append(text.Length).Append(':').Append(text);
+        }
+
+        return key.ToString();
+    }
+
+    private static bool TouchesAnyColumn(Dictionary<string, object> updates, List<string> columns)
+    {
+        foreach (var column in columns)
+        {
+            if (TryGetUpdateValue(updates, column, out _))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static string? RowIdentity(Dictionary<string, object> row, string? pkColumn) =>
+        pkColumn is not null && row.TryGetValue(pkColumn, out var pk) && pk is not null and not DBNull
+            ? UniqueKey(pk)
+            : null;
+
+    private static InvalidOperationException DuplicateCompositeValue(List<string> constraint, Dictionary<string, object> values) =>
+        new($"Duplicate key value ({string.Join(", ", constraint.ConvertAll(c => Convert.ToString(values[c], CultureInfo.InvariantCulture)))}) " +
+            $"violates unique constraint on columns ({string.Join(", ", constraint)})");
 
     private bool IsPrimaryKeyColumn(string column) =>
         this.PrimaryKeyIndex >= 0 &&

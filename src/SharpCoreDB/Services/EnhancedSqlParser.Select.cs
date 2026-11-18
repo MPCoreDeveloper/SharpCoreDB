@@ -981,6 +981,95 @@ public partial class EnhancedSqlParser
         return node;
     }
 
+    /// <summary>Returns <c>true</c> when the text after the current position continues an expression (a call, an operator).</summary>
+    private bool ContinuesAsExpression()
+    {
+        int i = _position;
+        while (i < _sql.Length && char.IsWhiteSpace(_sql[i]))
+        {
+            i++;
+        }
+
+        return i < _sql.Length && _sql[i] is '(' or '+' or '-' or '*' or '/' or '%' or '|';
+    }
+
+    /// <summary>
+    /// Reads one ORDER BY key from <paramref name="itemStart"/> as an expression, up to the next top-level comma or the end
+    /// of the ORDER BY list, with its ASC/DESC.
+    /// </summary>
+    private bool TryParseExpressionOrderItem(int itemStart, out OrderByItem item)
+    {
+        item = null!;
+        int end = FindOrderItemEnd(itemStart);
+        var text = _sql[itemStart..end].Trim();
+        bool ascending = true;
+        var direction = Regex.Match(text, @"\s+(ASC|DESC)$", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1));
+        if (direction.Success)
+        {
+            ascending = direction.Groups[1].Value.Equals("ASC", StringComparison.OrdinalIgnoreCase);
+            text = text[..direction.Index].TrimEnd();
+        }
+
+        if (text.Length == 0 || !SqlScalarExpression.TryParse(text, out _))
+        {
+            return false;
+        }
+
+        item = new OrderByItem
+        {
+            Column = new ColumnReferenceNode { ColumnName = text },
+            Expression = text,
+            IsAscending = ascending,
+        };
+        _position = end;
+        return true;
+    }
+
+    /// <summary>The end of the ORDER BY key starting at <paramref name="start"/>: a top-level comma, a closing parenthesis
+    /// that ends a subquery, LIMIT/OFFSET/a set operator, a semicolon or the end of the statement.</summary>
+    private int FindOrderItemEnd(int start)
+    {
+        int depth = 0;
+        for (int i = start; i < _sql.Length; i++)
+        {
+            char c = _sql[i];
+            if (c is '\'' or '"' or '`' or '[')
+            {
+                char close = c == '[' ? ']' : c;
+                for (i++; i < _sql.Length && _sql[i] != close; i++)
+                {
+                }
+
+                continue;
+            }
+
+            if (c == '(')
+            {
+                depth++;
+            }
+            else if (c == ')')
+            {
+                if (depth == 0)
+                {
+                    return i;
+                }
+
+                depth--;
+            }
+            else if (depth == 0 && (c is ',' or ';'))
+            {
+                return i;
+            }
+            else if (depth == 0 && char.IsWhiteSpace(c) &&
+                     Regex.IsMatch(_sql[(i + 1)..], @"^(LIMIT|OFFSET|UNION|INTERSECT|EXCEPT)\b", RegexOptions.IgnoreCase, TimeSpan.FromSeconds(1)))
+            {
+                return i;
+            }
+        }
+
+        return _sql.Length;
+    }
+
     private OrderByNode ParseOrderBy()
     {
         var node = new OrderByNode { Position = _position };
@@ -1005,9 +1094,18 @@ public partial class EnhancedSqlParser
                 }
                 else
                 {
+                    int itemStart = _position;
                     var tableAlias = ConsumeIdentifier();
                     if (tableAlias is null)
+                    {
+                        if (TryParseExpressionOrderItem(itemStart, out var startsWithExpression))
+                        {
+                            node.Items.Add(startsWithExpression);
+                            continue;
+                        }
+
                         break;
+                    }
 
                     string columnName;
                     if (MatchToken("."))
@@ -1018,6 +1116,15 @@ public partial class EnhancedSqlParser
                     {
                         columnName = tableAlias;
                         tableAlias = null;
+                    }
+
+                    // A key that continues past the column name — LENGTH(name), price * qty — is an expression. Up to
+                    // 2.1.4 only the name was read: `ORDER BY LENGTH(name)` left "(name)" as unparsed trailing content and
+                    // the rows came back unsorted.
+                    if (ContinuesAsExpression() && TryParseExpressionOrderItem(itemStart, out var expressionItem))
+                    {
+                        node.Items.Add(expressionItem);
+                        continue;
                     }
 
                     var item = new OrderByItem

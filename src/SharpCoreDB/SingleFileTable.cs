@@ -487,6 +487,89 @@ public sealed class SingleFileTable(string tableName, IStorageProvider storagePr
         return affected;
     }
 
+    /// <inheritdoc />
+    public int UpdateAffectedCount(
+        string? where,
+        Dictionary<string, object> updates,
+        IReadOnlyList<KeyValuePair<string, Func<Dictionary<string, object>, object?>>> computed)
+    {
+        ArgumentNullException.ThrowIfNull(updates);
+        ArgumentNullException.ThrowIfNull(computed);
+        if (computed.Count == 0)
+        {
+            return UpdateAffectedCount(where, updates);
+        }
+
+        EnsureCacheLoaded();
+
+        var condition = where?.Trim();
+        if (condition is not null && condition.StartsWith(WhereKeywordPrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            condition = condition[6..].Trim();
+        }
+
+        bool updatesTouchPk = PrimaryKeyIndex >= 0 &&
+            updates.Keys.Concat(computed.Select(c => c.Key))
+                .Any(k => string.Equals(k, Columns[PrimaryKeyIndex], StringComparison.OrdinalIgnoreCase));
+
+        int affected = 0;
+        lock (_tableLock)
+        {
+            // Every value is computed from the row as it was before the statement, and checked, before any row changes.
+            var matched = new List<(Dictionary<string, object> Row, Dictionary<string, object> Values)>();
+            foreach (var row in _rowCache)
+            {
+                if (!string.IsNullOrWhiteSpace(condition) && !EvaluateCondition(row, condition))
+                {
+                    continue;
+                }
+
+                var values = new Dictionary<string, object>(updates);
+                foreach (var (column, compute) in computed)
+                {
+                    values[column] = compute(row)!;
+                }
+
+                if (FindNotNullViolation(values) is { } notNullColumn)
+                {
+                    throw new InvalidOperationException($"Column '{notNullColumn}' cannot be NULL");
+                }
+
+                matched.Add((row, values));
+            }
+
+            foreach (var (row, values) in matched)
+            {
+                string? oldPkKey = updatesTouchPk ? GetPkKey(row) : null;
+
+                foreach (var update in values)
+                {
+                    row[update.Key] = update.Value;
+                }
+
+                if (oldPkKey is not null)
+                {
+                    var newPkKey = GetPkKey(row);
+                    if (!string.Equals(oldPkKey, newPkKey, StringComparison.Ordinal))
+                    {
+                        UnindexRow(row, oldPkKey);
+                        IndexRow(row);
+                    }
+                }
+
+                _isDirty = true;
+                affected++;
+            }
+        }
+
+        if (AutoFlush && _isDirty && !_isInTransaction)
+        {
+            FlushCache();
+        }
+
+        return affected;
+    }
+
     /// <summary>
     /// Executes batch updates keyed by primary key value.
     /// </summary>
