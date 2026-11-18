@@ -1161,6 +1161,181 @@ internal static class SqlScalarExpression
         }
     }
 
+    private sealed class BetweenCondition(Node value, Node low, Node high, bool negated) : Condition
+    {
+        public override bool? Evaluate(Dictionary<string, object> row)
+        {
+            var v = Eval(value, row);
+            bool? atLeastLow = TryCompare(v, Eval(low, row), out var c1) ? c1 >= 0 : null;
+            bool? atMostHigh = TryCompare(v, Eval(high, row), out var c2) ? c2 <= 0 : null;
+
+            // Three-valued AND of the two bounds.
+            bool? inside = atLeastLow == false || atMostHigh == false
+                ? false
+                : atLeastLow is null || atMostHigh is null ? null : true;
+            return inside is null ? null : negated ? !inside : inside;
+        }
+    }
+
+    private sealed class InCondition(Node value, Node[] items, bool negated) : Condition
+    {
+        public override bool? Evaluate(Dictionary<string, object> row)
+        {
+            var v = Eval(value, row);
+            if (v is null)
+            {
+                return items.Length == 0 ? negated : null;
+            }
+
+            bool sawNull = false;
+            foreach (var item in items)
+            {
+                var candidate = Eval(item, row);
+                if (candidate is null)
+                {
+                    sawNull = true;
+                    continue;
+                }
+
+                if (TryCompare(v, candidate, out var c) && c == 0)
+                {
+                    return !negated;
+                }
+            }
+
+            // SQLite: no match against a list holding a NULL is unknown, not false.
+            return sawNull ? null : negated;
+        }
+    }
+
+    private sealed class GlobCondition(Node value, Node pattern, bool negated) : Condition
+    {
+        public override bool? Evaluate(Dictionary<string, object> row)
+        {
+            var v = Eval(value, row);
+            var p = Eval(pattern, row);
+            if (v is null || p is null)
+            {
+                return null;
+            }
+
+            bool matched = GlobMatch(ToText(v), ToText(p));
+            return negated ? !matched : matched;
+        }
+    }
+
+    /// <summary>
+    /// SQLite's GLOB: case-sensitive, <c>*</c> any run, <c>?</c> one character, <c>[abc]</c>, <c>[a-z]</c> and
+    /// <c>[^…]</c> character classes (a <c>]</c> first in a class is literal).
+    /// </summary>
+    internal static bool GlobMatch(string text, string pattern)
+    {
+        int t = 0;
+        int p = 0;
+        int starP = -1;
+        int starT = 0;
+        while (t < text.Length)
+        {
+            if (p < pattern.Length)
+            {
+                char pc = pattern[p];
+                if (pc == '*')
+                {
+                    starP = p++;
+                    starT = t;
+                    continue;
+                }
+
+                if (pc == '?')
+                {
+                    p++;
+                    t++;
+                    continue;
+                }
+
+                if (pc == '[')
+                {
+                    if (TryMatchGlobClass(pattern, p, text[t], out int next, out bool inClass))
+                    {
+                        if (inClass)
+                        {
+                            p = next;
+                            t++;
+                            continue;
+                        }
+                    }
+                    else if (text[t] == '[')
+                    {
+                        p++; // an unterminated class is a literal '['
+                        t++;
+                        continue;
+                    }
+                }
+                else if (pc == text[t])
+                {
+                    p++;
+                    t++;
+                    continue;
+                }
+            }
+
+            if (starP < 0)
+            {
+                return false;
+            }
+
+            p = starP + 1;
+            t = ++starT;
+        }
+
+        while (p < pattern.Length && pattern[p] == '*')
+        {
+            p++;
+        }
+
+        return p == pattern.Length;
+    }
+
+    private static bool TryMatchGlobClass(string pattern, int start, char c, out int next, out bool matched)
+    {
+        int i = start + 1;
+        bool invert = i < pattern.Length && pattern[i] == '^';
+        if (invert)
+        {
+            i++;
+        }
+
+        bool found = false;
+        bool first = true;
+        while (i < pattern.Length)
+        {
+            char ch = pattern[i];
+            if (ch == ']' && !first)
+            {
+                next = i + 1;
+                matched = found != invert;
+                return true;
+            }
+
+            if (i + 2 < pattern.Length && pattern[i + 1] == '-' && pattern[i + 2] != ']')
+            {
+                found |= c >= ch && c <= pattern[i + 2];
+                i += 3;
+            }
+            else
+            {
+                found |= c == ch;
+                i++;
+            }
+
+            first = false;
+        }
+
+        next = start;
+        matched = false;
+        return false;
+    }
+
     private sealed class TruthCondition(Node expression) : Condition
     {
         public override bool? Evaluate(Dictionary<string, object> row) => IsTrue(Eval(expression, row));
@@ -1185,9 +1360,9 @@ internal static class SqlScalarExpression
         private Condition? CompileCondition(string text)
         {
             text = SqlInPredicate.StripOuterParentheses(text.Trim());
-            if (text.Length == 0 || FindTopLevelKeyword(text, "BETWEEN") >= 0)
+            if (text.Length == 0)
             {
-                return null;   // BETWEEN's own AND would be split as a conjunction; leave it to the caller
+                return null;
             }
 
             var orParts = SqlInPredicate.SplitTopLevelLogical(text, "OR");
@@ -1196,7 +1371,7 @@ internal static class SqlScalarExpression
                 return CompileAll(orParts, static p => new OrCondition(p));
             }
 
-            var andParts = SqlInPredicate.SplitTopLevelLogical(text, "AND");
+            var andParts = RejoinBetween(SqlInPredicate.SplitTopLevelLogical(text, "AND"));
             if (andParts.Count > 1)
             {
                 return CompileAll(andParts, static p => new AndCondition(p));
@@ -1228,11 +1403,136 @@ internal static class SqlScalarExpression
             return combine(compiled);
         }
 
+        /// <summary>
+        /// Puts a BETWEEN's own AND back together after a split on AND: <c>n BETWEEN 1 AND 10 AND m &gt; 0</c> splits into
+        /// three parts, of which the first two are one BETWEEN.
+        /// </summary>
+        private static List<string> RejoinBetween(List<string> parts)
+        {
+            if (parts.Count < 2)
+            {
+                return parts;
+            }
+
+            var joined = new List<string>(parts.Count);
+            for (int i = 0; i < parts.Count; i++)
+            {
+                var part = parts[i];
+                if (i + 1 < parts.Count && FindTopLevelKeyword(part, "BETWEEN") >= 0)
+                {
+                    part = part + " AND " + parts[++i];
+                }
+
+                joined.Add(part);
+            }
+
+            return joined;
+        }
+
+        /// <summary>Reads <c>x [NOT] BETWEEN lo AND hi</c>; <c>null</c> when the text is something else.</summary>
+        private Condition? CompileBetween(string text, int betweenAt)
+        {
+            var left = text[..betweenAt].TrimEnd();
+            bool negated = EndsWithKeyword(left, "NOT");
+            if (negated)
+            {
+                left = left[..^3].TrimEnd();
+            }
+
+            var bounds = text[(betweenAt + 7)..];
+            int andAt = FindTopLevelKeyword(bounds, "AND");
+            if (andAt < 0)
+            {
+                return null;
+            }
+
+            var value = ParseOperand(left);
+            var low = ParseOperand(bounds[..andAt]);
+            var high = ParseOperand(bounds[(andAt + 3)..]);
+            return value is null || low is null || high is null ? null : new BetweenCondition(value, low, high, negated);
+        }
+
+        /// <summary>Reads <c>x [NOT] IN (a, b, …)</c> with a list of expressions; a subquery is left to the caller.</summary>
+        private Condition? CompileIn(string text, int inAt)
+        {
+            var left = text[..inAt].TrimEnd();
+            bool negated = EndsWithKeyword(left, "NOT");
+            if (negated)
+            {
+                left = left[..^3].TrimEnd();
+            }
+
+            var list = text[(inAt + 2)..].Trim();
+            if (list.Length < 2 || list[0] != '(' || list[^1] != ')')
+            {
+                return null;
+            }
+
+            var inner = list[1..^1].Trim();
+            if (StartsWithKeyword(inner + " ", "SELECT") || StartsWithKeyword(inner + " ", "WITH"))
+            {
+                return null;
+            }
+
+            var value = ParseOperand(left);
+            if (value is null)
+            {
+                return null;
+            }
+
+            var items = new List<Node>();
+            if (inner.Length > 0)
+            {
+                foreach (var itemText in SqlInPredicate.SplitTopLevelComma(inner))
+                {
+                    var item = ParseOperand(itemText);
+                    if (item is null)
+                    {
+                        return null;
+                    }
+
+                    items.Add(item);
+                }
+            }
+
+            return new InCondition(value, [.. items], negated);
+        }
+
         private Condition? CompileLeaf(string text)
         {
+            // BETWEEN and IN with a value list are read here; up to 2.1.4 they were left to the caller, and a CHECK
+            // constraint written with them (`CHECK (status IN ('a', 'b'))`, `CHECK (n BETWEEN 1 AND 10)`) accepted every
+            // row.
+            int betweenAt = FindTopLevelKeyword(text, "BETWEEN");
+            if (betweenAt >= 0)
+            {
+                return CompileBetween(text, betweenAt);
+            }
+
+            int inAt = FindTopLevelKeyword(text, "IN");
+            if (inAt >= 0)
+            {
+                return CompileIn(text, inAt);
+            }
+
+            int globAt = FindTopLevelKeyword(text, "GLOB");
+            if (globAt >= 0)
+            {
+                var globLeft = text[..globAt].TrimEnd();
+                bool globNegated = EndsWithKeyword(globLeft, "NOT");
+                if (globNegated)
+                {
+                    globLeft = globLeft[..^3].TrimEnd();
+                }
+
+                var globValue = ParseOperand(globLeft);
+                var globPattern = ParseOperand(text[(globAt + 4)..]);
+                return globValue is null || globPattern is null ? null : new GlobCondition(globValue, globPattern, globNegated);
+            }
+
             // Keyword operators first: "a NOT LIKE b" also contains no symbol operator, but "x IS NOT NULL" must not
             // be read as a comparison.
-            foreach (var keyword in (string[])["IN", "GLOB", "REGEXP", "MATCH", "EXISTS"])
+            foreach (var keyword in (string[])["REGEXP", "MATCH", "EXISTS"])
             {
                 if (FindTopLevelKeyword(text, keyword) >= 0)
                 {

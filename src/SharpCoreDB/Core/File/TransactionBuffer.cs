@@ -365,9 +365,21 @@ public class TransactionBuffer : IDisposable
             }
             else
             {
+                // The buffered bytes are already in their on-disk form (encrypted when the store is), so they go
+                // straight to the file. Up to 2.1.4 they went back through storage.WriteBytes, which — the transaction
+                // still being open — buffered them again into this very list: the commit threw "Collection was
+                // modified" and every whole-file write of the transaction (the database metadata among them) was lost.
+                // Had it not thrown, WriteBytes would have encrypted the bytes a second time.
                 foreach (var write in pendingWrites)
                 {
-                    storage.WriteBytes(write.FilePath, write.Data);
+                    if (storage is Services.Storage bufferedStorage)
+                    {
+                        bufferedStorage.WriteStoredBytes(write.FilePath, write.Data);
+                    }
+                    else
+                    {
+                        System.IO.File.WriteAllBytes(write.FilePath, write.Data);
+                    }
                 }
                 
                 pendingWrites.Clear();

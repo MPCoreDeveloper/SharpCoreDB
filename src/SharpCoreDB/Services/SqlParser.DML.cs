@@ -2495,20 +2495,55 @@ public partial class SqlParser
         // Issue #8: single-pass — UpdateAffectedCount applies the update AND returns the affected
         // count, so change-tracking no longer needs a separate full Select pass (the old code
         // materialized every matching row just to count them).
+        // RETURNING reports the rows as the UPDATE left them. Up to 2.1.4 they were found by running the WHERE clause
+        // again after the update, so a SET that changes a column the WHERE tests (`SET status = 'done' WHERE status =
+        // 'open'`, `SET n = n + 10 WHERE n < 5`) returned no rows. The matched rows are read first and the SET list is
+        // applied to them exactly as the update applies it: constants, and expressions over the row before the statement.
+        var returningSource = returningColumns is null
+            ? null
+            : table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false);
+
         var affectedCount = computed is null
             ? table.UpdateAffectedCount(whereClause, updates)
             : table.UpdateAffectedCount(whereClause, updates!, computed);
         _lastChanges = affectedCount;
         _totalChanges += affectedCount;
 
-        // RETURNING: query updated rows after update
-        if (returningColumns is not null)
+        if (returningSource is not null)
         {
-            var updatedRows = table.Select(whereClause, orderBy: null, asc: true, noEncrypt: false);
-            _pendingQueryResults = ProjectReturningRows(updatedRows, returningColumns);
+            _pendingQueryResults = ProjectReturningRows(ApplySetList(returningSource, updates, computed), returningColumns!);
         }
 
         wal?.Log(sqlWithoutReturning);
+    }
+
+    /// <summary>The rows as an UPDATE's SET list leaves them, for RETURNING.</summary>
+    private static List<Dictionary<string, object>> ApplySetList(
+        List<Dictionary<string, object>> rows,
+        Dictionary<string, object?> updates,
+        List<KeyValuePair<string, Func<Dictionary<string, object>, object?>>>? computed)
+    {
+        var result = new List<Dictionary<string, object>>(rows.Count);
+        foreach (var row in rows)
+        {
+            var updated = new Dictionary<string, object>(row, row.Comparer);
+            foreach (var (column, value) in updates)
+            {
+                updated[column] = value!;
+            }
+
+            if (computed is not null)
+            {
+                foreach (var (column, compute) in computed)
+                {
+                    updated[column] = compute(row)!;
+                }
+            }
+
+            result.Add(updated);
+        }
+
+        return result;
     }
 
     /// <summary>

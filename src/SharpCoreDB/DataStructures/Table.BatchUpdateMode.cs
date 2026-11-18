@@ -290,31 +290,30 @@ public partial class Table
         if (PrimaryKeyIndex < 0)
             return; // No primary key
 
-        // ✅ CRITICAL: Clear old index (important for correctness!)
-        // Old index may have stale or outdated references
-        Index.Clear();
-
-        // ✅ Get all current rows
-        var allRows = this.SelectInternal(null, null, true, false);
-
-        // ✅ Re-insert each row's primary key
-        foreach (var row in allRows)
+        // The live rows' positions are read from the index BEFORE it is cleared, then re-inserted: the rebuild keeps
+        // the entry of every row the table still returns and drops any other. Up to 2.1.4 the index was cleared first
+        // and each position was then searched for in the empty index, so nothing was re-inserted: after every
+        // EndBatchUpdate() — every ADO.NET, linq2db or EF Core transaction — a columnar table's scan returned no rows
+        // until the database was reopened.
+        var pkCol = Columns[PrimaryKeyIndex];
+        var entries = new List<(string Key, long Position)>();
+        foreach (var row in this.SelectInternal(null, null, true, false))
         {
-            var pkCol = Columns[PrimaryKeyIndex];
             if (row.TryGetValue(pkCol, out var pkValue) && pkValue != null)
             {
                 var pkStr = pkValue.ToString() ?? string.Empty;
-                
-                // Get storage position from primary key search
-                // For both columnar and page-based, positions are maintained in the B-tree
                 var searchResult = Index.Search(pkStr);
                 if (searchResult.Found)
                 {
-                    // Position exists from old index, reuse it
-                    // (row was included in SelectInternal which means it's current version)
-                    Index.Insert(pkStr, searchResult.Value);
+                    entries.Add((pkStr, searchResult.Value));
                 }
             }
+        }
+
+        Index.Clear();
+        foreach (var (key, position) in entries)
+        {
+            Index.Insert(key, position);
         }
     }
 }
