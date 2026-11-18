@@ -660,9 +660,15 @@ Before: appends were opened with `FileOptions.WriteThrough`, but the cached in-p
 and nothing called `FlushToDisk`, so a power loss (not a process crash) could lose a committed UPDATE or DELETE while
 keeping committed INSERTs.
 
-## 18. 🟠 OPEN — An uncommitted PageBased transaction can reach the disk before a crash
+## 18. ✅ FIXED (interim) — An uncommitted PageBased transaction could reach the disk before a crash
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/durability-metadata-and-fsync`).**
+> ✅ **FIXED (2026-11-17, `fix/pagebased-checksums-pinning-indexes`) for pages written before the commit.** A dirty page
+> the open transaction changed is pinned: neither a cache eviction nor a flush in the middle of the transaction writes it
+> (the main path was not eviction but `ExecuteQuery`, which flushes pending writes inside `BeginBatchUpdate`); it stays in
+> memory, where the transaction's own reads see it, and is written at the commit. The cache may exceed its capacity until
+> the transaction ends. Pinned by `CrashDurabilityTests.Crash_AfterAnUncommittedPageBasedTransactionWhosePagesWereEvicted_LeavesTheCommittedState`
+> (failed before). **Still open:** a crash *during* the commit's multi-page write can leave some of its pages written and
+> others not; that needs the page redo log of `docs/storage/PAGEBASED_DURABILITY_DESIGN.md` §4.
 
 Measured: a transaction updated row 1 and deleted row 2 of a PageBased table of ~1,400 pages, then read the table twice,
 and the process was killed before the commit. After reopening, row 1 had the uncommitted value and row 2 was gone.
@@ -676,9 +682,16 @@ images are restored and written back); a crash between the eviction and the comm
 open transaction from eviction (bounded memory then needs a spill file). Engine work; designed in
 `docs/storage/PAGEBASED_DURABILITY_DESIGN.md` §4.
 
-## 19. 🟠 OPEN — A torn PageBased page loses rows silently
+## 19. ✅ FIXED (detection) — A torn PageBased page lost rows silently
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/durability-metadata-and-fsync`).**
+> ✅ **FIXED (2026-11-17, `fix/pagebased-checksums-pinning-indexes`).** Every page written carries a CRC32C checksum in
+> header bytes 9–12 and a format flag in byte 13 — header bytes no version ever wrote, so the page layout does not change
+> and a page written before (flag 0) is read unverified, as it always was. A page whose checksum fails raises
+> `InvalidDataException` naming the page and the file when its records are read; the page-index scan at open does not
+> verify, so one damaged page does not stop the table from opening. The PageBased scan's catch-all no longer swallows
+> that error (it returned the rows read so far, which is how the damage stayed hidden). Cost: ~2.9 µs per 8 KB page
+> written or read from disk (`BitOperations.Crc32C`). Pinned by `PageChecksumTests` (the two damage cases failed before).
+> **Still open:** repairing a damaged page needs the page redo log (design note §4).
 
 Measured: zeroing the second half of a page's 8 KB — what a torn write leaves when a crash interrupts it — made 25 of 40
 rows disappear without an error, and the table kept accepting writes; cutting the page file mid-page lost that page's
@@ -701,10 +714,14 @@ the configuration suggests a guarantee that does not exist. The single-file (`.s
 **Decision needed:** wire the WAL in (log each committed change, replay on open — the natural home for §15/§18's fix), or
 remove it and the WAL settings from directory mode so the configuration is honest.
 
-## 21. 🟡 OPEN — A PageBased lookup on a non-key column scans the whole table
+## 21. ✅ BY DESIGN — A PageBased lookup on a non-key column scans the table unless the column is indexed
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/pagebased-durability-case-and-coverage`).** Found in the READ A/B of the
-> write-path gate's watch band; present on `master` as well.
+> ✅ **RESOLVED (2026-11-17, `fix/pagebased-checksums-pinning-indexes`): not a defect.** PageBased tables deliberately do
+> not create a column index on first use (`Table.AutoHashIndexesEnabled` — columnar tables do; SQLite does not either).
+> An explicit `CREATE INDEX ix ON t (col)` serves the lookup: measured ~80 ms → 0.02–0.1 ms per lookup on 20,000 rows,
+> and the index stays correct through INSERT, UPDATE, DELETE and a reopen (`PageBasedSecondaryIndexTests`). Turning on
+> automatic indexes for PageBased tables would reverse that documented choice — an owner decision. The cause analysis
+> below was wrong in one point (`CREATE INDEX` does give the scan an index route) and is kept as the record.
 
 `SELECT … WHERE name = 'User42'` on a 20,000-row PageBased table takes ~32 ms (a full scan per lookup), against ~40 µs
 on a columnar table, where the column gets an automatic hash index. **Cause:** hash indexes exist for columnar tables only
@@ -735,7 +752,7 @@ references, which in-place updates keep stable), or a B-tree secondary index; me
 | 15 | PageBased autocommit / batch not durable until a flush | 🔴 High | — | **Fixed** — pages flushed at each autocommit statement and commit (§15) |
 | 16 | Non-atomic metadata write → database unopenable after a crash | 🔴 High | — | **Fixed** — temp file + fsync + rename; clear error for a damaged file (§16) |
 | 17 | Columnar in-place UPDATE/DELETE not fsynced | 🟠 Medium | — | **Fixed** — synced at commit, autocommit end and flush (§17) |
-| 18 | Uncommitted PageBased pages reach disk via eviction | 🟠 Medium | Keep transactions within the page cache | **Open** — needs a page WAL (§18) |
-| 19 | Torn PageBased page loses rows silently | 🟠 Medium | — | **Open** — needs page checksums (§19) |
+| 18 | Uncommitted PageBased pages reach disk via eviction | 🟠 Medium | — | **Fixed (interim)** — pages of an open transaction are pinned; a crash during the commit's flush still needs the page WAL (§18) |
+| 19 | Torn PageBased page loses rows silently | 🟠 Medium | — | **Fixed (detection)** — CRC32C per page, damage raises an error; repair needs the page WAL (§19) |
 | 20 | Directory-mode WAL never written or replayed | 🟡 Low | — | **Open, owner decision** (§20) |
-| 21 | PageBased non-key lookup scans the table | 🟡 Low | Look up by primary key, or use columnar storage | **Open** (§21) |
+| 21 | PageBased non-key lookup scans the table | 🟡 Low | `CREATE INDEX` on the column | **By design** — explicit index serves it (§21) |

@@ -40,13 +40,13 @@ readable by the new one (all-zero fields mean "written before checksums").
 
 ## 3. Torn pages — a checksum per page (§19)
 
-**Proposal.** Header bytes 9–16: `uint64` XxHash64 (System.IO.Hashing) of the page with these 8 bytes zeroed; byte 17:
-format flag `0x01` = checksummed. `WritePage` computes it; `ReadPage` verifies it when the flag is set and throws a
-`PageCorruptedException` naming the table and page id when it does not match. A page with flag `0x00` (written before)
-is read unverified, exactly as today.
+**Implemented (`fix/pagebased-checksums-pinning-indexes`).** Header bytes 9–12: CRC32C of the page with these four
+bytes left out (`BitOperations.Crc32C`, the CPU's CRC instruction — no new dependency); byte 13: format flag `0x01` =
+checksummed. `WritePage` computes it; `ReadPage` verifies it when the flag is set and throws `InvalidDataException`
+naming the page and file. A page with flag `0x00` (written before) is read unverified, exactly as before. The page-index
+scan at open skips verification, so one damaged page does not stop the table from opening.
 
-- *Cost:* one 8 KB hash per page write and read — XxHash64 runs at several GB/s, i.e. around 1 µs per page; measure on
-  the PageBased benchmark (`--engine=pagebased`) and the gate.
+- *Cost (measured):* ~2.9 µs per 8 KB page written or read from disk.
 - *What it buys:* a torn page becomes a loud error instead of silently missing rows. It does not repair the page —
   that needs §4's log.
 - *Compatibility:* none broken; downgrade (unsupported by policy) would read checksummed pages fine, since an old reader
@@ -114,10 +114,9 @@ it changes what a public configuration flag means.
 
 ## 7. Suggested order and test plan
 
-1. §3 checksums (no format break, independent) — tests: damage a page's tail → `PageCorruptedException` names it; a
-   page written before (flag 0) reads unverified; reopen round-trip matrix stays green.
-2. Option A pinning (§18 interim) — test: the eviction crash case of the investigation (`tx-uncommitted-then-big-read`)
-   leaves the committed state.
+1. ✅ §3 checksums — done (`PageChecksumTests`).
+2. ✅ Option A pinning (§18 interim) — done; it covers mid-transaction flushes as well as evictions
+   (`CrashDurabilityTests`).
 3. §4 log + recovery — tests: kill the child process at each step of the commit (after the log sync, between page
    writes) via a test hook; replay restores exactly the committed state; torn page repaired from the log; checkpoint
    truncates.

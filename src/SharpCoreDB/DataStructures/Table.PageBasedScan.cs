@@ -95,10 +95,12 @@ public partial class Table
             Console.WriteLine($"[ScanPageBasedTable] ✅ Total records found: {recordCount}, deserialization failures: {deserializeFailureCount}, after filtering: {results.Count}");
 #endif
         }
-        catch
+        catch (Exception ex) when (ex is not InvalidDataException)
         {
             // Exception during scan initialization - return empty results
-            // The WHERE clause evaluation or engine access may have failed
+            // The WHERE clause evaluation or engine access may have failed. A damaged page (InvalidDataException: its
+            // checksum failed) is NOT one of these: returning the rows read so far would hide the damage, which is
+            // exactly how a torn page used to lose rows silently (known issue §19).
 #if DEBUG
             Console.WriteLine($"[ScanPageBasedTable] Exception during scan");
 #endif

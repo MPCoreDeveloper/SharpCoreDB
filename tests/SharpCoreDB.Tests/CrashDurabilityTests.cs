@@ -28,6 +28,7 @@ public sealed class CrashDurabilityTests : IDisposable
 {
     private const string ScenarioVariable = "SCDB_CRASH_SCENARIO";
     private const string PathVariable = "SCDB_CRASH_PATH";
+    private const string CacheVariable = "SCDB_CRASH_PAGE_CACHE";
 
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"SCDB_Crash_{Guid.NewGuid():N}");
 
@@ -48,11 +49,11 @@ public sealed class CrashDurabilityTests : IDisposable
         }
     }
 
-    private static IDatabase Open(string path)
+    private static IDatabase Open(string path, DatabaseConfig? config = null)
     {
         var services = new ServiceCollection();
         services.AddSharpCoreDB();
-        return services.BuildServiceProvider().GetRequiredService<DatabaseFactory>().Create(path, "pw");
+        return services.BuildServiceProvider().GetRequiredService<DatabaseFactory>().Create(path, "pw", false, config);
     }
 
     /// <summary>The child half: runs only when spawned by <see cref="RunCrashScenario"/>, then kills its process.</summary>
@@ -65,9 +66,19 @@ public sealed class CrashDurabilityTests : IDisposable
             return;
         }
 
-        var db = Open(Environment.GetEnvironmentVariable(PathVariable)!);
+        var cache = Environment.GetEnvironmentVariable(CacheVariable);
+        var db = cache is null
+            ? Open(Environment.GetEnvironmentVariable(PathVariable)!)
+            : Open(Environment.GetEnvironmentVariable(PathVariable)!, new DatabaseConfig { PageCacheCapacity = int.Parse(cache, CultureInfo.InvariantCulture) });
         switch (scenario)
         {
+            case "transaction-uncommitted-then-full-reads":
+                db.BeginBatchUpdate();
+                db.ExecuteSQL("UPDATE t SET n = 999 WHERE id = 1");
+                db.ExecuteSQL("DELETE FROM t WHERE id = 2");
+                _ = db.ExecuteQuery("SELECT id, n FROM t").Count;
+                _ = db.ExecuteQuery("SELECT id, n FROM t").Count;
+                break;
             case "autocommit-update":
                 db.ExecuteSQL("UPDATE t SET n = 999 WHERE id = 1");
                 break;
@@ -125,6 +136,38 @@ public sealed class CrashDurabilityTests : IDisposable
 
 
     [Fact]
+    public void Crash_AfterAnUncommittedPageBasedTransactionWhosePagesWereEvicted_LeavesTheCommittedState()
+    {
+        if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable(ScenarioVariable)))
+        {
+            return; // inside a crash child
+        }
+
+        // A 4-page cache and a table of ~30 pages: the reads evict, and an evicted dirty page of the open transaction was
+        // written to the file, so a crash kept the uncommitted UPDATE and DELETE (known issue §18). Such pages are pinned.
+        var path = Path.Combine(_root, $"db_{Guid.NewGuid():N}");
+        var seed = Open(path);
+        seed.ExecuteSQL("CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, pad TEXT) STORAGE = PAGE_BASED");
+        var pad = new string('p', 700);
+        seed.ExecuteBatchSQL([.. Enumerable.Range(1, 300).Select(i => $"INSERT INTO t (id, n, pad) VALUES ({i}, {i}, '{pad}')")]);
+        (seed as IDisposable)?.Dispose();
+
+        RunChild("transaction-uncommitted-then-full-reads", path, pageCache: 4);
+
+        var reopened = Open(path);
+        try
+        {
+            Assert.Equal(["1"], reopened.ExecuteQuery("SELECT n FROM t WHERE id = 1").Select(r => Convert.ToString(r["n"], CultureInfo.InvariantCulture)));
+            Assert.Single(reopened.ExecuteQuery("SELECT n FROM t WHERE id = 2"));
+            Assert.Equal(300, reopened.ExecuteQuery("SELECT id FROM t").Count);
+        }
+        finally
+        {
+            (reopened as IDisposable)?.Dispose();
+        }
+    }
+
+    [Fact]
     public void Open_WithAnEmptyMetadataFile_ReportsAnInterruptedSave_NotTheWrongPassword()
     {
         var path = CreateSeeded("columnar");
@@ -179,21 +222,7 @@ public sealed class CrashDurabilityTests : IDisposable
     private string RunCrashScenario(string storage, string scenario)
     {
         var path = CreateSeeded(storage);
-        var start = new ProcessStartInfo(
-            Environment.ProcessPath!,
-            $"-filterVSTest \"FullyQualifiedName~{nameof(CrashDurabilityTests)}.{nameof(CrashChild_RunsTheScenarioAndKillsItsProcess)}\"")
-        {
-            UseShellExecute = false,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-        };
-        start.Environment[ScenarioVariable] = scenario;
-        start.Environment[PathVariable] = path;
-        using (var child = Process.Start(start)!)
-        {
-            child.StandardOutput.ReadToEnd();
-            child.WaitForExit();
-        }
+        RunChild(scenario, path, pageCache: null);
 
         var reopened = Open(path);
         try
@@ -207,5 +236,27 @@ public sealed class CrashDurabilityTests : IDisposable
         {
             (reopened as IDisposable)?.Dispose();
         }
+    }
+
+    private static void RunChild(string scenario, string path, int? pageCache)
+    {
+        var start = new ProcessStartInfo(
+            Environment.ProcessPath!,
+            $"-filterVSTest \"FullyQualifiedName~{nameof(CrashDurabilityTests)}.{nameof(CrashChild_RunsTheScenarioAndKillsItsProcess)}\"")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+        };
+        start.Environment[ScenarioVariable] = scenario;
+        start.Environment[PathVariable] = path;
+        if (pageCache is not null)
+        {
+            start.Environment[CacheVariable] = pageCache.Value.ToString(CultureInfo.InvariantCulture);
+        }
+
+        using var child = Process.Start(start)!;
+        child.StandardOutput.ReadToEnd();
+        child.WaitForExit();
     }
 }
