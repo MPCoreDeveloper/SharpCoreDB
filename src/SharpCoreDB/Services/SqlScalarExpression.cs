@@ -56,6 +56,26 @@ internal static class SqlScalarExpression
         return node is not null;
     }
 
+    /// <summary>
+    /// Parses a value: a scalar expression, or — as SQLite allows — a condition, whose value is 1, 0 or NULL
+    /// (<c>SET active = length(name) &gt; 0</c>, <c>THEN amount &lt; 0</c>).
+    /// </summary>
+    internal static bool TryParseValue(string text, out Node node)
+    {
+        if (TryParse(text, out node))
+        {
+            return true;
+        }
+
+        if (text.Length > 0 && ConditionCompiler.CompileAny(text) is { } condition)
+        {
+            node = new ConditionValue(condition);
+            return true;
+        }
+
+        return false;
+    }
+
     /// <summary>Returns <c>true</c> when the node is computed — a function, CAST, operator — not a literal or column.</summary>
     internal static bool IsComputed(Node node) => node is not (Literal or Column);
 
@@ -129,7 +149,7 @@ internal static class SqlScalarExpression
     internal static bool ReferencesColumnOrFunction(Node node, Func<string, bool> isColumn) => node switch
     {
         Column column => isColumn(column.Name),
-        Call or Cast => true,
+        Call or Cast or CaseExpression or ConditionValue => true,
         Binary binary => ReferencesColumnOrFunction(binary.Left, isColumn) || ReferencesColumnOrFunction(binary.Right, isColumn),
         Negate negate => ReferencesColumnOrFunction(negate.Operand, isColumn),
         _ => false,
@@ -189,6 +209,25 @@ internal static class SqlScalarExpression
     private sealed class Negate(Node operand) : Node
     {
         public Node Operand { get; } = operand;
+    }
+
+    /// <summary>A condition used as a value: 1 when true, 0 when false, NULL when unknown (SQLite's boolean values).</summary>
+    private sealed class ConditionValue(Condition condition) : Node
+    {
+        public Condition Condition { get; } = condition;
+    }
+
+    /// <summary>
+    /// <c>CASE [operand] WHEN … THEN … [ELSE …] END</c>. A simple CASE compares the operand with each WHEN value (NULL
+    /// never matches); a searched CASE takes the first WHEN condition that is true. No match and no ELSE is NULL.
+    /// </summary>
+    private sealed class CaseExpression(Node? operand, (Condition? Condition, Node? Value, Node Result)[] arms, Node? otherwise) : Node
+    {
+        public Node? Operand { get; } = operand;
+
+        public (Condition? Condition, Node? Value, Node Result)[] Arms { get; } = arms;
+
+        public Node? Otherwise { get; } = otherwise;
     }
 
     // ── Parser ──────────────────────────────────────────────────────────────────────────────────
@@ -309,6 +348,11 @@ internal static class SqlScalarExpression
             {
                 int start = _pos;
                 var word = ReadWord();
+                if (word.Equals("CASE", StringComparison.OrdinalIgnoreCase))
+                {
+                    return ReadCase();
+                }
+
                 SkipWhitespace();
                 if (_pos < text.Length && text[_pos] == '(')
                 {
@@ -336,6 +380,170 @@ internal static class SqlScalarExpression
             }
 
             throw new ParseFailure();
+        }
+
+        /// <summary>
+        /// Reads a CASE expression after its CASE keyword, up to the matching END. Up to 2.1.4 CASE was not parsed: a SET
+        /// value <c>CASE WHEN … END</c> fell back to the literal reading and stored the text, and a CHECK written with CASE
+        /// was left to an evaluator that rejected the row.
+        /// </summary>
+        private Node ReadCase()
+        {
+            var keywords = FindCaseKeywords(text, _pos, out int afterEnd);
+            if (keywords.Count == 0 || keywords[^1].Keyword != "END" || keywords[0].Keyword != "WHEN")
+            {
+                throw new ParseFailure();
+            }
+
+            var operandText = text[_pos..keywords[0].At].Trim();
+            Node? operand = operandText.Length == 0 ? null : ParseSegment(operandText);
+
+            var arms = new List<(Condition?, Node?, Node)>();
+            Node? otherwise = null;
+            for (int k = 0; k < keywords.Count - 1; k++)
+            {
+                var (keyword, at) = keywords[k];
+                int segmentStart = at + keyword.Length;
+                int segmentEnd = keywords[k + 1].At;
+                var segment = text[segmentStart..segmentEnd].Trim();
+                if (keyword == "WHEN")
+                {
+                    if (keywords[k + 1].Keyword != "THEN" || k + 2 >= keywords.Count)
+                    {
+                        throw new ParseFailure();
+                    }
+
+                    var thenEnd = keywords[k + 2].At;
+                    var result = ParseSegment(text[(keywords[k + 1].At + 4)..thenEnd].Trim());
+                    if (operand is null)
+                    {
+                        var condition = ConditionCompiler.CompileAny(segment) ?? throw new ParseFailure();
+                        arms.Add((condition, null, result));
+                    }
+                    else
+                    {
+                        arms.Add((null, ParseSegment(segment), result));
+                    }
+
+                    k++; // the THEN was consumed with its WHEN
+                }
+                else if (keyword == "ELSE")
+                {
+                    otherwise = ParseSegment(segment);
+                }
+                else
+                {
+                    throw new ParseFailure();
+                }
+            }
+
+            if (arms.Count == 0)
+            {
+                throw new ParseFailure();
+            }
+
+            _pos = afterEnd;
+            return new CaseExpression(operand, [.. arms], otherwise);
+        }
+
+        /// <summary>
+        /// Parses a CASE operand, WHEN value or result. A comparison or a boolean condition is a value in SQLite
+        /// (<c>THEN amount &lt; 0</c> is 1, 0 or NULL), so text the expression parser does not read is compiled as a
+        /// condition.
+        /// </summary>
+        private static Node ParseSegment(string segment)
+        {
+            if (segment.Length == 0)
+            {
+                throw new ParseFailure();
+            }
+
+            return TryParseValue(segment, out var node) ? node : throw new ParseFailure();
+        }
+
+        /// <summary>
+        /// The top-level WHEN/THEN/ELSE/END keywords of the CASE whose body starts at <paramref name="start"/> (nested CASE
+        /// expressions, parentheses and quoted text are skipped), ending with its END.
+        /// </summary>
+        internal static List<(string Keyword, int At)> FindCaseKeywords(string text, int start, out int afterEnd)
+        {
+            var found = new List<(string, int)>();
+            afterEnd = -1;
+            int depth = 0;
+            int nested = 0;
+            for (int i = start; i < text.Length; i++)
+            {
+                char c = text[i];
+                if (c is '\'' or '"' or '`' or '[')
+                {
+                    char close = c == '[' ? ']' : c;
+                    for (i++; i < text.Length; i++)
+                    {
+                        if (text[i] != close)
+                        {
+                            continue;
+                        }
+
+                        if (close != ']' && i + 1 < text.Length && text[i + 1] == close)
+                        {
+                            i++;
+                            continue;
+                        }
+
+                        break;
+                    }
+
+                    continue;
+                }
+
+                if (c == '(')
+                {
+                    depth++;
+                    continue;
+                }
+
+                if (c == ')')
+                {
+                    depth--;
+                    continue;
+                }
+
+                if (depth != 0 || !char.IsLetter(c) || (i > 0 && (char.IsLetterOrDigit(text[i - 1]) || text[i - 1] == '_')))
+                {
+                    continue;
+                }
+
+                int wordEnd = i;
+                while (wordEnd < text.Length && (char.IsLetterOrDigit(text[wordEnd]) || text[wordEnd] == '_'))
+                {
+                    wordEnd++;
+                }
+
+                var word = text[i..wordEnd].ToUpperInvariant();
+                if (word == "CASE")
+                {
+                    nested++;
+                }
+                else if (word == "END")
+                {
+                    if (nested == 0)
+                    {
+                        found.Add(("END", i));
+                        afterEnd = wordEnd;
+                        return found;
+                    }
+
+                    nested--;
+                }
+                else if (nested == 0 && word is "WHEN" or "THEN" or "ELSE")
+                {
+                    found.Add((word, i));
+                }
+
+                i = wordEnd - 1;
+            }
+
+            return [];
         }
 
         private Node ReadCall(string word)
@@ -559,8 +767,27 @@ internal static class SqlScalarExpression
         Cast cast => CastValue(Eval(cast.Operand, row), cast.TypeName),
         Binary binary => EvalBinary(binary.Op, Eval(binary.Left, row), Eval(binary.Right, row)),
         Negate negate => EvalBinary("-", 0L, Eval(negate.Operand, row)),
+        CaseExpression caseExpression => EvalCase(caseExpression, row),
+        ConditionValue conditionValue => conditionValue.Condition.Evaluate(row) switch { true => 1L, false => 0L, null => null },
         _ => null,
     };
+
+    private static object? EvalCase(CaseExpression expression, Dictionary<string, object> row)
+    {
+        var operand = expression.Operand is null ? null : Eval(expression.Operand, row);
+        foreach (var (condition, value, result) in expression.Arms)
+        {
+            bool matched = expression.Operand is null
+                ? condition!.Evaluate(row) == true
+                : operand is not null && TryCompare(operand, Eval(value!, row), out var c) && c == 0;
+            if (matched)
+            {
+                return Eval(result, row);
+            }
+        }
+
+        return expression.Otherwise is null ? null : Eval(expression.Otherwise, row);
+    }
 
     private static object? ResolveColumn(Dictionary<string, object> row, Column column)
     {
@@ -1376,6 +1603,13 @@ internal static class SqlScalarExpression
                 return null;
             }
 
+            // A condition that starts with a CASE expression is read around it: the CASE's own WHEN conditions hold
+            // comparisons and AND/OR that a split of the whole text would cut through.
+            if (StartsWithKeyword(text, "CASE") && CompileLeadingCase(text) is { } leadingCase)
+            {
+                return leadingCase;
+            }
+
             var orParts = SqlInPredicate.SplitTopLevelLogical(text, "OR");
             if (orParts.Count > 1)
             {
@@ -1412,6 +1646,50 @@ internal static class SqlScalarExpression
             }
 
             return combine(compiled);
+        }
+
+        /// <summary>
+        /// <c>CASE … END</c> on its own (its truth value), or followed by a comparison or <c>IS [NOT]</c>. Returns
+        /// <c>null</c> for any other shape, which then takes the general path.
+        /// </summary>
+        private Condition? CompileLeadingCase(string text)
+        {
+            Parser.FindCaseKeywords(text, 4, out int afterEnd);
+            if (afterEnd <= 0)
+            {
+                return null;
+            }
+
+            var left = ParseOperand(text[..afterEnd]);
+            var rest = text[afterEnd..].Trim();
+            if (left is null)
+            {
+                return null;
+            }
+
+            if (rest.Length == 0)
+            {
+                return new TruthCondition(left);
+            }
+
+            if (StartsWithKeyword(rest, "IS"))
+            {
+                var isRest = rest[2..].TrimStart();
+                bool negated = StartsWithKeyword(isRest, "NOT");
+                var right = ParseOperand(negated ? isRest[3..] : isRest);
+                return right is null ? null : new IsCondition(left, right, negated);
+            }
+
+            foreach (var op in SymbolOperators)
+            {
+                if (rest.StartsWith(op, StringComparison.Ordinal))
+                {
+                    var right = ParseOperand(rest[op.Length..]);
+                    return right is null ? null : new CompareCondition(op, left, right);
+                }
+            }
+
+            return null;
         }
 
         /// <summary>

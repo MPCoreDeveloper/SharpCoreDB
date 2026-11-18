@@ -117,6 +117,7 @@ guide explaining when SharpCoreDB is fastest.
 - `serialization/SERIALIZATION_AND_STORAGE_GUIDE.md`
 - `storage/STORAGE_MODE_GUIDANCE.md` — which storage mode to pick, and why
 - `storage/SINGLE_FILE_SQL_LIMITATIONS.md` — what `.scdb` single-file SQL does and does not support
+- `storage/PAGEBASED_DURABILITY_DESIGN.md` — PageBased crash safety, page checksums, page WAL and encryption: design proposal (known issues §14–§20)
 - `serialization/SERIALIZATION_FAQ.md` — common serialization questions
 
 ## 6. Engine Implementation Notes

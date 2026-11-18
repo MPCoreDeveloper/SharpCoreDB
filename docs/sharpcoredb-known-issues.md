@@ -596,9 +596,17 @@ uses.
 usable page and changes the page file format) is an on-disk format change; existing page files would stay readable as
 plaintext and be rewritten encrypted. Until then, PageBased storage should not hold data that relies on encryption.
 
-## 15. 🔴 OPEN — A PageBased statement that returned is not durable until a flush
+## 15. ✅ FIXED — A PageBased statement that returned was not durable until a flush
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/durability-metadata-and-fsync`).**
+> ✅ **FIXED (2026-11-17, `fix/pagebased-durability-case-and-coverage`).** The PageBased engine's dirty pages are written
+> to the page file at the end of every autocommit statement and at every transaction or batch commit (and synced under
+> `WalDurabilityMode.FullSync`, the default; `Async` writes them without the sync — process-crash safe, not power-loss
+> safe). `FlushDirtyPages` returns without a sync when nothing is dirty, so a SELECT pays nothing. **Cost:** an autocommit
+> PageBased INSERT/UPDATE went from ~50 µs to ~750 µs per statement (2,000 statements, measured on this box) — the same
+> order as a columnar autocommit write, which has always been written through; batches and transactions pay once per
+> commit. The page redo log of `docs/storage/PAGEBASED_DURABILITY_DESIGN.md` §4 would make this a sequential log append.
+> Pinned by `CrashDurabilityTests` (PageBased autocommit and batch cases, which failed before). The description below is
+> kept as the record.
 
 Measured with a child process killed (no Dispose, no flush) right after the statements returned, then reopened:
 
@@ -665,7 +673,8 @@ and an evicted dirty page is written to the file — committed or not. Rollback 
 images are restored and written back); a crash between the eviction and the commit or rollback is not.
 
 **Fix outline:** a page WAL (redo or undo log with commit records, replayed on open), or withholding dirty pages of an
-open transaction from eviction (bounded memory then needs a spill file). Engine work; also closes §15 cheaply.
+open transaction from eviction (bounded memory then needs a spill file). Engine work; designed in
+`docs/storage/PAGEBASED_DURABILITY_DESIGN.md` §4.
 
 ## 19. 🟠 OPEN — A torn PageBased page loses rows silently
 
@@ -675,7 +684,8 @@ Measured: zeroing the second half of a page's 8 KB — what a torn write leaves 
 rows disappear without an error, and the table kept accepting writes; cutting the page file mid-page lost that page's
 rows the same way. **Cause:** a page has no checksum, and its slot directory sits at the end of the page, so a torn tail
 reads as empty slots. **Fix outline:** a checksum per page verified on read (a damaged page then raises an error instead
-of reading as empty), plus the page WAL of §18 to repair it. Columnar files are append-only and lose only an incomplete
+of reading as empty), plus the page WAL of §18 to repair it (designed in `docs/storage/PAGEBASED_DURABILITY_DESIGN.md`
+§3 — the 23 unused page-header bytes hold the checksum, so the page format does not change). Columnar files are append-only and lose only an incomplete
 trailing record (measured: 39 of 40 rows, table writable).
 
 ## 20. 🟡 OPEN (owner decision) — The directory-mode write-ahead log is never written or replayed
@@ -690,6 +700,17 @@ the configuration suggests a guarantee that does not exist. The single-file (`.s
 
 **Decision needed:** wire the WAL in (log each committed change, replay on open — the natural home for §15/§18's fix), or
 remove it and the WAL settings from directory mode so the configuration is honest.
+
+## 21. 🟡 OPEN — A PageBased lookup on a non-key column scans the whole table
+
+> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/pagebased-durability-case-and-coverage`).** Found in the READ A/B of the
+> write-path gate's watch band; present on `master` as well.
+
+`SELECT … WHERE name = 'User42'` on a 20,000-row PageBased table takes ~32 ms (a full scan per lookup), against ~40 µs
+on a columnar table, where the column gets an automatic hash index. **Cause:** hash indexes exist for columnar tables only
+(`Table.RebuildIndex`: "Hash indexes only exist in columnar mode"), and `CREATE INDEX` on a PageBased table does not give
+the scan an index route. **Fix outline:** maintain hash indexes on PageBased tables (positions are the engine's storage
+references, which in-place updates keep stable), or a B-tree secondary index; measure with `--engine=pagebased`.
 
 ---
 
@@ -711,9 +732,10 @@ remove it and the WAL settings from directory mode so the configuration is hones
 | 12 | Columnar scan inside a transaction misses its own UPDATE/DELETE | 🟠 Medium | — | **Fixed** — buffered overwrites and tombstones are laid over the scan (§12) |
 | 13 | PageBased transaction rollback | 🔴 High | — | **Fixed** for `CancelBatchUpdate` (ADO.NET, linq2db, EF Core) and `ExecuteBatchSQL` via page undo images; crash atomicity without a page WAL tracked in §18 |
 | 14 | PageBased data stored unencrypted | 🔴 High | Columnar storage for sensitive data | **Open, owner decision** — page format change (§14) |
-| 15 | PageBased autocommit / batch not durable until a flush | 🔴 High | `Flush()` after writes, or explicit transactions | **Open** (§15) |
+| 15 | PageBased autocommit / batch not durable until a flush | 🔴 High | — | **Fixed** — pages flushed at each autocommit statement and commit (§15) |
 | 16 | Non-atomic metadata write → database unopenable after a crash | 🔴 High | — | **Fixed** — temp file + fsync + rename; clear error for a damaged file (§16) |
 | 17 | Columnar in-place UPDATE/DELETE not fsynced | 🟠 Medium | — | **Fixed** — synced at commit, autocommit end and flush (§17) |
 | 18 | Uncommitted PageBased pages reach disk via eviction | 🟠 Medium | Keep transactions within the page cache | **Open** — needs a page WAL (§18) |
 | 19 | Torn PageBased page loses rows silently | 🟠 Medium | — | **Open** — needs page checksums (§19) |
 | 20 | Directory-mode WAL never written or replayed | 🟡 Low | — | **Open, owner decision** (§20) |
+| 21 | PageBased non-key lookup scans the table | 🟡 Low | Look up by primary key, or use columnar storage | **Open** (§21) |

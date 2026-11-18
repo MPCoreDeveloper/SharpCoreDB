@@ -582,6 +582,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         if (storage is { IsInTransaction: false } current)
         {
             current.SyncPendingWrites();
+            foreach (var table in tables.Values)
+            {
+                if (table is Table { StorageMode: Storage.Hybrid.StorageMode.PageBased } pageTable)
+                {
+                    pageTable.FlushAutocommitPages();
+                }
+            }
         }
     }
 

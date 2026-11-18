@@ -82,6 +82,16 @@ public sealed class SubqueryOrderByCollationTests : IDisposable
     }
 
     [Fact]
+    public void InSubqueryWithOrderByAndLimit_SelectsTheRowsItsOwnOrderPicks()
+    {
+        // The subquery's own ORDER BY decides which rows its LIMIT keeps: the two highest scores, ties by name DESC.
+        var db = Seed();
+        db.ExecuteSQL("INSERT INTO p (id, name, score) VALUES (5, 'd', 9)");
+
+        Assert.Equal(["a", "d"], Names(db, "SELECT name FROM p WHERE id IN (SELECT id FROM p ORDER BY score DESC, name DESC LIMIT 2) ORDER BY name"));
+    }
+
+    [Fact]
     public void DerivedTable_OrderByCollateNoCase_SortsCaseInsensitively()
     {
         var db = Seed();

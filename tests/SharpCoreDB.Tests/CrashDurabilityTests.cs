@@ -20,8 +20,8 @@ using Xunit;
 /// The crash cases run the scenario in a child test process that kills itself (no Dispose, no finalizer, no flush) and
 /// reopen the database in this process. A process kill keeps whatever reached the operating system, so these pin
 /// crash consistency, not power-loss durability: the fsync of in-place writes and the atomic metadata replace
-/// (known issues §17 and §16) are verified by reading the code, not by these tests. The PageBased cases that do not hold
-/// yet are skipped with the known issue that tracks them (§15).
+/// (known issues §17 and §16) are verified by reading the code, not by these tests. The PageBased autocommit and batch
+/// cases failed up to 2.1.4 — the statement stayed in the page cache until a flush (known issue §15).
 /// </para>
 /// </summary>
 public sealed class CrashDurabilityTests : IDisposable
@@ -103,6 +103,9 @@ public sealed class CrashDurabilityTests : IDisposable
         { "columnar", "batch", "1:999 2:2 3:998" },
         { "columnar", "transaction-committed", "1:999 3:3 100:100" },
         { "columnar", "transaction-uncommitted", "1:1 2:2 3:3" },
+        { "page-based", "autocommit-update", "1:999 2:2 3:3" },
+        { "page-based", "autocommit-insert-delete", "1:1 3:3 100:100" },
+        { "page-based", "batch", "1:999 2:2 3:998" },
         { "page-based", "transaction-committed", "1:999 3:3 100:100" },
         { "page-based", "transaction-uncommitted", "1:1 2:2 3:3" },
     };
@@ -119,13 +122,7 @@ public sealed class CrashDurabilityTests : IDisposable
         Assert.Equal(expected, RunCrashScenario(storage, scenario));
     }
 
-    [Fact(Skip = "Known issue §15: a PageBased autocommit statement stays in the page cache until a flush, so a crash loses it.")]
-    public void Crash_AfterAPageBasedAutocommitUpdate_KeepsTheUpdate() =>
-        Assert.Equal("1:999 2:2 3:3", RunCrashScenario("page-based", "autocommit-update"));
 
-    [Fact(Skip = "Known issue §15: ExecuteBatchSQL does not flush the PageBased page cache, so a crash loses a completed batch.")]
-    public void Crash_AfterAPageBasedBatch_KeepsTheBatch() =>
-        Assert.Equal("1:999 2:2 3:998", RunCrashScenario("page-based", "batch"));
 
     [Fact]
     public void Open_WithAnEmptyMetadataFile_ReportsAnInterruptedSave_NotTheWrongPassword()
