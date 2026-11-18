@@ -271,7 +271,7 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
         if (metaExists && metaJson is null)  // ✅ C# 15: is null pattern
         {
             throw new InvalidOperationException(
-                "Failed to decrypt database metadata. The master password may be incorrect or the database file is corrupted.");
+                DescribeUnreadableMetadata(Path.Combine(_dbPath, PersistenceConstants.MetaFileName)));
         }
         
         // ✅ FIX: Handle empty/null metadata gracefully (valid for new databases)
@@ -550,6 +550,41 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
     /// ✅ FIX: Ensures immediate flush for durability
     /// ✅ FIX: Adds Brotli compression support (60-80% size reduction)
     /// </summary>
+    /// <summary>
+    /// The error for a metadata file that exists but cannot be read. A file too short to hold even an encrypted empty
+    /// document is an interrupted save, not a wrong password, and the message says so — up to 2.1.4 both cases reported
+    /// "the master password may be incorrect", which sends the user after the wrong cause.
+    /// </summary>
+    private static string DescribeUnreadableMetadata(string metaPath)
+    {
+        long length = File.Exists(metaPath) ? new FileInfo(metaPath).Length : 0; // NOSONAR:S6549 - metaPath is derived from the user-configured storage root.
+        const int minimumEncryptedLength = CryptoConstants.GCM_NONCE_SIZE + CryptoConstants.GCM_TAG_SIZE;
+        if (length < minimumEncryptedLength)
+        {
+            return $"The database metadata file '{metaPath}' is {(length == 0 ? "empty" : $"truncated ({length} bytes)")}: " +
+                   "a save of it was interrupted (a crash or power loss while it was being written). The table data files " +
+                   $"are not affected; restore {PersistenceConstants.MetaFileName} from a backup to open the database.";
+        }
+
+        return "Failed to decrypt database metadata. The master password may be incorrect, or the metadata file is " +
+               "damaged (for example by a crash while it was being written).";
+    }
+
+    /// <summary>The metadata this session last wrote outside a transaction; a save of the same text is skipped.</summary>
+    private string? _lastSavedMetaJson;
+
+    /// <summary>
+    /// After a statement outside a transaction, forces its in-place writes to disk — the autocommit statement's
+    /// durability boundary (a transaction's is its commit). Free when the statement wrote nothing in place.
+    /// </summary>
+    private void SyncAutocommitWrites()
+    {
+        if (storage is { IsInTransaction: false } current)
+        {
+            current.SyncPendingWrites();
+        }
+    }
+
     private void SaveMetadata()
     {
         // v2 (AOT readiness): strongly-typed DTO preserves the legacy anonymous-type JSON shape.
@@ -613,10 +648,13 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             System.Diagnostics.Debug.WriteLine($"[SaveMetadata] Saved and flushed metadata ({metaBytes.Length} bytes)");
 #endif
         }
-        else
+        else if (!string.Equals(metaJson, _lastSavedMetaJson, StringComparison.Ordinal))
         {
-            // ✅ Legacy: Use IStorage (file-based) - no compression
+            // ✅ Legacy: Use IStorage (file-based) - no compression. Written atomically (Storage.Write); skipped when
+            // the content has not changed since this session last wrote it, so an explicit Flush() with no schema
+            // change does not pay a file replace and an fsync.
             storage.Write(Path.Combine(_dbPath, PersistenceConstants.MetaFileName), metaJson);
+            _lastSavedMetaJson = storage.IsInTransaction ? null : metaJson;
         }
         
         _metadataDirty = false;
@@ -722,7 +760,8 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             var newSalt = new byte[CryptoConstants.DATABASE_SALT_SIZE];
             RandomNumberGenerator.Fill(newSalt);
             
-            File.WriteAllBytes(saltFilePath, newSalt);
+            // Atomic, like the metadata: a salt half-written by a crash would lock the database for good.
+            Services.Storage.WriteFileAtomically(saltFilePath, newSalt);
             File.SetAttributes(saltFilePath, FileAttributes.Hidden);
             
             return Convert.ToBase64String(newSalt);
@@ -795,6 +834,9 @@ public partial class Database : IDatabase, IDisposable, IAsyncDisposable
             
             SaveMetadata();
             _metadataDirty = false;
+
+            // An explicit flush is a durability boundary for in-place writes as well.
+            storage?.SyncPendingWrites();
         }
         catch (Exception ex)
         {

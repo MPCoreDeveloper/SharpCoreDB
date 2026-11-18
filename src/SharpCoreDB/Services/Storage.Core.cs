@@ -54,6 +54,9 @@ public partial class Storage : IStorage
     /// </para>
     /// </summary>
     private bool BuffersAppends => enableBufferedAppends;
+
+    /// <summary>True when in-place writes are forced to disk at commit, autocommit end and flush (WalDurabilityMode.FullSync).</summary>
+    private readonly bool syncInPlaceWrites;
     private readonly long appendBufferFlushThresholdBytes;
     private readonly int appendBufferFlushIntervalMs;
     
@@ -84,6 +87,11 @@ public partial class Storage : IStorage
         // ✅ Opt-in buffered appends (default false). Registered last so the encryption flags above are
         // already final when the append path starts consulting them.
         this.enableBufferedAppends = config?.EnableBufferedAppends ?? false;
+
+        // A durability statement, and only that: FullSync forces in-place writes to the physical disk at each
+        // durability boundary (SyncPendingWrites), Async leaves them to the operating system. Unlike the append
+        // buffering above, nothing is withheld from readers either way.
+        this.syncInPlaceWrites = (config?.WalDurabilityMode ?? DurabilityMode.FullSync) == DurabilityMode.FullSync;
         this.appendBufferFlushThresholdBytes = Math.Max(0, config?.AppendBufferFlushThresholdBytes ?? 1024 * 1024);
         this.appendBufferFlushIntervalMs = Math.Max(0, config?.AppendBufferFlushIntervalMs ?? 10);
 

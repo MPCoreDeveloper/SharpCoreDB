@@ -40,6 +40,14 @@ public interface IStorage
     void FlushTransactionBuffer();
 
     /// <summary>
+    /// Forces every in-place write made since the last call (an UPDATE patched into its record, a DELETE's tombstone
+    /// marker) to the physical disk, once per file. Appends are written through already. The default does nothing.
+    /// </summary>
+    void SyncPendingWrites()
+    {
+    }
+
+    /// <summary>
     /// Checks if currently inside a transaction.
     /// </summary>
     bool IsInTransaction { get; }
