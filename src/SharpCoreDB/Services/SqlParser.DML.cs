@@ -165,7 +165,13 @@ public partial class SqlParser
                 break;
 
             case (SqlConstants.INSERT, SqlConstants.INTO):
+            case (SqlConstants.INSERT, "OR"):
                 ExecuteInsert(sql, wal);
+                break;
+
+            case ("REPLACE", SqlConstants.INTO):
+                // SQLite: REPLACE INTO is INSERT OR REPLACE INTO.
+                ExecuteInsert("INSERT OR " + sql.TrimStart(), wal);
                 break;
 
             case ("UPDATE", _):
@@ -314,6 +320,8 @@ public partial class SqlParser
         var restTrimmed = rest.Trim();
         if (restTrimmed.StartsWith("SELECT", StringComparison.OrdinalIgnoreCase))
         {
+            var selectConflict = ReadInsertConflictClause(sqlWithoutReturning, ref restTrimmed);
+            int selectChanges = 0;
             var selectSql = restTrimmed;
             var selectParts = selectSql.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             var sourceRows = ExecuteSelectQuery(selectSql, selectParts, noEncrypt: false);
@@ -335,13 +343,18 @@ public partial class SqlParser
                     foreach (var kv in sourceRow)
                         newRow[kv.Key] = kv.Value;
                 }
+                if (selectConflict is not null && ResolveInsertConflict(table, newRow, selectConflict, null, ref selectChanges))
+                {
+                    continue;
+                }
+
                 FireTriggers(tableName, TriggerTiming.Before, TriggerEvent.Insert, newRow: newRow);
                 table.Insert(newRow);
                 FireTriggers(tableName, TriggerTiming.After, TriggerEvent.Insert, newRow: newRow);
                 insertedFromSelect.Add(new Dictionary<string, object>(newRow, StringComparer.OrdinalIgnoreCase));
             }
-            _lastChanges = insertedFromSelect.Count;
-            _totalChanges += insertedFromSelect.Count;
+            _lastChanges = insertedFromSelect.Count + selectChanges;
+            _totalChanges += insertedFromSelect.Count + selectChanges;
             if (insertedFromSelect.Count > 0) _lastInsertRowId++;
             if (returningColumns is not null) _pendingQueryResults = ProjectReturningRows(insertedFromSelect, returningColumns);
             // §2 instrumentation: the INSERT … SELECT branch's per-statement WAL call, stamped like the
@@ -354,6 +367,7 @@ public partial class SqlParser
         // ──────────────────────────────────────────────────────────────────
         var valuesStart = rest.IndexOf("VALUES", StringComparison.OrdinalIgnoreCase) + "VALUES".Length;
         var valuesRest = rest[valuesStart..].Trim();
+        var conflictClause = ReadInsertConflictClause(sqlWithoutReturning, ref valuesRest);
         // §2 instrumentation (2026-09-15): the statement text had no attribution on this path at all. This
         // covers the one-pass VALUES scan; the per-row, per-column literal conversion is RowBuild.
         long parseStart = Diagnostics.WritePathProfiler.Stamp();
@@ -496,15 +510,22 @@ public partial class SqlParser
         // any, which makes the statement atomic. Up to 2.1.4 it took the per-row loop, so a failing row
         // left the rows before it in place.
         bool useBatchedInsert = allRowValues.Count >= MinRowsForBatchedInsert
+            && conflictClause is null // a conflict clause decides row by row
             && (tableAsTable is { CanUseBatchedInsert: true } || table is SingleFileTable)
             && !HasTriggersFor(tableName, TriggerEvent.Insert);
         List<Dictionary<string, object>>? batchedRows = useBatchedInsert
             ? new List<Dictionary<string, object>>(allRowValues.Count)
             : null;
 
+        int conflictChanges = 0;
         foreach (var rowValues in allRowValues)
         {
             var row = BuildRowFromValues(rowValues);
+
+            if (conflictClause is not null && ResolveInsertConflict(table, row, conflictClause, returningRows, ref conflictChanges))
+            {
+                continue;
+            }
 
             if (batchedRows is not null)
             {
@@ -579,8 +600,8 @@ public partial class SqlParser
                 }
             }
         }
-        _lastChanges = insertedCount;
-        _totalChanges += insertedCount;
+        _lastChanges = insertedCount + conflictChanges;
+        _totalChanges += insertedCount + conflictChanges;
         if (insertedCount > 0)
         {
             // SQLite compatibility: last_insert_rowid returns the first INTEGER column value
@@ -2552,49 +2573,8 @@ public partial class SqlParser
     /// </summary>
     private static (string SetList, string Where) SplitUpdateSetAndWhere(string text)
     {
-        int depth = 0;
-        for (int i = 0; i < text.Length; i++)
-        {
-            char c = text[i];
-            if (c is '\'' or '"' or '`' or '[')
-            {
-                char close = c == '[' ? ']' : c;
-                for (i++; i < text.Length; i++)
-                {
-                    if (text[i] != close)
-                    {
-                        continue;
-                    }
-
-                    if (close != ']' && i + 1 < text.Length && text[i + 1] == close)
-                    {
-                        i++; // a doubled quote is one quote of data
-                        continue;
-                    }
-
-                    break;
-                }
-
-                continue;
-            }
-
-            if (c == '(')
-            {
-                depth++;
-            }
-            else if (c == ')')
-            {
-                depth--;
-            }
-            else if (depth == 0 && (c is 'W' or 'w') && i > 0 && char.IsWhiteSpace(text[i - 1]) &&
-                     string.Compare(text, i, "WHERE", 0, 5, StringComparison.OrdinalIgnoreCase) == 0 &&
-                     (i + 5 == text.Length || char.IsWhiteSpace(text[i + 5]) || text[i + 5] == '('))
-            {
-                return (text[..i].Trim(), text[(i + 5)..].Trim());
-            }
-        }
-
-        return (text.Trim(), string.Empty);
+        int at = SqlLiteralScanner.FindTopLevel(text, 0, static (t, i) => i > 0 && SqlLiteralScanner.IsKeywordAt(t, i, "WHERE"));
+        return at < 0 ? (text.Trim(), string.Empty) : (text[..at].Trim(), text[(at + 5)..].Trim());
     }
 
     /// <summary>
@@ -3393,25 +3373,18 @@ internal sealed class AstExecutor : ISqlVisitor<List<Dictionary<string, object>>
             return rows;
         }
 
-        var comparer = Comparer<object?>.Create(CompareValues);
         IOrderedEnumerable<Dictionary<string, object>>? ordered = null;
 
         for (int i = 0; i < orderBy.Items.Count; i++)
         {
             var item = orderBy.Items[i];
             var key = OrderKeySelector(item);
-            if (i == 0)
-            {
-                ordered = item.IsAscending
-                    ? rows.OrderBy(key, comparer)
-                    : rows.OrderByDescending(key, comparer);
-            }
-            else
-            {
-                ordered = item.IsAscending
-                    ? ordered.ThenBy(key, comparer)
-                    : ordered.ThenByDescending(key, comparer);
-            }
+
+            // Direction, NULLS FIRST/LAST and COLLATE live in the item's comparer, so the sort itself is ascending. Text
+            // without a COLLATE compares as BINARY, SQLite's default; up to 2.1.4 this path compared it case-insensitively,
+            // so `ORDER BY name` over a derived table put 'a' before 'C'.
+            var itemComparer = SqlOrderBy.ItemComparer(item, SqlOrderBy.KeyComparer.Instance);
+            ordered = i == 0 ? rows.OrderBy(key, itemComparer) : ordered!.ThenBy(key, itemComparer);
         }
 
         return [.. ordered];

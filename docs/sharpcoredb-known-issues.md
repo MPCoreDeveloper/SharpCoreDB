@@ -561,10 +561,9 @@ scan, so it needs the write-path gate and a read benchmark; not attempted in thi
 > pages the transaction allocated to the free list, then every table rebuilds its primary-key index from storage and
 > marks its hash indexes stale — which also fixes a columnar rollback leaving the hash index on the rolled-back value.
 > Outside a transaction a write pays one null check. Pinned by `TransactionRollbackTests` (including an ADO.NET
-> `DbTransaction.Rollback()`). **Still open:** `ExecuteBatchSQL` rolls its own internal transaction back on a failing
-> statement without the undo scope, so a PageBased table keeps the statements of a failed batch that ran before the
-> failure; hooking it adds a page copy per touched page to the most-measured write path and needs its own gate run.
-> And without a page WAL, a crash in the middle of a transaction can still leave pages the cache wrote early.
+> `DbTransaction.Rollback()`). `ExecuteBatchSQL` uses the undo scope too since `fix/batch-rollback-and-sql-gaps`
+> (`BatchAtomicityTests`), so a failing batch leaves a PageBased table unchanged. **Still open:** without a page WAL, a
+> crash in the middle of a transaction can still leave pages the cache wrote early.
 
 `CancelBatchUpdate()` (an ADO.NET `DbTransaction.Rollback()`) does not undo a PageBased table's changes: a rolled-back
 UPDATE or INSERT is still there — also after a reopen — and a rolled-back DELETE stays deleted. Columnar tables roll
@@ -598,4 +597,4 @@ in this change.
 | 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
 | 11 | PK uniqueness / composite keys | 🔴 High | — | **Fixed on directory storage for new tables** (composite key = UNIQUE over its columns); **open, owner decision** for single-file storage, which enforces no PK uniqueness (§11) |
 | 12 | Columnar scan inside a transaction misses its own UPDATE/DELETE | 🟠 Medium | — | **Fixed** — buffered overwrites and tombstones are laid over the scan (§12) |
-| 13 | PageBased transaction rollback | 🔴 High | — | **Fixed** for `CancelBatchUpdate` (ADO.NET, linq2db, EF Core) via page undo images; `ExecuteBatchSQL`'s internal failure rollback still open (§13) |
+| 13 | PageBased transaction rollback | 🔴 High | — | **Fixed** for `CancelBatchUpdate` (ADO.NET, linq2db, EF Core) and `ExecuteBatchSQL` via page undo images; crash atomicity without a page WAL still open (§13) |

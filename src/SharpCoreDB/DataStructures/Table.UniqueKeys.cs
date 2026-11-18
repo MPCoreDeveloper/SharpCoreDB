@@ -484,7 +484,12 @@ public partial class Table
     {
         var holders = new List<Dictionary<string, object>>();
         var seed = constraint[0];
-        foreach (var candidate in this.registeredIndexes.ContainsKey(seed)
+
+        // The constraint's own index (EnsureUniqueConstraintIndexes) normally exists; if it was dropped, the column's
+        // auto index is registered again, which ordinary reads do too. Only a column that cannot be indexed is scanned —
+        // a full scan per checked row, so it stays the last resort. (The table lock allows recursion, so neither path
+        // can deadlock under the write lock the callers hold.)
+        foreach (var candidate in EnsureAutoHashIndexRegistered(seed)
                      ? FindByIndex(seed, values[seed])
                      : SelectInternal(null, orderBy: null, asc: true, noEncrypt: false))
         {

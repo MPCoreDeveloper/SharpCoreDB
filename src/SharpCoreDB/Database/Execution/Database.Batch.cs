@@ -397,17 +397,20 @@ public partial class Database
         
         lock (_walLock)
         {
+            BeginTablesUndo();
             storage.BeginTransaction();
             
             try
             {
                 var positions = table.InsertBatch(rows);
                 storage.CommitSync();
+                CommitTablesUndo();
                 return positions;
             }
             catch
             {
                 storage.Rollback();
+                RollbackTablesUndo();
                 throw;
             }
         }
@@ -456,17 +459,20 @@ public partial class Database
 
         lock (_walLock)
         {
+            BeginTablesUndo();
             storage.BeginTransaction();
             
             try
             {
                 var positions = table.InsertBatch(rows);
                 storage.CommitSync();
+                CommitTablesUndo();
                 return positions;
             }
             catch
             {
                 storage.Rollback();
+                RollbackTablesUndo();
                 throw;
             }
         }
@@ -498,17 +504,20 @@ public partial class Database
         {
             lock (_walLock)
             {
+                BeginTablesUndo();
                 storage.BeginTransaction();
                 
                 try
                 {
                     var positions = table.InsertBatch(rows);
                     storage.CommitSync();
+                    CommitTablesUndo();
                     return positions;
                 }
                 catch
                 {
                     storage.Rollback();
+                    RollbackTablesUndo();
                     throw;
                 }
             }
@@ -534,12 +543,14 @@ public partial class Database
 
         lock (_walLock)
         {
+            BeginTablesUndo();
             storage.BeginTransaction();
             
             try
             {
                 table.Insert(row);
                 storage.CommitSync();
+                CommitTablesUndo();
                 
                 // Return -1 as we can't easily get position from ITable interface
                 // Caller can use InsertBatch for position tracking
@@ -548,6 +559,7 @@ public partial class Database
             catch
             {
                 storage.Rollback();
+                RollbackTablesUndo();
                 throw;
             }
         }
@@ -678,17 +690,20 @@ public partial class Database
 
         lock (_walLock)
         {
+            BeginTablesUndo();
             storage.BeginTransaction();
 
             try
             {
                 var positions = concreteTable.InsertBatch(rowArrays, columnOrder);
                 storage.CommitSync();
+                CommitTablesUndo();
                 return positions;
             }
             catch
             {
                 storage.Rollback();
+                RollbackTablesUndo();
                 throw;
             }
         }
@@ -708,6 +723,7 @@ public partial class Database
 
         if (!isInTransactionBefore)
         {
+            BeginTablesUndo();
             storage.BeginTransaction();
         }
 
@@ -719,6 +735,7 @@ public partial class Database
             {
                 long commitStart = Diagnostics.WritePathProfiler.Stamp();
                 storage.CommitSync();
+                CommitTablesUndo();
                 Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
 
                 long commitBufferStart = Diagnostics.WritePathProfiler.Stamp();
@@ -733,6 +750,7 @@ public partial class Database
             if (!isInTransactionBefore)
             {
                 storage.Rollback();
+                RollbackTablesUndo();
             }
 
             throw;
@@ -1109,6 +1127,9 @@ public partial class Database
                 return false;
             }
 
+            // A quoted SET column (`SET "n" = 5`, `SET [n] = 5` — linq2db's and EF Core's form) is matched by its name.
+            // Up to 2.1.4 it was looked up with its quotes, missed, and the statement left this fast path.
+            setCol = UnquoteSetColumn(setCol);
             int colIdx = fastTableMeta.Columns.IndexOf(setCol);
             if (colIdx < 0 || SqlParser.IsComputedSetValue(setValRaw, fastTableMeta.Columns, out _))
             {
@@ -1177,7 +1198,7 @@ public partial class Database
             var eqIdx = setPart.IndexOf('=');
             if (eqIdx < 0) return false;
 
-            var colName = setPart[..eqIdx].Trim();
+            var colName = UnquoteSetColumn(setPart[..eqIdx].Trim());
             var valStr = setPart[(eqIdx + 1)..].Trim();
 
             var fallbackColIdx = table.Columns.IndexOf(colName);
@@ -1195,6 +1216,10 @@ public partial class Database
         operation = (where, null, null, null, fallbackUpdates);
         return true;
     }
+
+    /// <summary>A SET column name without its quoting; an unquoted name is returned as is, without allocating.</summary>
+    private static string UnquoteSetColumn(string column) =>
+        column.Length > 1 && column[0] is '"' or '[' or '`' ? SqlIdentifierScanner.IdentifierText(column) : column;
 
     /// <summary>
     /// True when a scanned identifier is already in the form the table layer matches its column names against:
@@ -1261,6 +1286,49 @@ public partial class Database
     }
 
     /// <summary>
+    /// Runs a batch's statements one at a time, in the order given, as one transaction: a statement that fails rolls back
+    /// every statement of the batch before it (PageBased tables through their undo scope). Inside a transaction the
+    /// caller opened, that transaction owns the outcome. This is the path for a batch with a SELECT and for a mixed batch,
+    /// which the grouped executor cannot take; up to 2.1.4 it ran the statements without any transaction, so a failing
+    /// statement kept every statement before it.
+    /// </summary>
+    private void ExecuteStatementsAtomically(string[] statements)
+    {
+        lock (_walLock)
+        {
+            if (storage.IsInTransaction)
+            {
+                foreach (var sql in statements)
+                {
+                    ExecuteSQL(sql);
+                }
+
+                return;
+            }
+
+            BeginTablesUndo();
+            storage.BeginTransaction();
+            try
+            {
+                foreach (var sql in statements)
+                {
+                    ExecuteSQL(sql);
+                }
+
+                storage.CommitSync();
+                CommitTablesUndo();
+                storage.FlushTransactionBuffer();
+            }
+            catch
+            {
+                storage.Rollback();
+                RollbackTablesUndo();
+                throw;
+            }
+        }
+    }
+
+    /// <summary>
     /// ✅ PHASE 3: Optimized batch SQL execution with prepared statement caching.
     /// Uses cached parsers for repeated INSERT schemas, reducing parsing overhead by ~40%.
     /// ✅ FIX: Always use outer transaction to prevent concurrent write corruption.
@@ -1281,10 +1349,7 @@ public partial class Database
 
         if (hasSelect)
         {
-            foreach (var sql in statements)
-            {
-                ExecuteSQL(sql);
-            }
+            ExecuteStatementsAtomically(statements);
             return;
         }
 
@@ -1300,10 +1365,7 @@ public partial class Database
         // only a homogeneous batch may take that path (2026-11-13).
         if (!batch.IsHomogeneous)
         {
-            foreach (var sql in statements)
-            {
-                ExecuteSQL(sql);
-            }
+            ExecuteStatementsAtomically(statements);
             return;
         }
 
@@ -1317,6 +1379,7 @@ public partial class Database
             
             if (!isInTransactionBefore)
             {
+                BeginTablesUndo();
                 storage.BeginTransaction();
             }
             
@@ -1336,6 +1399,7 @@ public partial class Database
                     // The Add order matters: Add closes the checkpoint its Stamp opened, so each pair stays closed.
                     long commitStart = Diagnostics.WritePathProfiler.Stamp();
                     storage.CommitSync();
+                    CommitTablesUndo();
                     Diagnostics.WritePathProfiler.Add(Diagnostics.WritePathProfiler.Stage.Commit, commitStart);
 
                     long commitBufferStart = Diagnostics.WritePathProfiler.Stamp();
@@ -1353,6 +1417,7 @@ public partial class Database
                 if (!isInTransactionBefore)
                 {
                     storage.Rollback();
+                    RollbackTablesUndo();
                 }
                 throw;
             }
@@ -2003,10 +2068,8 @@ public partial class Database
 
         if (hasSelect)
         {
-            foreach (var sql in statements)
-            {
-                await ExecuteSQLAsync(sql, cancellationToken);
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecuteStatementsAtomically(statements);
             return;
         }
 
@@ -2020,10 +2083,8 @@ public partial class Database
         // because the grouped executor's fixed bucket order is only valid for one kind of statement.
         if (!batch.IsHomogeneous)
         {
-            foreach (var sql in statements)
-            {
-                await ExecuteSQLAsync(sql, cancellationToken).ConfigureAwait(false);
-            }
+            cancellationToken.ThrowIfCancellationRequested();
+            ExecuteStatementsAtomically(statements);
             return;
         }
 
@@ -2042,6 +2103,7 @@ public partial class Database
 
             if (startedTransaction)
             {
+                BeginTablesUndo();
                 storage.BeginTransaction();
             }
 
@@ -2055,6 +2117,7 @@ public partial class Database
                 {
                     commitStart = SharpCoreDB.Diagnostics.WritePathProfiler.Stamp();
                     commitTask = storage.CommitAsync();
+                    CommitTablesUndo();
                 }
             }
             catch
@@ -2062,6 +2125,7 @@ public partial class Database
                 if (startedTransaction)
                 {
                     storage.Rollback();
+                    RollbackTablesUndo();
                 }
 
                 throw;
@@ -2108,6 +2172,7 @@ public partial class Database
         {
             lock (_walLock)
             {
+                BeginTablesUndo();
                 storage.BeginTransaction();
                 
                 try
@@ -2128,10 +2193,12 @@ public partial class Database
                     }
                     
                     storage.CommitAsync().GetAwaiter().GetResult();
+                    CommitTablesUndo();
                 }
                 catch
                 {
                     storage.Rollback();
+                    RollbackTablesUndo();
                     throw;
                 }
             }
@@ -2154,6 +2221,7 @@ public partial class Database
         {
             lock (_walLock)
             {
+                BeginTablesUndo();
                 storage.BeginTransaction();
                 
                 try
@@ -2236,10 +2304,12 @@ public partial class Database
                     }
                     
                     storage.CommitAsync().GetAwaiter().GetResult();
+                    CommitTablesUndo();
                 }
                 catch
                 {
                     storage.Rollback();
+                    RollbackTablesUndo();
                     throw;
                 }
             }

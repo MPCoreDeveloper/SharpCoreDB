@@ -80,6 +80,26 @@ public sealed class BatchUpdateClassificationTests : IDisposable
 
     [Theory]
     [MemberData(nameof(Modes))]
+    public void BatchUpdate_QuotedSetColumn_TakesTheStructuredFastPath(string mode)
+    {
+        // Up to 2.1.4 a quoted SET column was looked up with its quotes, missed, and the statement left the fast path.
+        var (db, _) = Open(mode, "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER)");
+        db.ExecuteSQL("INSERT INTO t (id, n) VALUES (1, 1), (2, 2)");
+        db.TryGetTable("t", out var table);
+        var concrete = (SharpCoreDB.DataStructures.Table)table;
+
+        // The fast path counts its operations (the columnar fixed-width route as bulk batches); the shared parser's
+        // UPDATE path, where a declined statement goes, counts neither.
+        long before = concrete.StructuredUpdateOperations + concrete.BulkContiguousUpdateBatches;
+
+        db.ExecuteBatchSQL(["UPDATE t SET \"n\" = 5 WHERE id = 1", "UPDATE t SET [n] = 6 WHERE id = 2"]);
+
+        Assert.True(concrete.StructuredUpdateOperations + concrete.BulkContiguousUpdateBatches > before);
+        Assert.Equal(["1,5", "2,6"], Rows(db, "SELECT id, n FROM t").Order());
+    }
+
+    [Theory]
+    [MemberData(nameof(Modes))]
     public void BatchUpdate_QuotedSetColumn_IsKeptAfterReopen(string mode)
     {
         var (db, path) = Open(mode, "CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER)");
