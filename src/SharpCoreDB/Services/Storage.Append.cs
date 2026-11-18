@@ -788,6 +788,17 @@ public partial class Storage
     /// <inheritdoc />
     public bool AreRecordsEncrypted(string path) => UseRecordEncryption && FileHasEncryptedHeader(path);
 
+    /// <summary>Returns <c>true</c> when the current transaction deleted the record at <paramref name="offset"/>.</summary>
+    private bool IsBufferedTombstone(string path, long offset)
+    {
+        lock (appendLock)
+        {
+            return bufferedTombstones.Count > 0 &&
+                   bufferedTombstones.TryGetValue(path, out var tombstones) &&
+                   tombstones.Contains(offset);
+        }
+    }
+
     /// <inheritdoc />
     public void BufferTombstoneForCommit(string path, long offset)
     {
@@ -1614,6 +1625,13 @@ public partial class Storage
         if (TryGetBufferedAppend(path, offset, out var bufferedAppend))
         {
             return DecryptBufferedAppendPayload(path, bufferedAppend);
+        }
+
+        // Inside a transaction, a record the transaction deleted is gone, although its tombstone is written only at
+        // commit. Up to 2.1.4 the read returned it, so a primary-key lookup inside the transaction still found the row.
+        if (IsInTransaction && bufferedTombstones.Count > 0 && IsBufferedTombstone(path, offset))
+        {
+            return null;
         }
 
         // B7: inside a transaction, a buffered in-place overwrite takes precedence over the disk

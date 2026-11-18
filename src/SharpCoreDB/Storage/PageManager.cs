@@ -115,6 +115,13 @@ public partial class PageManager : IDisposable
 
     // O(1) Free list implementation
     private readonly Queue<ulong> freePageList = new();
+
+    // Transaction undo scope (see BeginUndoScope). Null outside a scope, so a write outside a transaction pays one null
+    // check. Maps each page changed inside the scope to its image before the first change, or to null for a page the
+    // scope allocated past the end of the file.
+    private Dictionary<ulong, Page?>? undoImages;
+    private Dictionary<uint, List<ulong>>? undoTablePages;
+    private ulong[]? undoFreePages;
     
     // Cache statistics
     private long cacheHits = 0;
@@ -351,10 +358,15 @@ public partial class PageManager : IDisposable
             if (freePageList.Count > 0)
             {
                 pageIdValue = freePageList.Dequeue();
+                CaptureUndo(pageIdValue);
             }
             else
             {
                 pageIdValue = nextPageId++;
+                if (undoImages is not null)
+                {
+                    undoImages.TryAdd(pageIdValue, null);
+                }
             }
 
             var pageId = new PageId(pageIdValue);
@@ -398,6 +410,8 @@ public partial class PageManager : IDisposable
 
         lock (writeLock)
         {
+            CaptureUndo(pageId.Value);
+
             // Add to free list for reuse
             freePageList.Enqueue(pageId.Value);
 
@@ -455,9 +469,11 @@ public partial class PageManager : IDisposable
     {
         if (pageId.Value == 0 || data.Length > MAX_RECORD_SIZE)
             return new(0);
-            
+
         lock (writeLock)
         {
+            CaptureUndo(pageId.Value);
+
             // Get or load page
             if (!pageCache.TryGetValue(pageId.Value, out var page))
             {
@@ -530,6 +546,8 @@ public partial class PageManager : IDisposable
 
         lock (writeLock)
         {
+            CaptureUndo(pageId.Value);
+
             if (!pageCache.TryGetValue(pageId.Value, out var page))
             {
                 page = ReadPage(pageId);
@@ -648,9 +666,11 @@ public partial class PageManager : IDisposable
     {
         if (pageId.Value == 0 || recordId.SlotIndex >= ushort.MaxValue)
             return;
-            
+
         lock (writeLock)
         {
+            CaptureUndo(pageId.Value);
+
             if (!pageCache.TryGetValue(pageId.Value, out var page))
             {
                 page = ReadPage(pageId);
@@ -863,6 +883,125 @@ public partial class PageManager : IDisposable
             }
         }
     }
+
+    /// <summary>
+    /// Starts a transaction undo scope: from here on, the first change to each page keeps a copy of the page as it was,
+    /// so <see cref="RollbackUndoScope"/> can put it back. Up to 2.1.4 the PageBased engine had no rollback at all — it
+    /// writes into this cache and the page file directly, outside the storage transaction buffer — so a rolled-back
+    /// UPDATE or INSERT stayed, also after a reopen (known issue §13). Starting a scope that is already open is a no-op.
+    /// </summary>
+    public void BeginUndoScope()
+    {
+        lock (writeLock)
+        {
+            if (undoImages is not null)
+            {
+                return;
+            }
+
+            undoImages = new Dictionary<ulong, Page?>();
+            undoTablePages = tablePagesIndex.ToDictionary(kv => kv.Key, kv => new List<ulong>(kv.Value));
+            undoFreePages = [.. freePageList];
+        }
+    }
+
+    /// <summary>Ends the undo scope and keeps every change (commit).</summary>
+    public void CommitUndoScope()
+    {
+        lock (writeLock)
+        {
+            undoImages = null;
+            undoTablePages = null;
+            undoFreePages = null;
+        }
+    }
+
+    /// <summary>
+    /// Ends the undo scope and puts every page changed inside it back as it was (rollback). Restored pages are marked
+    /// dirty, so a page the cache had already written to the file during the scope is written back on the next flush; a
+    /// page the scope allocated is written as a free page and returned to the free list.
+    /// </summary>
+    /// <returns><c>true</c> when the scope changed any page.</returns>
+    public bool RollbackUndoScope()
+    {
+        lock (writeLock)
+        {
+            if (undoImages is null)
+            {
+                return false;
+            }
+
+            var images = undoImages;
+            undoImages = null;
+
+            tablePagesIndex.Clear();
+            foreach (var (tableId, pages) in undoTablePages!)
+            {
+                tablePagesIndex[tableId] = pages;
+            }
+
+            freePageList.Clear();
+            foreach (var free in undoFreePages!)
+            {
+                freePageList.Enqueue(free);
+            }
+
+            undoTablePages = null;
+            undoFreePages = null;
+
+            foreach (var (pageId, image) in images)
+            {
+                var restored = image ?? new Page
+                {
+                    TableId = 0,
+                    Type = PageType.Free,
+                    RecordCount = 0,
+                    FreeSpace = (ushort)(PAGE_SIZE - PAGE_HEADER_SIZE),
+                    PageId = pageId,
+                    Data = new Memory<byte>(new byte[PAGE_SIZE - PAGE_HEADER_SIZE]),
+                    Slots = [],
+                };
+
+                if (image is null)
+                {
+                    freePageList.Enqueue(pageId);
+                }
+
+                restored = ClonePage(restored);
+                restored.IsDirty = true;
+                pageCache[pageId] = restored;
+                UpdateLRU(pageId);
+                dirtyPages.Add(pageId);
+            }
+
+            EvictIfNeeded();
+            return images.Count > 0;
+        }
+    }
+
+    /// <summary>Keeps the page's image before its first change inside an undo scope. Called under the write lock.</summary>
+    private void CaptureUndo(ulong pageId)
+    {
+        if (undoImages is null || undoImages.ContainsKey(pageId))
+        {
+            return;
+        }
+
+        if (pageCache.TryGetValue(pageId, out var cached))
+        {
+            undoImages[pageId] = ClonePage(cached);
+            return;
+        }
+
+        var onDisk = ReadPage(new PageId(pageId));
+        undoImages[pageId] = onDisk.PageId == 0 ? null : ClonePage(onDisk);
+    }
+
+    private static Page ClonePage(Page page) => page with
+    {
+        Data = new Memory<byte>(page.Data.ToArray()),
+        Slots = page.Slots is null ? [] : [.. page.Slots],
+    };
 
     public virtual void Dispose()
     {

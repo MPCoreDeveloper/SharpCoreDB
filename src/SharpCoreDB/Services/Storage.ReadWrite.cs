@@ -198,12 +198,115 @@ public partial class Storage
         // Plaintext (and every legacy layout): the buffer IS the file, so the buffer offset is already
         // the physical offset and the caller needs no map. Gated on the magic header (not on
         // AreRecordsEncrypted) to stay recursion-free with ReadBytes.
+        byte[]? data;
         if (noEncrypt || this.noEncryption || !FileHasEncryptedHeader(path))
         {
-            return ReadBytes(path, noEncrypt);
+            data = ReadBytes(path, noEncrypt);
+        }
+        else
+        {
+            data = DecryptTableFileToPlaintext(path, out physicalOffsets);
         }
 
-        return DecryptTableFileToPlaintext(path, out physicalOffsets);
+        // Inside a transaction the file on disk does not yet hold the transaction's in-place UPDATEs and DELETEs (they
+        // are buffered until commit), so they are laid over the records here. Up to 2.1.4 a full scan inside a
+        // transaction returned the old value of an updated row and still listed a deleted one, while a primary-key
+        // lookup saw the change (known issue §12).
+        return data is not null && IsInTransaction && HasBufferedChanges(path)
+            ? OverlayBufferedChanges(path, data, ref physicalOffsets)
+            : data;
+    }
+
+    /// <summary>Returns <c>true</c> when the transaction holds an in-place overwrite or a tombstone for the file.</summary>
+    private bool HasBufferedChanges(string path)
+    {
+        if (!bufferedOverwrites.IsEmpty && bufferedOverwrites.ContainsKey(path))
+        {
+            return true;
+        }
+
+        lock (appendLock)
+        {
+            return bufferedTombstones.TryGetValue(path, out var tombstones) && tombstones.Count > 0;
+        }
+    }
+
+    /// <summary>
+    /// Lays the transaction's buffered in-place overwrites and tombstones over a scanned copy of the file: an overwritten
+    /// record gets its new payload (same length — an in-place overwrite never changes it), a deleted record becomes a
+    /// tombstone (negative length prefix) and leaves the physical-offset map, which lists live records only.
+    /// </summary>
+    private byte[] OverlayBufferedChanges(string path, byte[] data, ref long[]? physicalOffsets)
+    {
+        Dictionary<long, byte[]>? overwrites = null;
+        HashSet<long>? tombstones = null;
+        lock (appendLock)
+        {
+            if (bufferedOverwrites.TryGetValue(path, out var buffered) && buffered.Count > 0)
+            {
+                overwrites = new Dictionary<long, byte[]>(buffered);
+            }
+
+            if (bufferedTombstones.TryGetValue(path, out var deleted) && deleted.Count > 0)
+            {
+                tombstones = [.. deleted];
+            }
+        }
+
+        bool encrypted = UseRecordEncryption && FileHasEncryptedHeader(path);
+        var copy = (byte[])data.Clone();
+        var span = copy.AsSpan();
+        var keptOffsets = physicalOffsets is null ? null : new List<long>(physicalOffsets.Length);
+        int position = 0;
+        int ordinal = 0;
+        while (position + 4 <= span.Length)
+        {
+            int length = BinaryPrimitives.ReadInt32LittleEndian(span.Slice(position, 4));
+            if (length < 0)
+            {
+                if (-length < 4)
+                {
+                    break;
+                }
+
+                position += -length; // an existing tombstone
+                continue;
+            }
+
+            if (position + 4 + length > span.Length)
+            {
+                break;
+            }
+
+            long physical = physicalOffsets is not null && ordinal < physicalOffsets.Length ? physicalOffsets[ordinal] : position;
+            ordinal++;
+
+            if (tombstones is not null && tombstones.Contains(physical))
+            {
+                BinaryPrimitives.WriteInt32LittleEndian(span.Slice(position, 4), -(4 + length));
+            }
+            else
+            {
+                keptOffsets?.Add(physical);
+                if (length > 0 && overwrites is not null && overwrites.TryGetValue(physical, out var stored))
+                {
+                    var payload = encrypted ? DecryptRecord((byte[])stored.Clone()) : stored;
+                    if (payload is not null && payload.Length == length)
+                    {
+                        payload.CopyTo(span.Slice(position + 4, length));
+                    }
+                }
+            }
+
+            position += 4 + length;
+        }
+
+        if (keptOffsets is not null)
+        {
+            physicalOffsets = [.. keptOffsets];
+        }
+
+        return copy;
     }
 
     /// <summary>

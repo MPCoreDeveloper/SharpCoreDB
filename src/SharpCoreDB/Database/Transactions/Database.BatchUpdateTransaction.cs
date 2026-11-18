@@ -96,6 +96,8 @@ public partial class Database
                 }
             }
 
+            BeginTablesUndo();
+
             storage.BeginTransaction();
             _batchInsertedRows.Clear();
             _batchUpdateActive = true;
@@ -118,6 +120,8 @@ public partial class Database
             if (isReadOnly)
                 throw new InvalidOperationException("Cannot begin transaction in readonly mode");
 
+            BeginTablesUndo();
+
             storage.BeginTransaction();
             _batchInsertedRows.Clear();
             _batchUpdateActive = true;
@@ -136,6 +140,7 @@ public partial class Database
                 return;
 
             storage.CommitAsync().GetAwaiter().GetResult();
+            CommitTablesUndo();
             _batchUpdateActive = false;
         }
     }
@@ -175,7 +180,44 @@ public partial class Database
             }
 
             storage.Rollback();
+            RollbackTablesUndo();
             _batchUpdateActive = false;
+        }
+    }
+
+    /// <summary>Starts every PageBased table's undo scope for the transaction (see <c>Table.TransactionUndo</c>).</summary>
+    private void BeginTablesUndo()
+    {
+        foreach (var table in tables.Values)
+        {
+            if (table is Table t)
+            {
+                t.BeginTransactionUndo();
+            }
+        }
+    }
+
+    /// <summary>Ends every PageBased table's undo scope keeping the changes.</summary>
+    private void CommitTablesUndo()
+    {
+        foreach (var table in tables.Values)
+        {
+            if (table is Table t)
+            {
+                t.CommitTransactionUndo();
+            }
+        }
+    }
+
+    /// <summary>Rolls every PageBased table back to its state at the start of the transaction.</summary>
+    private void RollbackTablesUndo()
+    {
+        foreach (var table in tables.Values)
+        {
+            if (table is Table t)
+            {
+                t.RollbackTransactionUndo();
+            }
         }
     }
 
@@ -194,6 +236,7 @@ public partial class Database
             try
             {
                 storage.CommitAsync().GetAwaiter().GetResult();
+                CommitTablesUndo();
 
                 // Ensure data pages are flushed before index rebuild so subsequent
                 // queries (including those after connection close) see the committed inserts.
@@ -226,6 +269,7 @@ public partial class Database
             catch
             {
                 storage.Rollback();
+                RollbackTablesUndo();
                 _batchUpdateActive = false;
                 throw;
             }
@@ -272,6 +316,7 @@ public partial class Database
 
                 // Now perform the storage-level rollback.
                 storage.Rollback();
+                RollbackTablesUndo();
 
                 foreach (var table in tables.Values)
                 {

@@ -326,6 +326,45 @@ public partial class PageBasedEngine : IStorageEngine
         }
     }
 
+    private volatile bool undoScopeActive;
+
+    /// <summary>
+    /// Starts a database transaction's undo scope on every page manager (see <see cref="PageManager.BeginUndoScope"/>).
+    /// Independent of this engine's own <see cref="BeginTransaction"/>, which the table layer uses around batch inserts.
+    /// </summary>
+    public void BeginUndoScope()
+    {
+        undoScopeActive = true;
+        foreach (var manager in tableManagers.Values)
+        {
+            manager.BeginUndoScope();
+        }
+    }
+
+    /// <summary>Ends the undo scope and keeps the changes (the database transaction committed).</summary>
+    public void CommitUndoScope()
+    {
+        undoScopeActive = false;
+        foreach (var manager in tableManagers.Values)
+        {
+            manager.CommitUndoScope();
+        }
+    }
+
+    /// <summary>Ends the undo scope and puts every changed page back (the database transaction rolled back).</summary>
+    /// <returns><c>true</c> when any page was restored.</returns>
+    public bool RollbackUndoScope()
+    {
+        undoScopeActive = false;
+        bool restored = false;
+        foreach (var manager in tableManagers.Values)
+        {
+            restored |= manager.RollbackUndoScope();
+        }
+
+        return restored;
+    }
+
     /// <inheritdoc />
     public bool IsInTransaction
     {
@@ -400,7 +439,13 @@ public partial class PageBasedEngine : IStorageEngine
         return tableManagers.GetOrAdd(tableName, name =>
         {
             var tableId = GetTableId(name);
-            return new PageManager(databasePath, tableId, config); // ✅ Pass config!
+            var manager = new PageManager(databasePath, tableId, config); // ✅ Pass config!
+            if (undoScopeActive)
+            {
+                manager.BeginUndoScope(); // a table first touched inside the transaction rolls back too
+            }
+
+            return manager;
         });
     }
 

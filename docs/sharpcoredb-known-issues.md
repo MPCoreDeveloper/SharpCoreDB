@@ -526,10 +526,13 @@ on the tuple — for files written before, there is no way to recover the lost k
 unenforced), and only then enforce single-column uniqueness on single-file storage. Pinned by the skipped
 single-file cases in `PrimaryKeyUniquenessTests`.
 
-## 12. 🟠 OPEN — Inside a transaction, a columnar full scan does not see the transaction's own UPDATEs and DELETEs
+## 12. ✅ FIXED — Inside a transaction, a columnar full scan did not see the transaction's own UPDATEs and DELETEs
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/returning-check-in-tx-reads`).** Found while investigating
-> read-your-own-writes; the two commit defects found with it are fixed (see the CHANGELOG), this is not.
+> ✅ **FIXED (2026-11-17, `fix/transaction-rollback-and-scan-overlay`).** The scan's data source
+> (`Storage.ReadBytesWithRecordOffsets`) lays the transaction's buffered in-place overwrites and commit-time tombstones
+> over the records it returns — only while a transaction holds such changes for the file, so other scans are untouched
+> — and a point read (`ReadBytesFrom`) of a record the transaction deleted returns nothing. Encrypted and
+> `NoEncryptMode` files alike. Pinned by `InTransactionReadTests`. The description below is kept as the record.
 
 Inside `BeginBatchUpdate()` / `EndBatchUpdate()` — the transaction an ADO.NET `DbTransaction` opens, and so linq2db's
 `TransactionAsync` and EF Core's transactions — a columnar table answers reads inconsistently until the commit:
@@ -549,9 +552,19 @@ where the scan finds them. After the commit every read is correct (`BatchUpdateT
 record offset, which the scan already carries for its stale-version filter). It is a read-path change on the hottest
 scan, so it needs the write-path gate and a read benchmark; not attempted in this change.
 
-## 13. 🔴 OPEN — PageBased storage cannot roll a transaction back
+## 13. ✅ FIXED — PageBased storage could not roll a transaction back
 
-> ⚠️ **STILL TRUE (verified 2026-11-17, `fix/returning-check-in-tx-reads`).**
+> ✅ **FIXED (2026-11-17, `fix/transaction-rollback-and-scan-overlay`) for `BeginBatchUpdate` / `CancelBatchUpdate` and
+> the storage-only transaction the EF Core provider uses** — so ADO.NET, linq2db and EF Core rollbacks. Each
+> `PageManager` keeps a page's image on its first change inside the transaction (`BeginUndoScope`); rollback restores
+> the images (marked dirty, so a page already written to the file during the transaction is written back) and returns
+> pages the transaction allocated to the free list, then every table rebuilds its primary-key index from storage and
+> marks its hash indexes stale — which also fixes a columnar rollback leaving the hash index on the rolled-back value.
+> Outside a transaction a write pays one null check. Pinned by `TransactionRollbackTests` (including an ADO.NET
+> `DbTransaction.Rollback()`). **Still open:** `ExecuteBatchSQL` rolls its own internal transaction back on a failing
+> statement without the undo scope, so a PageBased table keeps the statements of a failed batch that ran before the
+> failure; hooking it adds a page copy per touched page to the most-measured write path and needs its own gate run.
+> And without a page WAL, a crash in the middle of a transaction can still leave pages the cache wrote early.
 
 `CancelBatchUpdate()` (an ADO.NET `DbTransaction.Rollback()`) does not undo a PageBased table's changes: a rolled-back
 UPDATE or INSERT is still there — also after a reopen — and a rolled-back DELETE stays deleted. Columnar tables roll
@@ -584,5 +597,5 @@ in this change.
 | 9 | Column `UNIQUE` not enforced | 🟠 Medium | — | **Fixed on directory storage** — automatic unique index, composite `UNIQUE (a, b)` included; single-file still open (format decision, §10/§11) |
 | 10 | Single-file ignores `COLLATE` | 🟡 Low | — | **Open, owner decision** — needs a column-entry format extension (§10) |
 | 11 | PK uniqueness / composite keys | 🔴 High | — | **Fixed on directory storage for new tables** (composite key = UNIQUE over its columns); **open, owner decision** for single-file storage, which enforces no PK uniqueness (§11) |
-| 12 | Columnar scan inside a transaction misses its own UPDATE/DELETE | 🟠 Medium | Read by primary key, or commit first | **Open** — buffered overwrites/deletes are not overlaid on the scan (§12) |
-| 13 | PageBased transaction rollback | 🔴 High | Columnar storage for tables that need rollback | **Open** — `PageBasedEngine.Rollback()` is a stub (§13) |
+| 12 | Columnar scan inside a transaction misses its own UPDATE/DELETE | 🟠 Medium | — | **Fixed** — buffered overwrites and tombstones are laid over the scan (§12) |
+| 13 | PageBased transaction rollback | 🔴 High | — | **Fixed** for `CancelBatchUpdate` (ADO.NET, linq2db, EF Core) via page undo images; `ExecuteBatchSQL`'s internal failure rollback still open (§13) |
