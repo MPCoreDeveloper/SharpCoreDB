@@ -111,8 +111,8 @@
     <PackageVersion Include="SafeWebCore" Version="1.9.0" />
     <PackageVersion Include="ScottPlot" Version="5.1.59" />
     <PackageVersion Include="Serilog" Version="4.4.0" />
-    <PackageVersion Include="Serilog.AspNetCore" Version="10.0.0" />
-    <PackageVersion Include="Serilog.Extensions.Logging" Version="10.0.0" />
+    <PackageVersion Include="Serilog.AspNetCore" Version="11.0.0" />
+    <PackageVersion Include="Serilog.Extensions.Logging" Version="11.0.0" />
     <PackageVersion Include="Serilog.Sinks.Console" Version="6.1.1" />
     <PackageVersion Include="Serilog.Sinks.File" Version="7.0.0" />
     <PackageVersion Include="Serilog.Sinks.PeriodicBatching" Version="5.0.0" />
