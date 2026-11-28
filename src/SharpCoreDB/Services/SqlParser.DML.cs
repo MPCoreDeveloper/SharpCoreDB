@@ -749,6 +749,7 @@ public partial class SqlParser
         {
             int elementStart = index;
             int bracketDepth = 0;
+            int parenDepth = 0;
             int literalCount = 0;
 
             // One pass over the element: whole literals are skipped (a comma inside one is text), a bracketed
@@ -782,7 +783,15 @@ public partial class SqlParser
                 {
                     bracketDepth--;
                 }
-                else if (c == ',' && bracketDepth == 0)
+                else if (c == '(')
+                {
+                    parenDepth++;
+                }
+                else if (c == ')' && parenDepth > 0)
+                {
+                    parenDepth--;
+                }
+                else if (c == ',' && bracketDepth == 0 && parenDepth == 0)
                 {
                     break;
                 }

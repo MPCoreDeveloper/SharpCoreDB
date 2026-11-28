@@ -277,6 +277,27 @@ public partial class Database
         /// <summary>
         /// Fast value parsing without string allocations where possible.
         /// </summary>
+        /// <summary>
+        /// SQLite truth of a boolean literal: <c>true</c>/<c>false</c> by name and any non-zero number is true — the
+        /// same rules <c>SqlParser.ParseValue</c> applies, so the batch path and the single-statement path agree on a
+        /// numeric boolean (<c>6</c> is true, <c>0</c> is false). Any other text stays the lenient <c>false</c>.
+        /// </summary>
+        private static bool ParseBooleanFast(ReadOnlySpan<char> value)
+        {
+            if (value.Equals("true", StringComparison.OrdinalIgnoreCase))
+            {
+                return true;
+            }
+
+            if (value.Equals("false", StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            return long.TryParse(value, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var number)
+                && number != 0;
+        }
+
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
         private static object? ParseValueFast(ReadOnlySpan<char> value, DataType type)
         {
@@ -302,8 +323,7 @@ public partial class Database
                 DataType.Long => long.TryParse(value, out var l) ? l : 0L,
                 DataType.Real => double.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var d) ? d : 0.0,
                 DataType.Decimal => decimal.TryParse(value, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var m) ? m : 0m,
-                DataType.Boolean => value.Equals("true", StringComparison.OrdinalIgnoreCase) || 
-                                   value.Equals("1", StringComparison.Ordinal),
+                DataType.Boolean => ParseBooleanFast(value),
                 DataType.DateTime => DateTime.TryParse(value, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt) ? dt : DateTime.MinValue,
                 DataType.String => value.ToString(),
                 _ => value.ToString()
