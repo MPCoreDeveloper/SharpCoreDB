@@ -117,7 +117,7 @@ public partial class Database
                 if (valueIndex < Columns.Count && valueIndex < ColumnTypes.Count && start < end)
                 {
                     var valueSpan = valuesClause.Slice(start, end - start).Trim();
-                    var value = ParseValueFast(valueSpan, ColumnTypes[valueIndex]);
+                    var value = ParseValueFastOrExpression(valueSpan, ColumnTypes[valueIndex]);
                     row[Columns[valueIndex]] = value ?? DBNull.Value;
                 }
 
@@ -156,7 +156,7 @@ public partial class Database
                 if (valueIndex < Columns.Count && valueIndex < ColumnTypes.Count && start < end)
                 {
                     var valueSpan = valuesClause.Slice(start, end - start).Trim();
-                    values[valueIndex] = ParseValueFast(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
+                    values[valueIndex] = ParseValueFastOrExpression(valueSpan, ColumnTypes[valueIndex]) ?? DBNull.Value;
                 }
 
                 // Counted even when it is not stored: a surplus value has to be reported, not dropped.
@@ -309,6 +309,16 @@ public partial class Database
                 _ => value.ToString()
             };
         }
+
+        /// <summary>
+        /// Reads one VALUES element as SQLite does under option 2 of issue #525: a computed expression (constant
+        /// arithmetic, a function of literals, a comparison) is evaluated, and a date/time column keeps an unquoted
+        /// date as a date. Every other element — the overwhelming majority, a plain literal — takes the allocation-free
+        /// literal fast path, so the bulk-insert shape pays nothing for the added capability.
+        /// </summary>
+        [MethodImpl(MethodImplOptions.AggressiveOptimization)]
+        private static object? ParseValueFastOrExpression(ReadOnlySpan<char> value, DataType type) =>
+            SharpCoreDB.Services.SqlParser.TryEvaluateValuesExpression(value, type, out var result) ? result : ParseValueFast(value, type);
     }
 
     /// <summary>

@@ -124,6 +124,37 @@ internal static class SqlScalarExpression
         _ => false,
     };
 
+    /// <summary>
+    /// Returns <c>true</c> when every column reference in the expression satisfies <paramref name="isColumn"/>
+    /// (vacuously <c>true</c> when there are none). Used by the UPDATE SET / INSERT VALUES paths of issue #525 to
+    /// decide whether an expression can be evaluated: a constant expression such as <c>2 * 3</c> has no column
+    /// references and is always evaluable, an expression that reads a column is evaluable when that column is a
+    /// column of the table, and an identifier the evaluator cannot resolve keeps the lenient literal reading — which
+    /// is where SQLite itself would raise "no such column".
+    /// </summary>
+    internal static bool AllColumnRefsAreKnown(Node node, Func<string, bool> isColumn) => node switch
+    {
+        Column column => isColumn(column.Name),
+        Call call => AllArgumentsKnown(call.Args, isColumn),
+        Cast cast => AllColumnRefsAreKnown(cast.Operand, isColumn),
+        Binary binary => AllColumnRefsAreKnown(binary.Left, isColumn) && AllColumnRefsAreKnown(binary.Right, isColumn),
+        Negate negate => AllColumnRefsAreKnown(negate.Operand, isColumn),
+        _ => true,
+    };
+
+    private static bool AllArgumentsKnown(Node[] args, Func<string, bool> isColumn)
+    {
+        for (int i = 0; i < args.Length; i++)
+        {
+            if (!AllColumnRefsAreKnown(args[i], isColumn))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
     /// <summary>SQLite's text form of a value (what <c>upper</c>, <c>length</c>, <c>||</c> and CAST AS TEXT see).</summary>
     internal static string ToText(object? value) => value switch
     {

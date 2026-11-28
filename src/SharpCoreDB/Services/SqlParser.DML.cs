@@ -435,7 +435,7 @@ public partial class SqlParser
                     var col = table.Columns[i];
                     if (skipInternalRowId && col == Constants.PersistenceConstants.InternalRowIdColumnName) continue;
                     var type = table.ColumnTypes[i];
-                    row[col] = SqlParser.ParseValue(valueIdx < rowValues.Count ? rowValues[valueIdx] : "NULL", type) ?? DBNull.Value;
+                    row[col] = SqlParser.ParseInsertValue(valueIdx < rowValues.Count ? rowValues[valueIdx] : "NULL", type) ?? DBNull.Value;
                     valueIdx++;
                 }
             }
@@ -444,7 +444,7 @@ public partial class SqlParser
                 for (int i = 0; i < insertColumns.Count; i++)
                 {
                     var idx = insertColumnIndexes![i];
-                    row[insertColumns[i]] = SqlParser.ParseValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
+                    row[insertColumns[i]] = SqlParser.ParseInsertValue(i < rowValues.Count ? rowValues[i] : "NULL", table.ColumnTypes[idx]) ?? DBNull.Value;
                 }
             }
 
@@ -2473,7 +2473,16 @@ public partial class SqlParser
                 {
                     var colType = table.ColumnTypes[colIndex];
 
-                    // `SET n = n + 1`, `SET name = upper(name)`: computed per row (see SqlParser.SetExpressions).
+                    // Issue #525 (option 2), exception: an unquoted date in a date/time column stays a date. A DATETIME
+                    // column cannot hold the integer 2008 that SQLite's `2024-01-15` arithmetic would store.
+                    if (colType == DataType.DateTime && !IsPlainSetLiteral(valueStr) && TryParseDateTimeLiteral(valueStr, out var temporal))
+                    {
+                        updates[colName] = temporal;
+                        continue;
+                    }
+
+                    // `SET n = n + 1`, `SET name = upper(name)`, and — under option 2 of issue #525 — a constant
+                    // expression such as `SET label = 2 * 3`: computed per row (see SqlParser.SetExpressions).
                     if (IsComputedSetValue(valueStr, table.Columns, out var expression))
                     {
                         (computed ??= []).Add(new(colName, CompileSetExpression(expression, colType)));

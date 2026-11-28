@@ -35,7 +35,13 @@ public partial class SqlParser
             return false;
         }
 
-        if (!SqlScalarExpression.ReferencesColumnOrFunction(parsed, name => ContainsColumn(columns, name)))
+        // Option 2 of issue #525: evaluate anything that parses as an expression — constant arithmetic (2 * 3), an
+        // unquoted date (2024-01-15), a function call, CAST, a comparison — as long as every column it names is a
+        // column of the table. A bare word that names no column (SET status = active) and an identifier the evaluator
+        // cannot resolve keep the lenient literal reading, which is where SQLite itself would raise "no such column".
+        // A bare literal (a quoted string, a number, NULL, …) is read by ParseSetLiteral.
+        if ((!SqlScalarExpression.IsComputed(parsed) && !SqlScalarExpression.IsColumn(parsed)) ||
+            !SqlScalarExpression.AllColumnRefsAreKnown(parsed, name => ContainsColumn(columns, name)))
         {
             return false;
         }
@@ -121,9 +127,12 @@ public partial class SqlParser
     /// Returns <c>true</c> for a SET value that is certainly a literal: one quoted string, a number, NULL/TRUE/FALSE, a
     /// parameter, a vector (<c>[…]</c>) or blob (<c>X'…'</c>) literal. Allocates nothing.
     /// </summary>
-    private static bool IsPlainSetLiteral(string valueText)
+    private static bool IsPlainSetLiteral(string valueText) => IsPlainSetLiteral(valueText.AsSpan());
+
+    /// <summary>The span form of <see cref="IsPlainSetLiteral(string)"/> — the batch INSERT path reads a span.</summary>
+    internal static bool IsPlainSetLiteral(ReadOnlySpan<char> span)
     {
-        var span = valueText.AsSpan().Trim();
+        span = span.Trim();
         if (span.IsEmpty)
         {
             return true;
@@ -161,6 +170,61 @@ public partial class SqlParser
                span.Equals("TRUE", StringComparison.OrdinalIgnoreCase) ||
                span.Equals("FALSE", StringComparison.OrdinalIgnoreCase) ||
                double.TryParse(span, NumberStyles.Float, CultureInfo.InvariantCulture, out _);
+    }
+
+    /// <summary>
+    /// Reads one INSERT … VALUES / non-per-row UPDATE SET element as SQLite does under option 2 of issue #525: a plain
+    /// literal is left to the caller's own reader; a date/time column keeps an unquoted date as a date (the deliberate
+    /// exception — SharpCoreDB is typed, so it cannot store the integer SQLite's arithmetic would produce); and any
+    /// other expression that parses and names no unresolvable identifier is evaluated and converted to
+    /// <paramref name="type"/>. Returns <c>false</c> when the text is not such an expression, so the caller keeps its
+    /// existing literal (lenient) reading.
+    /// </summary>
+    internal static bool TryEvaluateValuesExpression(ReadOnlySpan<char> value, DataType type, out object? result)
+    {
+        result = null;
+        if (IsPlainSetLiteral(value))
+        {
+            return false;
+        }
+
+        string text = value.Trim().ToString();
+
+        // #525 exception: an unquoted date in a date/time column stays a date. A DATETIME column cannot hold the
+        // integer 2008 that SQLite's `2024-01-15` arithmetic would store, so the date reading is kept.
+        if (type == DataType.DateTime && TryParseDateTimeLiteral(text, out result))
+        {
+            return true;
+        }
+
+        if (!SqlScalarExpression.TryParse(text, out var node) ||
+            !SqlScalarExpression.IsComputed(node) ||
+            !SqlScalarExpression.AllColumnRefsAreKnown(node, static _ => false))
+        {
+            return false;
+        }
+
+        result = ConvertComputedSetValue(SqlScalarExpression.Evaluate(node, null), type);
+        return true;
+    }
+
+    /// <summary>Reads one INSERT … VALUES element: an evaluated expression when it is one, else the literal.</summary>
+    internal static object? ParseInsertValue(string valueText, DataType type) =>
+        TryEvaluateValuesExpression(valueText.AsSpan(), type, out var result) ? result : ParseValue(valueText, type);
+
+    /// <summary>Parses <paramref name="valueText"/> as a date/time literal; <c>false</c> when it is not one.</summary>
+    private static bool TryParseDateTimeLiteral(string valueText, out object? value)
+    {
+        try
+        {
+            value = ParseValue(valueText, DataType.DateTime);
+            return true;
+        }
+        catch (InvalidOperationException)
+        {
+            value = null;
+            return false;
+        }
     }
 
     private static bool ContainsColumn(IReadOnlyList<string> columns, string name)
