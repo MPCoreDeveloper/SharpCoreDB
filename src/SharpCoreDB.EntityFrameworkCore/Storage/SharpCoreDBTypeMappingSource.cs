@@ -92,13 +92,13 @@ public class SharpCoreDBTypeMappingSource : RelationalTypeMappingSource
     /// max length, collation, etc.), which is required for correct column-property
     /// mappings in the relational model.
     /// </summary>
-    public override CoreTypeMapping? FindMapping(IProperty property)
+    public override RelationalTypeMapping? FindMapping(IProperty property)
     {
         return base.FindMapping(property);
     }
 
     /// <inheritdoc />
-    public override CoreTypeMapping? FindMapping(IElementType elementType)
+    public override RelationalTypeMapping? FindMapping(IElementType elementType)
     {
         return FindMapping(elementType.ClrType);
     }
