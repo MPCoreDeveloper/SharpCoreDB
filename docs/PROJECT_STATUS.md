@@ -1,19 +1,19 @@
 # SharpCoreDB Project Status
 
-**Version:** 2.1.4 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
-**Status:** ✅ v2.1.4 released on the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
-**Last Updated:** November 13, 2026
+**Version:** 2.2.0 (`master`, net11.0 / C# 15 preview) · 2.0.0.3 (net10.0 / C# 14 stable, parked on `release/v2.0`)
+**Status:** ✅ v2.2.0 released on the main branch · ✅ v2.0 stable line parked on `release/v2.0` · ✅ Performance-first line
+**Last Updated:** November 28, 2026
 
 ## Current Status
 
-The **current release is `2.1.4` (2026-11-13)** — the quoted-identifier patch: `CREATE TABLE [notes] ([id] …)`,
-the shape every generator emits, catalogued the table as `[notes]` and the columns as `[id]`, while later
-statements resolve the bare names, so a data source that is not a `.scdb` file could create its table and then
-not receive a row (`Table notes does not exist`, then `ArgumentOutOfRangeException` from a `-1` column index).
-`CREATE TABLE` and `ALTER TABLE … ADD COLUMN` now read the identifier as one token. Found by re-running issue
-[#497](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/497)'s own reproduction against the published
-2.1.3 packages. Validated on the `2.1.4` tree: core **2,160 tests / 0 failed**, linq2DB **26 / 0**. Notes:
-[`CHANGELOG.md`](CHANGELOG.md) › `[2.1.4]`.
+The **current release is `2.2.0` (2026-11-28)** — a minor release: the .NET 11 dependency majors (EF Core /
+ASP.NET Core / Extensions **11.0.0**, Aspire.Hosting **17.0.0**, MailKit/MimeKit **5.0.0**, Serilog **11.0.0**),
+**EF Core 11 compatibility** for the provider, and **option 2 of issue
+[#525](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/525)** — an unquoted value in `UPDATE … SET` /
+`INSERT … VALUES` is now evaluated as an expression, as SQLite evaluates it, with the lenient literal reading
+kept for a bare word that names no column and an unquoted date in a `DATETIME` column kept as a date. Validated
+across all 17 test projects: **4,886 tests / 0 failed / 6 skipped**, including a 511-case differential matrix.
+Notes: [`CHANGELOG.md`](CHANGELOG.md) › `[2.2.0]`.
 
 The **previous release was `2.1.3` (2026-11-12)** — the LINQ to DB patch: `SharpCoreDBDataConnection` used to
 hand its connection string to `ProviderName.SQLite`, so a password was refused and the rows went into an
@@ -31,7 +31,7 @@ suites — 0 failed, 0 errors, 16 skipped** (core 1,916), the write-path regress
 the full benchmark arm set (comparative, fair-PK, pure-default, PageBased, multi-row INSERT) measured
 in the product-default regime. Release notes: [`2.1.0-RC.3_WHAT_CHANGED.md`](2.1.0-RC.3_WHAT_CHANGED.md).
 `2.1.1` followed on **2026-10-25** with the SQL vector fixes; `2.1.2` (2026-10-26) with the statement-path
-literal scanner; `2.1.3` added the LINQ to DB adapter fix; `2.1.4` (2026-11-13) is the current patch.
+literal scanner; `2.1.3` added the LINQ to DB adapter fix; `2.1.4` (2026-11-13) was the quoted-identifier patch; `2.2.0` (2026-11-28) is the current release.
 
 ### .NET 11 GA upgrade (released as 2.1.3 on 2026-11-12)
 
@@ -75,7 +75,7 @@ The **v2.0 stable packages (`2.0.0.3`)** are the net10.0 / C# 14 line, parked on
   `SharpCoreDB.HybridSearch` and `SharpCoreDB.Aspire.Hosting` ship on this line for the first time
 - ✅ **2.1.0 was published from `master`, and `2.1.1` followed as a patch (2026-10-25)** — the publish
   trigger is the `push: branches: [master]` job in `.github/workflows/ci.yml`, which packs and pushes the
-  28 packages; `2.1.4` is the current release. History: [`CHANGELOG.md`](CHANGELOG.md).
+  28 packages; `2.2.0` is the current release. History: [`CHANGELOG.md`](CHANGELOG.md).
 - ✅ **Linux/macOS data-integrity defect fixed** — the AES-GCM cipher caches were shared across threads,
   which is only safe on Windows (dotnet/runtime#53320); they are thread-affine now, so concurrent
   encryption cannot corrupt a cipher's native state or repeat a nonce off Windows

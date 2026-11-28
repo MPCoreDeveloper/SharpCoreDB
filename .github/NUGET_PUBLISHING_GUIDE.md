@@ -29,7 +29,7 @@ Run the **Publish to NuGet.org** workflow (`workflow_dispatch`):
 
 - with **no input**, it reuses the newest successful `ci.yml` run on `master` (so a re-run after a failed
   publish pushes exactly the packages that run packed);
-- with an explicit **`version`** (e.g. `2.1.4`), it packs the `SharpCoreDB.CI.slnf` itself with
+- with an explicit **`version`** (e.g. `2.2.0`), it packs the `SharpCoreDB.CI.slnf` itself with
   `/p:Version=<version>` and publishes that.
 
 The former `publish-manual.yml` was removed with the move to trusted publishing: its job — pack with an

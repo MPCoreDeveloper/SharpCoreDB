@@ -16,7 +16,7 @@
 
     <!-- Assembly info -->
     <AssemblyName>SharpCoreDB.Aspire.Hosting</AssemblyName>
-    <Version>2.1.4</Version>
+    <Version>2.2.0</Version>
     <Description>.NET Aspire hosting integration for the SharpCoreDB network server</Description>
 
     <!-- NuGet Package Properties -->

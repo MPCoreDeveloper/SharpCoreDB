@@ -1,8 +1,8 @@
-# SharpCoreDB 2.1.4 — Performance-First Database Engine
+# SharpCoreDB 2.2.0 — Performance-First Database Engine
 
 **High-Performance Embedded AND Networked Database for .NET 11 (C# 15 preview)**
 
-> **This is the 2.1.x release line (current: 2.1.4)** — it targets **net11.0 only** with
+> **This is the 2.1.x release line (current: 2.2.0)** — it targets **net11.0 only** with
 > **C# 15 preview** (`LangVersion=preview`). The net10.0 / C# 14 packages are the v2.0 stable
 > line, parked on `release/v2.0`. See `docs/net11/UPGRADE.md` for what the .NET 11 line adds.
 
@@ -13,6 +13,26 @@ SharpCoreDB is a modern, encrypted, file-based database engine with SQL support,
 [![.NET 11](https://img.shields.io/badge/.NET-11-blue.svg)](https://dotnet.microsoft.com/download)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![SonarCloud Quality Gate](https://img.shields.io/sonar/quality_gate/MPCoreDeveloper_SharpCoreDB?server=https%3A%2F%2Fsonarcloud.io&logo=sonarcloud)](https://sonarcloud.io/dashboard?id=MPCoreDeveloper_SharpCoreDB)
+
+## What's New in 2.2.0
+
+A minor release: the .NET 11 dependency majors (**EF Core / ASP.NET Core / Extensions 11.0.0**,
+**Aspire.Hosting 17.0.0**, **MailKit/MimeKit 5.0.0**, **Serilog 11.0.0**), **EF Core 11 compatibility** for the
+provider, and **option 2 of issue #525** — an unquoted value in `UPDATE … SET` / `INSERT … VALUES` is now
+evaluated as an expression, the way SQLite evaluates it:
+
+```sql
+CREATE TABLE t (id INTEGER PRIMARY KEY, n INTEGER, s TEXT);
+INSERT INTO t (id, n) VALUES (1, 2 * 3);   -- INTEGER: stores 6 (was an error)
+INSERT INTO t (id, s) VALUES (1, 'x');
+UPDATE t SET s = upper(s);                 -- TEXT: stores 'X'
+```
+
+A bare word that names no column (`SET status = active`) keeps the lenient literal reading, where SQLite itself
+raises *"no such column"*; an unquoted date in a `DATETIME` column stays a date. `ExecuteBatchSQL`'s INSERT
+fast path follows the same rule, and a multi-argument call such as `substr('abcdef', 2, 3)` in a VALUES tuple is
+one value. Validated by **4,886 tests / 0 failed / 6 skipped across all 17 test projects**, including a
+**511-case differential matrix**.
 
 ## What's New in 2.1.4
 
@@ -201,7 +221,7 @@ you passed it:
 ✅ **High Performance** - 6.5x faster than SQLite for bulk operations  
 ✅ **Modern C# 15** - Latest language features, NativeAOT ready  
 ✅ **Cross-Platform** - Windows, Linux, macOS, ARM64 native  
-✅ **Production Ready** - 1,995 tests, zero known critical bugs  
+✅ **Production Ready** - 4,886 tests, zero known critical bugs  
 ✅ **Multi-Language** - .NET, Python, JavaScript/TypeScript clients  
 
 ## 📊 Performance
@@ -323,16 +343,16 @@ db.Flush(); // Persist to disk
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.4
+dotnet add package SharpCoreDB --version 2.2.0
 ```
 
 **Optional companion packages:**
 
 ```bash
-dotnet add package SharpCoreDB.Functional --version 2.1.4
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.4
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.4
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.4
+dotnet add package SharpCoreDB.Functional --version 2.2.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.2.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.2.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.2.0
 ```
 
 ## 🔄 Upgrading from v1.9
@@ -360,10 +380,10 @@ We welcome contributions! Check the repository for contribution guidelines.
 
 ---
 
-**Latest Version:** 2.1.4 (November 2026)  
+**Latest Version:** 2.2.0 (November 2026)  
 **Target:** .NET 11 / C# 15 (preview)  
-**Tests:** core suite 2,149 (0 failed) · linq2DB 25 · EF Core 116 · Functional 38 · Dapper 3  
-**Status:** ✅ Released — 2.1.4 (net11.0-only performance line)  
+**Tests:** 4,886 across 17 test projects (0 failed, 6 skipped) · core 2,980 · linq2DB 96 · EF Core 116  
+**Status:** ✅ Released — 2.2.0 (net11.0-only performance line)  
 **Versioning:** SharpCoreDB now uses 4-part versions (`n.n.n.n`).
 
 

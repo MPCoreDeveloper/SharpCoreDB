@@ -71,7 +71,7 @@ Console.WriteLine($"Synced {result.TotalChangesDownloaded} changes from cloud");
 ## 📦 Installation
 
 ```bash
-dotnet add package SharpCoreDB.Provider.Sync --version 2.1.4
+dotnet add package SharpCoreDB.Provider.Sync --version 2.2.0
 ```
 
 **Requires:** SharpCoreDB v1.9.5+, Dotmim.Sync.Core v1.3.0+

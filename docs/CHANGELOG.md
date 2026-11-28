@@ -7,8 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-> **Where this bucket ends.** `2.1.4` was cut from this line's `HEAD` on 2026-11-13, so everything below the
-> `[2.1.4]` heading shipped in that patch. New entries start here, above `[2.1.4]`.
+> New entries start here, above `[2.2.0]`.
+
+## [2.2.0] - 2026-11-28
+
+> **`2.2.0`** was cut from this line's `HEAD` on 2026-11-28. The .NET 11 dependency majors (EF Core / ASP.NET
+> Core / Extensions 11.0.0, Aspire.Hosting 17.0.0, MailKit/MimeKit 5.0.0, Serilog 11.0.0), EF Core 11
+> compatibility for the provider, and **option 2 of issue #525** (unquoted `UPDATE … SET` / `INSERT … VALUES`
+> values are evaluated as expressions). Validated across all 17 test projects: 4,886 tests / 0 failed / 6 skipped.
 
 ### Added
 

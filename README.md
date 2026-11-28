@@ -24,21 +24,32 @@ Use it when you need:
 - Fast embedded storage with **AES-256-GCM encryption** and ACID guarantees
 - A secure network database via **gRPC (HTTP/2 + HTTP/3)**
 - Built-in **vector search**, **advanced analytics**, and **GraphRAG/graph algorithms**
-- A production-focused stack validated by the **core suite on this line (1,998 tests, 0 failed,
-  measured 2026-10-11)**, the **RC.3 sweep of 2,897 tests across 16 suites**, and **backward
-  compatibility**
+- A production-focused stack validated by **4,886 tests across all 17 test projects (0 failed,
+  6 skipped, measured 2026-11-28)**, including the write-path regression gate and the reopen
+  round-trip matrix
 
-> **Current release: v2.1.4 (2026-11-13) — the .NET 11 / C# 15 line, on `master`.** The quoted-identifier
+> **Current release: v2.2.0 (2026-11-28) — the .NET 11 / C# 15 line, on `master`.** A minor release with
+> the .NET 11 dependency majors (EF Core / ASP.NET Core / Extensions **11.0.0**, Aspire.Hosting **17.0.0**,
+> MailKit/MimeKit **5.0.0**, Serilog **11.0.0**), **EF Core 11 compatibility** for the provider, and the
+> engine hardening that landed since 2.1.4 (composite keys, atomic UPDATE, CHECK/CASE, PageBased durability,
+> page checksums, crash-safety). The headline SQL change is **option 2 of
+> [issue #525](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/525)**: an unquoted value in
+> `UPDATE … SET` / `INSERT … VALUES` is now evaluated as an expression, as SQLite evaluates it — a bare word
+> that names no column keeps the lenient literal reading, and an unquoted date in a `DATETIME` column stays a
+> date. Validated by **4,886 tests / 0 failed / 6 skipped across all 17 test projects**, including a
+> **511-case differential matrix** for #525. Full notes:
+> [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.2.0]`.
+
+> **Previous release — v2.1.4 (2026-11-13) — the .NET 11 / C# 15 line, on `master`.** The quoted-identifier
 > patch, found by re-running [issue #497](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/497)'s own
 > reproduction against the 2.1.3 packages: `CREATE TABLE` catalogued a quoted name with its quoting
 > (`[notes]`, `[id]`) — exactly what linq2db, EF Core and FluentMigrator emit — so a table could be created
 > and then not receive a single row (*Table notes does not exist*, then `ArgumentOutOfRangeException` from a
 > `-1` column index) whenever the data source was not a `.scdb` file. Table and column names are now read as
-> one identifier token, in **`CREATE TABLE` and `ALTER TABLE … ADD COLUMN`**. Validated by **core 2,160
-> tests / 0 failed, linq2DB 26 / 0**, with the reporter's case re-run against the published packages. Full
-> notes: [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.4]`.
+> one identifier token, in **`CREATE TABLE` and `ALTER TABLE … ADD COLUMN`**. Full notes:
+> [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.1.4]`.
 
-> **Previous release — v2.1.3 (2026-11-12) — the .NET 11 / C# 15 line, on `master`.** The LINQ to DB patch:
+> **Earlier release — v2.1.3 (2026-11-12) — the .NET 11 / C# 15 line, on `master`.** The LINQ to DB patch:
 > `SharpCoreDBDataConnection` used to hand its connection string to `ProviderName.SQLite`, so a password was
 > refused and the rows landed in an unencrypted `SQLite format 3` file. It now executes on SharpCoreDB's own
 > connection — SQLite stays the SQL **dialect**, SharpCoreDB owns the file and the AES-256-GCM encryption —
@@ -102,17 +113,17 @@ Use it when you need:
 
 ## Requirements and the two release lines
 
-| | **v2.1.4 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
+| | **v2.2.0 — this line (`master`)** | **v2.0.0.3 — parked line (`release/v2.0`)** |
 |---|---|---|
 | Target framework | `net11.0` only (every project under `src`) | `net10.0` |
 | Language | C# 15 (`LangVersion=preview`, always on) | C# 14 |
 | SDK | .NET 11 GA, pinned in `global.json` (`11.0.100`, `rollForward: latestPatch`) | .NET 10 (`10.0.x`) |
 | Pipeline | `.github/workflows/ci.yml` | `.github/workflows/ci-net10.yml` |
-| Packages | `2.1.4` — the 28 packable projects under `src` | `2.0.0.3` |
+| Packages | `2.2.0` — the 28 packable projects under `src` | `2.0.0.3` |
 | Status | current release, receives new work | servicing only |
 
 - **Pick one line per solution.** The package references are line-specific: a `net10.0` project uses the
-  `2.0.0.x` packages, a `net11.0` project the `2.1.4` ones. Do not mix them in one solution.
+  `2.0.0.x` packages, a `net11.0` project the `2.2.0` ones. Do not mix them in one solution.
 - **The .NET 11 SDK is required to build** — the `global.json` pin is deliberate and `dotnet test` is not
   this repository's runner (Microsoft.Testing.Platform is; run the built test executable, or see
   [`docs/INDEX.md`](docs/INDEX.md)).
@@ -144,7 +155,24 @@ Use it when you need:
 
 ---
 
-## What's new in v2.1.4 (current release)
+## What's new in v2.2.0 (current release)
+
+**Dependency majors, EF Core 11, and SQLite expression parity for `INSERT`/`UPDATE`.** Every Microsoft.*
+package moves to **11.0.0** (EF Core, ASP.NET Core, Extensions), **Aspire.Hosting to 17.0.0**,
+**MailKit/MimeKit to 5.0.0** and **Serilog to 11.0.0**; the EF Core provider was updated for EF Core 11's
+`RelationalTypeMappingSource` signatures (`CS0508`), and `Microsoft.EntityFrameworkCore.InMemory` is kept in
+step at 11.0.0 (a 10.0.14 / 11.0.0 mix threw `TypeLoadException: TranslateFullJoin`). The engine change is
+**option 2 of [#525](https://github.com/MPCoreDeveloper/SharpCoreDB/issues/525)**: an unquoted value in an
+`UPDATE … SET` or `INSERT … VALUES` list is now evaluated as an expression, as SQLite evaluates it —
+`INSERT … VALUES (…, 2 * 3, …)` into a `TEXT` column stores `'6'` (it stored the four characters `2 * 3`),
+into an `INTEGER` column it stores `6` (it used to be an error), and `upper('abc')` stores `'ABC'`. A bare
+word that names no column (`SET status = active`) keeps the lenient literal reading, where SQLite itself
+raises *"no such column"*; an unquoted date in a `DATETIME` column stays a date. `ExecuteBatchSQL`'s INSERT
+fast path follows the same rule, and a multi-argument call such as `substr('abcdef', 2, 3)` in a VALUES tuple
+is now one value. Validated by **4,886 tests / 0 failed / 6 skipped across all 17 projects**, including a
+**511-case differential matrix** for #525. Full notes: [`docs/CHANGELOG.md`](docs/CHANGELOG.md) › `[2.2.0]`.
+
+## What's new in v2.1.4
 
 **Quoted identifiers are no longer catalogued with their quoting.** `CREATE TABLE [notes] ([id] INTEGER,
 [body] TEXT)` — the shape linq2db's SQLite dialect, EF Core and FluentMigrator generate — registered the
@@ -349,7 +377,7 @@ Headline changes, grouped by area. Everything below is in the shipped `2.1.0` pa
 ### 1) Embedded mode
 
 ```bash
-dotnet add package SharpCoreDB --version 2.1.4
+dotnet add package SharpCoreDB --version 2.2.0
 ```
 
 ```csharp
@@ -386,8 +414,8 @@ gRPC endpoint: `https://localhost:5001`
 Install client/server packages:
 
 ```bash
-dotnet add package SharpCoreDB.Server.Core --version 2.1.4
-dotnet add package SharpCoreDB.Client --version 2.1.4
+dotnet add package SharpCoreDB.Server.Core --version 2.2.0
+dotnet add package SharpCoreDB.Client --version 2.2.0
 ```
 
 > The server host is a standalone executable (`src/SharpCoreDB.Server`), distributed as the
@@ -418,50 +446,50 @@ dotnet add package SharpCoreDB.Client --version 2.1.4
 
 ## Available NuGet packages
 
-### v2.1.4 — current release (`master`, net11.0 / C# 15 preview)
+### v2.2.0 — current release (`master`, net11.0 / C# 15 preview)
 
 ```bash
 # Core
-dotnet add package SharpCoreDB --version 2.1.4
+dotnet add package SharpCoreDB --version 2.2.0
 
 # Server/client
-dotnet add package SharpCoreDB.Server.Core --version 2.1.4
-dotnet add package SharpCoreDB.Server.Protocol --version 2.1.4
-dotnet add package SharpCoreDB.Client --version 2.1.4
-dotnet add package SharpCoreDB.Client.Protocol --version 2.1.4
-dotnet add package SharpCoreDB.Data.Provider --version 2.1.4
+dotnet add package SharpCoreDB.Server.Core --version 2.2.0
+dotnet add package SharpCoreDB.Server.Protocol --version 2.2.0
+dotnet add package SharpCoreDB.Client --version 2.2.0
+dotnet add package SharpCoreDB.Client.Protocol --version 2.2.0
+dotnet add package SharpCoreDB.Data.Provider --version 2.2.0
 
 # Engines and extensions
-dotnet add package SharpCoreDB.Analytics --version 2.1.4
-dotnet add package SharpCoreDB.VectorSearch --version 2.1.4
-dotnet add package SharpCoreDB.Search --version 2.1.4
-dotnet add package SharpCoreDB.HybridSearch --version 2.1.4
-dotnet add package SharpCoreDB.Graph --version 2.1.4
-dotnet add package SharpCoreDB.Graph.Advanced --version 2.1.4
-dotnet add package SharpCoreDB.Distributed --version 2.1.4
-dotnet add package SharpCoreDB.Provider.Sync --version 2.1.4
-dotnet add package SharpCoreDB.Provider.YesSql --version 2.1.4
-dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.1.4
-dotnet add package SharpCoreDB.Extensions --version 2.1.4
-dotnet add package SharpCoreDB.Identity --version 2.1.4
-dotnet add package SharpCoreDB.Serilog.Sinks --version 2.1.4
+dotnet add package SharpCoreDB.Analytics --version 2.2.0
+dotnet add package SharpCoreDB.VectorSearch --version 2.2.0
+dotnet add package SharpCoreDB.Search --version 2.2.0
+dotnet add package SharpCoreDB.HybridSearch --version 2.2.0
+dotnet add package SharpCoreDB.Graph --version 2.2.0
+dotnet add package SharpCoreDB.Graph.Advanced --version 2.2.0
+dotnet add package SharpCoreDB.Distributed --version 2.2.0
+dotnet add package SharpCoreDB.Provider.Sync --version 2.2.0
+dotnet add package SharpCoreDB.Provider.YesSql --version 2.2.0
+dotnet add package SharpCoreDB.EntityFrameworkCore --version 2.2.0
+dotnet add package SharpCoreDB.Extensions --version 2.2.0
+dotnet add package SharpCoreDB.Identity --version 2.2.0
+dotnet add package SharpCoreDB.Serilog.Sinks --version 2.2.0
 
 # Optional architecture packages
-dotnet add package SharpCoreDB.EventSourcing --version 2.1.4
-dotnet add package SharpCoreDB.Projections --version 2.1.4
-dotnet add package SharpCoreDB.CQRS --version 2.1.4
+dotnet add package SharpCoreDB.EventSourcing --version 2.2.0
+dotnet add package SharpCoreDB.Projections --version 2.2.0
+dotnet add package SharpCoreDB.CQRS --version 2.2.0
 
 # Optional functional adapters
-dotnet add package SharpCoreDB.Functional --version 2.1.4
-dotnet add package SharpCoreDB.Functional.Dapper --version 2.1.4
-dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.1.4
-dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.1.4
+dotnet add package SharpCoreDB.Functional --version 2.2.0
+dotnet add package SharpCoreDB.Functional.Dapper --version 2.2.0
+dotnet add package SharpCoreDB.Functional.EntityFrameworkCore --version 2.2.0
+dotnet add package SharpCoreDB.Functional.Linq2DB --version 2.2.0
 
 # Hosting and tooling
-dotnet add package SharpCoreDB.Aspire.Hosting --version 2.1.4
+dotnet add package SharpCoreDB.Aspire.Hosting --version 2.2.0
 ```
 
-> The 28 commands above are the complete packable set of this line. **`2.1.4` is a stable release**, so
+> The 28 commands above are the complete packable set of this line. **`2.2.0` is a stable release**, so
 > NuGet selects it by default for a `net11.0` project; a `net10.0` project resolves to the `2.0.0.3` line
 > instead. Pin the version explicitly (as above) when you want to be certain, and tick *Include
 > prerelease* only if you are deliberately testing an RC build.
